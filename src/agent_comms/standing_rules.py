@@ -276,3 +276,18 @@ class DiskLow(UndatedStandingRule):
             f"DISK LOW: {self.rule.volume} has {self.free_gib:.1f} GiB free (cleanup due under"
             f" {self.rule.cleanup_gib:g} GiB{floor}) -> put a cleanup owner on it now"
         )
+
+
+@dataclass(frozen=True)
+class DeadProvider(UndatedStandingRule):
+    """A unit whose latest turn failed on its provider's usage limit serves no turns until
+    Core moves it to the next working model declared for it."""
+
+    unit: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return ()
+
+    def line(self) -> str:
+        return f"DEAD PROVIDER: {self.unit} hit its provider's usage limit"
