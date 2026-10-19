@@ -4,7 +4,7 @@ from agent_comms.transcript_events import UserTranscript
 
 def _output(tmp_path):
     from agent_comms.comms import Comms
-    from agent_comms.cli_bridges.shared import ThreadOutput
+    from agent_comms.runtime_updates import ThreadOutput
     from agent_comms.thread_execution import ExternalThreadExecution
     from agent_comms.threads import Thread
 
@@ -35,7 +35,7 @@ def test_bus_input_encodes_its_text_with_the_codex_tag():
 def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     from agent_comms.activity import ActivityState
     from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
-    from agent_comms.cli_bridges.shared import ActiveItem, FinishedItem, TurnEnded, TurnStarted
+    from agent_comms.runtime_updates import ActiveItem, FinishedItem, TurnEnded, TurnStarted
     from agent_comms.native_tools import BashTool
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
@@ -70,7 +70,7 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
 
 def test_attaching_reports_the_status_codex_gives_its_thread():
     from agent_comms.cli_bridges.codex_protocol import ResumedThread
-    from agent_comms.cli_bridges.shared import TurnEnded, TurnStarted
+    from agent_comms.runtime_updates import TurnEnded, TurnStarted
 
     def resumed(status):
         return ResumedThread.model_validate({"thread": {"id": "th", "status": status}})
@@ -109,7 +109,9 @@ def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
 
 
 def test_coalescing_preserves_completion_and_unrelated_updates():
-    from agent_comms.cli_bridges.shared import DraftItem, FinishedItem, TextDraft, TranscriptUpdate, TurnEnded
+    from agent_comms.runtime_updates import (
+        DraftItem, FinishedItem, RuntimeUpdate, TextDraft, TurnEnded,
+    )
     from agent_comms.recorded_time import UnrecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
@@ -118,8 +120,8 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
     other = DraftItem("t", "b", TextDraft.from_parts(AssistantTranscript, ("Other",), UnrecordedEventTime(), "b"))
     final = FinishedItem("t", "a", (AssistantTranscript("Hello!", position="a"),))
     end = TurnEnded()
-    assert TranscriptUpdate.coalesced([first, other, newer]) == [other, newer]
-    assert TranscriptUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]
+    assert RuntimeUpdate.coalesced([first, other, newer]) == [other, newer]
+    assert RuntimeUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]
 
 
 def test_function_outputs_keep_wire_fields_and_share_page_and_live_decoding(tmp_path):

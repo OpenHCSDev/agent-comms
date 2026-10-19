@@ -15,7 +15,7 @@ import pytest
 
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.activity import Activity, ActivityLog, ActivityState
-from agent_comms.cli_bridges.shared import ThreadOutput
+from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript

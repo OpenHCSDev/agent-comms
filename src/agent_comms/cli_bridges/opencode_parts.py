@@ -11,22 +11,25 @@ from pydantic import ConfigDict, Field, JsonValue, model_validator
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.transcript_events import (
-    AssistantTranscript, ContextTranscript, ThinkingTranscript, TextTranscript, UserTranscript,
-)
-
-from .shared import (
+from agent_comms.runtime_updates import (
     ActiveItem,
     CompletedItem,
     HiddenItem,
     HistoryNotice,
-    Summarized,
+    RuntimeUpdate,
     StartedItem,
+    Summarized,
     TextDraft,
-    CliToolArguments,
-    ToolCall,
-    TranscriptUpdate,
 )
+from agent_comms.transcript_events import (
+    AssistantTranscript,
+    ContextTranscript,
+    LiveTextTranscript,
+    ThinkingTranscript,
+    UserTranscript,
+)
+
+from .shared import CliToolArguments, ToolCall
 
 
 class MessageTime(WireModel):
@@ -53,7 +56,7 @@ class MessageInfo(TaggedWire, ABC):
     time: MessageTime
 
     @abstractmethod
-    def present(self, part: Part) -> tuple[TranscriptUpdate, ...]: ...
+    def present(self, part: Part) -> tuple[RuntimeUpdate, ...]: ...
 
     def finished(self, part: Part) -> bool:
         return part.finished(self)
@@ -66,7 +69,7 @@ class UserMessage(MessageInfo):
     def finished(self, part: Part) -> bool:
         return True  # A prompt is complete once saved; it has no completion time.
 
-    def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: Part) -> tuple[RuntimeUpdate, ...]:
         # Wire history owns incoming bus messages; the live view never echoes them as CLI output.
         return part.prompted()
 
@@ -76,7 +79,7 @@ class AssistantMessage(MessageInfo):
     role: Literal['assistant']
     parentID: str
 
-    def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: Part) -> tuple[RuntimeUpdate, ...]:
         return part.present(self)
 
 
@@ -87,7 +90,7 @@ class SummaryMessage(AssistantMessage):
     role: Literal['assistant']
     summary: Literal[True]
 
-    def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: Part) -> tuple[RuntimeUpdate, ...]:
         return (*part.present(self), *part.summarized())
 
 
@@ -105,13 +108,13 @@ class Part(TaggedWire, ABC):
         return message.time.completed is not None
 
     @abstractmethod
-    def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
+    def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]: ...
 
-    def prompted(self) -> tuple[TranscriptUpdate, ...]:
+    def prompted(self) -> tuple[RuntimeUpdate, ...]:
         """This part in a user's message, kept for history only."""
         return ()
 
-    def summarized(self) -> tuple[TranscriptUpdate, ...]:
+    def summarized(self) -> tuple[RuntimeUpdate, ...]:
         """This part in a compaction summary."""
         return ()
 
@@ -124,7 +127,7 @@ class PartTime(WireModel):
 class TextualPart(Part, ABC):
     text: str
     time: PartTime | None = None
-    event_type: ClassVar[builtins.type[TextTranscript]]
+    event_type: ClassVar[builtins.type[LiveTextTranscript]]
     activity: ClassVar[ActivityState]
     detail: ClassVar[str]
 
@@ -135,7 +138,7 @@ class TextualPart(Part, ABC):
     def finished(self, message: MessageInfo) -> bool:
         return super().finished(message) or (self.time is not None and self.time.end is not None)
 
-    def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         accumulator = self.accumulator(message)
         if self.finished(message):
             return (CompletedItem(message.id, self.id, accumulator.events),)
@@ -151,10 +154,10 @@ class TextPart(TextualPart):
     def matches(self, session: str, text: str) -> bool:
         return self.sessionID == session and self.text == text
 
-    def prompted(self) -> tuple[TranscriptUpdate, ...]:
+    def prompted(self) -> tuple[RuntimeUpdate, ...]:
         return (HiddenItem((UserTranscript(self.text, position=self.id),)),)
 
-    def summarized(self) -> tuple[TranscriptUpdate, ...]:
+    def summarized(self) -> tuple[RuntimeUpdate, ...]:
         return (Summarized(self.text),)
 
 
@@ -184,7 +187,7 @@ class ToolState(TaggedWire, ABC):
     finished: ClassVar[bool] = False
 
     @abstractmethod
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
+    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]: ...
 
     def call(self, part: ToolPart) -> ToolCall:
         sent = self.input.model_dump(by_alias=True, exclude_unset=True)
@@ -195,7 +198,7 @@ class ToolState(TaggedWire, ABC):
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         return (ActiveItem(message.id, part.id, ActivityState.WORKING, self.call(part).title),)
 
 
@@ -212,7 +215,7 @@ class EndedTool(ToolState, ABC):
     @abstractmethod
     def result(self) -> str: ...
 
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         event_time = RecordedEventTime(self.time.start / 1000)
         events = tuple(event_time.stamp(event) for event in self.call(part).finished(self.result, self.ok, part.id))
         return (CompletedItem(message.id, part.id, events),)
@@ -247,13 +250,13 @@ class ToolPart(Part):
     def finished(self, message: MessageInfo) -> bool:
         return self.state.finished
 
-    def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         return self.state.present(self, message)
 
 
 class StructuralPart(Part, ABC):
     """Native bookkeeping and input attachments are not assistant transcript items."""
-    def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
@@ -262,7 +265,7 @@ class FilePart(StructuralPart):
     filename: str = ''
     mime: str = ''
 
-    def prompted(self) -> tuple[TranscriptUpdate, ...]:
+    def prompted(self) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice('Attachment contents are not imported; source references are retained.'),
                 HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]', position=self.id),)))
 
@@ -303,7 +306,7 @@ class SavedMessage(WireModel):
     info: MessageInfo.declared_union()
     parts: list[Part.declared_union()]
 
-    def publications(self) -> tuple[TranscriptUpdate, ...]:
+    def publications(self) -> tuple[RuntimeUpdate, ...]:
         """Its finished parts. An unfinished part is published from its own deltas, from its
         start, never from a snapshot that overlaps them; to history it adds nothing."""
         return tuple(update for part in self.parts if self.info.finished(part) for update in self.info.present(part))

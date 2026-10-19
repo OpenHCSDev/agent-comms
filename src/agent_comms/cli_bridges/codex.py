@@ -17,8 +17,10 @@ from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
 from .history import CodexHistory, OnlineHistory
-from .shared import (Binding, EarlierPublishedPage, IncomingFrame, PublishedPage, SessionFacts,
-                     ThreadOutput, TranscriptBridge, Options, TranscriptUpdate, run_bridge)
+from .shared import Binding, IncomingFrame, TranscriptBridge, Options, run_bridge
+from agent_comms.runtime_updates import (
+    EarlierPublishedPage, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
+)
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcReply, RpcNotification, TextInput,
@@ -100,7 +102,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
     def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
         return cls(thread, address or str(cls.SOCKET))
 
-    async def history(self) -> AsyncIterator[TranscriptUpdate]:
+    async def history(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:
             async for update in self.seen(codex):
                 yield update
@@ -109,7 +111,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         """Only the newest page; the pager requests an earlier page when it reaches it."""
         return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread))).publication()
 
-    async def seen(self, codex: CodexConnection) -> AsyncIterator[TranscriptUpdate]:
+    async def seen(self, codex: CodexConnection) -> AsyncIterator[RuntimeUpdate]:
         resumed = ResumedThread.model_validate(await codex.call(ResumeThread(threadId=self.thread)))
         yield SessionFacts(source_id=self.thread, project=resumed.thread.cwd)
         # Only completed snapshots. An active item's deltas must be assembled
@@ -130,7 +132,7 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--socket', default=str(cls.SOCKET))
 
-    async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
+    async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:
             async for update in self.seen(codex):
                 yield update
