@@ -3,7 +3,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.todos import ProgressSource, PullRequests, StatusProgressSource
+from agent_comms.goals import CheckedCommit
 from agent_comms.ui_model.commander import (
     CommanderModel,
     ObserveCommander,
@@ -37,13 +37,11 @@ def test_board_uses_order_state_and_requests_details_only_when_opened(commander)
 
 def test_status_source_never_requests_acceptance_measurement(commander, monkeypatch):
     comms, caller = commander
-    todo = create(commander, 'P1')
-    def forbidden(self):
+    create(commander, 'P1')
+    def forbidden(*args, **kwargs):
         pytest.fail('A read-only commander page executed an acceptance measurement')
-    monkeypatch.setattr(ProgressSource, 'readings', forbidden)
-    # The read-only source owns the no-measurement capability, not each frontend.
-    source = StatusProgressSource(todo, comms.root, PullRequests((todo,)))
-    assert not source.readings().readings
+    monkeypatch.setattr(CheckedCommit, 'run', forbidden)
+    # Progress now consumes retained check receipts, never executes a measurement.
     model = CommanderModel.read(comms, ObserveCommander(
         str(comms.root), comms.registry.require(caller.name).incarnation))
     assert model.units[0].orders[0].progress.state == 'no commit since the order'

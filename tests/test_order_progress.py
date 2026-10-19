@@ -1,5 +1,6 @@
 """An order's progress is read from its unit's checkout and PRs beside its deadline; merged work draws no strike."""
 import subprocess
+import shlex
 import time
 
 from dataclasses import replace
@@ -7,13 +8,16 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.goals import CountCheckResult, GitCommandFailed, OrderCheck
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
-    PullRequest, PullRequests, PushedProgress, UnreadProgress)
+    LocalProgressSource, ProgressPoint, ProgressSource, PullRequest, PullRequests,
+    PushedProgress, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
+from agent_comms.work_branches import WorkBranchError
 from test_commander_problem_orders import create, working
 
 
@@ -116,9 +120,34 @@ def test_a_merged_order_still_awaits_its_record(checkout):
 
 def test_unread_github_is_explicit(checkout):
     pulls = Listed()
-    pulls.states = ValueError('gh: not logged in')
+    pulls.states = WorkBranchError('gh: not logged in')
     progress = read(checkout, pulls)
     assert progress == UnreadProgress('gh: not logged in')
+
+
+def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
+    todo, unit = checkout
+    marker = tmp_path / 'explicit-check-count'
+    check = OrderCheck(str(unit), f'printf x >> {shlex.quote(str(marker))}; printf 0',
+                       CountCheckResult(0))
+    todo = replace(todo, order=replace(todo.order, check=check))
+    source = ProgressSource.at(todo, unit, Listed())
+    assert source.readings() == DistanceReadings()
+    assert not marker.exists()
+    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
+    assert marker.read_text() == 'x'
+    assert len(source.readings().readings) == 1
+    assert source.readings().readings[0].distance == todo.order.untouched(())
+    assert marker.read_text() == 'x'
+
+
+def test_an_existing_broken_checkout_is_not_silently_treated_as_missing(checkout, tmp_path):
+    bad = tmp_path / 'not-a-repository'
+    bad.mkdir()
+    source = ProgressSource.at(checkout[0], bad, Listed())
+    assert isinstance(source, LocalProgressSource)
+    with pytest.raises(GitCommandFailed):
+        source.readings()
 
 
 def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander_script, monkeypatch, tmp_path):
@@ -154,7 +183,8 @@ class HeldSource:
     since = 100.0
 
     def commits(self, *excluded):
-        commits = {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}
+        commits = {('--remotes',): ProgressPoint('a' * 40, 1000.0),
+                   ('origin/HEAD',): ProgressPoint('e' * 40, 1000.0)}
         yield commits[excluded]
 
     def readings(self):
@@ -314,8 +344,8 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     monkeypatch.setattr(subprocess, "run", forge)
     script.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).run()
     assert todo.order.pull_request_ids(bodies[0]) == (todo.order.id,)
-    stamp = "1970-01-01T00:08:20Z"
-    merged = PullRequest.listed(number, branch, "b" * 40, "d" * 40, stamp, stamp, bodies[0])
+    merged = PullRequest(number, branch, "b" * 40, "d" * 40,
+        merged_at=500, updated_at=500, orders=todo.order.pull_request_ids(bodies[0]))
     foreign = replace(merged, number=number + 1, merge="f" * 40, orders=("another-order",))
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order:
                         (foreign, merged) if state == "merged" else ())

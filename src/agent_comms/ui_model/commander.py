@@ -17,7 +17,7 @@ from agent_comms.notification_progress import FailedProgress
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.revision_views import CommanderView
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, PullRequests, StatusProgressSource, Todo
+from agent_comms.todos import OrderProgress, ProgressSource, PullRequests, Todo
 from agent_comms.turn_digests import LastTurns, ThreadTurns
 from agent_comms.ui_model.observation import (
     InterestRequest,
@@ -158,7 +158,7 @@ class CommanderModel:
         grouped: dict[ThreadIncarnation, list[CommanderOrder]] = {}
         for todo in todos:
             unit = todo.held().owner_identity
-            progress = StatusProgressSource(
+            progress = ProgressSource.at(
                 todo, storage.order_checkout(unit.name, todo.id), pulls).progress()
             grouped.setdefault(unit, []).append(CommanderOrder(todo, progress, todo.overdue(now)))
         cards = []
@@ -171,7 +171,7 @@ class CommanderModel:
             if unit in request.expanded:
                 commits = []
                 for order in current:
-                    source = StatusProgressSource(order.todo, storage.order_checkout(
+                    source = ProgressSource.at(order.todo, storage.order_checkout(
                         unit.name, order.todo.id), pulls)
                     try:
                         commit = source.latest_commit()
