@@ -18,7 +18,10 @@ from .child_process import (BoundedRun, ChildOutcome, ChildResult, ExitedOutcome
                             TimedOutOutcome)
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
+from .field_codec import (
+    FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember,
+    RecordMember, SubclassUnion,
+)
 from .goal_states import ActiveGoal, GoalState
 from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, InactiveGoalPermission, TurnGoalPermission
@@ -162,7 +165,7 @@ class GoalMentionSource:
         RecordedThreadIncarnation(self.owner_name, self.owner_created_at)
 
     @property
-    def checkpoint(self) -> GoalRevision:
+    def revision_key(self) -> GoalRevision:
         return GoalRevision(self.goal_id, self.text_revision)
 
     @property
@@ -225,8 +228,10 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 
 
 class CheckResult(DeclaredFamily, affix="CheckResult"):
-    @abstractmethod
-    def require(self, result) -> None: ...
+    def require(self, result: ChildResult) -> None:
+        distance = self.distance(result)
+        if distance:
+            raise ValueError(f"The order check is {distance} away from {self}.")
 
     @abstractmethod
     def distance(self, result: ChildResult) -> int:
@@ -235,10 +240,6 @@ class CheckResult(DeclaredFamily, affix="CheckResult"):
 
 @dataclass(frozen=True)
 class SilentCheckResult(CheckResult):
-    def require(self, result):
-        if result.outcome != ExitedOutcome(0) or result.stdout:
-            raise ValueError("The order check must print nothing and exit zero.")
-
     def distance(self, result: ChildResult) -> int:
         return int(result.outcome != ExitedOutcome(0) or bool(result.stdout))
 
@@ -251,63 +252,8 @@ class CountCheckResult(CheckResult):
         if self.expected < 0:
             raise ValueError("An expected count must be nonnegative.")
 
-    def require(self, result):
-        if not isinstance(result.outcome, ExitedOutcome):
-            raise ValueError(f"The order check did not exit, so it printed no count of {self.expected}.")
-        CheckPrinted.decoded(result.stdout).require(self.expected)
-
     def distance(self, result: ChildResult) -> int:
-        if not isinstance(result.outcome, ExitedOutcome):
-            raise ValueError("The order check did not exit, so it printed no count.")
-        return CheckPrinted.decoded(result.stdout).distance(self.expected)
-
-
-class CheckPrinted(DeclaredFamily, affix="Printed"):
-    """What an order check printed: a count (its last integer) or no integer at all."""
-
-    @staticmethod
-    def decoded(stdout: bytes) -> CheckPrinted:
-        counts = re.findall(r"\d+", stdout.decode(errors="replace"))
-        return CountPrinted(int(counts[-1])) if counts else NoIntegerPrinted()
-
-    @abstractmethod
-    def require(self, expected: int) -> None: ...
-
-    @abstractmethod
-    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
-        """Why a check that must fail before any work proves nothing yet."""
-
-    @abstractmethod
-    def distance(self, expected: int) -> int: ...
-
-
-@dataclass(frozen=True)
-class CountPrinted(CheckPrinted):
-    count: int
-
-    def require(self, expected: int) -> None:
-        if self.count != expected:
-            raise ValueError(f"The order check printed {self.count}, not its expected count {expected}.")
-
-    def distance(self, expected: int) -> int:
-        return abs(self.count - expected)
-
-    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
-        return ((f"Check already prints {self.count} before any work: `{command}` proves nothing; "
-                 "write a check that fails now",) if self.count == expected else ())
-
-
-@dataclass(frozen=True)
-class NoIntegerPrinted(CheckPrinted):
-    def require(self, expected: int) -> None:
-        raise ValueError(f"The order check printed no integer, so no count of {expected}.")
-
-    def distance(self, expected: int) -> int:
-        self.require(expected)
-        return 0
-
-    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
-        return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
+        return result.outcome.printed_count(result.stdout).distance(self.expected)
 
 
 @dataclass(frozen=True)
@@ -788,6 +734,29 @@ class NoGoal(NullMember, GoalDeclaration):
         return "This goal has been cleared."
 
 
+class ReportedTurnState(DeclaredFamily, JsonShapeFamily, affix="ReportedTurnState"):
+    """The reporting turn is a state; null/text remain the existing wire forms."""
+
+    @abstractmethod
+    def reports(self, turn_id: str) -> bool: ...
+
+
+@dataclass(frozen=True)
+class NoReportedTurn(ReportedTurnState, JsonShapeMember):
+    value: None = None
+
+    def reports(self, turn_id: str) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class ReportedTurn(ReportedTurnState, JsonShapeMember):
+    value: str
+
+    def reports(self, turn_id: str) -> bool:
+        return self.value == turn_id
+
+
 @dataclass(frozen=True)
 class Goal(RecordMember, GoalDeclaration):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
@@ -797,7 +766,7 @@ class Goal(RecordMember, GoalDeclaration):
     published_seq: int
     progress: str = ""
     revision: int = 0
-    reported_turn: str | None = None
+    reported_turn: ReportedTurnState = field(default_factory=NoReportedTurn)
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
@@ -846,7 +815,7 @@ class Goal(RecordMember, GoalDeclaration):
         return ContinuationGoalPermission(self)
 
     def task_scope(self, scope: TaskScope) -> TaskScope:
-        return scope.with_goal(self.checkpoint)
+        return scope.with_goal(self.revision_key)
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context.prepend_goal(owner, self, goals)
@@ -856,7 +825,7 @@ class Goal(RecordMember, GoalDeclaration):
         return wait.project(self, snapshot, agents)
 
     def peer_change_values(self) -> GoalPeerChange:
-        return GoalPeerChange(goal=self.checkpoint, state=type(self.state), progress=self.progress)
+        return GoalPeerChange(goal=self.revision_key, state=type(self.state), progress=self.progress)
 
     def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
                                claim_scope: int) -> FailedTurnProjection:
@@ -916,11 +885,11 @@ class Goal(RecordMember, GoalDeclaration):
         return self if self.state.active else NoGoal()
 
     def reports_turn(self, turn_id: str) -> bool:
-        return self.reported_turn == turn_id
+        return self.reported_turn.reports(turn_id)
 
     @property
     def captured(self) -> GoalCheckpoint:
-        return PresentGoalCheckpoint(self.checkpoint)
+        return PresentGoalCheckpoint(self.revision_key)
 
     def render_instructions(self, orders_text: str) -> str:
         return "\n\n".join(part for part in (self.order.goal_text(self), orders_text) if part)
@@ -938,11 +907,9 @@ class Goal(RecordMember, GoalDeclaration):
         GoalRevision(self.id, self.revision)
         if self.published_seq < 0:
             raise ValueError("Goal publication requires a nonnegative bus sequence.")
-        if self.reported_turn is not None and not isinstance(self.reported_turn, str):
-            raise ValueError("Goal reported turn must be a string or null.")
 
     @property
-    def checkpoint(self) -> GoalRevision:
+    def revision_key(self) -> GoalRevision:
         return GoalRevision(self.id, self.revision)
 
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:

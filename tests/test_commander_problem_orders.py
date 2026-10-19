@@ -171,7 +171,7 @@ def test_delivery_checks_once_and_preserves_the_units_goal(commander):
 def test_failed_check_keeps_problem_pending(commander):
     comms, caller = commander
     original = create(commander, 'P1', 'printf 9', 1)
-    with pytest.raises(ValueError, match='printed 9, not its expected count 1'):
+    with pytest.raises(ValueError, match=r'The order check is 8 away from CountCheckResult\(expected=1\)\.'):
         CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P1') == original
     assert comms.registry.require('worker').goal.state.active
@@ -520,7 +520,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('commit', '-qam', 'fix')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     fixed = git('rev-parse', 'HEAD')
-    with pytest.raises(ValueError, match='printed 0, not its expected count 1'):
+    with pytest.raises(ValueError, match=r'The order check is 1 away from CountCheckResult\(expected=1\)\.'):
         script.done('P1', fixed, fixed)
     script.correct_check('P1', corrected, why)
     current = comms.goals.todos.get('P1')
@@ -563,7 +563,7 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
 
 @pytest.mark.parametrize('printed, refused', [
     ("printf 'no count here'", 'The order check printed no integer, so no count of 1.'),
-    ('echo 2', 'The order check printed 2, not its expected count 1.'),
+    ('echo 2', 'The order check is 1 away from CountCheckResult(expected=1).'),
     ('echo found 1', None),
 ])
 def test_a_count_check_refuses_saying_whether_it_printed_no_integer_or_the_wrong_count(tmp_path, printed, refused):
@@ -1285,7 +1285,7 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     (copied / 'flag.py').write_text('def checked(value):\n    if value is None:\n        raise ValueError\n')
     callers.write_text('from flag import checked\n\ndef read(v):\n    try:\n        checked(v)\n'
                        '    except ValueError:\n        return 0\n    return 1\n')
-    with pytest.raises(ValueError, match='printed 1, not its expected count 0'):
+    with pytest.raises(ValueError, match=r'The order check is 1 away from CountCheckResult\(expected=0\)\.'):
         CommsOrderDoneTool(problem='P520', order_id=comms.goals.todos.get('P520').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P520') == pending
     (copied / 'flag.py').unlink()

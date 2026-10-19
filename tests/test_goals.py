@@ -80,14 +80,14 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
         "text": "Ship the release", "status": "active", "progress": goal.progress,
     }
     scope = thread.task_scope
-    assert scope == GoalTaskScope(project=str(tmp_path), goal=goal.checkpoint)
+    assert scope == GoalTaskScope(project=str(tmp_path), goal=goal.revision_key)
     scope.require_context(thread)
     comms.goals.update_goal("worker", ClearGoalAction())
     absent(stored())
     with pytest.raises(RelationViolationError, match="No goal is set"):
         scope.require_context(stored())
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Ship the patch"))
-    assert stored().task_scope == GoalTaskScope(project=str(tmp_path), goal=replacement.checkpoint)
+    assert stored().task_scope == GoalTaskScope(project=str(tmp_path), goal=replacement.revision_key)
     with pytest.raises(RelationViolationError, match="replaced or cleared"):
         scope.require_context(stored())
 
