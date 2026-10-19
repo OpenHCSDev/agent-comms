@@ -23,7 +23,7 @@ def test_preflight_diagnostics_keep_original_phase(reason):
 
 def test_delivery_projection_requires_complete_homogeneous_actual_rows():
     reserved = ReservedInput('a', None, 'owner', 1, 'owner', 'input')
-    unsent = reserved.finish_unbound()
+    unsent = reserved.finish_unbound().require_moved('Reserved input stayed reserved').state
     assert isinstance(unsent, NotSentInput)
     document = InputDocument(rows={'a': unsent})
     assert document.shared_state(('a',)) is NotSentInput

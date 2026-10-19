@@ -967,16 +967,19 @@ class CoordinationSegment(InstructionSegment):
 class GoalSegment(InstructionSegment):
     goal: Goal
     orders_text: str = ""
+    progress: str = ""
 
     @classmethod
     def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
-        revision = hashlib.sha256(json.dumps(FieldCodec.encode((goal, orders_text))).encode()).hexdigest()
-        return super().capture((OwnerProvenance(owner.incarnation, revision),), goal=goal, orders_text=orders_text)
+        progress = goal.order.progress(goal, todos, goals)
+        revision = hashlib.sha256(json.dumps(FieldCodec.encode((goal, orders_text, progress))).encode()).hexdigest()
+        return super().capture((OwnerProvenance(owner.incarnation, revision),), goal=goal,
+                               orders_text=orders_text, progress=progress)
 
     def values(self) -> dict[str, object]:
-        return dict(goal_id=self.goal.id, goal_text=self.goal.render_instructions(self.orders_text), progress=self.goal.progress)
+        return dict(goal_id=self.goal.id, goal_text=self.goal.render_instructions(self.orders_text), progress=self.progress)
 
 
 @dataclass(frozen=True, kw_only=True)

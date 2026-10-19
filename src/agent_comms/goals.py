@@ -322,6 +322,18 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         return ()
 
+    def goal_text(self, goal: Goal) -> str:
+        return goal.text
+
+    def progress(self, goal: Goal, todos: Sequence[Todo], goals: Goals) -> str:
+        return goal.progress
+
+    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
+        return f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
+
+    def require_model_block(self) -> None:
+        pass
+
     @abstractmethod
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
@@ -371,6 +383,7 @@ class ProblemGoalOrder(GoalOrder):
     """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
     StrikeLimit: ClassVar[int] = 2  # live strikes the commanded unit may take on one problem
+    text: ClassVar[str] = "Complete the assigned problems."
 
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         raise ValueError("Complete each problem with its checked delivered commit.")
@@ -388,6 +401,19 @@ class ProblemGoalOrder(GoalOrder):
 
     def instructions(self, todos: Sequence[Todo]) -> str:
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
+
+    def goal_text(self, goal: Goal) -> str:
+        return self.text
+
+    def progress(self, goal: Goal, todos: Sequence[Todo], goals: Goals) -> str:
+        return goals.todos.progress(todos, goals.registry.storage_rule)
+
+    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
+        return goal.progress
+
+    def require_model_block(self) -> None:
+        raise ValueError("A problem goal is not blocked by text: ask the commander to block the "
+                         "problem's Todo, or standby with wait_for naming the decider.")
 
 
 @dataclass(frozen=True)
@@ -722,10 +748,10 @@ class Goal(RecordMember, GoalDeclaration):
         return PresentGoalCheckpoint(self.checkpoint)
 
     def render_instructions(self, orders_text: str) -> str:
-        return "\n\n".join(part for part in (self.text, orders_text) if part)
+        return "\n\n".join(part for part in (self.order.goal_text(self), orders_text) if part)
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
-        progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
+        progress = self.order.failed_turn_progress(self, diagnostic)
         state = self.state.after_failed_turn(diagnostic)
         if state is self.state:
             return self

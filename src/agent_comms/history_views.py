@@ -6,11 +6,13 @@ import logging
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
+from .declared_family import DeclaredFamily
 from .cli_result import CliResult
 from .field_codec import FieldCodec, WireForm
 from .goal_waits import GoalWaits
@@ -58,6 +60,8 @@ from .presentation import (
     CoordinationSnapshot,
     MessageNotification,
     ThreadRecord,
+    CountedRead,
+    InboxRead,
     ThreadView,
     WireRevision,
 )
@@ -68,6 +72,32 @@ from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PollTarget(DeclaredFamily, affix="Target"):
+    """Whose poll this is: the thread that calls, or one named on the command line."""
+
+    @abstractmethod
+    def thread(self, registry: Registration) -> Thread: ...
+
+
+@dataclass(frozen=True)
+class CallingThreadTarget(PollTarget):
+    def thread(self, registry: Registration) -> Thread:
+        return registry.require(current_thread(registry).name)
+
+
+@dataclass(frozen=True)
+class NamedThreadTarget(PollTarget):
+    name: str
+
+    def thread(self, registry: Registration) -> Thread:
+        return registry.require(self.name)
+
+    @classmethod
+    def argument(cls, value: str) -> dict[str, object]:
+        return FieldCodec.encode_record(cls(value))
 
 
 @dataclass(frozen=True)
@@ -424,8 +454,7 @@ class HistoryViews:
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""
         views = self._presence_views()
-        # One bus snapshot for every thread, not one per thread.
-        pending = self.bus.pending_counts_all(tuple(view.thread.name for view in views))
+        pending = CountedRead().counts(self.bus, tuple(view.thread.name for view in views))
         counted = (replace(view, pending=pending[view.thread.name]) for view in views)
         return [FieldCodec.project(view, "presence") for view in counted]
 
@@ -441,23 +470,20 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
                         if not active_only or snapshot.statuses[name].active)
-        pending = self.bus.pending_counts_all(tuple(thread.name for thread in threads))
+        pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
         return [FieldCodec.project(record, "presence") for record in ThreadRecord.read(
             snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)]
 
-    def thread_detail(self, name: str, *, include_pending: bool = True) -> ThreadRecord:
+    def thread_detail(self, name: str, read: InboxRead) -> ThreadRecord:
         thread = self.registry.require(name)
-        pending = self.bus.pending_counts_all((thread.name,)) if include_pending else None
+        pending = read.counts(self.bus, (thread.name,))
         record, = ThreadRecord.read(self.registry.snapshot(), self.agents,
                                     GoalWaits.at(self.root).read(), (thread,), pending)
         return record
 
-    def poll(self, name: str | None = None) -> ThreadPoll:
+    def poll(self, target: PollTarget) -> ThreadPoll:
         """One-shot status snapshot: self state plus inbox."""
-        if name is None:
-            me = current_thread(self.registry)
-            name = me.name
-        self.registry.require(name)
+        name = target.thread(self.registry).name
         peers = tuple(view for view in self._presence_views() if view.thread.name != name)
-        return ThreadPoll(self.thread_detail(name), tuple(self.bus.inbox(name)),
+        return ThreadPoll(self.thread_detail(name, CountedRead()), tuple(self.bus.inbox(name)),
                           self.ledger.document(), peers)

@@ -38,7 +38,7 @@ from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+from ..todos import (ApplicationOrderRun, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
@@ -234,7 +234,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append(str(refused))
     serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
     try:
-        phase = OrderPhase.decode(serves[1] if serves else UnplannedPhase.declared_name)
+        phase = OrderPhase.member_named(serves[1] if serves else UnplannedPhase.declared_name)
     except ValueError as refused:
         problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
@@ -459,8 +459,8 @@ def board():
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
 
 
-def on_record(line: str, recorded: str) -> None:
-    """Put one line on the public record: the narrative file, then #comms.
+def on_record(line: str, recorded: str, audience: tuple[str, ...] = ('#comms',)) -> None:
+    """Put one line on the public record: the narrative file, then its audience.
 
     Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
     """
@@ -471,9 +471,9 @@ def on_record(line: str, recorded: str) -> None:
                     'Written by agent-comms-commander order; never edited.\n\n')
         f.write(f'- {line}\n')
     try:
-        post(['#comms'], f'On the record: {line}')
+        post([*audience], f'On the record: {line}')
     except SystemExit as failed:
-        print(f'{recorded} recorded, but the #comms post failed ({failed}). '
+        print(f'{recorded} recorded, but the post failed ({failed}). '
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
 
@@ -524,11 +524,10 @@ def done(pid, sha, delivered=None):
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
     call(CommsOrderDoneTool(problem=pid, delivery=delivery))
-    at = COMMS.goals.todos.get(pid).order.delivery.at
+    lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
-    if not operation and at.at > todo.deadline.at:
-        strike(unit, f'late on {pid}: order {todo.order.id} due {hhmm(todo.deadline)} '
-                     f'delivered {hhmm(at)} as {delivered}')
+    if not operation and lateness.late():
+        strike(unit, f'{pid} order {todo.order.id} {lateness} as {delivered}')
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 
@@ -635,30 +634,38 @@ def replied(latest: dict | None) -> str:
 
 
 def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
-    """Each order that entered lateness (OVERDUE or DUE PASSED), changed it by a reply or push, or
-    entered STALL after the previous poll at ``since``; a tick where nothing changed is silent."""
+    """Each order that entered lateness (OVERDUE), changed it by a reply or push, or entered STALL
+    after the previous poll at ``since``; a tick where nothing changed is silent. Merged work waits
+    on the install, which ``install_lines`` reports."""
     now = time.time()
-    late, stalled, passed = [], [], []
+    late, stalled = [], []
     for t in pending:
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
-        if (entered := work.stalled_since(ordered)) is not None and since < entered < now:
+        if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
+        if not work.strikes:
+            continue
         if (crossed := t.late_since(now)) is None:
             continue
-        answer = reply(t.holder, ordered) if work.strikes else None
-        if since < max(crossed, work.moved or 0, float(answer.get('ts', 0)) if answer else 0):
-            if work.strikes:
-                due = f'due {hhmm(t.deadline)}, order {t.order.id}'
-                late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
-            else:
-                passed.append(f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {work.line}')
+        answer = reply(t.holder, ordered)
+        replied_at = float(answer.get('ts', 0)) if answer else 0
+        if since < max(crossed, replied_at) or work.moved_after(since):
+            due = f'due {hhmm(t.deadline)}, order {t.order.id}'
+            late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
     alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
              'missed = order strike, 2 strikes = fire')
-    return [alarm] * bool(late) + stalled + passed
+    return [alarm] * bool(late) + stalled
+
+
+def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: float) -> list[str]:
+    """One INSTALL line naming every held order that waits on the fleet's install."""
+    waiting = [f'{w.id} {w.holder}' for t in held for w in t.order.waiting_on_install(t, read)]
+    return InstallDeadline.read(COMMS.root).alarm(waiting, now)
 
 
 def overdue():
     since = 0.0  # the previous poll: a line prints once, when its state is entered after it
+    installs: list[str] = []
     while True:
         now = time.time()
         if missing := first_calls():
@@ -673,6 +680,10 @@ def overdue():
         read = progress() if pending else {}
         for line in deadline_lines(pending, read, since):
             print(line, flush=True)
+        if (lines := install_lines(held, read, now)) != installs:
+            for line in lines:
+                print(line, flush=True)
+            installs = lines
         # Units leave finished PRs open and wander off. An order's open PR that nobody has touched for
         # 5 minutes is a stall, whatever the unit says it is doing; until its deadline, OVERDUE owns the alarm.
         idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
@@ -725,7 +736,7 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.decode(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_namespace(args)
 
 
 class RuledVerb(CommanderVerb):
@@ -876,6 +887,16 @@ class DueVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class InstallVerb(RuledVerb):
+    help = "plan the fleet's next install; merged and delivered orders wait on it"
+    at: str = option("at", help="HH:MM the install is due")
+
+    def run(self) -> None:
+        PlannedInstallDeadline(deadline(self.at)).plan(COMMS.root)
+        print(f'install due {self.at}')
+
+
+@dataclass(frozen=True, kw_only=True)
 class WithdrawVerb(OrderVerb, RuledVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
     pid: str = option("pid")
@@ -917,7 +938,7 @@ class ServeVerb(OrderVerb, RuledVerb):
     phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
 
     def run(self) -> None:
-        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.decode(self.phase)))
+        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
         print(f'{self.pid} serves {self.phase}')
 
 

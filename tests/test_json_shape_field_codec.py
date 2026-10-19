@@ -81,7 +81,7 @@ def test_external_shape_family_uses_one_codec_for_children_and_new_cases():
     assert value.render() == (("failure", ("400",), "False", ""),)
     assert FieldCodec.encode(value) == raw
     assert FieldCodec.project(value, "status") == raw
-    assert ExternalValue.decode("text") is TextValue
+    assert ExternalValue.member_named("text") is TextValue
     assert FieldCodec.decode(type[ExternalValue], "text") is TextValue
     for invalid in (object(), {1: "bad key"}, float("nan")):
         with pytest.raises((TypeError, ValueError)):

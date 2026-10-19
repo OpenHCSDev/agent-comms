@@ -1,26 +1,25 @@
-"""One-time P495 read-ledger conversion. Stop writers; back up before publishing.
-
-Run with the P495 runtime's Python: carry_p495_read_ledger.py ROOT --backup FILE.
-No production reader accepts the previous shape.
+"""Read cursors gain their conversation record (P495): each viewer's per-conversation
+cursors move under ``ReadCursor.conversations``. Every message and native read position
+is preserved. No production reader accepts the previous shape.
 """
 from __future__ import annotations
 
-import argparse
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agent_comms.field_codec import FieldCodec
+from cutover.carry import Carried, Carry
+
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.read_basis import ChannelConversation, DMConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
 @dataclass(frozen=True)
 class PreviousConversation:
     target: str = ''
-    participants: tuple[RecordedThreadIncarnation, ...] = ()
+    participants: tuple[ThreadIncarnation, ...] = ()
 
     def current(self):
         if self.participants:
@@ -40,32 +39,35 @@ class PreviousReadDocument:
     notice: str | None = None
 
 
-def carry(root: Path, backup: Path) -> None:
-    ledger = ReadLedger.at(root)
-    with ledger.locked():
-        original = ledger.path.read_bytes()
-        previous = FieldCodec.decode(PreviousReadDocument, FieldCodec.parse(original))
-        current = ReadDocument(
-            {owner: ReadCursor({key.current(): value for key, value in conversations.items()})
-             for owner, conversations in previous.messages.items()},
-            previous.bus_identity, previous.transcripts, previous.notice,
-        )
-        with backup.open('xb') as stream:
-            stream.write(original)
-            stream.flush()
-            os.fsync(stream.fileno())
-        ledger._publish_unlocked(current)
-    assert ledger.read() == current
-    print(f'Converted {len(current.messages)} viewers; all message and native read positions preserved. Backup: {backup}')
+class ReadLedgerConversations(Carry):
+    after = "carry_earlier_projects"
+
+    @classmethod
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
+        ledger = ReadLedger.at(root)
+        if not ledger.path.exists():
+            return Carried(0)
+        with ledger.locked():
+            parsed = FieldCodec.parse(ledger.path.read_bytes())
+            try:
+                FieldCodec.decode(ReadDocument, parsed)
+            except MalformedRecord:
+                pass
+            else:
+                return Carried(0)
+            previous = FieldCodec.decode(PreviousReadDocument, parsed)
+            current = ReadDocument(
+                {owner: ReadCursor({key.current(): value for key, value in conversations.items()})
+                 for owner, conversations in previous.messages.items()},
+                previous.bus_identity, previous.transcripts, previous.notice,
+            )
+            if apply:
+                ledger._publish_unlocked(current)
+        if apply and ledger.read() != current:
+            raise ValueError("Read ledger carry did not preserve every read position")
+        viewers = len(current.messages)
+        return Carried(viewers, {"viewers": viewers}, (ledger.path.name,) if apply else ())
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('root', type=Path)
-    parser.add_argument('--backup', required=True, type=Path)
-    args = parser.parse_args()
-    carry(args.root, args.backup)
-
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    ReadLedgerConversations.main()

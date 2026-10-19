@@ -9,7 +9,7 @@ from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import ActiveTurn
+from agent_comms.turn_lease import ActiveTurn, FinishedTurnFence, NoFinishedTurn
 
 
 def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypatch):
@@ -40,10 +40,10 @@ def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
     successor = comms.agents.begin_turn("owner", "same-id").turn_lease
     assert original.identity.generation == successor.identity.generation
     saved = comms.registry.store.path.read_bytes()
-    assert comms.registry.release_turn(original) == (False, None)
+    assert comms.registry.release_turn(original) == (False, NoFinishedTurn())
     assert comms.registry.store.path.read_bytes() == saved
     assert comms.registry.require("owner").turn_lease == successor
-    assert comms.agents.finish_turn(successor) is not None
+    assert isinstance(comms.agents.finish_turn(successor), FinishedTurnFence)
 
 
 def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
@@ -51,7 +51,7 @@ def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn("owner", "turn").turn_lease
     comms.registry.archive("owner")
-    assert comms.registry.release_turn(lease) == (True, None)
+    assert comms.registry.release_turn(lease) == (True, NoFinishedTurn())
     assert not comms.registry.require("owner").active_turn.executing
 
 
