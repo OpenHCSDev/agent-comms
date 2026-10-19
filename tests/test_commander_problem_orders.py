@@ -1025,6 +1025,30 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
 
 
+def test_dropped_problem_links_through_the_unordered_lifecycle(commander):
+    from agent_comms.todos import LocatedProblemFinding, UnlocatedProblemFinding
+    comms, caller = commander
+    original_finding = LocatedProblemFinding(FileLine(__file__, 1))
+    for pid, at, finding in (('P1', 100, original_finding), ('P2', 200, UnlocatedProblemFinding())):
+        CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+            problem=pid, order=replace(order(comms.root, 'order-' + pid),
+                at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120), finding=finding),
+            request='request', deadline=RecordedEventTime(1000), commander='lead',
+            repo='OpenHCSDev/agent-comms', text='Fix ' + pid)).apply(comms, caller)
+    old_message = order_message(commander, 'P1', 'The earlier counter order')
+    new_message = order_message(commander, 'P2', 'The newer counter order')
+    lead = comms.registry.require('lead').incarnation
+    comms.goals.todos.drop(lead, 'worker', old_message, new_message)
+    dropped = comms.goals.todos.get('P1')
+    assert dropped.holder is None and not dropped.pending
+    comms.goals.todos.link(lead, 'P1', 'worker', new_message)
+    linked = comms.goals.todos.get('P1')
+    assert linked.holder == 'worker' and linked.pending
+    assert linked.order.id == comms.goals.todos.get('P2').order.id
+    assert linked.order.finding == original_finding
+    assert comms.goals.todos.get('P2').order.finding == UnlocatedProblemFinding()
+
+
 def order_message(commander, problem, text):
     """The commander's bus message, recorded as the one the order was sent in."""
     comms, caller = commander

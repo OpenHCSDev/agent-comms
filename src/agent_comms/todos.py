@@ -1254,7 +1254,7 @@ class PendingProblemOrder(CheckedProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DroppedProblemOrder(CheckedProblemOrder):
+class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
     replacing_message: str
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Dropped for a newer order"
