@@ -13,7 +13,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.private_path import FileRevision
-from agent_comms.view_unread import ReplyIndex
+from agent_comms.view_unread import Counted, ReplyIndex
 
 
 def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
@@ -28,8 +28,7 @@ def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
     assert index.counts(indexed, 0)
     assert not index.counts(growing, 0)  # A changed source needs a fresh suffix.
     assert index.counts(growing, growing.size)  # The read mark itself proves zero unread.
-    assert index.counted(1, 0).total == 1
-    assert not index.counted(1, 0).lower_bound
+    assert index.counted(1, 0) == Counted(1)
 
     source.write_bytes(b"")
     truncated = FileRevision.capture(source)
