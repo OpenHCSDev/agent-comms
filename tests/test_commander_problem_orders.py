@@ -889,14 +889,9 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
     from agent_comms.connector import CALLER
     from agent_comms.goal_actions import CompletedGoalAction
     from agent_comms.goals import RequestDirective
-    from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
     from agent_comms.tools import CommsSendTool
     comms, caller = commander
     comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
-    def reviewed():
-        RuleReviews(comms.root).write('claude-ai', DrawnRuleReviewEntry(('Declare each fact once',), 1))
-        RuleReviews(comms.root).write('claude-ai', AnsweredRuleReviewEntry(
-            1, 'This tick moves rules.py:47 into one typed Core record that Core owns.'))
     def direct(target, body):
         CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
         return comms.bus.log.latest_sequence()
@@ -904,7 +899,6 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
         monkeypatch.setattr(standing_rules.time, 'time', lambda: after)
         return [rule.line() for rule in standing_rules.DirectiveUnacted.violations(comms, 'lead')]
     worker = comms.registry.require('worker').goal
-    reviewed()
     seq = direct('lead', 'Make the slowdowns impossible by mechanism.')
     assert direct('worker', 'A note to a unit, not a request.') and comms.registry.require('worker').goal == worker
     goal = comms.registry.require('lead').goal
@@ -919,7 +913,6 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
     assert unacted(directive.deadline + 1) == []
     CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
-    reviewed()  # the clock now stands past the first deadline
     seq = direct('lead', 'A second directive after the first request is done.')
     goal = comms.registry.require('lead').goal
     assert goal.id != 'request' and goal.state.active and goal.text == 'A second directive after the first request is done.'

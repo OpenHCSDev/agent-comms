@@ -58,7 +58,6 @@ class CommanderConfig(CommanderRole, BaseModel):
     state: Path
     board: Path
     narrative: Path
-    rules: tuple[Path, ...]
     repos: tuple[Repo, ...]
     worktrees: Path
     scratch: Path
