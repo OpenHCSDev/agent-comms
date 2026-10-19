@@ -22,6 +22,8 @@ from .agent_backend import (
 from .agent_events import Error
 from .coordination_database import CoordinationStore
 from .external_transcript import ExternalCut
+from .thread_identity import ThreadIncarnation
+from .recorded_time import EventTime
 from .native_child import PiChild
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
@@ -52,7 +54,7 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
     def require_forkable(self):
         raise ValueError('Durable database forking is not implemented')
 
-    def last_tool_call(self, root, incarnation):
+    def last_tool_call(self, root: Path, incarnation: ThreadIncarnation) -> EventTime:
         raise BackendDeclarationError("Pi Durable does not serve thread turns or tool activity")
 
     def history_source(self, root, incarnation):

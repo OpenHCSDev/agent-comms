@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
 from .notification_progress import AcknowledgedProgress
+from .native_tool_activity import NativeToolActivity
 
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
@@ -118,7 +119,6 @@ class AgentActivity:
 
     def record_native_tool_call(self, thread: Thread, call_id: str) -> None:
         """Index the original native record when the runtime announces its call."""
-        from .native_tool_activity import NativeToolActivity
         NativeToolActivity(
             self._wire_lock_path.parent, thread.incarnation, Path(thread.runtime.path)
         ).record(call_id)

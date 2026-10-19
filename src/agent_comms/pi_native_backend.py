@@ -38,6 +38,9 @@ from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
+from .native_tool_activity import NativeToolActivity
+from .thread_identity import ThreadIncarnation
+from .recorded_time import EventTime
 from .selected_session import SavedSelectedSession
 from .unstarted_runtime import UnstartedRuntime
 
@@ -96,8 +99,7 @@ class PiSessionFile(RuntimeLocation):
     def imported_sources(self):
         return NativeTranscript(Path(self.path)).imported_sources()
 
-    def last_tool_call(self, root, incarnation):
-        from .native_tool_activity import NativeToolActivity
+    def last_tool_call(self, root: Path, incarnation: ThreadIncarnation) -> EventTime:
         return NativeToolActivity(root, incarnation, Path(self.path)).last_tool_call()
 
     def storage_files(self):

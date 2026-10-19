@@ -36,6 +36,7 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
+    from .agent_activity import AgentActivity
     from .comms import Comms
     from .goal_presentation import GoalSnapshot
     from .input_disposition import InputDocument
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     from .pi_events import RetryAttemptEvent
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
+    from .threads import Thread
     from .transcript_events import SentTranscript
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
@@ -57,8 +59,9 @@ class AgentEvent(ABC):
     def __init__(self) -> None:
         """Concrete dataclass declarations supply their own payload constructor."""
 
-    def record_native_activity(self, activity, thread) -> None:
+    def record_native_activity(self, activity: AgentActivity, thread: Thread) -> None:
         """Events without an original tool call publish no tool selector."""
+        return None
 
 
 @dataclass(frozen=True)
@@ -171,7 +174,7 @@ class ToolStart(ToolEvent):
     args: object = None
     kind: str = "other"
 
-    def record_native_activity(self, activity, thread) -> None:
+    def record_native_activity(self, activity: AgentActivity, thread: Thread) -> None:
         activity.record_native_tool_call(thread, self.id)
 
     @classmethod

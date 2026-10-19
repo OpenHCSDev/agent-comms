@@ -598,10 +598,12 @@ class TurnSession(NativeSession):
     async def tool_started(self, event):
         await self.context_proof()
         self.tool_socket.tool_started(event)
+        return True
 
     @handles(pi.ToolExecutionEnd)
     async def tool_finished(self, event):
         self.tool_socket.tool_finished(event, self.command.input_id)
+        return True
 
     def reject_prompt(self, response):
         error = self.output.error(str(response.error or "Prompt was rejected"))

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from .thread_identity import ThreadIncarnation
+from .recorded_time import EventTime
 
 from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from .external_transcript import ExternalTranscript
@@ -51,10 +54,10 @@ class UnstartedRuntime(RuntimeLocation):
     def select_session(self, directory, execution, source_reads):
         return SelectedSession(directory)
 
-    def history_source(self, root, incarnation):
+    def history_source(self, root: Path, incarnation: ThreadIncarnation) -> ExternalTranscript:
         return ExternalTranscript(root, incarnation)
 
-    def last_tool_call(self, root, incarnation):
+    def last_tool_call(self, root: Path, incarnation: ThreadIncarnation) -> EventTime:
         return self.history_source(root, incarnation).last_tool_call()
 
     def storage_files(self):
