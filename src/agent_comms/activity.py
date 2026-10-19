@@ -89,6 +89,10 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
 
     headline: ClassVar[str] = "Inbox unavailable"
 
+    @classmethod
+    def from_error(cls, owner: OwnerIdentity, error: Exception) -> Self:
+        return cls(owner, type(error).__name__, str(error), recorded_at=time.time())
+
     @property
     def summary(self) -> str:
         return f"{self.headline} · {self.error_type}: {self.reason} · {self.recovery}"

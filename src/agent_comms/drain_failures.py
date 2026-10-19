@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
-import time
 from contextlib import asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
@@ -43,9 +42,7 @@ async def drain_failures(
     ))
 
     async def record(kind, error) -> None:
-        diagnostic = kind(
-            owner, type(error).__name__, str(error), recorded_at=time.time()
-        )
+        diagnostic = kind.from_error(owner, error)
         await Coordination.run_worker(partial(
             comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
             source_error=error,
