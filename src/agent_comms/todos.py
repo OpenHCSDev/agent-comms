@@ -354,6 +354,14 @@ class ProgressSource:
         return run.stdout
 
     def readings(self) -> DistanceReadings:
+        """Progress observation does not run the order's Check."""
+        return DistanceReadings()
+
+
+class MeasuredProgressSource(ProgressSource):
+    """The board's distance view admits Check execution; the watchdog only reads activity."""
+
+    def readings(self) -> DistanceReadings:
         """The order's base, then each branch commit since the order; the last two are read."""
         base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
         after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
@@ -384,7 +392,11 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The first found member by its declared precedence; with none found, no commit yet."""
         owner = todo.holder
         assert owner, "Only a held order has progress."
-        source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
+        return cls.from_source(MeasuredProgressSource(
+            todo, storage.order_checkout(owner, todo.id), pulls))
+
+    @classmethod
+    def from_source(cls, source: ProgressSource) -> OrderProgress:
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
             return next((progress for member in members for progress in member.found(source)),
@@ -403,6 +415,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def distance_readings(self) -> DistanceReadings:
         """The order's distance readings; progress that read no commit has none."""
         return DistanceReadings()
+
+    def advance(self, todo: Todo, now: float) -> Todo:
+        """Progress with no stall consequence leaves its order unchanged."""
+        return todo
 
     def stalled(self, ordered: float, now: float) -> bool:
         return False
@@ -436,26 +452,46 @@ class FoundProgress(OrderProgress):
 
 
 class Stalling:
-    """Work that stalls at a time its own class declares."""
+    """One inactivity deadline and its strike/release transition."""
+
+    seconds: ClassVar[int] = 600
 
     @abstractmethod
-    def stall_at(self, ordered: float) -> float: ...
+    def last_move(self, ordered: float) -> float: ...
+
+    @abstractmethod
+    def stall_reason(self) -> str: ...
+
+    def stall_at(self, ordered: float) -> float:
+        return self.last_move(ordered) + self.seconds
 
     def stalled(self, ordered: float, now: float) -> bool:
-        return now > self.stall_at(ordered)
+        return now >= self.stall_at(ordered)
+
+    def advance(self, todo: Todo, now: float) -> Todo:
+        if not self.stalled(todo.order.at.recorded_at("An order"), now):
+            return todo
+        owner, actor = todo.held(), todo.creator_identity
+        reason = StrikeReason(f"{owner.owner} stalled on {todo.id}: {self.stall_reason()}")
+        at = RecordedEventTime(now)
+        struck = StrikeTodo(todo.revision, actor, owner, reason.text, at).apply(todo)
+        return ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
 
     def stalled_between(self, ordered: float, since: float, now: float) -> bool:
-        return since < self.stall_at(ordered) < now
+        return since < self.stall_at(ordered) <= now
 
 
 @dataclass(frozen=True)
 class Moving(Stalling):
-    """Work last moved ``at``; it stalls 15 minutes later with no commit, push or PR change."""
+    """Work whose last commit, push or PR change was observed at ``at``."""
     at: float = field(kw_only=True)
     readings: DistanceReadings = field(default=DistanceReadings(), kw_only=True, compare=False)
 
-    def stall_at(self, ordered: float) -> float:
-        return self.at + 900
+    def last_move(self, ordered: float) -> float:
+        return max(ordered, self.at)
+
+    def stall_reason(self) -> str:
+        return f"no commit, push or PR change for ten minutes after {self.state}"
 
     def distance_readings(self) -> DistanceReadings:
         return self.readings
@@ -470,9 +506,11 @@ class NoCommitProgress(Stalling, OrderProgress):
     def state(self) -> str:
         return "no commit since the order"
 
-    def stall_at(self, ordered: float) -> float:
-        """No first commit within 10 minutes of the order."""
-        return ordered + 600
+    def last_move(self, ordered: float) -> float:
+        return ordered
+
+    def stall_reason(self) -> str:
+        return "no commit, push or PR change for ten minutes after the order"
 
 
 @dataclass(frozen=True)
@@ -1994,7 +2032,7 @@ class Todo(TypedTable):
 
     @property
     def strike_count(self) -> int:
-        return 0 if self.assignment is None else len(self.live_strikes(self.assignment.owner))
+        return len(self.live_strikes(self.holder))
 
     def live_strikes(self, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         """The strikes still counting on this task, against ``unit`` on any order of it."""
@@ -2232,6 +2270,36 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def advance_stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
+        """Observe outside SQLite, then atomically strike and release the same assignment."""
+        held = tuple(todo for todo in self._open("assignment IS NOT NULL", ()) if todo.pending)
+        pulls = PullRequests(held)
+        changed = []
+        for todo in held:
+            observed_at = time.time()
+            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            progress = OrderProgress.from_source(source)
+            try:
+                with self.writing() as db:
+                    current = self._current(db, todo.id)
+                    current.require_result(todo)
+                    result = progress.advance(current, observed_at)
+                    if result != current:
+                        result.upsert(db)
+                        changed.append(result)
+            except TodoConflict:
+                # A concurrent order change owns the row; observe its new assignment next pass.
+                continue
+        return tuple(changed)
+
+    async def watch_stalled(self, storage: StorageRule) -> None:
+        """The backend observes Git/PR changes; Stalling alone owns the deadline."""
+        from .coordinator import Coordination
+
+        while True:
+            await Coordination.run_worker(lambda: self.advance_stalled(storage))
+            await asyncio.sleep(60)
 
     def board_disagreements(
         self, commander: ThreadIncarnation, storage: StorageRule,

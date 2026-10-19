@@ -28,7 +28,7 @@ import time
 import urllib.request
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
@@ -366,6 +366,7 @@ class Connector:
         with self.opened_wire():
             pass
         app = web.Application()
+        app.cleanup_ctx.append(self.watch_orders)
         app.add_routes(
             [
                 web.get("/.well-known/oauth-protected-resource", self.resource_metadata),
@@ -378,6 +379,18 @@ class Connector:
             ]
         )
         return app
+
+    async def watch_orders(self, app: web.Application):
+        """The running Core service advances stalled orders without a commander call."""
+        with self.opened_wire() as comms:
+            task = asyncio.create_task(
+                comms.goals.todos.watch_stalled(comms.registry.storage_rule))
+            try:
+                yield
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(
