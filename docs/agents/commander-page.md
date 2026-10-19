@@ -1,86 +1,110 @@
-# Commander page: delivered first slice
+# Commander board and derived commit cadence
 
-Issue #1495. Drafts: Core #1937 and Toad #1080. Owner: pi-cn-phase6.
+Issue #1495. Core #1937, paired Toad #1080. Owner: pi-cn-phase6.
+These are source-paired changes, not an installation claim.
 
-## Delivered, not installed
+## Working slice
 
-`/commander <commander-thread>` opens the board in normal Toad. One collapsed line per held unit shows its problem number, plain problem text, deadline, recorded delivery state and native git/PR status. Overdue units come first. Click/Enter expands only that unit: full canonical order instructions, the actual latest checkout commit and up to three original recent turns, one line each.
+`/commander <commander-thread>` opens the ordinary Toad page. It shows held
+orders, deadlines and delivery state, overdue first. Expanding one unit reads
+its actual checkout commit and three original recent turns. Recorded failures,
+stalled orders and retained refused sends appear in the alarms pane.
 
-Alarms show native stalled orders, recorded failed deliveries and retained refused sends. Alarm sources declare their reads; Toad has no alarm-kind switch. Refusals come from pi-connector's `SendRefusal.recent`, not from a UI log. **Core #1937 locally integrates dependency #1922; land that dependency first.** No GitHub PR was merged. Nothing was installed, relinked or restarted in the normal launcher.
+The collapsed card also shows commit cadence, the forecast next-commit time,
+its margin against the order deadline, and whether that forecast has already
+been missed. Missing checkouts and insufficient/non-increasing samples remain
+explicitly unknown. Delivery removes the forecast.
 
-This is the requested first slice, not full phase 6: strikes, review queue, story, sidebar order decorations, turn/file drill-down and predictions remain outside this delivery.
+**Interpretation:** commit cadence predicts the next commit, not completion.
+There is no known amount of remaining work from which to calculate a completion
+ETA. The page explicitly says `completion unknown`; no prediction is persisted.
+Full row-27 prediction/outcome comparison remains unverified. pi-plan-claims
+owns that row's declaration in #1992; no second parity registry was added here.
+Strikes, review queue, story and sidebar decorations remain outside this slice.
 
-## Owners, consumers and deletions
+## Owners and deletions
 
-- `TodoStore.held_for_commander` selects indexed held rows; `Todo.held().owner_identity` supplies nominal unit identity; `Todo.overdue` supplies overdue meaning. `CommanderModel` retains those types. It does not inspect kind/name strings to recover semantics.
-- `ProblemOrder.instructions` supplies the complete order body. No second order renderer was written in Toad.
-- `ProgressSource.progress` in `todos.py:333` now owns the sole progress selection algorithm, moved out of `OrderProgress.read`. The latter delegates to it. `StatusProgressSource` inherits that selection and suppresses acceptance-distance measurement: reading the page cannot execute an order's arbitrary acceptance check. Existing measured native-tool behavior remains on `ProgressSource`.
-- `ProgressSource.latest_commit` reads one actual commit only for expanded cards. `OrderProgress.stalled` supplies stall policy. GitHub/read failures are `UnreadProgress`, not a false no-commit state.
-- `TranscriptEvent.turn_line` and `TurnDigest.line` own recent-work summaries. Assistant and tool-start declarations contribute; prompts do not swamp the card with wire envelopes. The model's earlier generic imported-body rendering was deleted.
-- `ReadCommanderIdentity` resolves the command spelling to `ThreadIncarnation` inside the existing observation process. Toad performs no registry or Todo read. Intentional typed read refusals return through the existing `ReadRefused` boundary instead of killing the observer.
-- `ObserveCommander` and `CommanderReading` use the existing interest/process lifetime. `WireRevision` watches Todo main/WAL files plus relevant existing sources and the existing expiry tick. Closing the page removes its interest; there is no new polling timer or store.
-- Toad's `CommanderCommand` is discovered from its declaration, with no command roster or MainScreen edit. `CommanderUnit` extends `Collapsible`; its existing title and explicit detail widgets are updated in place. A real run caught an incorrect broad `Static` lookup that updated the title; that lookup was deleted.
+- `TodoStore.held_for_commander`, nominal holder identities and `Todo.overdue`
+  supply the canonical order selection and deadline meaning.
+- `ProblemOrder.instructions` supplies order text. `CheckedProblemOrder.ordered_at`
+  owns recorded-time normalization; all numeric order-time consumers use it.
+- `ProgressSource.progress` supplies one progress-selection algorithm.
+  `StatusProgressSource` inherits it and disables acceptance-check execution.
+- Main's `ProgressCheckout` family owns available versus removed checkouts.
+  Its concrete classes supply commit details and bounded cadence evidence.
+  Both distance and cadence reads share `PresentCheckout.branch_commits` and
+  the `ProgressPoint` decoder. #1935's competing source changes were reverted.
+- `UnitCard.momentum` derives `CommitMomentum` values from canonical orders and
+  observed commits. Unknown and forecast states are distinct types, not zero
+  timestamps standing in for missing observations. No new store or timer exists.
+- `DeliveryProgress.failed_notifications` owns failure selection. `FailedProgress`
+  returns the original notification. The alarm reader's `isinstance` filter was
+  deleted; Toad has no failure-kind switch or notification copy.
+- Actual GitHub command failures and timeouts become explicit unread progress.
+  Other Git, decode and source errors propagate; there is no ValueError catch-all.
+- Existing observation interests, store/WAL revisions and expiry notifications
+  drive updates. Closing the page retires its interest.
+- Toad renders the Core model through its existing Collapsible widgets. GoalBar
+  presence is derived from actual composition, not an optional cached child;
+  opening/clicking a bus conversation no longer raises `goal_bar` AttributeError.
 
-One selection declaration, confirmed with:
+Used the existing refactor-audit Package parser across both production roots.
+The declaration/consumer evidence reports zero parse omissions. Dynamic family
+and MRO resolution was read semantically, not claimed as an AST behavioral proof.
+Evidence is under `/home/ts/.cache/agent-scratch/pi-cn-phase6/`.
 
-```
-rg -n 'members = sorted\(OrderProgress.members_with' src/agent_comms
-# todos.py:335 only
-```
+## Physical application proof
 
-## Overlap and source evidence
+`physical-failure-owner/` contains the latest plain-st/Xvfb run, using normal
+Toad, its real observation process, copied registered saved sessions, real
+scratch-bus orders created through Core tools, and an actual retained refused
+send. No provider was started, and no original session or uncertain input was
+changed. `sources.txt` records provenance.
 
-All open Core and Toad PR file lists were read before writing. #1903/#1873 concern launch/runtime classes not changed here. P603 #1757 was already merged. #1912 and #1756 diffs were read; their root-context and pattern-ID classes are not changed here. Same-file changes in `todos.py` are separate functions/classes. Recent Toad #1070 changes MainScreen and existing command classes; this slice adds a new command and screen instead. #1917 changes imported-message/UserTranscript behavior, not the event/turn-summary methods added here. `plan_phases.py` was not edited.
+The journey opened a real bus conversation, submitted `/commander claude-code`,
+clicked one card, observed a tool-recorded delivery update without reopening,
+and returned to the same conversation. Captures were inspected; no traceback
+pane or unavailable-page error is present.
 
-Read the refactor-audit skill and pattern catalog. Reused its `Package` AST parser and overlay for both complete production roots, before/after source revisions, with zero parse omissions. Owners, imports, inheritance, direct consumers and function checks are recorded in `/home/ts/.cache/agent-scratch/pi-cn-phase6/owner-consumers.txt`. Dynamic family discovery, MRO dispatch and aliases were read semantically; the AST listing does not claim complete dynamic resolution. NRA is not installed on this machine.
+- `level-0.txt/png`: collapsed cards, known and unknown cadence, alarms.
+- `level-1.txt/png`: one expanded card and original turns; second card collapsed.
+- `live-delivery.txt/png`: delivery updates the same open card and clears its stall.
+- `result.txt`: successful continuous-journey result.
 
-Relevant patterns: BOUND-2/BOUND-8 (retain Core's domain records rather than mapped shapes), MEMB-1 (derive command/alarm membership from declarations), IMPL-12 (one progress selector, inherited source capability). The final overlay adds no string/type dispatch switches or raw-record shapes. Its unused-module heuristic cannot see the pickled observation interest crossing the paired repository boundary.
+Actual collapsed screen excerpt:
 
-## Actual application acceptance
-
-Verified implementation pair: **Core e248a6ace / Toad 292bdaa5**, using the existing installed stack Python/dependencies with the two source checkouts on `PYTHONPATH`. This is a source-paired real Toad run, not a claim that the normal installed launcher contains the feature.
-
-Ran `tools/commander_page_journey.py` in **plain st on isolated Xvfb :186**, a real `ToadApp`, real observation child and scratch bus. It opened a real bus conversation and submitted `/commander claude-code` through the normal prompt/local-command boundary. It clicked a real Collapsible title, recorded delivery through the real order-completion tool, observed the page update without reopening, and returned to the identical underlying conversation.
-
-The scratch bus contains copies of actual registered units and complete-line cuts of their real saved session files, not fixture transcripts or hand-built events. Orders were created through `CommsTodoCreateTool`. The refusal was one actual `CommsSendTool` attempt to an absent target, retained by the send owner. No provider/agent was started and no original session, registry or uncertain input was modified. Snapshot provenance is in `physical-4/sources.txt`.
-
-Artifacts under `/home/ts/.cache/agent-scratch/pi-cn-phase6/physical-4/`:
-
-- `level-0.png`, `level-0.txt`: physically displayed collapsed board and alarms.
-- `level-1.png`, `level-1.txt`: actual expanded card, commit and original turns; second unit still collapsed.
-- `live-delivery.png`, `live-delivery.txt`: same open card changes to Delivered, OVERDUE disappears and its stall alarm clears; the refusal remains.
-- `result.txt`: successful continuous journey receipt.
-
-Text below is excerpted from the actual composed terminal strips; the files contain the complete screen.
-
-### Level 0
-
-```
-Commander claude-code | 2 units | Overdue first · Enter/click a unit to expand · Esc to return
-▶ pi-cn-phase2 | OVERDUE P1: Show the real order in the commander page | due 14:23:01 | Open; no commit since the order
-▶ pi-cn-phase5 | P2: Show the real order in the commander page | due 14:54:01 | Open; no commit since the order
-Alarms
-STALLED pi-cn-phase2 P1: no commit since the order
+```text
+Commander claude-code | 2 units | Overdue first
+P1: 3.0m/commit; next commit ~17:17 (132.1m before due); forecast missed by 133.2m; due 1.2m ago; completion unknown
+P2: cadence unknown (need two increasing commit times); due in 29.8m; completion unknown
+STALLED pi-cn-phase6 P1: pushed d07ee61b8 at 17:14, no PR
 REFUSED SEND #1 claude-code -> unregistered-page-target: Target 'unregistered-page-target' is not a registered thread.
 ```
 
-### Level 1, selected screen lines
+## Checks and review limits
 
-```
-▼ pi-cn-phase2 | OVERDUE P1: Show the real order in the commander page | due 14:23:01 | Open; no commit since the order
-  Problem: P1: Show the real order in the commander page
-  Order: commander-page-pi-cn-phase2
-  1. Render the canonical order owner without copying its state
-  Latest checkout commits:
-  P1: 69688af8d Merge remote-tracking branch 'origin/main' into feat/cn-phase2-design
-  Recent turns (newest first):
-  eb8bb409-f882-4e9b-80f2-efd20829b639: Run gh pr edit 1931 -R OpenHCSDev/agent-comms ...
-  35561dbb-3227-4076-bda3-078c45dfdf7b: Run gh pr diff 1587 -R OpenHCSDev/agent-comms; ...
-▶ pi-cn-phase5 | P2: Show the real order in the commander page | due 14:54:01 | Open; no commit since the order
-```
+The stable source checkpoint passed **142 tests in 72.67s**. After removing the
+failure-family filter, all **10 commander-model checks passed in 1.88s**, including
+selection of the original failed notification. Tests ran in the background under
+`timeout 300 ... -X faulthandler`, with default parallelism/coverage disabled.
+The environment warns about the unavailable pytest-timeout plugin; the outer
+timeout was enforced. Ruff for the new model and both diff checks pass.
 
-## Checks and retained output
+The retained full ratchet reports at the stable checkpoint both exit **1**, solely
+for `SourceLines` (+465 Core, +205 tools), with no introduced findings. Rechecking
+`ca9c4f881` after deleting the failure-family filter gives **src 1/tools 1**, solely
++474/+205 SourceLines, again with introduced findings empty. No budget,
+suppression or checker change was made. Under the commander's ruling in message
+3617, SourceLines-only failures do not block review. Reports name their exact
+base/head; they are not a claim about a fresh merger integration head.
 
-Focused batch covers commander model, read-only progress, refusals and native/external turn readers. Three pre-existing turn-reader fixtures lacked required positions/timestamps; updated those fixtures without weakening their assertions. The final batch passed **40 checks in 31.90 seconds**, including the identity/refusal boundary check. Commands run in the background under `timeout 300 ... -X faulthandler`, with pytest default parallelism/whole-suite coverage disabled for the small selected batch. The environment lacks pytest-timeout, producing one configuration warning; the outer timeout remains enforced. New-file Ruff and both `git diff --check` checks pass. CI/full-suite acceptance was not requested or claimed.
+The checking interpreter is the shared QA Python, with the paired Toad source and
+existing stack dependencies visible. Toad now publishes its inline declarations
+through `py.typed`; no copied Toad schema or stub was introduced. The installed
+stack interpreter lacks the checking modules and was not modified.
 
-Owned disposable output: `/home/ts/.cache/agent-scratch/pi-cn-phase6`. Keep `physical-4` screen/source receipts while the drafts await review. Superseded physical runs and test databases were retired after checking actual borrowers; the isolated Xvfb/st processes were stopped. Source and handoffs stay in `/home/ts/wt/pi-cn-phase6--P1` and `--P2`. The standard resource-check executable is absent here; measured 3.1 GiB available RAM and 26 GiB disk before the bounded run. One physical UI was used; no parallel agent was launched.
+The required `order pr P243` create command was attempted once. It failed on its
+derived missing `pi-cn-phase6--P243` directory; this task's assigned checkout is
+`pi-cn-phase6--P1`, and #1937 already exists. The existing PR is updated in place
+with metadata generated by its canonical order owner. GitHub currently reports
+a conflict with current main; no merge-main or unrequested rebase was performed.
