@@ -7,7 +7,7 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,9 +15,19 @@ from typing import TYPE_CHECKING
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
+from .field_codec import FieldCodec
+from .store_files import SharedLock
 from .private_path import ObservedPath
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
-from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
+from .read_basis import (
+    ChannelConversation,
+    Conversation,
+    ConversationCursor,
+    DisplayBasis,
+    DisplayedConversation,
+    DMConversation,
+    ReadCursor,
+)
 from .sealed import Sealed
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -28,27 +38,35 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
+    from .wire_log import OpenedWireSource
 
 
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
-    messages: dict[RecordedThreadIncarnation, dict[Conversation, ReadCursor]] = field(default_factory=dict)
+    messages: dict[RecordedThreadIncarnation, ReadCursor] = field(default_factory=dict)
     bus_identity: RecordedBusIdentity = field(default_factory=NoRecordedBus)
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
 
-    def cursor(
-        self, viewer: str, snapshot: RegistryProvenance, source
-    ) -> ReadCursor:
-        """Project this document against the reader's actual source identity."""
-        viewer = snapshot.canonical_name(viewer)
-        thread = snapshot.threads[viewer]
-        if not self.bus_identity.matches(source):
-            return ReadCursor()
-        return ReadCursor.union(
-            cursor for owner in thread.incarnation.recorded_names(snapshot)
-            for conversation, cursor in self.messages.get(owner, {}).items()
-            if conversation.current(snapshot)
+    def cursors(self, viewer: str, snapshot: RegistryProvenance,
+                source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
+        if self.bus_identity.matches(source):
+            thread = snapshot.threads[snapshot.canonical_name(viewer)]
+            for owner in thread.incarnation.recorded_names(snapshot):
+                yield self.messages.get(owner, ReadCursor())
+
+    def cursor(self, viewer: str, snapshot: RegistryProvenance,
+               source: ObservedPath | OpenedWireSource) -> ReadCursor:
+        return ReadCursor.union(cursor.current(snapshot)
+                                for cursor in self.cursors(viewer, snapshot, source))
+
+    def for_conversation(self, viewer: str, conversation: Conversation,
+                         snapshot: RegistryProvenance,
+                         source: ObservedPath | OpenedWireSource) -> ConversationCursor:
+        keys = tuple(conversation.recorded_keys(snapshot))
+        return ConversationCursor.union(
+            cursor.for_conversation(key)
+            for cursor in self.cursors(viewer, snapshot, source) for key in keys
         )
 
 
@@ -63,32 +81,36 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     def empty(self) -> ReadDocument:
         return ReadDocument()
 
+    def read_conversation(self, viewer: str, conversation: Conversation,
+                          snapshot: RegistryProvenance) -> ReadDocument:
+        owners = tuple(snapshot.threads[snapshot.canonical_name(viewer)].incarnation.recorded_names(snapshot))
+        conversations = tuple(conversation.recorded_keys(snapshot))
+        with self.locked(mode=SharedLock()):
+            return self._read_using(lambda data: FieldCodec.decode_selected(ReadDocument, data,
+                {(ReadDocument, "messages"): owners, (ReadCursor, "conversations"): conversations},
+                fields=("messages", "bus_identity")))
+
     @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
-        return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, Conversation)
+        return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, ChannelConversation, DMConversation)
 
-    def capture(
-        self,
-        viewer: str,
-        messages: Iterable[Message],
-        snapshot: RegistrySnapshot,
-        bus_path: Path,
-        *,
-        conversation_snapshot: RegistryProvenance | None = None,
-    ) -> DisplayBasis:
+    def capture_indexed(self, viewer, messages, snapshot, source, index, *,
+                        document: ReadDocument, conversation_snapshot=None) -> DisplayBasis:
         viewer = snapshot.canonical_name(viewer)
-        grouped: dict[Conversation, list[int]] = {}
+        provenance = conversation_snapshot or snapshot
+        grouped: dict[Conversation, set[int]] = {}
         for message in messages:
-            conversation = self.conversation(message, conversation_snapshot or snapshot)
-            grouped.setdefault(conversation, []).append(message.seq)
+            conversation = self.conversation(message, provenance)
+            grouped.setdefault(conversation, set()).add(message.seq)
         return DisplayBasis(
-            viewer,
-            snapshot.threads[viewer].created_at,
-            tuple(
-                DisplayedConversation(conversation, tuple(sorted(set(sequences))))
-                for conversation, sequences in grouped.items()
-            ),
-            RecordedBusIdentity.capture(bus_path),
+            viewer, snapshot.threads[viewer].created_at,
+            tuple(DisplayedConversation(
+                conversation, sequences := tuple(sorted(members)),
+                index.proved_read_prefix(conversation.scope(provenance),
+                    document.for_conversation(viewer, conversation, snapshot, source),
+                    sequences, source.boundary),
+            ) for conversation, members in grouped.items()),
+            source.bus_identity,
         )
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
@@ -102,10 +124,9 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
                 dict(document.messages)
                 if document.bus_identity.matches(displayed.bus_identity) else {}
             )
-            conversations = dict(messages.get(displayed.viewer_identity, {}))
-            for item in displayed.conversations:
-                conversations[item.conversation] = conversations.get(item.conversation, ReadCursor()).add(item.sequences)
-            messages[displayed.viewer_identity] = conversations
+            messages[displayed.viewer_identity] = messages.get(
+                displayed.viewer_identity, ReadCursor(),
+            ).add(displayed.conversations)
             return (
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
                 if messages != document.messages
@@ -163,9 +184,14 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             self, message, snapshot, document=document
         )
 
-    def _displayed_recipient(self, message, thread, snapshot, *, document):
-        if message.seq in self.cursor(thread.name, snapshot, document=document):
-            return (thread.incarnation,)
+    def displayed_incarnation(self, message, incarnation, snapshot, *, document):
+        conversation = self.conversation(message, snapshot)
+        document = (self.read_conversation(incarnation.name, conversation, snapshot)
+                    if document is None else document)
+        if message.seq in document.for_conversation(
+            incarnation.name, conversation, snapshot, ObservedPath.at(self.path.with_name("bus.jsonl"))
+        ):
+            return (incarnation,)
         return ()
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:

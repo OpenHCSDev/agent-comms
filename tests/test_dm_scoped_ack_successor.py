@@ -1,6 +1,8 @@
 """Additional no-provider identity and lock-order probes for scoped DM basis."""
 
 from __future__ import annotations
+
+from agent_comms.wire_log import WireLog
 from agent_comms.registration import Registration
 
 import os
@@ -14,6 +16,8 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest, PageBounds
 from agent_comms.store_files import _store_lock
+from agent_comms.read_basis import ReadCursor, ConversationCursor
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 
@@ -38,20 +42,20 @@ def test_dm_preparation_releases_native_claim_lock(tmp_path, monkeypatch):
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(3):
-        comms.messaging.send("peer", viewer, f"original {index}").message.message_id
-    read = MessagePageRequest.read
+        comms.messaging.send("peer", viewer, f"original {index}")
+    read = MessagePageRequest.displayed
     prepared = []
 
-    def inspect(request, log):
+    def inspect(request, *args):
         # An independent descriptor must acquire the real claim_scope lock while
         # the original reader still prepares the page; no replacement reader.
         with _store_lock(tmp_path / "wire", blocking=False):
             prepared.append(True)
-        page = read(request, log)
-        comms.messaging.send("peer", viewer, "arrived after opened page").message.message_id
+        page = read(request, *args)
+        comms.messaging.send("peer", viewer, "arrived after opened page")
         return page
 
-    monkeypatch.setattr(MessagePageRequest, "read", inspect)
+    monkeypatch.setattr(MessagePageRequest, "displayed", inspect)
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert prepared == [True]
     assert page.messages[0].body == "original 2"
@@ -167,27 +171,30 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     messages = {
         name: comms.messaging.send(name, viewer, name).message for name in ("peer", "other")
     }
-    original = ConversationMessagePageRequest.read
+    original = ConversationMessagePageRequest.displayed
 
-    def interpose(request, log):
-        page = original(request, log)
-        comms.bus.reads.mark_displayed(
-            viewer,
-            comms.bus.reads.capture(
-                viewer, (messages[marked_sender],), comms.registry.snapshot(), comms.bus.log.path,
-            ),
-        )
+    def interpose(request, *args):
+        page = original(request, *args)
+        document = comms.bus.reads.read()
+        with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+            displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+                viewer, (messages[marked_sender],), comms.registry.snapshot(), opened, index, document=document))
+        comms.bus.reads.mark_displayed(viewer, displayed)
         return page
 
-    monkeypatch.setattr(ConversationMessagePageRequest, "read", interpose)
+    monkeypatch.setattr(ConversationMessagePageRequest, "displayed", interpose)
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.messages == (messages["peer"],)
     assert page.display_basis is not None
     _mark(comms, "peer", tmp_path, page)
     cursor = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     expected = {messages["peer"].seq, messages[marked_sender].seq}
-    assert len(cursor) == len(expected)
-    assert all(sequence in cursor for sequence in expected)
+    snapshot = comms.registry.snapshot()
+    assert cursor == ReadCursor({
+        ReadLedger.conversation(message, snapshot): ConversationCursor(message.seq)
+        for message in messages.values() if message.seq in expected
+    })
+    assert all(message.seq in cursor.for_conversation(ReadLedger.conversation(message, snapshot)) for message in messages.values() if message.seq in expected)
 
 
 def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):

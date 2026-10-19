@@ -16,7 +16,7 @@ from .errors import UnregisteredThreadError
 from .maintenance_barrier import MaintenanceBarrier
 from .historical_views import HistoryArchive
 from .message_page import (
-    NEWEST_PAGE, MessagePage, MessagePageRequest, PageBounds,
+    NEWEST_PAGE, DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
@@ -24,7 +24,7 @@ from .messages import Message
 from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
-    ChannelDisplayScope,
+    AllChannelDisplayScope, ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
@@ -107,12 +107,12 @@ class MessageBus[Writes: Publisher]:
         after: MessageReference | None = None,
     ) -> Sequence[Message]:
         """Read unread deliveries against a newly captured registry."""
-        return self.inbox_at(name, self._registry.snapshot(), target, after=after)
+        return list(self.inbox_at(name, self._registry.snapshot(), target, after=after).page.messages)
 
     def inbox_at(
         self, name: str, snapshot: RegistrySnapshot, target: str | None = None, *,
         after: MessageReference | None = None,
-    ) -> Sequence[Message]:
+    ) -> DisplayedMessagePage:
         """Read unread deliveries using the caller's captured registry.
 
         The route index lists which deliveries are unread, as it does for the
@@ -121,22 +121,22 @@ class MessageBus[Writes: Publisher]:
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
-        seen = self.reads.cursor(delivery.actor, snapshot)
+        document = self.reads.read()
+        seen = self.reads.cursor(delivery.actor, snapshot, document=document)
         with self.log.opened_wire_snapshot() as source:
             source.messages_for_references((after,) if after is not None else ())
             with self.projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
                 unread = index.unseen_deliveries(delivery.actor, seen, after=after.seq if after else 0)
-            if not unread:
-                return []
             listed = ListedDeliveries(
                 selection,
                 frozenset(row.seq for row in unread),
                 frozenset(row.target for row in unread),
             )
-            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(source)
-            return list(page.messages)
+            return MessagePageRequest.every(listed, after=min(listed.sequences, default=1) - 1).displayed(
+                self.reads, document, delivery.actor, snapshot, snapshot, source,
+            )
 
     async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment], after: MessageReference | None = None) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
@@ -153,14 +153,13 @@ class MessageBus[Writes: Publisher]:
             async for _ in changes:
                 maintenance.read().require_open()
                 snapshot = self._registry.snapshot()
-                messages = await asyncio.to_thread(
+                batch = await asyncio.to_thread(
                     self.inbox_at, name, snapshot, after=after)
                 if not reader.current(self._registry.snapshot()):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
-                for message in messages:
-                    displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
+                for message in batch.page.messages:
                     yield message
-                    acknowledgment.taken(self.reads, displayed)
+                    acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
                     after = message.reference
 
     async def resumed(self) -> None:
@@ -212,7 +211,7 @@ class MessageBus[Writes: Publisher]:
         with self.projection(
             self.log.path, source, selection.registry, {actor: delivery}
         ) as index:
-            return index.unseen_counts({actor: selection.seen})[actor]
+            return index.unseen_counts({actor: selection.seen(source)})[actor]
 
     def delivered(
         self, name: str, references: Sequence[MessageReference]
@@ -225,12 +224,14 @@ class MessageBus[Writes: Publisher]:
         """
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        seen = self.reads.cursor(delivery.actor, snapshot)
-        messages = self.log.messages_for_references(references)
-        return self.reads.capture(
-            name, tuple(message for message in messages if delivery.includes(message) and message.seq not in seen),
-            snapshot, self.log.path,
-        )
+        document = self.reads.read()
+        seen = self.reads.cursor(delivery.actor, snapshot, document=document)
+        with self.log.opened_wire_snapshot() as source:
+            messages = source.messages_for_references(references)
+            return source.query_page_index(lambda index: self.reads.capture_indexed(
+                name, tuple(message for message in messages
+                            if delivery.includes(message) and not delivery.has_read(seen, message, snapshot)),
+                snapshot, source, index, document=document))
 
     def mark_delivered(
         self, name: str, references: Sequence[MessageReference]
@@ -241,15 +242,13 @@ class MessageBus[Writes: Publisher]:
         return basis.message_count
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
-        """Advance a thread's global inbox cursor without loading messages."""
+        """Mark delivered inbox messages through the requested source sequence."""
         snapshot = self._registry.snapshot()
         canonical = snapshot.require(name).name
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
-        messages = (message for message in self.inbox_at(canonical, snapshot)
-                    if message.seq <= sequence)
-        displayed = self.reads.capture(canonical, messages, snapshot, self.log.path)
-        self.reads.mark_displayed(canonical, displayed)
+        batch = self.inbox_at(canonical, snapshot)
+        self.reads.mark_displayed(canonical, batch.displayed.through(sequence))
         return
 
     def awareness_segments(
@@ -294,7 +293,7 @@ class MessageBus[Writes: Publisher]:
         """A bounded delivery stream independent of UI read acknowledgments."""
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return MessagePageRequest(delivery, PageBounds(NewerTraversal(after))).read(self.log)
+        return self.log.read_page(MessagePageRequest(delivery, PageBounds(NewerTraversal(after))))
 
     def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Return one bounded page between two threads, either possibly deleted."""
@@ -302,20 +301,20 @@ class MessageBus[Writes: Publisher]:
         scope = DMDisplayScope.capture(
             snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
-        return MessagePageRequest(scope, bounds).read(self.log)
+        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channel_history_page(
         self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
         channel = self._channels.read().resolve(target.name)
-        scope = ChannelDisplayScope(channel.name, channel.history_targets)
-        return MessagePageRequest(scope, bounds).read(self.log)
+        scope = channel.history_scope()
+        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded combined view of explicit channel and direct wire messages."""
-        scope = ChannelDisplayScope(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets)
-        return MessagePageRequest(scope, bounds).read(self.log)
+        scope = AllChannelDisplayScope(BuiltinChannel.ANY.value)
+        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:
         return list(self._channels.read().views(self._registry.all_threads()))

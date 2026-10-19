@@ -1,5 +1,7 @@
 """A retained original cut is independent of later routes and timestamp history."""
 
+from agent_comms.wire_log import WireLog
+
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 from unittest.mock import patch
@@ -54,9 +56,11 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
     originals = [comms.bus.publisher.publish_ordinary(Message(
         'sender', viewer, f'original {number}', InfoKind, timestamp=timestamp,
     ), origin=AgentOrigin()) for number, timestamp in enumerate((birth+2, birth-1, birth+2, birth+1))]
-    comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
-        viewer, (originals[0],), comms.registry.snapshot(), comms.bus.log.path,
-    ))
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (originals[0],), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
 
@@ -72,7 +76,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 with OpenedRouteCounts(
                     comms.bus.log.path, source, basis.registry, {viewer: delivery},
                 ) as index:
-                    answer = measure(index, viewer, basis.seen)
+                    answer = measure(index, viewer, basis.seen(source))
             assert answer[:2] == (
                 {viewer: {'sender': 2}}, (originals[2].seq, originals[3].seq),
             )

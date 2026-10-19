@@ -1,5 +1,7 @@
 """Retained history never becomes work for a different thread incarnation."""
 
+from agent_comms.wire_log import WireLog
+
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 import os
@@ -17,7 +19,8 @@ from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.routing import DeliveryScope
-from agent_comms.read_basis import ReadCursor
+from agent_comms.read_basis import ReadCursor, ConversationCursor
+from agent_comms.read_ledger import ReadLedger
 
 
 def consistent(comms, *names):
@@ -83,9 +86,10 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
         )
         for index, timestamp in enumerate((birth + 2, birth - 1, birth + 1, birth - 2))
     ]
-    basis = comms.bus.reads.capture(
-        "recipient", [messages[0], messages[1]], comms.registry.snapshot(), comms.bus.log.path
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        basis = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            'recipient', [messages[0], messages[1]], comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed("recipient", basis)
     consistent(comms, "sender", "recipient")
     assert [row.seq for row in comms.bus.inbox("recipient")] == [messages[2].seq]
@@ -128,7 +132,7 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
             with OpenedRouteCounts(
                 reader.bus.log.path, stale, basis.registry, {viewer: delivery}
             ) as index:
-                assert len(index.unseen_deliveries(viewer, basis.seen)) == 5
+                assert len(index.unseen_deliveries(viewer, basis.seen(stale))) == 5
             assert decode.call_count == 0
     with BusRouteCounts(comms.bus.log.path) as index:
         recorded = RouteSourceRow.current(index.connection)
@@ -229,15 +233,19 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
             "sender", viewer, "outside cut", InfoKind,
             timestamp=birth - 1 if birth_crossing else birth + 3,
         ), origin=AgentOrigin())
-        comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
-            viewer, (later,), basis.registry, comms.bus.log.path,
-        ))
+        document = comms.bus.reads.read()
+        with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+            displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+                viewer, (later,), basis.registry, opened, index, document=document))
+        comms.bus.reads.mark_displayed(viewer, displayed)
         with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
             assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 1}
         later_reads = comms.bus.reads.read().cursor(
             viewer, basis.registry, source
         )
-        assert later_reads == ReadCursor().add((later.seq,))
+        assert later_reads == ReadCursor({
+            ReadLedger.conversation(later, basis.registry): ConversationCursor().add((later.seq,))
+        })
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
         with OpenedRouteCounts(
             comms.bus.log.path, source, basis.registry, {viewer: delivery}
@@ -253,9 +261,11 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_pat
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send("sender", viewer, "already read").message
-    comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
-        viewer, (message,), comms.registry.snapshot(), comms.bus.log.path,
-    ))
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (message,), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
         assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {}
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
