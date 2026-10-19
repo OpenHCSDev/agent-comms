@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .declared_family import DeclaredFamily
 from .plan_phases import PlanPhase
 from .rule_reviews import RuleReviews
+from .todos import OrderProgress, ProgressSource, PullRequests
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -130,6 +131,31 @@ class BridgeDown(ReasonedStandingRule):
     def reason(cls, comms: Comms, commander: str) -> str | None:
         receiving = comms.registry.snapshot().statuses[commander].receiving
         return None if receiving else f"{commander} is not receiving"
+
+
+@dataclass(frozen=True)
+class BoardDisagrees(StandingRule):
+    """An open order reads as no commit despite its linked pull request having merged."""
+
+    problem: str
+    order: str
+    merge: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        todos = cls.todos(comms, commander)
+        storage, pulls = comms.registry.storage_rule, PullRequests(todos)
+        found = []
+        for todo in todos:
+            progress = OrderProgress.read(todo, storage, pulls)
+            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            found.extend(cls(todo.id, todo.order.id, merged.sha)
+                         for merged in progress.missing_merges(source))
+        return tuple(found)
+
+    def line(self) -> str:
+        return (f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
+                f"but its linked PR merged as {self.merge} -> repair the progress read this wake")
 
 
 @dataclass(frozen=True)

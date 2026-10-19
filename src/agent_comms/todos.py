@@ -273,6 +273,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        """Linked merges this progress incorrectly reports as no commit."""
+        return ()
+
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -309,6 +313,9 @@ class Moving(Stalling):
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        return tuple(MergedProgress.found(source))
+
     @property
     def line(self) -> str:
         return "no commit since the order"
