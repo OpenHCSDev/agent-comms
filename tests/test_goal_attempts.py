@@ -13,8 +13,8 @@ from threading import Event
 
 import pytest
 
-from agent_comms.diagnostics import FailureReason
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.diagnostics import FailureReason
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_attempts import (
     GoalAttemptSchema,
