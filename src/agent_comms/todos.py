@@ -97,7 +97,7 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
-    def strikes(self, todo: Todo, actor: ThreadIncarnation) -> tuple[StrikeTodo, ...]:
+    def strikes(self, todo: Todo, order_id: str, actor: ThreadIncarnation) -> tuple[StrikeTodo, ...]:
         """An operation has no commit time: recording it later is the commander's delay, so its
         lateness is judged at the OVERDUE alarm and its delivery strikes nobody."""
         return ()
@@ -132,10 +132,10 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
         return EventTime.capture(float(
             await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
 
-    def strikes(self, todo: Todo, actor: ThreadIncarnation) -> tuple[StrikeTodo, ...]:
+    def strikes(self, todo: Todo, order_id: str, actor: ThreadIncarnation) -> tuple[StrikeTodo, ...]:
         """A commit delivered after the order's deadline strikes its holder once."""
         lateness = self.at.lateness(todo.deadline)
-        reason = (f"{todo.id} order {todo.order.id} {lateness} as {self.delivered} "
+        reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
                   f"(caught by {actor.name} at review)")
         return (StrikeTodo(todo.revision, actor, todo.held(), reason),) * lateness.late()
 
@@ -1890,7 +1890,7 @@ class DeliverTodo(TodoOperation):
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
         return replace(current, order=current.order.delivered(self.delivery),
-                       strikes=(*current.strikes, *self.delivery.strikes(current, self.actor)),
+                       strikes=(*current.strikes, *self.delivery.strikes(current, self.order_id, self.actor)),
                        revision=current.revision + 1)
 
 

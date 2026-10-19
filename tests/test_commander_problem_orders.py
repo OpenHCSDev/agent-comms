@@ -344,7 +344,7 @@ def test_each_delivery_declares_the_strikes_it_carries(commander):
     lead = comms.registry.require('lead').incarnation
 
     def strikes(delivery, at):
-        return replace(delivery, at=RecordedEventTime(at)).strikes(todo, lead)
+        return replace(delivery, at=RecordedEventTime(at)).strikes(todo, todo.order.id, lead)
 
     commit = CommitDelivery(commit='a' * 40, delivered_commit='b' * 40)
     (late,) = strikes(commit, 2035)
