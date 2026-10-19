@@ -1733,7 +1733,7 @@ class LedgerCliCommand(CliCommand):
             ctx.ledger.merge(updates, self.author)
             return LedgerMergedResult()
         else:
-            document: LedgerDocument = ctx.ledger.document()
+            document: LedgerDocument = ctx.ledger.read()
             return document
 
 
