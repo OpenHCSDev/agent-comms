@@ -52,6 +52,7 @@ class ActivityState(Enum):
         return member
 
     IDLE = ("idle", IdleThreadPresentationStatus())
+    STARTING = ("starting", WorkingThreadPresentationStatus())
     THINKING = ("thinking", WorkingThreadPresentationStatus())
     WORKING = ("working", WorkingThreadPresentationStatus())
     # Appended once when the thread is permanently deleted. The log stays
