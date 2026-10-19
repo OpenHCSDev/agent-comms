@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 from xml.etree import ElementTree
 
@@ -280,11 +281,6 @@ class ClaudeRecord(TaggedWire, ABC):
         """Whether Claude replaced everything before this record (compaction)."""
         return False
 
-    def request(self) -> str:
-        """The prompt this record carries, read without the session around it."""
-        return ''
-
-
 class AssistantBlock(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
@@ -398,18 +394,7 @@ class PromptOrigin(TaggedWire, ABC):
                session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
-    def request(self, text: str) -> str:
-        return ''
-
-
-class Prompting(PromptOrigin, ABC):
-    """An origin whose text is a request to the model."""
-
-    def request(self, text: str) -> str:
-        return text
-
-
-class AgentPrompt(Prompting):
+class AgentPrompt(PromptOrigin):
     """Input another agent wrote: the commanding session, or a peer session."""
 
     def prompt(self, record: TimedRecord, text: str,
@@ -417,7 +402,7 @@ class AgentPrompt(Prompting):
         return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
 
 
-class HumanPrompt(Prompting):
+class HumanPrompt(PromptOrigin):
     wire_tag = 'human'
 
     def prompt(self, record: TimedRecord, text: str,
@@ -445,7 +430,7 @@ class AutoContinuation(PromptOrigin):
     wire_tag = 'auto-continuation'
 
 
-class ToolSupplied(Prompting):
+class ToolSupplied(PromptOrigin):
     """Text Claude records without a sender: a subagent's task, or a local command's echo.
     It starts a turn; the live view does not show it as the person's prompt."""
 
@@ -575,10 +560,6 @@ class UserRecord(ClaudeRecord, TimedRecord):
     def text(self) -> str:
         return '\n'.join(text for block in self.message.content if (text := block.prompt_text()))
 
-    def request(self) -> str:
-        return self.origin.request(self.text)
-
-
 class CompactSummary(UserRecord):
     """Claude's summary of the conversation before its latest compaction."""
     wire_tag = 'compact-summary'
@@ -586,10 +567,6 @@ class CompactSummary(UserRecord):
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(self.promptId)
         return (TurnStarted(), Summarized(self.text))
-
-    def request(self) -> str:
-        return ''
-
 
 class TaskUserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'task-user'
@@ -797,7 +774,12 @@ class ForkContextReference(MetadataRecord):
     def import_updates(self, source: ClaudeTranscript, session: ClaudeSession,
                        offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
         """Resolve the exact inherited cut; later parent work is not this fork's history."""
-        yield from source.inherited_updates(self.parentSessionId, self.parent_last_uuid)
+        parent_id = Path(self.parentSessionId)
+        if parent_id.is_absolute() or len(parent_id.parts) != 1:
+            raise ValueError(f'Invalid inherited Claude session id: {self.parentSessionId}')
+        # This declared record kind is a subagent fork; its layout owns the parent location.
+        parent_source = source.source.parents[2] / f'{self.parentSessionId}.jsonl'
+        yield from source.inherited_updates(parent_source, self.parent_last_uuid)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice(f'Context inherited from session {self.parentSessionId} is not imported.'),)

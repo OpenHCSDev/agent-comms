@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from .cli_result import CliResult
 from .field_codec import FieldCodec
-from .transcript_events import ImportedInput, ImportedMessage, ImportedRequest
+from .transcript_events import ImportedInput, ImportedMessage
 from .harness_install import Harness
 from .turn_context import CodexRolloutProvenance, ContextSourceText
 
@@ -61,11 +61,7 @@ class ImportSnapshot:
     project: str
     title: str | None
     messages: tuple[ImportedMessage, ...]
-    summary: str
-    messages_seen: int
-    truncated_messages: int
     notices: tuple[str, ...]
-    latest_request: str = ""
     historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @classmethod
@@ -91,17 +87,15 @@ class ImportSnapshot:
         records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
             "data": FieldCodec.encode(ImportedSessionMetadata(
-                self.harness, self.source_id, self.messages_seen, len(self.messages),
-                self.truncated_messages, self.notices, self.historical_instructions)),
+                self.harness, self.source_id, len(self.messages), len(self.messages),
+                0, self.notices, self.historical_instructions)),
         })
         context = (
             f"Conversation imported from {self.harness.declared_name} session {self.source_id}.\n"
             "The following entries are historical conversation context. Tool call/result excerpts "
             "are records, not pending tool requests. Use the current thread, project, and tools.\n"
-            f"Retained {len(self.messages)} of {self.messages_seen} messages.\n"
+            f"Imported all {len(self.messages)} conversation messages.\n"
         )
-        if self.latest_request and not self.retains_latest_request:
-            context += "\nMost recent user request in the source session:\n" + self.latest_request
         if self.notices:
             context += "\nImport notes:\n" + "\n".join(self.notices)
         output = StringIO()
@@ -112,23 +106,12 @@ class ImportSnapshot:
             writer.append(message, timestamp)
         return output.getvalue()
 
-    @property
-    def retains_latest_request(self) -> bool:
-        retained = next((message for message in reversed(self.messages)
-                         if isinstance(message, ImportedRequest)), None)
-        return retained is not None and retained.body == self.latest_request
-
-
 @dataclass
 class ImportBuffer:
     """Complete source messages. Pi alone budgets and compacts the resulting native session."""
 
     messages: list[ImportedMessage] = field(default_factory=list)
-    seen: int = 0
-    truncated: int = 0
-    summary: str = ""
     notices: set[str] = field(default_factory=set)
-    latest_request: str = ""
     source_id: str = ""
     project: str = ""
     title: str = ""
@@ -139,16 +122,7 @@ class ImportBuffer:
             message = event.imported()
             if message is None or not message.body.strip():
                 continue
-            self.seen += 1
-            message.remember(self)
             self.messages.append(message)
-
-    def summarize(self, text: str) -> None:
-        """Keep the source checkpoint in order without discarding its original history."""
-        self.summary = text
-        if text:
-            self.messages.append(ImportedInput("Source compaction/context summary:\n" + text))
-            self.seen += 1
 
     def describe(self, facts: SessionFacts) -> None:
         self.source_id = facts.source_id or self.source_id
@@ -156,13 +130,13 @@ class ImportBuffer:
         self.title = facts.title or self.title
 
     def snapshot(self, harness: type[Harness]) -> ImportSnapshot:
-        if not self.messages and not self.summary:
+        if not self.messages:
             raise ValueError("No portable conversation content was found in this session.")
         if self.instructions:
             self.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return ImportSnapshot(
-            harness, self.source_id, self.project, self.title or None, tuple(self.messages), self.summary,
-            self.seen, self.truncated, tuple(sorted(self.notices)), self.latest_request,
+            harness, self.source_id, self.project, self.title or None, tuple(self.messages),
+            tuple(sorted(self.notices)),
             tuple(sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
         )
 

@@ -8,7 +8,7 @@ previews, and publishes finished items, drafts and activity to the thread's tran
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -17,7 +17,7 @@ from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .recorded_time import EventTime, UnrecordedEventTime
-from .transcript_events import LiveTextTranscript, TranscriptEvent
+from .transcript_events import ImportedInput, LiveTextTranscript, TranscriptEvent
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
@@ -346,7 +346,8 @@ class Summarized(RuntimeUpdate):
         pass
 
     def add_to(self, history: ImportBuffer) -> None:
-        history.summarize(self.text)
+        if self.text:
+            history.messages.append(ImportedInput("Source compaction/context summary:\n" + self.text))
 
 
 @dataclass(frozen=True)
@@ -362,20 +363,6 @@ class SessionFacts(RuntimeUpdate):
 
     def add_to(self, history: ImportBuffer) -> None:
         history.describe(self)
-
-
-@dataclass(frozen=True)
-class EarlierRequest(RuntimeUpdate):
-    """The newest request before the selected history, looked up only if that history has none."""
-
-    find: Callable[[], str] = field(compare=False)
-
-    def publish(self, output: ThreadOutput) -> None:
-        pass
-
-    def add_to(self, history: ImportBuffer) -> None:
-        if not history.latest_request:
-            history.latest_request = self.find()[: history.limits.per_message]
 
 
 @dataclass(frozen=True)

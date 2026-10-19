@@ -23,7 +23,7 @@ from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, 
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.thread_identity import ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.transcript_events import ImportedReply, ImportedRequest
+from agent_comms.transcript_events import ImportedReply, ImportedInput
 from agent_comms.turn_context import CodexRolloutProvenance
 
 
@@ -133,9 +133,8 @@ def test_claude_subagent_keeps_its_task_its_commander_and_its_tools(tmp_path):
         "Also delete the old decoder",
         "Done.",
     ]
-    assert isinstance(snapshot.messages[0], ImportedRequest)
-    assert isinstance(snapshot.messages[-2], ImportedRequest)
-    assert snapshot.latest_request == "Also delete the old decoder"
+    assert isinstance(snapshot.messages[0], ImportedInput)
+    assert isinstance(snapshot.messages[-2], ImportedInput)
     assert "harness note" not in str(snapshot.messages)
     assert snapshot.notices == ()
     assert ClaudeTranscript.subagents(session) == (subagent,)
@@ -150,12 +149,10 @@ def test_claude_import_keeps_history_before_and_after_compaction(tmp_path):
         claude_reply("n", "Next step"),
     ])
     snapshot = read(ClaudeCodeHarness, source)
-    assert snapshot.summary == "Summary of the work so far"
     assert bodies(snapshot) == [
         "Obsolete request", "Obsolete reply",
         "Source compaction/context summary:\nSummary of the work so far", "Next step",
     ]
-    assert snapshot.latest_request == "Obsolete request"
     assert snapshot.pi_session(tmp_path).count("Obsolete request") == 1
 
 
@@ -207,7 +204,7 @@ def test_selected_import_and_listing_use_real_saved_records(tmp_path, capsys, co
     listing = json.loads(capsys.readouterr().out)["subagents"]
     assert {row["id"]: row["description"] for row in listing} == {
         agent: f"Launch {agent}" for agent in ("a1", "b2", "c3")}
-    assert all(row["message_count"] == row["source_records"] == 2 for row in listing)
+    assert all(row["message_count"] == 2 for row in listing)
     assert main(["--root", str(comms.root), "import-subagents", "--session", str(session),
                  "--agents", "c3,a1,c3", "--prefix", "selected-", "--worktree", str(tmp_path)]) == 0
     result = json.loads(capsys.readouterr().out)
@@ -224,13 +221,20 @@ def test_selected_import_and_listing_use_real_saved_records(tmp_path, capsys, co
     assert "invalid-b2" not in comms.registry
 
 
+def test_listing_represents_missing_launch_metadata_without_a_null_description(tmp_path):
+    source = lines(tmp_path / "agent-missing.jsonl", [claude_prompt("first", "whole task")])
+    assert ClaudeTranscript(source).listing() == {
+        "id": "missing", "description": {"kind": "missing"}, "message_count": 1,
+    }
+
+
 def test_import_retains_messages_and_bodies_beyond_removed_caps(tmp_path):
     large = "Full original text λ " * 10_000
     source = lines(tmp_path / "whole.jsonl", [claude_prompt("first", large)] + [
         claude_reply(f"answer-{i}", f"detail {i}") for i in range(220)])
     snapshot = read(ClaudeCodeHarness, source)
-    assert len(snapshot.messages) == snapshot.messages_seen == 221
-    assert snapshot.messages[0].body == snapshot.latest_request == large
+    assert len(snapshot.messages) == 221
+    assert snapshot.messages[0].body == large
     assert snapshot.messages[-1].body == "detail 219"
     records = [json.loads(row) for row in snapshot.pi_session(tmp_path).splitlines()]
     messages = [row["message"] for row in records if row["type"] == "message"]
@@ -256,7 +260,7 @@ def test_inherited_context_stops_at_exact_parent_cut_and_keeps_launch_identity(t
     assert snapshot.title == "Child launch description"
     assert snapshot.source_id == "agent-child"
     assert bodies(snapshot) == ["inherited detail", "own task", "child tail"]
-    assert ClaudeTranscript(source).subagent_info().description == "Child launch description"
+    assert ClaudeTranscript(source).listing()["description"] == "Child launch description"
     assert ClaudeTranscript.select_subagents(session, ("child",)) == (source,)
     lines(source, [{"type": "fork-context-ref", "parentSessionId": "session", "parentLastUuid": "absent"}])
     with pytest.raises(ValueError, match="absent"):
@@ -356,7 +360,7 @@ def test_codex_import_preserves_instruction_references_across_checkpoints(tmp_pa
             {"type": "message", "role": "developer", "content": "Selected historical wording"}]}},
     ])
     snapshot = read(CodexHarness, source, session_id="original")
-    assert snapshot.latest_request == "Prior question"
+    assert "Prior question" in bodies(snapshot)
     assert tuple(ref.public_text(None) for ref in snapshot.historical_instructions) == (
         "Old cut only", "Selected historical wording",)
 
@@ -400,12 +404,10 @@ def test_codex_uses_response_items_and_imports_without_excerpt_limits(tmp_path):
     source = lines(tmp_path / "rollout.jsonl", records)
     snapshot = read(CodexHarness, source)
     assert len(snapshot.messages) == 13
-    assert snapshot.truncated_messages == 0
     assert snapshot.messages[-1].body.endswith("x" * 400)
-    assert snapshot.summary == "Earlier context summary"
+    assert "Source compaction/context summary:\nEarlier context summary" in bodies(snapshot)
     assert "duplicate" not in str(snapshot.messages) and "opaque" not in str(snapshot.messages)
     assert snapshot.notices == ()
-    assert snapshot.latest_request == "Message 9"
     assert snapshot.pi_session(tmp_path).count("Message 9") == 1
 
 
@@ -480,7 +482,6 @@ def test_codex_reads_latest_checkpoint_without_replaying_huge_prefix(tmp_path, m
     snapshot = buffer.snapshot(CodexHarness)
     assert snapshot.source_id == "child-current"
     assert bodies(snapshot) == ["Retained request", "Retained state", "Post-checkpoint result"]
-    assert snapshot.latest_request == "Retained request"
     assert "obsolete prefix" not in str(snapshot.messages)
     assert opened[0].bytes_read < 200_000
     with pytest.raises(ValueError, match="different"):
@@ -507,8 +508,7 @@ def test_codex_without_checkpoint_keeps_complete_chronological_history(tmp_path)
     source = lines(tmp_path / "uncompacted-rollout.jsonl", records)
     snapshot = read(CodexHarness, source)
     assert bodies(snapshot) == [value for i in range(3) for value in (f"Request {i}", f"Answer {i}")]
-    assert snapshot.messages_seen == 6
-    assert snapshot.latest_request == "Request 2"
+    assert len(snapshot.messages) == 6
     assert snapshot.notices == ()
 
 
@@ -517,7 +517,7 @@ def test_import_does_not_discard_older_messages_for_a_character_budget(tmp_path)
         codex_message("assistant", body) for body in ("o" * 10, "m" * 80, "n" * 60)])
     snapshot = read(CodexHarness, source)
     assert bodies(snapshot) == ["o" * 10, "m" * 80, "n" * 60]
-    assert snapshot.messages_seen == 3
+    assert len(snapshot.messages) == 3
 
 
 def test_codex_import_preserves_all_compactions_and_original_messages(tmp_path):
@@ -535,13 +535,11 @@ def test_codex_import_preserves_all_compactions_and_original_messages(tmp_path):
         codex_message("assistant", "Current tail"),
     ])
     snapshot = read(CodexHarness, source)
-    assert snapshot.summary == "Current summary"
     assert bodies(snapshot) == [
         "Obsolete request", "Source compaction/context summary:\nObsolete summary",
         "Old checkpoint", "Old tail", "Source compaction/context summary:\nCurrent summary",
         "Current checkpoint", "Current state", "Current tail",
     ]
-    assert snapshot.latest_request == "Current checkpoint"
 
 
 def test_codex_compaction_record_may_span_several_reverse_blocks(tmp_path):
@@ -553,13 +551,12 @@ def test_codex_compaction_record_may_span_several_reverse_blocks(tmp_path):
             codex_message("user", "Resume after large state")["payload"]]}},
     ])
     snapshot = read(CodexHarness, source)
-    assert snapshot.summary == "Large checkpoint"
     assert bodies(snapshot) == [
         "Source compaction/context summary:\nLarge checkpoint", large_state, "Resume after large state",
     ]
 
 
-def test_latest_request_is_not_duplicated_when_retained(tmp_path):
+def test_import_does_not_duplicate_original_request(tmp_path):
     source = lines(tmp_path / "rollout.jsonl", [codex_meta("dedupe", tmp_path),
                                                 codex_message("user", "Continue exactly once")])
     assert read(CodexHarness, source).pi_session(tmp_path).count("Continue exactly once") == 1
@@ -615,7 +612,7 @@ def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs():
     snapshot = asyncio.run(collect())
     assert bodies(snapshot) == ["from the bus", "second answer"]
     assert snapshot.project == "/work/codex" and snapshot.source_id == "thread"
-    assert [type(message) for message in snapshot.messages] == [ImportedRequest, ImportedReply]
+    assert [type(message) for message in snapshot.messages] == [ImportedInput, ImportedReply]
     assert [call.method for call in codex.calls] == ["thread/resume", "thread/items/list"]
 
 

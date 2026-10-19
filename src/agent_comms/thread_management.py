@@ -210,8 +210,8 @@ class ThreadManagement:
             snapshot.harness,
             snapshot.source_id,
             len(snapshot.messages),
-            snapshot.messages_seen - len(snapshot.messages),
-            snapshot.truncated_messages,
+            0,
+            0,
             snapshot.notices,
             snapshot.historical_instructions,
         )

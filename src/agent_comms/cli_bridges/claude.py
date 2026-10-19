@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import json
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import aclosing
-from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self, cast
@@ -14,22 +14,43 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_path import FileRevision
 from agent_comms.importing import ImportSnapshot
 from agent_comms.wire_watch import WatchSource, WireWatch
-from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
+from .claude_protocol import (
+    CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame, TimedRecord,
+)
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
 from .shared import Binding, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 
 
-class SubagentMeta(WireModel):
+class SubagentMeta(ABC):
+    """The optional Claude launch record, not a second listing record."""
+
+    @staticmethod
+    def read(source: Path) -> SubagentMeta:
+        meta = source.with_suffix('.meta.json')
+        return (RecordedSubagentMeta.model_validate_json(meta.read_bytes())
+                if meta.is_file() else MissingSubagentMeta())
+
+    def facts(self, source_id: str) -> SessionFacts:
+        return SessionFacts(source_id=source_id)
+
+    @abstractmethod
+    def description_wire(self) -> str | dict[str, str]: ...
+
+
+class RecordedSubagentMeta(WireModel, SubagentMeta):
     description: str
 
+    def facts(self, source_id: str) -> SessionFacts:
+        return SessionFacts(source_id=source_id, title=self.description)
 
-@dataclass(frozen=True)
-class SubagentInfo:
-    id: str
-    description: str | None
-    message_count: int
-    source_records: int
+    def description_wire(self) -> str:
+        return self.description
+
+
+class MissingSubagentMeta(SubagentMeta):
+    def description_wire(self) -> dict[str, str]:
+        return {'kind': 'missing'}
 
 
 class ClaudeJsonLines(JsonLinesFile):
@@ -47,14 +68,8 @@ class ClaudeJsonLines(JsonLinesFile):
         for update in record.updates(state):
             yield from update.during(state.phase)
 
-    @property
-    def launch_description(self) -> str | None:
-        """Claude saves launch descriptions beside the JSONL, not in its first record."""
-        meta = self.source.with_suffix('.meta.json')
-        return SubagentMeta.model_validate_json(meta.read_bytes()).description if meta.is_file() else None
-
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
-        yield SessionFacts(source_id=self.source.stem, title=self.launch_description or '')
+        yield SubagentMeta.read(self.source).facts(self.source.stem)
 
 
 class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
@@ -72,15 +87,11 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
 
     def import_updates(self, record: object, state: object,
                        offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
-        yield from cast(ClaudeRecord, record).import_updates(self, cast(ClaudeSession, state), offset, raw)
+        yield from cast(ClaudeRecord, record).import_updates(
+            self, cast(ClaudeSession, state), offset, raw)
 
-    def inherited_updates(self, session_id: str, last_uuid: str) -> Iterator[RuntimeUpdate]:
-        directory = self.source.parent
-        if directory.name == 'subagents':
-            directory = directory.parent.parent
-        if Path(session_id).name != session_id:
-            raise ValueError(f'Invalid inherited Claude session id: {session_id}')
-        parent = ClaudeTranscript(directory / f'{session_id}.jsonl')
+    def inherited_updates(self, parent_source: Path, last_uuid: str) -> Iterator[RuntimeUpdate]:
+        parent = ClaudeTranscript(parent_source)
         parent.ancestors = (*self.ancestors, self.source)
         if parent.source in parent.ancestors:
             raise ValueError(f'Cyclic inherited Claude context: {parent.source}')
@@ -92,16 +103,14 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
                     # Inherit conversation, never the parent's identity, project or title.
                     if not isinstance(update, SessionFacts):
                         yield update
-                if json.loads(raw).get('uuid') == last_uuid:
+                if isinstance(record, TimedRecord) and record.uuid == last_uuid:
                     return
-        raise ValueError(f'Inherited Claude context {session_id} has no record {last_uuid}')
+        raise ValueError(f'Inherited Claude context {parent_source} has no record {last_uuid}')
 
-    def subagent_info(self) -> SubagentInfo:
-        snapshot = ImportSnapshot.read(self)
-        with self.source.open('rb') as stream:
-            source_records = sum(1 for _ in self.import_records(stream, stream.seek(0, 2)))
-        return SubagentInfo(self.source.stem.removeprefix('agent-'), self.launch_description,
-                            len(snapshot.messages), source_records)
+    def listing(self) -> dict[str, object]:
+        return {'id': self.source.stem.removeprefix('agent-'),
+                'description': SubagentMeta.read(self.source).description_wire(),
+                'message_count': len(ImportSnapshot.read(self).messages)}
 
     @classmethod
     def select_subagents(cls, session: Path, agents: tuple[str, ...]) -> tuple[Path, ...]:

@@ -56,10 +56,6 @@ class RolloutItem(OpenWire, ABC):
     def instructions(self) -> tuple[InstructionMessage, ...]:
         return ()
 
-    def request(self) -> str:
-        return ''
-
-
 class ForeignItem(RolloutItem):
     """Reasoning, searches and other items that are not portable conversation."""
     wire_tag = 'foreign'
@@ -84,10 +80,6 @@ class UserMessageItem(MessageItem):
 
     def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
         return (FinishedItem('', self.id, (UserTranscript(self.text, position=position),)),)
-
-    def request(self) -> str:
-        return self.text
-
 
 class AssistantMessageItem(MessageItem):
     wire_tag = 'message/assistant'
@@ -171,9 +163,6 @@ class RolloutRecord(OpenWire, ABC):
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
         return tuple(instruction for item in self.entries() for instruction in item.instructions())
-
-    def request(self) -> str:
-        return next((text for item in reversed(self.entries()) if (text := item.request())), '')
 
     def begins_history(self) -> bool:
         return False

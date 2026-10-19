@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 from pydantic import JsonValue
 from urllib.parse import quote
 
@@ -22,20 +22,11 @@ from .ui_model.message_category import (
     OtherCategory, ThinkingCategory, ToolCategory,
 )
 
-if TYPE_CHECKING:
-    from .importing import ImportBuffer
-
-
 @dataclass(frozen=True, slots=True)
 class ImportedMessage(ABC):
     """One transcript event as portable text in the imported Pi session."""
 
     body: str
-    truncated: bool = False
-
-    def remember(self, buffer: ImportBuffer) -> None:
-        """Only a request is the source session's latest request."""
-
     @abstractmethod
     def pi_message(self, timestamp: int) -> dict[str, object]: ...
 
@@ -45,13 +36,6 @@ class ImportedInput(ImportedMessage):
 
     def pi_message(self, timestamp: int) -> dict[str, object]:
         return {"role": "user", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp}
-
-
-class ImportedRequest(ImportedInput):
-    """A person's or a commanding agent's prompt."""
-
-    def remember(self, buffer: ImportBuffer) -> None:
-        buffer.latest_request = self.body
 
 
 class ImportedReply(ImportedMessage):
@@ -243,7 +227,7 @@ class UserTranscript(NativeTextTranscript):
         return self.routing is not None and bool(self.routing.requests)
 
     def imported(self) -> ImportedMessage:
-        return ImportedRequest(self.text)
+        return ImportedInput(self.text)
 
 
 class AssistantTranscript(AgentTextTranscript):

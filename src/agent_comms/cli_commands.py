@@ -34,7 +34,7 @@ from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChan
 from .channels import ANY_CHANNEL
 from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .cli_bridges.claude import ClaudeTranscript, SubagentInfo
+from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
@@ -694,7 +694,7 @@ class SubagentsImportedResult(CliResult):
 
 @dataclass(frozen=True)
 class SubagentsListedResult(CliResult):
-    subagents: tuple[SubagentInfo, ...]
+    subagents: tuple[dict[str, object], ...]
 
 
 @dataclass(frozen=True)
@@ -1063,7 +1063,7 @@ class ListSubagentsCliCommand(CliCommand, declared_name="list-subagents"):
 
     def apply(self, ctx: Comms) -> SubagentsListedResult:
         return SubagentsListedResult(tuple(
-            ClaudeTranscript(path).subagent_info()
+            ClaudeTranscript(path).listing()
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())))
 
 

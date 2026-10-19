@@ -22,7 +22,7 @@ from agent_comms.agent_runtime import ReadsHistory
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness
 
-from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
+from agent_comms.runtime_updates import HistoryNotice, RuntimeUpdate, SessionFacts
 
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
@@ -127,7 +127,7 @@ class JsonLines:
     """
 
     REVERSE_BLOCK: ClassVar[int] = 64 * 1024
-    # Each record answers `begins_history()` (everything before it was replaced) and `request()`.
+    # Each record answers `begins_history()` (everything before it was replaced).
     records: ClassVar[TypeAdapter]
     # What decoding remembers between records (open tool calls, the current turn).
     state: ClassVar[type]
@@ -158,13 +158,6 @@ class JsonLines:
                 return
             raise
         yield from self.record_updates(record, state, offset, raw)
-
-    def earlier_request(self, stream: BinaryIO, start: int) -> str:
-        for offset, raw in self.reverse_lines(stream, start):
-            record = self.decode_line(raw, offset)
-            if text := record.request():
-                return text
-        return ''
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         for offset, raw in self.reverse_lines(stream, boundary):
@@ -246,4 +239,3 @@ class JsonLinesFile(JsonLines, ReadAtOnce):
             offset = stream.tell()
             if raw := stream.read(boundary - offset).strip():
                 yield from self.line_updates(raw, state, offset, 'An incomplete final source record was omitted.')
-            yield EarlierRequest(lambda: self.earlier_request(stream, start))
