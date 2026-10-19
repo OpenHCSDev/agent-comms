@@ -237,11 +237,14 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
                               selection: CapturedSelection) -> Mapping[str, int]:
         """Borrow the caller's original source, namespace and sparse reads."""
         actor = selection.require_viewer()
+        seen = selection.seen(source)
+        if seen.fully_read(source.metadata.last_seq):
+            return {}
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
         with self.projection(
             self.log.path, source, selection.registry, {actor: delivery}
         ) as index:
-            return index.unseen_counts({actor: selection.seen(source)})[actor]
+            return index.unseen_counts({actor: seen})[actor]
 
     def delivered(
         self, name: str, references: Sequence[MessageReference]
@@ -282,9 +285,9 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
             delivery = DeliveryScope.capture(canonical, basis.registry, basis.catalog)
             scope = delivery.selection(target, basis.registry,
                 lambda channel: basis.catalog.require_channel(channel, basis.activity))
-            displayed = source.query_page_index(lambda index: scope.capture_all(
+            displayed = source.query_page_index(lambda index: delivery.capture_all(
                 self.reads, canonical, basis.registry, source, index,
-                document=basis.document, audience=delivery, through=sequence,
+                document=basis.document, within=scope, through=sequence,
             ))
             self.reads.mark_displayed(canonical, displayed)
 

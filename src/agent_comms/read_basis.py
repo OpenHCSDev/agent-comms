@@ -357,10 +357,12 @@ class ReadCursor:
     unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
 
     joined_sql = """cursors AS MATERIALIZED (
-        SELECT row.*,coalesce(read.high_water,0) AS high_water,
+        SELECT row.*,max(coalesce(read.high_water,0),coalesce(all_read.high_water,0)) AS high_water,
             coalesce(read.exceptions,'[]') AS exceptions FROM requests AS row
         LEFT JOIN read_cursors AS read ON read.actor=row.actor AND read.target=row.target
             AND (read.sender='' OR read.sender=row.sender)
+        LEFT JOIN read_cursors AS all_read ON all_read.actor=row.actor
+            AND all_read.target='' AND all_read.sender=''
     )"""
 
     def counted(self, scope: MessageDisplayScope, snapshot: RegistryProvenance
@@ -386,7 +388,13 @@ class ReadCursor:
         return cls({key: ConversationCursor.union(values) for key, values in grouped.items()})
 
     def for_conversation(self, conversation: Conversation) -> ConversationCursor:
-        return self.conversations.get(conversation, ConversationCursor())
+        return ConversationCursor.union((
+            self.conversations.get(AllConversation(), ConversationCursor()),
+            self.conversations.get(conversation, ConversationCursor()),
+        ))
+
+    def fully_read(self, sequence: int) -> bool:
+        return self.for_conversation(AllConversation()).high_water >= sequence
 
     def add(self, displayed: Iterable[DisplayedConversation]) -> ReadCursor:
         conversations = dict(self.conversations)
@@ -421,6 +429,26 @@ class Conversation(DeclaredFamily, ABC, affix="Conversation"):
 
     @abstractmethod
     def in_targets(self, targets: Collection[str], snapshot: RegistryProvenance) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class AllConversation(Conversation):
+    """An explicit whole-bus read applies to every conversation in this source."""
+
+    def resolved(self, snapshot):
+        return self
+
+    def scope(self, snapshot):
+        return AllChannelDisplayScope('#any')
+
+    def sql_keys(self, snapshot):
+        return (('', ''),)
+
+    def recorded_keys(self, snapshot):
+        return (self,)
+
+    def in_targets(self, targets, snapshot):
+        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -778,10 +806,10 @@ class MessageDisplayScope(ABC):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document,
-                    audience: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
+                    within: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
         prefixes: dict[Conversation, int] = {}
-        for row in index.latest_by_conversation(self, source.boundary, through=through):
-            if audience.includes(row):
+        for row in index.latest_by_conversation(within, source.boundary, through=through):
+            if self.includes(row):
                 conversation = self.read_key(row.sender, row.target, snapshot)
                 prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
@@ -921,7 +949,16 @@ class AllChannelDisplayScope(ChannelDisplayScope):
         return cursor.conversations.items()
 
     def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
-        return 0
+        return cursor.for_conversation(AllConversation()).high_water
+
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document,
+                    within: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
+        sequence = source.metadata.last_seq
+        if through is not None:
+            sequence = min(sequence, through)
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            (DisplayedConversation(AllConversation(), (), sequence),), source.bus_identity)
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:
@@ -939,12 +976,12 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document,
-                    audience: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
+                    within: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
         # Mentions and authorship may select only part of a channel conversation.
         # Unlike the whole-bus view, they cannot grant its unseen prefix.
         rows = self.offsets(index, lower=None, upper=through + 1 if through is not None else None,
                             descending=False, before_offset=source.boundary)
-        return reads.capture_indexed(viewer, (row for row in rows if audience.includes(row)),
+        return reads.capture_indexed(viewer, (row for row in rows if within.includes(row)),
                                      snapshot, source, index, document=document)
 
     @classmethod
