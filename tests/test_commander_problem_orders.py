@@ -1277,3 +1277,48 @@ def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_
         monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
         send_guard.main([])
         assert capsys.readouterr().out == ''
+
+
+def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, tmp_path):
+    """A goal report claiming merged, installed or working is refused, naming the artifact, until
+    the commit is on origin, P1's delivery recorded its check result and the screenshot exists;
+    the order delivery tool refuses the same claims the same way."""
+    from agent_comms.goal_actions import ActiveGoalAction
+    from agent_comms.progress_claims import InstalledClaim, MergedClaim, WorkingClaim
+    from agent_comms.tools import CommsGoalTool
+    comms, caller = commander
+    create(commander, 'P1')
+
+    def git(*args):
+        return subprocess.run(['git', '-C', str(tmp_path), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    subprocess.run(['git', 'init', '-q', '--bare', str(tmp_path / 'origin.git')], check=True)
+    git('init', '-q')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'work')
+    git('remote', 'add', 'origin', str(tmp_path / 'origin.git'))
+    screenshot = tmp_path / 'working.png'
+
+    def push():
+        git('push', '-q', 'origin', 'HEAD:refs/heads/work')
+        git('fetch', '-q', 'origin')
+
+    def deliver():
+        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+
+    claims = []
+    for claim, missing, provide in (
+        (MergedClaim(git('rev-parse', 'HEAD')), 'a commit sha that resolves on origin', push),
+        (InstalledClaim('P1'), 'the recorded check result of P1', deliver),
+        (WorkingClaim(str(screenshot)), 'a screenshot path that exists',
+         lambda: screenshot.write_bytes(b'png')),
+    ):
+        with pytest.raises(ValueError, match=re.escape(missing)):
+            CommsGoalTool(goal_id='request', status=ActiveGoalAction, progress='claimed',
+                          claims=(claim,)).apply(comms, caller)
+        with pytest.raises(ValueError, match=re.escape(missing)):
+            CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=(claim,)).apply(comms, caller)
+        provide()
+        claims.append(claim)
+    report = CommsGoalTool(goal_id='request', status=ActiveGoalAction, progress='claimed', claims=tuple(claims))
+    assert report.apply(comms, caller).goal.progress == 'claimed'
