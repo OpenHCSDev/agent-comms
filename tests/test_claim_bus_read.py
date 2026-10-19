@@ -172,6 +172,9 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
             ((str(resource),), 0), ((), 1),
         ]
         assert all(message.type is ClaimNoticeKind for message in claims)
+        assert (claims[0].sender, claims[0].target, claims[0].body) == (
+            "Alice", "Alice", "Claimed",
+        )
         snapshot = comms.registry.snapshot()
         dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
         assert comms.bus.log.read_page(ConversationMessagePageRequest(dm_scope)).messages == ()

@@ -29,7 +29,7 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .errors import RelationViolationError
-from .messages import ClaimNoticeKind, Message
+from .messages import ClaimNoticeKind
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import SharedLock, StoreLock, _store_lock
@@ -189,7 +189,7 @@ def publish_selected_resource_claim(
                 raise IdentityConflict("Wake claim operation was already consumed")
         committed = bus.publisher._publish_claim_envelope_unlocked(
             bus_lock, registry,
-            Message(owner.name, owner.name, "Claimed", ClaimNoticeKind),
+            ClaimNoticeKind.claimed(owner),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],

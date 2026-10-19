@@ -7,6 +7,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms.channel_coding_tools import CodingToolOwner
 from agent_comms.owned_send import OwnedSend
+from agent_comms.messages import ClaimNoticeKind
 from agent_comms.field_codec import FieldCodec
 from agent_comms.storage_rules import StorageRule
 
@@ -55,6 +56,10 @@ async def test_ordinary_native_write_commits_claim(native_backend, monkeypatch):
         assert committed == claims[0]
         assert committed.owner == session
         assert committed.seq > 0
+        notices = [message for message in agent._comms.views.full_history_page().messages
+                   if message.claim_transition is not None and message.claim_transition.claims]
+        assert [(message.sender, message.target, message.body, message.type)
+                for message in notices] == [(session, session, "Claimed", ClaimNoticeKind)]
         assert native.provider.posts == 2
         assert native.session.read_bytes().startswith(original)
         print("p620_ordinary_claim=" + json.dumps({
