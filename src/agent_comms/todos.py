@@ -86,12 +86,20 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
-        """The order's check and every count its deletion declares run on the delivered source."""
-        for each in (check, *deletes.checks):
+    @property
+    def check_line(self) -> str:
+        return "Check print not recorded"
+
+    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> CheckedDelivery:
+        """Record the order's actual check output, not an integer supplied by its reporter."""
+        await self.require_source(check)
+        result = await self.checked(check)
+        check.result.require(result)
+        for each in deletes.checks:
             await self.require_source(each)
             each.result.require(await self.checked(each))
-        return replace(self, at=await self.delivery_time(check))
+        delivery = replace(self, at=await self.delivery_time(check))
+        return CheckedDelivery.record(delivery, CheckPrinted.decoded(result.stdout))
 
     @abstractmethod
     async def require_source(self, check): ...
@@ -183,6 +191,36 @@ class OperationDelivery(OrderDelivery):
 
     async def delivery_time(self, check):
         return EventTime.capture(time.time())
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedDelivery(OrderDelivery, declared_name=None):
+    """A verified receipt keeps the print alongside the delivery it measures."""
+
+    printed: CheckPrinted
+    submission: ClassVar[type[OrderDelivery]]
+
+    @property
+    def check_line(self) -> str:
+        return self.printed.line
+
+    @classmethod
+    def record(cls, delivery: OrderDelivery, printed: CheckPrinted) -> CheckedDelivery:
+        for member in cls.members_with(cls):
+            if isinstance(delivery, member.submission):
+                values = {item.name: getattr(delivery, item.name) for item in fields(delivery)}
+                return member(**(values | {"printed": printed}))
+        raise ValueError(f"No checked receipt declared for {type(delivery).__name__}.")
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedCommitDelivery(CheckedDelivery, CommitDelivery):
+    submission = CommitDelivery
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedOperationDelivery(CheckedDelivery, OperationDelivery):
+    submission = OperationDelivery
 
 
 @dataclass(frozen=True)
@@ -1112,6 +1150,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
+    @property
+    def progress_line(self) -> str:
+        return self.line
+
     def verify_evidence(self, evidence: tuple[Evidence, ...], goals: Goals) -> None:
         raise ValueError("This problem has no checked order to cite evidence against.")
 
@@ -1346,6 +1388,10 @@ class DeliveredProblemOrder(CheckedProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Delivered, waiting on install"
+
+    @property
+    def progress_line(self) -> str:
+        return f"{self.line} · {self.delivery.check_line}"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner

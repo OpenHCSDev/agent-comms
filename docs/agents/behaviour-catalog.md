@@ -129,7 +129,7 @@ A done report that names its own measure instead of what its order's Check print
 
 Checked by:
 
-- not enforced here: P197 (#1733)
+- check in `agent_comms.todos.OrderDelivery.verified`
 
 Learned from: seed catalog pattern 4 (claude-ai message 1c8729ba0ed7); [Codex postmortem, failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
 

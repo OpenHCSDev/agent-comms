@@ -400,7 +400,7 @@ def board():
         owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
         lines.append(f'| {t.id}: {t.text} | {t.order.owner.to_wire()} | {owner} | {t.order.id} | '
                      f'{hhmm(t.deadline)} | {read[t.id].line if t.id in read else "-"} | '
-                     f'{"no" if t.pending else "yes, install pending"} | '
+                     f'{t.order.progress_line} | '
                      f'{activity[unit].clock() if unit else "-"} |')
     history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
     lines += ['', '## Withdrawn orders', '',
@@ -500,7 +500,8 @@ def done(pid, sha, screenshot='', seen='', repo=''):
     delivered_todo = COMMS.goals.todos.get(pid)
     for late in delivered_todo.strikes[len(todo.strikes):]:
         posted(unit, delivered_todo, late)
-    print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
+    print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}'
+          f' · {delivered_todo.order.delivery.check_line}')
 
 
 def first_calls(held, activity):

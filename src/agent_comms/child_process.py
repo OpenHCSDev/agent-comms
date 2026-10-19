@@ -1015,6 +1015,10 @@ class PosixLaunch(ChildLaunch):
 class CheckPrinted(DeclaredFamily, affix="Printed"):
     """The count printed by a child, or the absence of an integer."""
 
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
+
     @staticmethod
     def decoded(stdout: bytes) -> CheckPrinted:
         counts = re.findall(r"\d+", stdout.decode(errors="replace"))
@@ -1040,6 +1044,10 @@ class CheckPrinted(DeclaredFamily, affix="Printed"):
 class CountPrinted(CheckPrinted):
     count: int
 
+    @property
+    def line(self) -> str:
+        return f"Check printed {self.count}"
+
     def distance(self, expected: int) -> CheckPrinted:
         return CountPrinted(abs(self.count - expected))
 
@@ -1060,6 +1068,10 @@ class CountPrinted(CheckPrinted):
 
 @dataclass(frozen=True)
 class NoIntegerPrinted(CheckPrinted):
+    @property
+    def line(self) -> str:
+        return "Check printed no integer"
+
     def distance(self, expected: int) -> CheckPrinted:
         return self
 

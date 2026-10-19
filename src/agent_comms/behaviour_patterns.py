@@ -19,7 +19,7 @@ from .commander.send_guard import TacticalCommand
 from .declared_family import DeclaredFamily
 from .goals import OrderCheck
 from .standing_rules import BoardDisagrees, PlanIdle, StandingRule
-from .todos import PlainText, StorageStrikeTodo, Todo, TodoStore, VoidStrikeTodo
+from .todos import OrderDelivery, PlainText, StorageStrikeTodo, Todo, TodoStore, VoidStrikeTodo
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"
 COMMANDER_SKILL = "../../src/agent_comms/skills/comms-commander/SKILL.md"
@@ -309,7 +309,7 @@ class WrongMeasurePattern(BehaviourPattern):
     signature = (
         "A done report that names its own measure instead of what its order's Check printed."
     )
-    checks = (PendingCheck("P197", "#1733"),)
+    checks = (CallableCheck(OrderDelivery.verified),)
     sources = (SeedCatalog(4), MeasuredWrongThingFailure())
 
 
