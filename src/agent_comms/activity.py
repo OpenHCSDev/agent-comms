@@ -87,9 +87,7 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     @abstractmethod
     def recovery(self) -> str: ...
 
-    @property
-    def headline(self) -> str:
-        return "Inbox unavailable"
+    headline: ClassVar[str] = "Inbox unavailable"
 
     @property
     def summary(self) -> str:
@@ -110,17 +108,13 @@ class UnavailableDrainDiagnostic(DrainDiagnostic):
 
 
 class FailedWakeDiagnostic(UnavailableDrainDiagnostic):
-    @property
-    def headline(self) -> str:
-        return "Wake failed"
+    headline = "Wake failed"
 
 
 class NativeInputDrainDiagnostic(DrainDiagnostic):
     """A native request failure is not evidence that the inbox cannot be read."""
 
-    @property
-    def headline(self) -> str:
-        return "Native request failed"
+    headline = "Native request failed"
 
     @property
     def recovery(self) -> str:

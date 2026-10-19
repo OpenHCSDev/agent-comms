@@ -261,6 +261,8 @@ class SettledTick(TickState):
 class InputObservation:
     """File-driven observation and process-local wake behavior."""
 
+    closing: bool
+
     def _tick_paths(self) -> TickRevisionPaths:
         configuration = self.sessions.config.configuration
         return TickRevision.paths(
@@ -284,10 +286,8 @@ class InputObservation:
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
         state = self.state(session_id)
-        if state.drain_task is task:
-            state.observation_watcher = None
-            if not self.closing:
-                raise SystemExit(1)
+        if state.drain_task is task and not self.closing:
+            raise SystemExit(1)
 
     def wake_observer(self, session_id: str) -> None:
         state = self.state(session_id)

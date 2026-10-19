@@ -241,10 +241,15 @@ async def test_unexpected_drain_failure_is_visible_and_propagates(tmp_path, monk
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", broken)
     try:
-        agent.inputs.ensure_live_drain("beta")
-        task = agent.inputs.state("beta").drain_task
+        # Invoke the real retirement callback explicitly so its process exit
+        # does not terminate pytest's own event loop.
+        task = asyncio.create_task(agent.inputs.observe("beta"))
+        agent.inputs.state("beta").drain_task = task
         with pytest.raises(ValueError, match="unexpected drain implementation failure"):
             await task
+        with pytest.raises(SystemExit) as stopped:
+            agent.inputs._retire_observer("beta", task)
+        assert stopped.value.code == 1
         assert isinstance(
             owner_view(comms).activity.readiness.source_diagnostic(),
             StoppedDrainDiagnostic,
