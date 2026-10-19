@@ -556,19 +556,19 @@ class InboxRead(DeclaredFamily, affix="Read"):
     """Whether a thread read counts each thread's unread messages."""
 
     @abstractmethod
-    def counts(self, bus, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
+    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
 
 
 @dataclass(frozen=True)
 class CountedRead(InboxRead):
-    def counts(self, bus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]:
         # One bus snapshot for every thread, not one per thread.
         return {name: CountedInbox(count) for name, count in bus.pending_counts_all(names).items()}
 
 
 @dataclass(frozen=True)
 class UncountedRead(InboxRead):
-    def counts(self, bus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+    def counts(self, bus: MessageBus, names: Sequence[str]) -> Mapping[str, InboxCount]:
         return {name: UncountedInbox() for name in names}
 
 

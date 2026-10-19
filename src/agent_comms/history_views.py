@@ -79,12 +79,12 @@ class PollTarget(DeclaredFamily, affix="Target"):
     """Whose poll this is: the thread that calls, or one named on the command line."""
 
     @abstractmethod
-    def thread(self, registry) -> Thread: ...
+    def thread(self, registry: Registration) -> Thread: ...
 
 
 @dataclass(frozen=True)
 class CallingThreadTarget(PollTarget):
-    def thread(self, registry) -> Thread:
+    def thread(self, registry: Registration) -> Thread:
         return registry.require(current_thread(registry).name)
 
 
@@ -92,7 +92,7 @@ class CallingThreadTarget(PollTarget):
 class NamedThreadTarget(PollTarget):
     name: str
 
-    def thread(self, registry) -> Thread:
+    def thread(self, registry: Registration) -> Thread:
         return registry.require(self.name)
 
     @classmethod
