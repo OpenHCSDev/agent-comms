@@ -643,7 +643,9 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
         if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
-        if (crossed := t.late_since(now)) is None or not work.strikes:
+        if not work.strikes:
+            continue
+        if (crossed := t.late_since(now)) is None:
             continue
         answer = reply(t.holder, ordered)
         replied_at = float(answer.get('ts', 0)) if answer else 0
@@ -886,7 +888,7 @@ class DueVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class InstallVerb(RuledVerb):
-    help = "plan the fleet's next install; merged and delivered orders wait on it, not on their deadlines"
+    help = "plan the fleet's next install; merged and delivered orders wait on it"
     at: str = option("at", help="HH:MM the install is due")
 
     def run(self) -> None:

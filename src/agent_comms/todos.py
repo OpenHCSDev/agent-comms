@@ -421,7 +421,7 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         path = cls.path_in(root)
         if not path.exists():
             return UnplannedInstallDeadline()
-        return PlannedInstallDeadline(RecordedEventTime(json.loads(path.read_text())["at"]))
+        return PlannedInstallDeadline(RecordedEventTime(**json.loads(path.read_text())))
 
     @abstractmethod
     def alarm(self, waiting: list[str], now: float) -> list[str]:
