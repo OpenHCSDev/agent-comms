@@ -51,12 +51,12 @@ from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarr
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
+from agent_comms.connector import PORT
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.locked_store import RuntimeFile
-from agent_comms.connector import PORT
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
