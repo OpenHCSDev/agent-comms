@@ -216,6 +216,12 @@ def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
     ({"carry_b": step_source("carry_a")}, 0),
     ({"carry_a": step_source(None).replace("Carried(0)", "Carried(1)")}, 1),
     ({"carry_a": step_source("carry_previous")}, 0),
+    ({"carry_a": step_source(None) +
+      "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 0),
+    ({"carry_a": step_source(None).replace("Carried(0)", "Carried(1)") +
+      "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 1),
+    ({"carry_a": step_source(None) +
+      "\n    @classmethod\n    def before_stop(cls, root, *, apply):\n        return Carried(1)\n"}, 1),
     ({"carry_a": None, "carry_renamed": step_source(None)}, 1),
     ({"carry_a": None}, 0),
 ])
