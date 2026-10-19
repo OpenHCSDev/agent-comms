@@ -138,9 +138,7 @@ class Thread(ThreadProvenance):
 
     def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
-        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(
-            self
-        )
+        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
 
     @property
     def project_path(self) -> Path:
@@ -157,22 +155,17 @@ class Thread(ThreadProvenance):
         earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
-            self,
-            worktree=project,
-            earlier_projects=tuple(
-                dict.fromkeys(path for path in (*self.earlier_projects, earlier) if path != current)
-            ),
+            self, worktree=project,
+            earlier_projects=tuple(dict.fromkeys(
+                path for path in (*self.earlier_projects, earlier) if path != current
+            )),
             project_resume_due=self.project_resume_due or self.executing,
         )
 
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
-        return (
-            self.project_resume_due
-            and not self.executing
-            and not self.goal.accepts_following_handoff()
-        )
+        return self.project_resume_due and not self.executing and not self.goal.accepts_following_handoff()
 
     @property
     def turn_state(self) -> TurnState:
@@ -241,22 +234,18 @@ class Thread(ThreadProvenance):
             raise ValueError("Thread model cannot be empty.")
 
     def require_original_model_configuration(self, original: Thread) -> None:
-        changed = any(
-            (
-                self.incarnation != original.incarnation,
-                self.worktree != original.worktree,
-                self.model != original.model,
-                self.thinking_level != original.thinking_level,
-                self.service_tier != original.service_tier,
-            )
-        )
+        changed = any((
+            self.incarnation != original.incarnation,
+            self.worktree != original.worktree,
+            self.model != original.model,
+            self.thinking_level != original.thinking_level,
+            self.service_tier != original.service_tier,
+        ))
         if changed:
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self,
-        *,
-        model: str | None = None,
+        self, *, model: str | None = None,
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
@@ -272,10 +261,7 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self,
-        *,
-        model: str | None,
-        thinking_level: type[ThinkingChoice],
+        self, *, model: str | None, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
@@ -325,9 +311,7 @@ class Thread(ThreadProvenance):
 
     def wake_context(self, goals: Goals) -> dict[str, object]:
         return {
-            "name": self.name,
-            "title": self.title,
-            "tags": sorted(self.tags),
+            "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
             "current_goal": self.goal.wake_context(goals, self.incarnation),
         }
@@ -344,19 +328,9 @@ class Thread(ThreadProvenance):
         Something read from the running agent under one record still describes the
         other only when this holds. Titles, tags, goals and turns do not change it.
         """
-
         def launch(thread: Thread):
-            return (
-                thread.incarnation,
-                thread.process_identity,
-                thread.role,
-                thread.runtime,
-                thread.worktree,
-                thread.execution,
-                thread.model,
-                thread.thinking_level,
-            )
-
+            return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
+                    thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 
     def without_turn(self) -> Thread:
@@ -373,23 +347,17 @@ class Thread(ThreadProvenance):
         result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
         if self.turn_generation != previous.turn_generation:
             result = replace(
-                result,
-                turn_generation=previous.turn_generation,
+                result, turn_generation=previous.turn_generation,
                 last_finished_turn_id=(
                     previous.last_finished_turn_id
-                    if self.turn_record == previous.turn_record
-                    else None
+                    if self.turn_record == previous.turn_record else None
                 ),
             )
         return result
 
     def for_claim(self, name: str) -> Thread:
         """Assign an allocated name without turning a generated clock into caller identity."""
-        created = (
-            _GeneratedCreationTime(self.created_at)
-            if self._generated_created_at
-            else self.created_at
-        )
+        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
         return replace(self, name=name, created_at=created)
 
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:

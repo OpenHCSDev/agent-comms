@@ -10,21 +10,69 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from . import agent_events as events
 from .activity import ObservedActivity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion, boundary_decoder
+from .input_disposition import InputDispositions
 from .locked_store import JsonDocument
+from .message_reference import MessageReference
+from .mro_dispatch import MroDispatch, handles
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
-from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
+from .turn_phase import CancellingPhase, IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .child_process import ProcessState
     from .messaging import Messaging
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .turn_runner import TurnRunner
+
+
+class ReportTurn(SubclassUnion, affix="ReportTurn"):
+    @abstractmethod
+    def matches_current(self, turn: TurnDeclaration) -> bool: ...
+
+
+@dataclass(frozen=True)
+class IdleReportTurn(NullMember, ReportTurn):
+    def matches_current(self, turn: TurnDeclaration) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class RunningReportTurn(RecordMember, ReportTurn):
+    turn_id: str
+    generation: int
+
+    def __post_init__(self) -> None:
+        if not self.turn_id or type(self.generation) is not int or self.generation <= 0:
+            raise ValueError("A reporting turn requires a recorded ID and generation")
+
+    def matches_current(self, turn: TurnDeclaration) -> bool:
+        return turn.matches_report(self.turn_id, self.generation)
+
+
+class CompactionObservation(MroDispatch):
+    """The turn declaration owns compaction transitions, not its runner."""
+    def __init__(
+        self, runner: TurnRunner, session_id: str, lease: TurnLeaseFence, phase: TurnPhase,
+    ) -> None:
+        self.runner, self.session_id, self.lease, self.phase = runner, session_id, lease, phase
+
+    async def publish(self, phase: TurnPhase) -> None:
+        await self.runner.transition_turn(self.session_id, self.lease, phase)
+
+    @handles(events.CompactionStart)
+    async def start(self, event: events.CompactionStart) -> None:
+        await self.publish(self.phase.compacting())
+
+    @handles(events.CompactionEnd)
+    async def end(self, event: events.CompactionEnd) -> None:
+        await self.publish(self.phase.compaction_ended())
 
 
 class TurnEnding(DeclaredFamily, affix="Ending"):
@@ -58,35 +106,6 @@ class FailedEnding(TurnEnding):
 
     def record(self, turn: ActiveTurn) -> FailedTurn:
         return FailedTurn(turn, self.error)
-
-
-class TurnEndingEffect(ABC):
-    @abstractmethod
-    def write(self, record: StoredTurnRecord) -> None: ...
-
-    @abstractmethod
-    def notify(self, messaging: Messaging, name: str) -> None: ...
-
-
-@dataclass(frozen=True)
-class NewTurnEnding(TurnEndingEffect):
-    terminal: EndedTurn
-
-    def write(self, record: StoredTurnRecord) -> None:
-        record._publish_unlocked(self.terminal)
-
-    def notify(self, messaging: Messaging, name: str) -> None:
-        self.terminal.notify_failure(messaging, name)
-
-
-class UnchangedTurnEnding(TurnEndingEffect):
-    """A stale/repeated end neither writes nor repeats a notification."""
-
-    def write(self, record: StoredTurnRecord) -> None:
-        pass
-
-    def notify(self, messaging: Messaging, name: str) -> None:
-        pass
 
 
 class TurnDeclaration(SubclassUnion, affix=""):
@@ -150,7 +169,7 @@ class TurnDeclaration(SubclassUnion, affix=""):
     def matches(self, turn_id: TurnId) -> bool: ...
 
     @abstractmethod
-    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect: ...
+    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> IdleTurn: ...
 
     @abstractmethod
     def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]: ...
@@ -159,19 +178,23 @@ class TurnDeclaration(SubclassUnion, affix=""):
     def observed_task_turn(self, identity: TurnIdentity, turn: TurnId, thread: Thread) -> bool: ...
 
     @abstractmethod
-    def selection_matches(self, actual, expected) -> bool: ...
+    def selection_matches(self, actual: object, expected: object) -> bool: ...
 
     @abstractmethod
-    def answered_by(self, messaging, owner, target): ...
+    def answered_by(
+        self, messaging: Messaging, owner: Thread, target: str,
+    ) -> tuple[MessageReference, ...]: ...
 
     @abstractmethod
-    async def observe_compaction(self, runner, session_id, owner, event): ...
+    async def observe_compaction(
+        self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent,
+    ) -> None: ...
 
     @abstractmethod
-    async def cancel_turn(self, runner, session_id, owner): ...
+    async def cancel_turn(self, runner: TurnRunner, session_id: str, owner: Thread) -> None: ...
 
     @abstractmethod
-    def report_wait_turn(self): ...
+    def report_wait_turn(self) -> ReportTurn: ...
 
     @abstractmethod
     def matches_report(self, turn_id: str, generation: int) -> bool: ...
@@ -234,31 +257,36 @@ class IdleTurn(TurnDeclaration, declared_name=None):
             and thread.last_finished_turn_id == turn.value
         )
 
-    def selection_matches(self, actual, expected) -> bool:
+    def selection_matches(self, actual: object, expected: object) -> bool:
         return actual == expected
 
-    def answered_by(self, messaging, owner, target):
+    def answered_by(
+        self, messaging: Messaging, owner: Thread, target: str,
+    ) -> tuple[MessageReference, ...]:
         return ()
 
-    async def observe_compaction(self, runner, session_id, owner, event):
+    async def observe_compaction(
+        self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent,
+    ) -> None:
         pass
 
-    async def cancel_turn(self, runner, session_id, owner):
+    async def cancel_turn(self, runner: TurnRunner, session_id: str, owner: Thread) -> None:
         pass
 
-    def report_wait_turn(self):
-        from .goal_waits import IdleReportTurn
-
+    def report_wait_turn(self) -> ReportTurn:
         return IdleReportTurn()
 
     def matches_report(self, turn_id: str, generation: int) -> bool:
         return False
 
-    def notify_failure(self, messaging: Messaging, name: str) -> None:
+    def write(self, record: StoredTurnRecord) -> None:
         pass
 
-    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect:
-        return UnchangedTurnEnding()
+    def notify(self, messaging: Messaging, name: str) -> None:
+        pass
+
+    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> IdleTurn:
+        return NoTurn()
 
     def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]:
         return iter(())
@@ -282,12 +310,15 @@ class EndedTurn(RecordMember, IdleTurn):
     def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]:
         return self.turn.release_witnesses(lease)
 
+    def write(self, record: StoredTurnRecord) -> None:
+        record._publish_unlocked(self)
+
 
 @dataclass(frozen=True)
 class FailedTurn(EndedTurn):
     error: str
 
-    def notify_failure(self, messaging: Messaging, name: str) -> None:
+    def notify(self, messaging: Messaging, name: str) -> None:
         messaging.report_failed_turn(name, self)
 
 
@@ -308,33 +339,28 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     def report_turn(self) -> str:
         return self.id
 
-    def selection_matches(self, actual, expected) -> bool:
+    def selection_matches(self, actual: object, expected: object) -> bool:
         return True
 
-    def answered_by(self, messaging, owner, target):
-        from .input_disposition import InputDispositions
-
+    def answered_by(
+        self, messaging: Messaging, owner: Thread, target: str,
+    ) -> tuple[MessageReference, ...]:
         lease = owner.require_turn_lease()
         inputs = InputDispositions(messaging.root).in_turn(self.id)
         with messaging.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, messaging.registry.snapshot(), target)
 
-    async def observe_compaction(self, runner, session_id, owner, event):
-        # The runner imports the declaration; defer the reverse behavior dependency.
-        from .turn_runner import CompactionObservation
-
+    async def observe_compaction(
+        self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent,
+    ) -> None:
         await CompactionObservation(
             runner, session_id, owner.require_turn_lease(), self.phase
         ).dispatch(event)
 
-    async def cancel_turn(self, runner, session_id, owner):
-        from .turn_phase import CancellingPhase
-
+    async def cancel_turn(self, runner: TurnRunner, session_id: str, owner: Thread) -> None:
         await runner.transition_turn(session_id, owner.require_turn_lease(), CancellingPhase())
 
-    def report_wait_turn(self):
-        from .goal_waits import IdleReportTurn, RunningReportTurn
-
+    def report_wait_turn(self) -> ReportTurn:
         if self.claimed_generation is None or self.turn_generation is None:
             return IdleReportTurn()
         return RunningReportTurn(self.id, self.turn_generation)
@@ -356,8 +382,7 @@ class ActiveTurn(RecordMember, TurnDeclaration):
             raise RelationViolationError("A turn must belong to the registered executor.")
         if self.turn_generation is not None and (
             type(self.turn_generation) is not int
-            or self.turn_generation <= 0
-            or self.turn_generation != generation
+            or self.turn_generation <= 0 or self.turn_generation != generation
         ):
             raise RelationViolationError("Active turn generation differs from its owner.")
 
@@ -378,10 +403,8 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     def without_claim(self) -> ActiveTurn:
         return replace(self, claimed_generation=None)
 
-    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect:
-        return (
-            NewTurnEnding(ending.record(self)) if self.may_release(lease) else UnchangedTurnEnding()
-        )
+    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> IdleTurn:
+        return ending.record(self) if self.may_release(lease) else NoTurn()
 
     def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]:
         if self.may_release(lease):
@@ -398,14 +421,12 @@ class ActiveTurn(RecordMember, TurnDeclaration):
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return self.id == lease.turn_id and self.current(
-            lease.claimed_generation, lease.identity.generation
-        )
+            lease.claimed_generation, lease.identity.generation)
 
     def may_release(self, lease: TurnLeaseFence) -> bool:
         return self.held_by(lease) or (
             self.claimed_generation is None
-            and replace(self, claimed_generation=lease.claimed_generation).held_by(lease)
-        )
+            and replace(self, claimed_generation=lease.claimed_generation).held_by(lease))
 
     def leases(
         self,
@@ -428,9 +449,8 @@ class ActiveTurn(RecordMember, TurnDeclaration):
         return self.started_at * 1000 <= updated_at_ms + 1
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
-        return replace(
-            super().project_activity(activity), timestamp=max(activity.timestamp, self.started_at)
-        )
+        return replace(super().project_activity(activity),
+                       timestamp=max(activity.timestamp, self.started_at))
 
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]:
         if phase != self.phase:
@@ -551,11 +571,8 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity)
-        return (
-            self
-            if (self.registry_path, self.identity) == (record.registry_path, record.identity)
-            else record
-        )
+        return (self if (self.registry_path, self.identity) ==
+                (record.registry_path, record.identity) else record)
 
     def empty(self) -> TurnDeclaration:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
@@ -566,10 +583,7 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
 
     @classmethod
     def begin(
-        cls,
-        registry_path: Path,
-        identity: TurnIdentity,
-        turn: ActiveTurn,
+        cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn,
     ) -> StoredTurnRecord:
         record = cls.for_identity(registry_path, identity)
         record.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -590,7 +604,7 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
         self,
         lease: TurnLeaseFence,
         ending: TurnEnding = FINISHED_ENDING,
-    ) -> TurnEndingEffect:
+    ) -> IdleTurn:
         """End the exact original turn without depending on a readable registry."""
         with _store_lock(self.registry_path):
             ended = self.read().ended(lease, ending)
@@ -598,9 +612,7 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
         return ended
 
     def _turn_effects(
-        self,
-        lease: TurnLeaseFence,
-        observe: Callable[[TurnState], Iterable[TurnState]],
+        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
         with _store_lock(self.registry_path):
             active = self.read()
@@ -615,9 +627,7 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))
 
     def observe_native_phase(
-        self,
-        lease: TurnLeaseFence,
-        phase: TurnPhase,
+        self, lease: TurnLeaseFence, phase: TurnPhase,
     ) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
 

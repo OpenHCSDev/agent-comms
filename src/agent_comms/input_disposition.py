@@ -23,7 +23,6 @@ from .input_attempt import (
 )
 from .message_reference import MessageReference
 from .messages import Message
-from .threads import Thread
 from .tool_result import ToolResult
 from .typed_table import Column, Index, TypedStore, TypedTable, sql_literal
 
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
     from .registry_document import RegistrySnapshot
     from .thread_identity import TurnId
+    from .threads import Thread
     from .turn_lease import TurnLeaseFence
 
 

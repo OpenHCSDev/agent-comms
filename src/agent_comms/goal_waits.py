@@ -10,49 +10,20 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .field_codec import NullMember, RecordMember, SubclassUnion
-from .goal_presentation import (
-    GoalExecution,
-    GoalExecutionState,
-    GoalWaitTarget,
-    IdleGoalExecution,
-    ThreadGoalExecution,
-)
+from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
+from .turn_lease import ReportTurn
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .agent_activity import AgentActivity
     from .threads import Thread
-
-
-class ReportTurn(SubclassUnion, affix="ReportTurn"):
-    @abstractmethod
-    def matches_current(self, turn) -> bool: ...
-
-
-@dataclass(frozen=True)
-class IdleReportTurn(NullMember, ReportTurn):
-    def matches_current(self, turn) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class RunningReportTurn(RecordMember, ReportTurn):
-    turn_id: str
-    generation: int
-
-    def __post_init__(self):
-        if not self.turn_id or type(self.generation) is not int or self.generation <= 0:
-            raise ValueError("A reporting turn requires a recorded ID and generation")
-
-    def matches_current(self, turn) -> bool:
-        return turn.matches_report(self.turn_id, self.generation)
+    from .comms import Comms
 
 
 class GoalWait(ABC):
@@ -75,7 +46,7 @@ class GoalWait(ABC):
     ) -> int:
         return goal.published_seq
 
-    def consume_dependency(self, comms, canonical: str) -> bool:
+    def consume_dependency(self, comms: Comms, canonical: str) -> bool:
         return True
 
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
@@ -84,9 +55,7 @@ class GoalWait(ABC):
     def idle_execution(self) -> IdleGoalExecution:
         return IdleGoalExecution()
 
-    def project(
-        self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity
-    ) -> GoalExecution:
+    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         return GoalExecution(
             GoalExecutionState.for_domain_state(goal.state),
             goal.id,
@@ -111,7 +80,8 @@ class RecordedGoalWait(GoalWait):
     report_turn: ReportTurn
 
     @classmethod
-    def capture(cls, goal_id, wait_id, revision, after_seq, targets, *, owner):
+    def capture(cls, goal_id: str, wait_id: str, revision: int, after_seq: int,
+                targets: tuple[GoalWaitTarget, ...], *, owner: Thread) -> RecordedGoalWait:
         return cls(
             goal_id,
             wait_id,
@@ -131,23 +101,20 @@ class RecordedGoalWait(GoalWait):
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
         return self.owner.same_publication_birth(owner)
 
-    def consume_dependency(self, comms, canonical: str) -> bool:
+    def consume_dependency(self, comms: Comms, canonical: str) -> bool:
         return comms.goals.consume_goal_wait(canonical, self.wait_id)
 
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
         return waits.clear(goal_id, wait_id=self.wait_id)
 
-    def project(
-        self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity
-    ) -> GoalExecution:
+    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         targets = tuple(
-            GoalWaitTarget(
-                target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name))
-            )
+            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name)))
             for target in self.targets
         )
         inactive = tuple(
-            target for target in targets if not agents.is_working(target.incarnation, snapshot)
+            target for target in targets
+            if not agents.is_working(target.incarnation, snapshot)
         )
         return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
 
@@ -158,7 +125,9 @@ class RecordedGoalWait(GoalWait):
         goal revision preserves the declared wait; a future wait revision does
         not belong to the observed goal snapshot.
         """
-        return self.owner_matches(owner) and goal.accepts_observation(self.goal_id, self.revision)
+        return self.owner_matches(owner) and goal.accepts_observation(
+            self.goal_id, self.revision
+        )
 
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
@@ -170,7 +139,8 @@ class RecordedGoalWait(GoalWait):
             and any(target.sent(original) for target in self.targets)
         )
 
-    def review_after_seq(self, goal, owner, targets) -> int:
+    def review_after_seq(self, goal: Goal, owner: RecordedThreadIncarnation,
+                         targets: tuple[GoalWaitTarget, ...]) -> int:
         if self.owner_matches(owner) and {target.incarnation.lookup for target in targets} == {
             target.incarnation.lookup for target in self.targets
         }:
@@ -205,14 +175,9 @@ class ExcludedInput(UnresolvedInput):
     @classmethod
     def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
         return ExcludedInput(
-            sequence=row.sequence,
-            target=row.target,
-            text=row.source_text,
-            input_id=row.public_id,
-            status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)),
-            reason=reason,
-        )
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)), reason=reason)
 
 
 @dataclass(frozen=True)
@@ -243,16 +208,9 @@ class GoalInputReview:
         excluded: list[ExcludedInput] = []
         for row in self.unknown:
             if row.key not in self.eligible_keys:
-                excluded.append(
-                    ExcludedInput.excluded(
-                        row,
-                        reason=(
-                            OwnerInputWithoutBusSequenceExclusion
-                            if row.sequence is None
-                            else NotADirectReplyFromDeclaredDependenciesExclusion
-                        ),
-                    )
-                )
+                excluded.append(ExcludedInput.excluded(row, reason=(
+                    OwnerInputWithoutBusSequenceExclusion if row.sequence is None
+                    else NotADirectReplyFromDeclaredDependenciesExclusion)))
             elif row.reviewed_for_goal(self.goal_id):
                 reviewed.append(UnresolvedInput.of(row))
             else:
@@ -311,7 +269,9 @@ class GoalWaits(ThreadOwnedState, TypedStore):
                 for position, target in enumerate(wait.targets):
                     GoalWaitTargetRow(wait.goal_id, position, target.incarnation.lookup).insert(db)
 
-    def targeting(self, target: RecordedThreadIncarnation) -> tuple[RecordedGoalWait, ...]:
+    def targeting(
+        self, target: RecordedThreadIncarnation
+    ) -> tuple[RecordedGoalWait, ...]:
         with self.snapshot() as db:
             return tuple(
                 row.wait
@@ -339,21 +299,17 @@ class GoalWaits(ThreadOwnedState, TypedStore):
         if not self.path.exists():
             return False
         with self.writing() as db:
-            return (
-                StoredGoalWaitRow.delete(
-                    db,
-                    where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
-                    parameters=(goal_id, wait_id, wait_id),
-                ).rowcount
-                > 0
-            )
+            return StoredGoalWaitRow.delete(
+                db, where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
+                parameters=(goal_id, wait_id, wait_id),
+            ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
         return self.for_goal(goal, self.read())
 
     @staticmethod
     def for_goal(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:
-        return rows.get(goal.active().reported_id(), NoGoalWait())
+        return next((rows.get(recorded.id, NoGoalWait()) for recorded in goal.active()), NoGoalWait())
 
     @classmethod
     def execution(
@@ -370,8 +326,8 @@ class GoalWaits(ThreadOwnedState, TypedStore):
     def current_waits(
         goal: GoalDeclaration, rows: dict[str, RecordedGoalWait], owner: RecordedThreadIncarnation
     ) -> tuple[RecordedGoalWait, ...]:
-        wait = rows.get(goal.reported_id())
-        return (wait,) if wait is not None and wait.current_for(goal, owner) else ()
+        return tuple(rows[recorded.id] for recorded in goal
+                     if recorded.id in rows and rows[recorded.id].current_for(goal, owner))
 
     @classmethod
     def closed_wait_group(

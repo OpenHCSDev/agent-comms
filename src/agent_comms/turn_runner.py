@@ -30,7 +30,6 @@ from .goal_actions import (
 )
 from .goal_scheduler import GoalScheduler
 from .messages import Message
-from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
 from .native_input_owner import RegistryOwner
 from .routing import TurnRouting
@@ -57,23 +56,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-
-
-class CompactionObservation(MroDispatch):
-    """All selected/native compaction callers update the existing turn owner."""
-    def __init__(self, runner, session_id, lease, phase):
-        self.runner, self.session_id, self.lease, self.phase = runner, session_id, lease, phase
-
-    async def publish(self, phase):
-        await self.runner.transition_turn(self.session_id, self.lease, phase)
-
-    @handles(events.CompactionStart)
-    async def start(self, event):
-        await self.publish(self.phase.compacting())
-
-    @handles(events.CompactionEnd)
-    async def end(self, event):
-        await self.publish(self.phase.compaction_ended())
 
 
 class TurnRunner:
