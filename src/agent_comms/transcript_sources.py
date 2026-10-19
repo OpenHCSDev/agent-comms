@@ -283,9 +283,6 @@ class TranscriptDraft:
     def end_turn(self, transcript: StoreWriter) -> None:
         """An absent draft needs no write."""
 
-    def append_text(self, text: str):
-        return self
-
     def publish(self, transcript: StoreWriter) -> None:
         """An absent draft needs no publication."""
 
