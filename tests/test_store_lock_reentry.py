@@ -11,7 +11,8 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.store_files import (
-    SharedLock, StoreLockContention, _async_store_lock, _store_lock, store_lock_path,
+    BoundedStoreReadBudget, SharedLock, StoreLockContention,
+    _async_store_lock, _store_lock, store_lock_path,
 )
 
 
@@ -77,7 +78,7 @@ def test_nested_source_still_checks_each_borrows_budget(tmp_path):
     path.write_bytes(b'not within the nested budget')
     with _store_lock(path):
         with pytest.raises(RelationViolationError, match='bounded read budget'):
-            with _store_lock(path, mode=SharedLock(), max_bus_bytes=1):
+            with _store_lock(path, mode=SharedLock(), read_budget=BoundedStoreReadBudget(1)):
                 pytest.fail('nested source skipped its read budget')
         assert not probe(path)
     assert probe(path, shared=False)

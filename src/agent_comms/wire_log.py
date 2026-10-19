@@ -35,6 +35,7 @@ from .envelope_claim_transitions import (
     ClaimProjection,
 )
 from .errors import (
+    CheckpointNeedsRepairError,
     RelationViolationError,
     StoredHistoryUnreadable,
 )
@@ -52,6 +53,7 @@ from .store_files import (
     StoreLockOwner,
     StoreLockContention,
     StoreLockAcquisition,
+    UNBOUNDED_STORE_READ,
     _atomic_write_text,
     _iter_jsonl_stream,
     _store_lock,
@@ -581,22 +583,13 @@ class WireLog(StoreLockOwner):
                 yield source
 
     async def read_checked_async(self, read: Callable):
-        """Acquire cancellably, then consume the whole source in its worker.
-
-        Return detached observations only. Verification and the callback share
-        one resource thread; no SQLite connection crosses to the event loop.
-        The worker releases its locks before returning its result; result
-        delivery must not keep a POSIX lock until the event loop resumes.
-        Cancellation joins acquired work before the original descriptor closes.
-        """
-        from .private_bus_checkpoint import CheckpointNeedsRepair
-
+        """Consume in the joined source worker; cancellation waits for acquired work."""
         # Readers share the bus lock so idle workers don't queue behind each
         # other; only a checkpoint repair needs the exclusive lock.
         mode = SharedLock()
         try:
             return await self._read_checked_under_lock(read, mode)
-        except CheckpointNeedsRepair as error:
+        except CheckpointNeedsRepairError as error:
             return await self._read_checked_under_lock(read, mode.after_repair_needed(error))
 
     async def _read_checked_under_lock[T](
@@ -609,11 +602,10 @@ class WireLog(StoreLockOwner):
             with acquisition as lock, self._checked_source(lock) as source:
                 return read(source)
 
-        held = StoreLockAcquisition.current(self.path, mode)
-        if held is not None:
-            return await Coordination.run_worker(partial(
-                consume, held.source(self.path, None, self.lock_type),
-            ))
+        for source in StoreLockAcquisition.current(self.path, mode).sources(
+            self.path, UNBOUNDED_STORE_READ, self.lock_type
+        ):
+            return await Coordination.run_worker(partial(consume, source))
         platform = Platform.current()
         with _store_lock_file(self.path) as lock_file:
             await StoreLockContention(math.inf).acquire_async(
@@ -623,7 +615,8 @@ class WireLog(StoreLockOwner):
             def read_acquired() -> T:
                 with lock_file:
                     return consume(StoreLockAcquisition.holding(
-                        self.path, lock_file, platform, None, mode=mode, lock_type=self.lock_type,
+                        self.path, lock_file, platform, UNBOUNDED_STORE_READ,
+                        mode=mode, lock_type=self.lock_type,
                     ))
 
             return await Coordination.run_worker(read_acquired)
