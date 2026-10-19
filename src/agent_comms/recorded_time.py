@@ -31,8 +31,9 @@ class Lateness:
         return self.seconds > 0
 
     def __str__(self) -> str:
-        due, delivered = (time.strftime("%H:%M:%S", time.localtime(at))
-                          for at in (self.due, self.delivered))
+        due, delivered = (
+            time.strftime("%H:%M:%S", time.localtime(at)) for at in (self.due, self.delivered)
+        )
         return f"late by {self.seconds:g} s: due {due}, delivered {delivered}"
 
 
