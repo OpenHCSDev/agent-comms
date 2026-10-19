@@ -426,13 +426,13 @@ class UnrecognizedTransportStage(ProviderTransportStage):
 @dataclass(frozen=True)
 class ProviderDiagnosticError(PiPayload):
     message: str
+    code: int | str
     name: str | None = None
-    code: int | str | None = None
 
     @property
     def description(self) -> str:
         name = self.name or "Provider transport error"
-        return f"{name} (code {self.code})" if self.code is not None else name
+        return f"{name} (code {self.code})"
 
 
 class TransportStageText(TextRepresentation[ProviderTransportStage]):

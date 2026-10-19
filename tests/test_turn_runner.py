@@ -226,7 +226,7 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
         evidence.observe()
         assert tuple(evidence.inputs) == (original.native_id,)
         assert evidence.tracked(original.native_id).message.text == sent_text(native, original)
-    assert sent_text(native, original).endswith("Actual failed input")
+    assert "Actual failed input" in sent_text(native, original).splitlines()
     assert not owner._comms.registry.require(session).executing
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
