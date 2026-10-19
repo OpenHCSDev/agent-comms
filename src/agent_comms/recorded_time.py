@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from math import isfinite
-from typing import TYPE_CHECKING, TypeVar
+
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
 
-if TYPE_CHECKING:
-    from .transcript_events import TranscriptEvent
-
-Event = TypeVar("Event", bound="TranscriptEvent")
+class MissingTranscriptTimestampError(ValueError):
+    """An external source cannot publish an event without its recorded time."""
 
 
 class GeneratedTimestamp(FieldRepresentation):
@@ -85,8 +83,8 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def require_delivery(self) -> None:
         self.require_recorded("A delivery")
 
-    @abstractmethod
-    def stamp(self, event: Event) -> Event: ...
+    def transcript_timestamp(self) -> float:
+        raise MissingTranscriptTimestampError("A transcript event requires its source's recorded time")
 
     @abstractmethod
     def continued_from(self, original_at: float): ...
@@ -94,9 +92,6 @@ class EventTime(DeclaredFamily, affix="EventTime"):
 
 @dataclass(frozen=True)
 class UnrecordedEventTime(EventTime):
-    def stamp(self, event: Event) -> Event:
-        return event
-
     def continued_from(self, original_at):
         return RecordedEventTime(original_at)
 
@@ -124,8 +119,8 @@ class RecordedEventTime(EventTime):
     def recorded_at(self, label: str) -> float:
         return self.at
 
-    def stamp(self, event: Event) -> Event:
-        return replace(event, timestamp=self.at)
+    def transcript_timestamp(self) -> float:
+        return self.at
 
     def continued_from(self, original_at):
         return self

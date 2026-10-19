@@ -11,9 +11,13 @@ from typing import ClassVar
 
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
-from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingRule,
-                              UndatedStandingRule)
 from ..goals import Goal
+from ..standing_rules import (
+    DatedStandingRule,
+    ReasonedStandingRule,
+    StandingRule,
+    UndatedStandingRule,
+)
 from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
@@ -71,13 +75,13 @@ class WheelSpin(StandingRule, declared_name=None):
 
     @classmethod
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
-        """Units with a native turn in the last ten minutes and no order, parked threads aside."""
+        """Units with a recent turn in their own transcript and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CONFIG.parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((thread for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
-                       and TurnDigestRead(comms.root, thread, bound).native()),
+                       and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
     def assign(self, comms: Comms, commander: str, unit: Thread) -> None:
@@ -182,30 +186,41 @@ class MergeGrowth(DatedStandingRule):
         ).stdout
 
     @classmethod
-    def numstat(cls, checkout: Path, sha: str, path: str) -> tuple[int, int]:
-        diff = cls.git(checkout, "diff", "--numstat", f"{sha}^1", sha, "--", path)
-        counted = [
-            (int(a), int(d))
-            for a, d, _ in (row.split("\t", 2) for row in diff.splitlines())
-            if a.isdigit()
-        ]
-        return sum(a for a, _ in counted), sum(d for _, d in counted)
-
-    @classmethod
     def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
-        """Each first-parent commit on the repository's main inside the window, newest first."""
-        cls.git(repo.checkout, "fetch", "-q", "origin", "main")
+        """Read first-parent growth from one captured, already-fetched Git history.
+
+        Fetch belongs to the checkout's update owner, not a standing-rule read.
+        Git emits each commit's first-parent diff in this same process.
+        """
         log = cls.git(
             repo.checkout,
             "log",
             "--first-parent",
             f"--since={cls.window}",
-            "--format=%H %ct %s",
+            "--format=%x1e%H%x00%ct%x00%s",
+            "--numstat",
+            "--no-renames",
+            "--diff-merges=first-parent",
             "origin/main",
+            "--",
+            repo.source,
+            "tests",
         )
-        for sha, at, subject in (line.split(" ", 2) for line in log.splitlines()):
-            src, tests = (cls.numstat(repo.checkout, sha, path) for path in (repo.source, "tests"))
-            yield cls(repo.github, sha, subject, float(at), src, tests)
+        for record in log.split("\x1e")[1:]:
+            header, _, diff = record.partition("\n")
+            sha, at, subject = header.split("\x00", 2)
+            src, tests = [0, 0], [0, 0]
+            for row in diff.splitlines():
+                if not row:
+                    continue
+                added, deleted, path = row.split("\t", 2)
+                if not (added.isdigit() and deleted.isdigit()):
+                    continue
+                for root, counts in ((repo.source, src), ("tests", tests)):
+                    if path == root or path.startswith(root.rstrip("/") + "/"):
+                        counts[0] += int(added)
+                        counts[1] += int(deleted)
+            yield cls(repo.github, sha, subject, float(at), (src[0], src[1]), (tests[0], tests[1]))
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
