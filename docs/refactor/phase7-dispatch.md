@@ -68,11 +68,38 @@ start. No fork copies, new launch codec or second task/order store.
 
 Completion uses the explicit task problem and ProblemOrder.accepted: only
 InstalledProblemOrder accepts; a withdrawn/folded/merely delivered problem does
-not complete the phase. pi-plan-claims is integrating PlanPhase.done and A2's
-corrected dependencies separately.
+not complete the phase. pi-plan-claims' a44d1be1e completion/A2 change is merged
+normally into this branch. Its borrowed module was reconciled with the current
+finite-deadline and exact-task identity checks.
 
 Source trace also exposed an authority bypass: releasing an order skipped
 Assignment.require_trace on its next transfer. Todo.assigned now applies the
 same trace requirement to the released assignment history. Auto-dispatch passes
 no fabricated source trace. After two owners, missing real tracing stops that
 transfer rather than pretending the old order's source owner was newly read.
+
+## Final checkpoint
+
+After edit: refactor-audit parsed 380 Core production modules and 283 Toad
+modules (ba57101e), zero parse omissions. UnownedWheelSpin has no declaration
+or consumers. PlanPhase.done and PlanIdle consume PhaseTask; task.done is the
+only order.accepted consumer. Toad has no imports of the changed owner classes.
+Dynamic discovery and provider execution remain unproved.
+
+Source imports and git diff --check pass. Final bounded background run used
+`timeout 300`, Python `-X faulthandler`, `-o addopts=''`, one process and an owned
+basetemp: 12 tests passed in 10.64 seconds (work_dispatch, plan_phases and affected
+PlanIdle/wheel-spin cases). pytest-timeout is absent; external timeout applies.
+
+The broader check had 16 passes and six failures: four board cases read missing
+checkout /home/ts/wt/worker--P109, one compares changing memory snapshots, and my
+new trace test used a banned word. The last is fixed and passes. This is not a
+passing full standing-rule suite. pi-cn-phase7 owns the missing-checkout rotation
+risk: reproduce with the board self-check cases; acceptance must preserve the
+remote PR fact without a local checkout. Default eight-worker/coverage settings
+were needless overhead for that bounded run; final checks were serial.
+
+No agent launch, provider input, installation or PR merge occurred. Draft #1932
+is not a first-reply proof. Production checked full-phase briefs and the scratch
+unit/order/first-reply proof remain required. Unordered rows without a checked
+order cannot be dispatched by inventing their missing check.
