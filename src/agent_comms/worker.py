@@ -9,7 +9,7 @@ from .coordinator import Coordination
 from contextlib import suppress
 
 from .acp import CommsAgent
-from .comms import wire
+from .comms import Comms, wire
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 
@@ -24,7 +24,7 @@ async def run() -> None:
         await run_owner(comms)
 
 
-async def run_owner(comms) -> None:
+async def run_owner(comms: Comms) -> None:
     name = ThreadLaunch.current().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(

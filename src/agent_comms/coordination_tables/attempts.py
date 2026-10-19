@@ -16,7 +16,7 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IntegrityViolationError, IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.field_codec import projected
@@ -361,7 +361,10 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         """
         if not observed or cls.exists(
             db,
-            where="execution_id=? AND (facts & ?) = ? AND replay_safe=0 AND side_effects_possible=1",
+            where=(
+                "execution_id=? AND (facts & ?) = ? "
+                "AND replay_safe=0 AND side_effects_possible=1"
+            ),
             parameters=(execution_id, int(observed), int(observed)),
         ):
             return
@@ -370,7 +373,8 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         # A new fact joins atomically: another connection may have accumulated
         # different evidence since the existence check, even in autocommit use.
         statement, values = cls(execution_id, observed, False, True, 1)._insertion()
-        db.execute(statement + """
+        db.execute(
+            statement + """
             ON CONFLICT (execution_id) DO UPDATE SET
                 facts = facts | excluded.facts,
                 replay_safe = 0,
@@ -378,7 +382,9 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
                 revision = revision + 1
             WHERE (facts | excluded.facts) != facts
                OR replay_safe != 0 OR side_effects_possible != 1
-            """, values)
+            """,
+            values,
+        )
 
     @classmethod
     def authorize_if_unobserved(cls, db, execution_id: str) -> None:

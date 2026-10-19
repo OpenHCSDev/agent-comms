@@ -29,7 +29,11 @@ class CoordinationSession(CoordinationStore):
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
         super().__init__(path, contention)
-        self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
+        self._clock_ms = clock_ms or self.system_clock
+
+    @staticmethod
+    def system_clock() -> int:
+        return time.time_ns() // 1_000_000
 
     def now(self, floor: int = 0) -> int:
         now = self._clock_ms()
