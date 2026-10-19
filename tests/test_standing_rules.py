@@ -143,6 +143,19 @@ def working(comms, name, created):
             name, frozenset(), str(comms.root), session_file=str(path), created_at=created))
 
 
+def test_idle_reads_external_execution_and_requires_an_actual_recent_turn(standing, tmp_path):
+    from agent_comms.transcript_events import AssistantTranscript
+    comms, _, module = standing
+    for name in ("external-working", "external-empty"):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.transcripts.external("external-working").finish(
+        turn_id="current", item_id="answer", events=(AssistantTranscript("working", position="answer"),))
+    names = [thread.name for thread in module.WheelSpin.idle(comms, "lead")]
+    assert "external-working" in names
+    assert "external-empty" not in names and "worker" not in names
+
+
 def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
         commander, standing, tmp_path, monkeypatch):
     from agent_comms.storage_rules import StorageRule
