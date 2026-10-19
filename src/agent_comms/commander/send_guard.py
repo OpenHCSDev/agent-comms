@@ -24,8 +24,8 @@ from typing import ClassVar
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
 from ..todos import InstallDeadline
-from .config import CommanderConfig
 from . import order
+from .config import CommanderConfig
 
 Words = tuple[str, ...]
 
@@ -50,8 +50,9 @@ class CommanderSession:
     session: str
 
     def commander(self) -> bool:
-        process = CommanderConfig.installed().comms.registry.require(CommanderConfig.installed().commander).process_identity.require(
-            f'{CommanderConfig.installed().commander} has no registered process to compare this session with')
+        config = CommanderConfig.installed()
+        process = config.comms.registry.require(config.commander).process_identity.require(
+            f'{config.commander} has no registered process to compare this session with')
         environment = Path(f'/proc/{process.pid}/environ').read_bytes().split(b'\0')
         return f'CLAUDE_CODE_SESSION_ID={self.session}'.encode() in environment
 
@@ -117,7 +118,8 @@ class TacticalCommand(GuardedCommand):
 
     @classmethod
     def refusal(cls) -> str:
-        return InstallDeadline.read(CommanderConfig.installed().comms.root).refusal(cls.work, CommanderConfig.installed().commander)
+        config = CommanderConfig.installed()
+        return InstallDeadline.read(config.comms.root).refusal(cls.work, config.commander)
 
 
 @dataclass(frozen=True)

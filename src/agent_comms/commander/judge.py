@@ -103,8 +103,10 @@ def roast(audience, thread, lines, text, fix, slop):
 
 
 def alarm():
+    config = CommanderConfig.installed()
     while True:
-        late = [edit for edit in Edit.unjudged(CommanderConfig.installed().comms, CommanderConfig.installed().commander) if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(config.comms, config.commander)
+                if time.time() - edit.at > 300]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
@@ -126,7 +128,8 @@ class ShowVerb(JudgeVerb):
         return True
 
     def run(self) -> None:
-        show([edit for edit in Edit.unjudged(CommanderConfig.installed().comms, CommanderConfig.installed().commander) if self.selects(edit)])
+        config = CommanderConfig.installed()
+        show([edit for edit in Edit.unjudged(config.comms, config.commander) if self.selects(edit)])
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -165,10 +168,12 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def report(self, todos: tuple[Todo, ...]) -> None: ...
 
     def run(self) -> None:
+        config = CommanderConfig.installed()
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
         orders = {todo.id: todo for todo in order.held_orders() if todo.sent_in(self.msg)}
-        edits = {edit.id: edit for edit in Edit.unjudged(CommanderConfig.installed().comms, CommanderConfig.installed().commander) if edit.problem in orders}
+        edits = {edit.id: edit for edit in Edit.unjudged(config.comms, config.commander)
+                 if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
@@ -187,7 +192,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         for i, todo in selected.items():
             result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
             current[todo.id] = result.todo
-        left = len(Edit.unjudged(CommanderConfig.installed().comms, CommanderConfig.installed().commander))
+        left = len(Edit.unjudged(config.comms, config.commander))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
         self.report(tuple(current.values()))
 
@@ -198,7 +203,8 @@ class OkVerb(VerdictVerb):
     serves: str = option(help="exact words of the order")
 
     def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        return AcceptedVerdict(todo.revision, CommanderConfig.installed().comms.registry.require(CommanderConfig.installed().commander).incarnation,
+        config = CommanderConfig.installed()
+        return AcceptedVerdict(todo.revision, config.incarnation,
                                todo.held(), edit_id, quote=self.serves)
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -245,7 +251,8 @@ class BackVerb(VerdictVerb):
         return order.Slop(self.slop_kind, self.fact, self.at, self.derive, self.by)
 
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, CommanderConfig.installed().comms.registry.require(CommanderConfig.installed().commander).incarnation,
+        config = CommanderConfig.installed()
+        return SendBackVerdict(todo.revision, config.incarnation,
                                todo.held(), edit_id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 
@@ -259,11 +266,12 @@ class BackVerb(VerdictVerb):
         order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)
 
     def report(self, todos: tuple[Todo, ...]) -> None:
+        config = CommanderConfig.installed()
         for todo in todos:
             audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
             roast(audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {CommanderConfig.installed().review_catch}): '
+                    f'(strike {todo.strike_count} on {todo.id}; caught by {config.review_catch}): '
                     f'{todo.strikes[-1].reason}')
             order.on_record(line, 'Send-back', audience)
 

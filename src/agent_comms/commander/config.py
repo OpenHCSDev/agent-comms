@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from ..comms import Comms
+from ..thread_identity import ThreadIncarnation
 
 
 class Repo(BaseModel):
@@ -65,8 +66,14 @@ class CommanderConfig(BaseModel):
 
     @cached_property
     def comms(self) -> Comms:
-        """The bus whose Todo store owns problems, orders, deadlines and strikes, opened on first use."""
+        """The bus whose Todo store owns problems, orders, deadlines and strikes, opened on first
+        use."""
         return Comms(self.root)
+
+    @property
+    def incarnation(self) -> ThreadIncarnation:
+        """The commander thread's current incarnation, read from the registry on each use."""
+        return self.comms.registry.require(self.commander).incarnation
 
     @property
     def review_catch(self) -> str:

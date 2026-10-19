@@ -22,9 +22,11 @@ from .order import CommanderVerb, RuledVerb, hhmm
 
 def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
-    thread = CommanderConfig.installed().comms.registry.require(CommanderConfig.installed().commander)
+    config = CommanderConfig.installed()
+    thread = config.comms.registry.require(config.commander)
     return tuple(request for goal in thread.goal.active()
-                 for request in goal.order.open_requests(goal, CommanderConfig.installed().comms.goals, thread.incarnation))
+                 for request in goal.order.open_requests(goal, config.comms.goals,
+                                                         thread.incarnation))
 
 
 class RequestVerb(CommanderVerb):
@@ -37,7 +39,9 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
     text: str = option("text")
 
     def run(self) -> None:
-        goal = CommanderConfig.installed().comms.goals.update_goal(CommanderConfig.installed().commander, SetGoalAction(text=self.text, order=RequestGoalOrder()))
+        config = CommanderConfig.installed()
+        goal = config.comms.goals.update_goal(
+            config.commander, SetGoalAction(text=self.text, order=RequestGoalOrder()))
         print(goal.require().id)
 
 
@@ -48,8 +52,10 @@ class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
     why: str = option("--why")
 
     def run(self) -> None:
+        config = CommanderConfig.installed()
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())
-        CommanderConfig.installed().comms.goals.update_goal(CommanderConfig.installed().commander, CompletedGoalAction(progress=self.why, expect=expect))
+        config.comms.goals.update_goal(
+            config.commander, CompletedGoalAction(progress=self.why, expect=expect))
         print(f"{self.id} done")
 
 

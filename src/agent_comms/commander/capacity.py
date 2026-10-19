@@ -20,14 +20,16 @@ BEAT_AGE = 10 * 60
 
 
 def live_forks() -> list[str]:
-    os.makedirs(CommanderConfig.installed().forks, exist_ok=True)
-    return [n[:-5] for n in os.listdir(CommanderConfig.installed().forks) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{CommanderConfig.installed().forks}/{n}') < BEAT_AGE]
+    config = CommanderConfig.installed()
+    os.makedirs(config.forks, exist_ok=True)
+    return [n[:-5] for n in os.listdir(config.forks) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{config.forks}/{n}') < BEAT_AGE]
 
 
 def beat(name: str):
-    os.makedirs(CommanderConfig.installed().forks, exist_ok=True)
-    with open(f'{CommanderConfig.installed().forks}/{name}.beat', 'a'):
-        os.utime(f'{CommanderConfig.installed().forks}/{name}.beat')
+    config = CommanderConfig.installed()
+    os.makedirs(config.forks, exist_ok=True)
+    with open(f'{config.forks}/{name}.beat', 'a'):
+        os.utime(f'{config.forks}/{name}.beat')
 
 
 @dataclass(frozen=True)
@@ -70,5 +72,6 @@ class Load:
 
 
 def main(a):
-    load = Load.of(CommanderConfig.installed().comms, CommanderConfig.installed().commander)
+    config = CommanderConfig.installed()
+    load = Load.of(config.comms, config.commander)
     print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')

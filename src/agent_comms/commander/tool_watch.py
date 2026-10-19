@@ -60,8 +60,9 @@ def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> No
         violation = str(denied)
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
     for todo in order.held_by(thread)[:1]:
-        order.strike(thread, todo.id, f'{todo.id} broke the storage rule at a tool call: {violation}; '
-                             'storage waste is banned outright', 'tool_watch at tool call',
+        order.strike(thread, todo.id,
+                     f'{todo.id} broke the storage rule at a tool call: {violation}; '
+                     'storage waste is banned outright', 'tool_watch at tool call',
                      kind=StorageStrikeTodo)
 
 
@@ -112,14 +113,15 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
 
 
 def main(a):
-    registry = Registration(Path(CommanderConfig.installed().root) / 'registry.json')
+    config = CommanderConfig.installed()
+    registry = Registration(Path(config.root) / 'registry.json')
     names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)
     last_names = time.time()
     while True:
         if time.time() - last_names > 60:
             names.update(thread_names(registry)); last_names = time.time()
-        for path in set(glob.glob(f'{CommanderConfig.installed().root}/native-sessions/*/*.jsonl')) | set(names):
+        for path in set(glob.glob(f'{config.root}/native-sessions/*/*.jsonl')) | set(names):
             try:
                 st = os.stat(path)
             except OSError:
