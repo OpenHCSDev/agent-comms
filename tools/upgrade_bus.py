@@ -189,7 +189,8 @@ class Stack:
         for _ in range(240):
             completed = subprocess.run(
                 [str(self.python), "-c", "from agent_comms.cli import main; main()", "--root", str(root),
-                 *arguments], cwd=self.checkout, env=self.environment(), capture_output=True, text=True)
+                 *arguments], cwd=self.checkout, env=self.environment(), capture_output=True,
+                text=True)
             if "Route index covers" not in completed.stdout:
                 break
             time.sleep(5)

@@ -175,7 +175,7 @@ class ConnectorStore(RootFile, LockedStore[ConnectorGrants]):
         return ConnectorGrants()
 
     @contextmanager
-    def admitted(self, client_id: str) -> Iterator[str]:
+    def granted(self, client_id: str) -> Iterator[str]:
         """An access token for a caller on this machine, revoked when its call is done."""
         token = secrets.token_urlsafe(32)
         held = IssuedAccess(client_id, time.time() + CODE_SECONDS)
@@ -281,6 +281,10 @@ class ToolCall:
     name: str
     arguments: dict[str, object] = field(default_factory=dict)
     meta: dict[str, object] = field(default_factory=dict, metadata={"wire_name": "_meta"})
+
+    @classmethod
+    def of(cls, tool: type[ToolRequest]) -> ToolCall:
+        return cls(tool.declared_name)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -671,11 +675,11 @@ class RoundTripVerb(ConnectorVerb):
     port: int = option("--port", default=PORT, help="The service's loopback port")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        read = ToolCall(CommsChannelsTool.declared_name)
+        read = ToolCall.of(CommsChannelsTool)
         call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
         try:
             running = ServiceProcess.listening(self.port).executable
-            with ctx.admitted("upgrade round trip") as token:
+            with ctx.granted("upgrade round trip") as token:
                 request = urllib.request.Request(
                     f"http://{LOOPBACK}:{self.port}/mcp",
                     data=json.dumps(FieldCodec.encode(call)).encode(),
