@@ -47,7 +47,6 @@ class ReplyIndexTable:
 @dataclass(frozen=True)
 class ReplyIndex(ReplyIndexTable, TypedTable):
     revision: FileRevision | None = None
-    through: int = 0
     records: int = 0
     source: str = field(default="", metadata={"sql": Column(primary_key=True, check="source<>''")})
     start: int = 0
@@ -66,7 +65,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
         return indexes
 
     def counts(self, revision: FileRevision, seen: int) -> bool:
-        """A suffix covers this mark, or already proves the declared cap."""
+        """The read reached this mark or exhausted the record allowance."""
         return seen == revision.size or (
             self.revision == revision and (self.start <= seen or self.records >= self.limit)
         )
@@ -100,7 +99,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
                 start = begin
                 if raw.endswith(b"\n") and NativeEntry.read(raw).unread_reply:
                     replies.append(TranscriptReply(self.source, end))
-        index = ReplyIndex(revision, revision.size, visited, self.source, start)
+        index = ReplyIndex(revision=revision, records=visited, source=self.source, start=start)
         return ReplyIndexUpdate(self, index, tuple(replies))
 
 
@@ -120,13 +119,13 @@ class TranscriptReply(ReplyIndexTable, TypedTable):
 
     @classmethod
     def after(cls, database: sqlite3.Connection, ends: Mapping[str, int]) -> dict[str, int]:
-        """Count the indexed suffix, bounded by the owner's display cap."""
+        """Count replies after each mark within the index owner's admitted records."""
         rows = _ReplyCount.read(database.execute(
             f'''SELECT displayed.key AS source,
-                (SELECT count(*) FROM (SELECT end FROM {cls.declared_name}
-                 WHERE source=displayed.key AND end>displayed.value)) AS total
+                (SELECT count(*) FROM {cls.declared_name}
+                 WHERE source=displayed.key AND end>displayed.value) AS total
                 FROM json_each(?) AS displayed''',
-            (json.dumps(ends),)
+            (json.dumps(ends),),
         ))
         return {row.source: row.total for row in rows}
 
@@ -182,7 +181,7 @@ class Indexing(FileReplyCount):
 
 @dataclass(frozen=True)
 class TranscriptUnread:
-    """Exact or capped suffix counts; pending names await their requested slice."""
+    """Per-thread reply rows: exact, a record-capped lower bound, or still preparing."""
 
     counts: dict[str, UnreadPresentation]
 
@@ -209,7 +208,7 @@ class RevisionMoved(NoReplyUpdate):
 
 @dataclass(frozen=True)
 class ReplyIndexUpdate(ReplyIndexResult):
-    """A native-only prepared delta, authorized against one stored prefix."""
+    """A native-only prepared delta, authorized against one stored suffix."""
 
     before: ReplyIndex
     after: ReplyIndex
