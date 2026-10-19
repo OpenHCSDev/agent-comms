@@ -416,7 +416,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             timestamp = connection.execute(
                 f'SELECT (SELECT timestamp FROM "{ExternalEventRow.declared_name}" '
                 'WHERE thread=? AND kind=? ORDER BY seq DESC,ordinal DESC LIMIT 1)',
-                (self.lookup, ToolStartTranscript.declared_name),
+                (self.lookup, FieldCodec.encode(ToolStartTranscript)),
             ).fetchone()[0]
         return GeneratedTimestamp.decode(timestamp)
 
