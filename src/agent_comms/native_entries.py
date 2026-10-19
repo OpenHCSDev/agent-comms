@@ -241,7 +241,7 @@ class NativeEvidenceRead:
         for position, entry in enumerate(appended, len(self.entries)):
             if user := entry.tracked_user:
                 if user.input_id in self.inputs:
-                    raise MalformedRecord("duplicate tracked input")
+                    raise MalformedRecord("ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
 
     def observe(self):
