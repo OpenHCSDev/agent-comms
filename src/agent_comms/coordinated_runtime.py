@@ -23,6 +23,7 @@ from .coordination_errors import (
     RetryScheduled,
 )
 from .coordinator import Coordination
+from .cursor_publication import CursorDelivery
 from .coordination_snapshot import RecoverySnapshot
 from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
@@ -57,6 +58,7 @@ class SelectedExecution(NativeExecution):
     wire_root_id: str
     owner_name: str
     native_package: VerifiedNativePackage
+    cursor_delivery: CursorDelivery
     opt_in: bool = True
     after_seq: int = 0
     session_file: Path | None = None
@@ -129,6 +131,7 @@ class SelectedExecution(NativeExecution):
                     self.wire_root_id,
                     self.owner_name,
                     self.after_seq,
+                    cursor_delivery=self.cursor_delivery,
                     on_compaction=on_compaction,
                 ) as participant:
                     if participant is None:

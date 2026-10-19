@@ -344,19 +344,14 @@ class NativeEvidenceScope(ExitStack):
         super().__init__()
         self.readers: dict[Path, NativeInputEvidenceRead] = {}
 
-    @classmethod
     @contextmanager
-    def borrow(cls, scope: NativeEvidenceScope | None = None):
-        """One owner chooses borrowed or newly acquired resource lifetime."""
-        if scope is None:
-            with cls() as acquired:
-                yield acquired
-        else:
-            try:
-                yield scope
-            except BaseException:
-                scope.close()
-                raise
+    def borrow(self):
+        """Retain this owner's reader on success; retire it on refused evidence."""
+        try:
+            yield self
+        except BaseException:
+            self.close()
+            raise
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()

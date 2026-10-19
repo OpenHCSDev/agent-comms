@@ -107,7 +107,7 @@ class SourceCoverage:
 
     def read(
         self, *, limit: int = 100, after_seq: int = 0, partial: bool = False,
-        source_reads: NativeEvidenceScope | None = None,
+        source_reads: NativeEvidenceScope,
     ) -> ProvenSourceCoverage:
         """Check a page; stop at selected UNKNOWN input or missing evidence.
 
@@ -116,9 +116,7 @@ class SourceCoverage:
         not the last message anywhere on the bus. Filesystem flushes and locks
         can still take longer than the requested time limit.
         """
-        from .native_entries import NativeEvidenceScope
-
-        with NativeEvidenceScope.borrow(source_reads) as source_reads:
+        with source_reads.borrow():
             request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
                                            after_seq=after_seq, partial=partial)
             if self.store.session._connection.in_transaction:
@@ -217,7 +215,7 @@ class SourceCoverage:
             return evidence
         return ()
 
-    def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> tuple[HistoricalNativeInput, ...]:
+    def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope) -> tuple[HistoricalNativeInput, ...]:
         return read_historical_native_inputs(
             self.store,
             wire_root_id=self.wire_root_id,
@@ -226,11 +224,9 @@ class SourceCoverage:
         )
 
     def prefix(self, *, through_seq: int | None = None,
-               source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:
+               source_reads: NativeEvidenceScope) -> ProvenSourceCoverage:
         """Rescan the whole activation prefix; no persisted high-water is trusted."""
-        from .native_entries import NativeEvidenceScope
-
-        with NativeEvidenceScope.borrow(source_reads) as source_reads:
+        with source_reads.borrow():
             with self.bus.log.certified_read(
                 blocking=False, contention=self.contention
             ) as source:

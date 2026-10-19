@@ -11,7 +11,6 @@ from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
 from .messages import AlertKind, NoticeRole
-from .native_source_cursor import NativeSourceCursor
 from .private_sidecar import SidecarCommitUnknown
 from .send_result import SendResult
 
@@ -45,14 +44,7 @@ class CoordinatedTurn:
         # Projection is auxiliary: failure never undoes a committed response,
         # creates another attempt or gives permission to replay native input.
         try:
-            cursor = await NativeSourceCursor.advance_async(
-                participant.bus,
-                wire_root_id=participant.root_id,
-                owner=participant.owner.thread,
-                owner_claimed_generation=participant.owner.claimed_generation,
-                owner_generation=participant.identity.generation,
-                committed_input_id=input_id,
-            )
+            cursor = await participant.cursor_delivery.advance(participant, input_id)
         except (
             OSError,
             sqlite3.Error,
