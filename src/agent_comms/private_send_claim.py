@@ -28,6 +28,7 @@ from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import SelectedModel
 from .native_input_owner import ParticipantOwner, RegistryOwner
+from .native_entries import NativeEvidenceScope
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary, send_fenced_prompt
@@ -126,7 +127,10 @@ class PrivateSendClaim(PromptBoundary):
             session=session,
         )
 
-    def verify(self, store: Coordination, context: NativeContextProof) -> None:
+    def verify(
+        self, store: Coordination, context: NativeContextProof,
+        source_reads: NativeEvidenceScope,
+    ) -> None:
         self.stage.verify(
             store,
             self.participant,
@@ -135,6 +139,7 @@ class PrivateSendClaim(PromptBoundary):
             context,
             wire_root_id=self.wire_root_id,
             prompt=self.prompt.text,
+            source_reads=source_reads,
         )
         self.owner.require_running_turn(self.bus._registry)
 
@@ -182,13 +187,14 @@ class PrivateSendClaim(PromptBoundary):
             )
         except NativePiTerminalFailure as error:
             def settle(store: Coordination, terminal: NativePiTerminalFailure = error):
-                self.verify(store, terminal.context)
+                self.verify(store, terminal.context, source_reads)
                 return self.stage.fail_terminal(
                     store, self.participant, self.input_id, self.token_digest,
                     terminal.context, terminal.failure,
                 )
 
-            settlement = await Coordination.run_async(self.store_path, settle)
+            async with self.selected.cursor_delivery.reading() as source_reads:
+                settlement = await Coordination.run_async(self.store_path, settle)
             try:
                 await self.stage.continue_after_failure(settlement, error.failure)
             except RetryScheduled as retry:
@@ -199,7 +205,10 @@ class PrivateSendClaim(PromptBoundary):
                 record_acquisition_progress, self.bus.log.path.parent, lease,
                 self.input_id, self._measurements,
             ))
-        await Coordination.run_read_async(self.store_path, lambda store: self.verify(store, result.context))
+        async with self.selected.cursor_delivery.reading() as source_reads:
+            await Coordination.run_read_async(
+                self.store_path, lambda store: self.verify(store, result.context, source_reads),
+            )
         return result
 
     def commit(self, store: Coordination, context: NativeContextProof) -> None:

@@ -70,6 +70,23 @@ class NativeSessionIdentity:
             )
         )
 
+    @classmethod
+    def from_evidence(cls, evidence: NativeEvidenceRead) -> NativeSessionIdentity:
+        """Derive selected identity from its recipient's already verified source."""
+        from .native_pi import NativePiUnavailable
+
+        try:
+            file = evidence.source.path
+            if file != file.resolve(strict=True):
+                raise NativeReopenError("Saved native session path is not canonical")
+            header, _entries = evidence.observe()
+            header.require_reopen()
+            return cls(header.require_entry_id(), str(file))
+        except (OSError, ValueError, NativePiUnavailable) as error:
+            if isinstance(error, NativeReopenError):
+                raise
+            raise NativeReopenError("Saved native session identity cannot be read") from error
+
     @staticmethod
     def locate(package: VerifiedNativePackage, session_file: str) -> NativeSessionIdentity:
         """Read a saved header through the process's acquired package."""
