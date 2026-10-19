@@ -28,7 +28,7 @@ from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from cutover.carry import STEPS, Step
 from stored_formats import StoredForm
-from agent_comms.field_codec import FieldCodec, projected
+from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
 
@@ -116,13 +116,14 @@ class OccurrenceMeasure(CountedSource):
         """Return this node's contribution, excluding its descendants."""
 
     @staticmethod
-    def sites(tree: ast.AST) -> Iterator[ast.AST]:
+    def sites(tree: ast.AST, filename: str) -> Iterator[ast.AST]:
         """The nodes this measure reads; every node unless a measure excludes some."""
         return ast.walk(tree)
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        return sum(cls.occurrences(node) for node in cls.sites(ast.parse(source, filename)))
+        tree = ast.parse(source, filename)
+        return sum(cls.occurrences(node) for node in cls.sites(tree, filename))
 
     @classmethod
     def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
@@ -289,7 +290,7 @@ class CleanChangedLines(OccurrenceMeasure):
     def changed_sites(cls, source: ChangedSource) -> list[int]:
         """The first changed line of each occurrence written on a changed line."""
         sites = []
-        for node in cls.sites(source.tree):
+        for node in cls.sites(source.tree, source.path):
             if ((count := cls.occurrences(node))
                     and (touched := source.lines.intersection(cls.site_lines(node)))):
                 sites.extend([min(touched)] * count)
@@ -351,6 +352,42 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return [*super().changed_sites(source), *(cls.prose_lines(source) & source.lines)]
 
 
+@dataclass(frozen=True)
+class DecoratorBinding:
+    """The spellings one module binds to a declared decorator, read from its imports alone.
+
+    A decorator of the same name declared or imported from anywhere else marks nothing.
+    """
+
+    names: frozenset[str]
+
+    @classmethod
+    def of(cls, decorator: typing.Callable[..., object], tree: ast.AST,
+           filename: str) -> DecoratorBinding:
+        owner, name = decorator.__module__, decorator.__name__
+        parts = Path(filename).with_suffix("").parts
+        module = parts[1:] if parts[:1] == ("src",) else parts
+        package = module[:-1]
+        names = {name} if ".".join(module) == owner else set()
+        for node in ast.walk(tree):
+            match node:
+                case ast.Import(names=aliases):
+                    names.update(f"{alias.asname or alias.name}.{name}"
+                                 for alias in aliases if alias.name == owner)
+                case ast.ImportFrom(module=source, names=aliases, level=level):
+                    base = package[:len(package) - level + 1] if level else ()
+                    resolved = ".".join((*base, source) if source else base)
+                    for alias in aliases:
+                        if f"{resolved}.{alias.name}" == owner:
+                            names.add(f"{alias.asname or alias.name}.{name}")
+                        if resolved == owner and alias.name == name:
+                            names.add(alias.asname or name)
+        return cls(frozenset(names))
+
+    def marks(self, decorator: ast.expr) -> bool:
+        return ast.unparse(decorator) in self.names
+
+
 class NoneSpelling(MroDispatch):
     """One node's spellings of absence as None, never evaluated code."""
 
@@ -397,28 +434,22 @@ class NoneSpelling(MroDispatch):
 class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
     """Absence spelled as None: ``is None`` tests, annotations that allow None, ``default=None``.
 
-    Absence belongs to a declared null member that answers for itself. Only a boundary
-    decoder named here meets None from outside, and its body is not counted.
+    Absence belongs to a declared null member that answers for itself. A decoder that
+    meets None from outside declares itself with ``boundary_decoder``; its body is not counted.
     """
 
-    boundary_decoders: typing.ClassVar[frozenset[str]] = frozenset({
-        "FieldPlan.decoded", "ValueDecoder.decode_editor", "_RepresentedDecoder.decode",
-    })
-
     @classmethod
-    def sites(cls, tree: ast.AST) -> Iterator[ast.AST]:
-        pending: list[tuple[ast.AST, tuple[str, ...]]] = [(tree, ())]
+    def sites(cls, tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        marker = DecoratorBinding.of(boundary_decoder, tree, filename)
+        pending = [tree]
         while pending:
-            node, scope = pending.pop()
+            node = pending.pop()
             match node:
-                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) if (
-                        ".".join((*scope, name)) in cls.boundary_decoders):
+                case ast.FunctionDef(decorator_list=decorators) | ast.AsyncFunctionDef(
+                        decorator_list=decorators) if any(map(marker.marks, decorators)):
                     continue
-                case (ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name)
-                      | ast.ClassDef(name=name)):
-                    scope = (*scope, name)
             yield node
-            pending.extend((child, scope) for child in ast.iter_child_nodes(node))
+            pending.extend(ast.iter_child_nodes(node))
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:
