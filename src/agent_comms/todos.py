@@ -2420,7 +2420,6 @@ class TodoStore(TypedStore):
         """Observe outside SQLite, then atomically strike and release the same assignment."""
         held = tuple(todo for todo in self._open("assignment IS NOT NULL", ()) if todo.pending)
         pulls = PullRequests(held)
-        changed = []
         for todo in held:
             observed_at = time.time()
             source = ProgressSource.of(todo, storage, pulls)
@@ -2432,11 +2431,10 @@ class TodoStore(TypedStore):
                     result = progress.advance(current, source.since, observed_at)
                     if result != current:
                         result.upsert(db)
-                        changed.append(result)
             except TodoConflict:
                 # A concurrent order change owns the row; observe its new assignment next pass.
                 continue
-        return tuple(changed)
+        return self._open("assignment IS NULL", ())
 
     def board_disagreements(
         self, commander: ThreadIncarnation, storage: StorageRule,

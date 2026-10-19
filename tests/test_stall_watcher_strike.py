@@ -1,5 +1,8 @@
 import asyncio
+import json
+import shutil
 
+from agent_comms.comms import Comms
 from agent_comms.commander import standing
 from agent_comms.change_report import FileLine
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -20,6 +23,10 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
     CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(problem="P1", order=order,
         request="request", deadline=RecordedEventTime(1000), commander="lead",
         repo="OpenHCSDev/agent-comms", text="Fix P1")).apply(comms, caller)
+    original = comms.root
+    copied = original.with_name("copied-wire")
+    shutil.copytree(original, copied)
+    comms = Comms(copied)
     # the one stubbed read: turn-digest activity marks worker and spare as recently active
     monkeypatch.setattr(standing.WheelSpin, "idle", classmethod(
         lambda cls, c, cmd: [c.registry.require("worker"), c.registry.require("spare")]))
@@ -35,6 +42,16 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
     # Core's watcher made the assignment, while the order stays on its commander's board
     assert todo.assignment.parent_identity == StallWatcherIncarnation.watcher()
     assert [t.id for t in comms.goals.todos.held_for_commander(comms.registry.require("lead").incarnation)] == ["P1"]
+    source = Comms(original).goals.todos.get("P1")
+    assert source.holder == "worker" and not source.strikes and not source.released
+    (copied.parent / "copied-root-result.json").write_text(json.dumps({
+        "original": str(original), "copy": str(copied), "id": todo.id,
+        "holder": todo.holder, "revision": todo.revision,
+        "strike_actor": todo.strikes[0].actor.to_wire(),
+        "release_actor": todo.released[0].actor.to_wire(),
+        "assigner": todo.held().parent_identity.to_wire(),
+        "original_holder": source.holder, "original_strikes": len(source.strikes),
+        "qualification": "Copied fixture root; recent native activity is controlled, no commander invocation."}, indent=2))
 
 
 def test_a_failed_stall_pass_is_recorded_and_the_next_pass_still_runs(commander, monkeypatch):
