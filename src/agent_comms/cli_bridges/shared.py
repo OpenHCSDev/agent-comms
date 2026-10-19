@@ -12,10 +12,10 @@ import signal
 import sys
 import traceback
 from abc import ABC, abstractmethod
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar, Unpack
 
@@ -41,7 +41,6 @@ from agent_comms.messages import Message, MessageKind, InfoKind
 from agent_comms.send_result import SendResult
 from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.tool_declaration import ReplacementEdit, ToolDeclaration
@@ -797,11 +796,10 @@ class Inbox(Operation[OperationBridge]):
 
             registry = await asyncio.to_thread(
                 Registration, Path(bridge.binding.root) / 'registry.json')
-            # A bridge started during an upgrade's drain waits for it to clear, as a running
-            # watch does, instead of being refused at registration.
-            await bridge.comms.bus.resumed()
-            # The endpoint, not a particular CLI's record parser, owns presence.
-            with registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid())):
+            # Retry only endpoint acquisition, never the running bridge's delivery work.
+            with ExitStack() as endpoint:
+                await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
+                    registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid()))))
                 async with asyncio.TaskGroup() as tasks:
                     self.start(bridge, tasks)
 
@@ -878,23 +876,22 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     async def watch(self) -> None:
         await self.prepare_delivery()
         print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
-        while True:
-            child = await AttachedChild.start((
-                str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-                '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-                '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-                stdio=StreamingChildStdio(input_enabled=False))
-            try:
-                async for item in WatchLine.stream(child):
-                    await item.handle(self, child)
-                await raise_child_exit(child, '')
-            except MaintenanceHeldError:
-                print(f'Bus maintenance: {self.binding.bus} paused until it clears',
-                      file=sys.stderr, flush=True)
-            finally:
-                await child.stop()
-            await self.comms.bus.resumed()
+        await self.comms.bus.when_open(self.watch_child)
+
+    async def watch_child(self) -> None:
+        """One child stream; the bus owns waiting and its next attempt after a hold."""
+        child = await AttachedChild.start((
+            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
+            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
+            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+            stdio=StreamingChildStdio(input_enabled=False))
+        try:
+            async for item in WatchLine.stream(child):
+                await item.handle(self, child)
+            await raise_child_exit(child, '')
+        finally:
+            await child.stop()
 
     async def run(self) -> None:
         current = asyncio.current_task()
@@ -930,7 +927,7 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
             await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
-        await asyncio.to_thread(output.transcript.end_turn)
+        await comms.bus.when_open(output.transcript.end_turn)
         # Each CLI reports its own initial state. Disk writes never stop the
         # event reader from receiving a newer whole draft of the same item.
         queue: asyncio.Queue[TranscriptUpdate] = asyncio.Queue()
@@ -952,7 +949,7 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
                     break
                 while not queue.empty():
                     pending.append(queue.get_nowait())
-                await asyncio.to_thread(output.publish_batch, pending)
+                await comms.bus.when_open(partial(output.publish_batch, pending))
 
 class MonitorFrame(TaggedWire, ABC):
     """Our line protocol inside the harness's task-notification envelope."""

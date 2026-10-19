@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,7 +14,7 @@ from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import ANY_CHANNEL, BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
-from .maintenance_barrier import MaintenanceBarrier
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .historical_views import HistoryArchive
 from .message_page import (
     NEWEST_PAGE, DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
@@ -161,6 +162,28 @@ class MessageBus[Writes: Publisher]:
                     yield message
                     acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
                     after = message.reference
+
+    async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
+        """Wait out a hold without replaying an admitted synchronous write.
+
+        Synchronous callbacks run under ingress in a worker, so refusal precedes
+        even in-memory mutation and maintenance cannot split a publication batch.
+        An async callback only creates its coroutine under ingress; its stream
+        runs unlocked and retains its own delivery cursor across held attempts.
+        No other failure is retried.
+        """
+        maintenance = MaintenanceBarrier(self._registry.store.path)
+
+        def admitted():
+            with maintenance.allow_input():
+                return operation()
+
+        while True:
+            try:
+                result = await asyncio.to_thread(admitted)
+                return await result if inspect.isawaitable(result) else result
+            except MaintenanceHeldError:
+                await self.resumed()
 
     async def resumed(self) -> None:
         """Return once maintenance has cleared; each change to its state wakes the check."""
