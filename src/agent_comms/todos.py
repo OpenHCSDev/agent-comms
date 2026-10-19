@@ -791,19 +791,6 @@ class FairText(OrderWords):
                "implementation or state) and the declaration that derives it.")
 
 
-class DeadlineText(OrderWords):
-    """A clock time in an order is the latest acceptable moment, never when work
-    starts or waits until: the commander kept writing "retry at 13:00" and units
-    sat idle until a time nothing required. The text names the event that starts
-    the work and gives the time only as "by HH:MM"."""
-
-    REFUSED = re.compile(r"\b(?:at|until|wait(?:s|ing)? (?:for|until)|starting|from"
-                         r"|resumes? at|retr(?:y|ies) at)\s+\d{1,2}:\d{2}\b", re.I)
-    refusal = ("{1} schedules work at a clock time. A time is only a ceiling: name "
-               "the event that starts the work (the moment the turns are idle) and "
-               "the time as \"by HH:MM\".")
-
-
 class HierarchyText(OrderWords):
     """A forwarder restates an implementation pair, so the cure is the hierarchy, never a route: text may not keep
     a forwarder, and a Banned: item may forbid removing classes, bases or parents but not adding them."""
@@ -922,7 +909,7 @@ class DirectiveText:
     connector's send refuse a text failing any of these."""
 
     OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
-        FairText, HierarchyText, PlainText, OrderText, DefectText, DeadlineText)
+        FairText, HierarchyText, PlainText, OrderText, DefectText)
 
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
