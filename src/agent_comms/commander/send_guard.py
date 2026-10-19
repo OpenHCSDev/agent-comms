@@ -86,7 +86,8 @@ class RawSendCommand(GuardedCommand):
         pairs = set(pairwise(words))
         if 'send' not in words or 'agent-comms-commander' in {Path(word).name for word in words}:
             return ()
-        if ('--from', order.ME) not in pairs or not pairs & {('--to', unit) for unit in order.units()}:
+        addressed = pairs & {('--to', unit) for unit in order.units()}
+        if ('--from', order.ME) not in pairs or not addressed:
             return ()
         return ('Raw send to a unit. Use agent-comms-commander order send '
                 '(orders, with deadline) or order say (no work).',)
