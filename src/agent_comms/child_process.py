@@ -873,7 +873,7 @@ class ChildLaunch(ABC):
         return child
 
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
-        with self.children_store.launching(self.runtime) as reservation:
+        async with self.children_store.launching_async(self.runtime) as reservation:
             process = await asyncio.create_subprocess_exec(
                 *self.argv, cwd=cwd, env=env, **stdio.options, **self.options,
             )

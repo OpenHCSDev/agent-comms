@@ -256,6 +256,11 @@ class StoreLockOwner(StoreOwner, declared_name=None):
         return _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
                            mode=mode, contention=contention, lock_type=self.lock_type)
 
+    def locked_async(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
+                     mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
+        return _async_store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
+                                 mode=mode, contention=contention, lock_type=self.lock_type)
+
 
 def store_lock_path(store_path: Path) -> Path:
     """The original named inode for one store's physical lock."""

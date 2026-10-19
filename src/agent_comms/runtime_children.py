@@ -5,7 +5,7 @@ import os
 import time
 from abc import abstractmethod
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -120,6 +120,12 @@ class RuntimeChildReservation:
     children: RuntimeChildren
     initiator: ChildInitiator
 
+    @classmethod
+    def capture(cls, store: RuntimeChildrenStore) -> RuntimeChildReservation:
+        children = store._read_unlocked()
+        children.require_open()
+        return cls(store, children, ChildInitiator.capture())
+
     def record(self, identity: ProcessIdentity) -> None:
         child = RuntimeChild(GroupLeader(identity.pid, identity.start_time), self.initiator, self.store.path.parent)
         self.store._publish_unlocked(self.children.add(child))
@@ -140,9 +146,14 @@ class RuntimeChildrenStore(RootFile, ChildRegistration, LockedStore[RuntimeChild
     def launching(cls, runtime: LaunchRuntime):
         store = cls.at(runtime.prefix)
         with store.locked():
-            children = store._read_unlocked()
-            children.require_open()
-            yield RuntimeChildReservation(store, children, ChildInitiator.capture())
+            yield RuntimeChildReservation.capture(store)
+
+    @classmethod
+    @asynccontextmanager
+    async def launching_async(cls, runtime: LaunchRuntime):
+        store = cls.at(runtime.prefix)
+        async with store.locked_async():
+            yield RuntimeChildReservation.capture(store)
 
     def finished(self, identity: ProcessIdentity) -> None:
         self.update(lambda children: children.finished(identity))

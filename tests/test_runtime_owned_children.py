@@ -1,4 +1,5 @@
 """Real gated launches and durable runtime-prefix retirement."""
+import asyncio
 import os
 import sys
 
@@ -67,6 +68,21 @@ async def test_async_launch_registration_is_removed_only_after_group_retirement(
     finally:
         await child.stop()
     assert not RuntimeChildrenStore.at(prefix).read().records
+
+
+async def test_concurrent_async_launches_share_the_prefix_without_blocking_the_loop(tmp_path):
+    environment, runtime = runtime_environment(tmp_path / 'runtime')
+    children = []
+    try:
+        async with asyncio.timeout(15):
+            children = await asyncio.gather(*(AttachedChild.start(
+                (str(runtime.interpreter), '-c', 'import time;time.sleep(60)'),
+                env=environment, runtime=runtime) for _ in range(4)))
+        records = RuntimeChildrenStore.at(runtime.prefix).read().records
+        assert {record.identity for record in records} == {child.identity for child in children}
+    finally:
+        await asyncio.gather(*(child.stop() for child in children))
+    assert not RuntimeChildrenStore.at(runtime.prefix).read().records
 
 
 def test_failed_exec_leaves_no_registration(tmp_path):
