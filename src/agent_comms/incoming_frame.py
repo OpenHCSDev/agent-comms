@@ -17,5 +17,7 @@ class IncomingFrame(ABC):
     @property
     def text(self) -> str:
         origin = self.message.sender_role.origin_label
-        return (f'Comms in · {self.message.sender} ({origin})\n'
-                f'{self.message.body}\nMessage ID: {self.message.message_id}')
+        return (
+            f"Comms in · {self.message.sender} ({origin})\n"
+            f"{self.message.body}\nMessage ID: {self.message.message_id}"
+        )
