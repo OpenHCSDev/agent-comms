@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, ClassVar, Never
 
 
 if TYPE_CHECKING:
-    from .native_tool_transport import ToolTransport
+    from .native_tool_transport import UnboundToolTransport
     from .envelope_claim_transitions import FileClaimPath
     from .storage_room import RoomReservation
     from .registration import Registration
@@ -359,7 +359,7 @@ class NativeToolMode(ABC):
         """Return the native tool selection and reviewed extension."""
 
     @abstractmethod
-    async def open_transport(self, turn, ownership) -> ToolTransport:
+    async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         """Open the transport implementing this declared permission."""
 
     def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:

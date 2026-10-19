@@ -15,7 +15,7 @@ from typing import BinaryIO, ClassVar
 from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
-from agent_comms.cli_protocol import OpenWire, WireHeader, WireModel
+from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader, WireModel
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import AssistantTranscript, ToolEndTranscript, ToolStartTranscript, UserTranscript
 from agent_comms.turn_context import CodexRolloutProvenance
@@ -50,7 +50,7 @@ class RolloutItem(OpenWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = RolloutItemHeader
 
-    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
+    def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
         return ()
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
@@ -82,8 +82,8 @@ class MessageItem(RolloutItem, ABC):
 class UserMessageItem(MessageItem):
     wire_tag = 'message/user'
 
-    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem('', self.id, (UserTranscript(self.text, position=position),)),)
+    def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
+        return (FinishedItem('', self.id, (UserTranscript(self.text, position=position, timestamp=timestamp),)),)
 
     def request(self) -> str:
         return self.text
@@ -92,8 +92,8 @@ class UserMessageItem(MessageItem):
 class AssistantMessageItem(MessageItem):
     wire_tag = 'message/assistant'
 
-    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
-        return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=position),)),)
+    def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
+        return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=position, timestamp=timestamp),)),)
 
 
 class InstructionMessage(MessageItem, ABC):
@@ -122,10 +122,10 @@ class FunctionCallItem(RolloutItem):
     def raw_input(self) -> dict[str, JsonValue]:
         return TypeAdapter(dict[str, JsonValue]).validate_json(self.arguments)
 
-    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
+    def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
         state.tools[self.call_id] = self.name
         return (FinishedItem('', self.call_id, (ToolStartTranscript(
-            position=position, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
+            position=position, timestamp=timestamp, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
             tool=ToolDeclaration.record(self.name, self.raw_input, call_id=self.call_id)),)),)
 
 
@@ -144,17 +144,17 @@ class FunctionCallOutputItem(RolloutItem):
     call_id: str = ''
     output: JsonValue = ''
 
-    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
+    def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
         text = self.output if isinstance(self.output, str) else json.dumps(self.output, ensure_ascii=False)
         return (FinishedItem('', self.call_id + ':result', (ToolEndTranscript(
-            position=position, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
+            position=position, timestamp=timestamp, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
 
 
 class CustomToolCallOutputItem(FunctionCallOutputItem):
     wire_tag = 'custom_tool_call_output'
 
 
-class RolloutRecord(OpenWire, ABC):
+class RolloutRecord(TimestampedWire, OpenWire, ABC):
     """One rollout line. Conversation is in the items a record carries; the record adds what
     it says about the session."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
@@ -167,7 +167,7 @@ class RolloutRecord(OpenWire, ABC):
         return ()
 
     def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
-        return (*self.own_updates(), *(update for item in self.entries() for update in item.updates(state, position)))
+        return (*self.own_updates(), *(update for item in self.entries() for update in item.updates(state, position, self.timestamp)))
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
         return tuple(instruction for item in self.entries() for instruction in item.instructions())

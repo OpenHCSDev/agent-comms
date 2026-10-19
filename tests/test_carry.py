@@ -478,88 +478,112 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     assert not thread.executing
 
 
-def test_upgrade_busy_owner_refuses_before_any_stop_or_start(tmp_path):
+def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, tmp_path, monkeypatch):
+    from threading import Barrier
+
+    import tools.upgrade_bus as upgrade_bus
     from agent_comms.maintenance_barrier import ReadyPhase
-    from agent_comms.restart_refusals import OwnerBusyRefusal
-    from tools.upgrade_bus import live
 
-    root = tmp_path / "bus"
-    Comms(root)
+    names = [f"worker-{number}" for number in range(19)]
+    stop = Barrier(len(names), timeout=10)
+    start = Barrier(len(names), timeout=10)
     calls = []
+    commands = []
+    carried_bus = []
 
-    class BusyStack(Stack):
+    class Installed(Stack):
         def cli(self, root, *arguments):
-            calls.append(arguments)
-            return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
+            if arguments == ("threads",):
+                assert not calls  # Never rediscover a possibly changed owner set.
+                return {"threads": [
+                    *({"name": name, "role": "agent", "status": "running"} for name in names),
+                    {"name": "idle", "role": "agent", "status": "stopped"},
+                    {"name": "human", "role": "human", "status": "running"},
+                ]}
+            command, flag, name = arguments
+            assert flag == "--name" and name in names
+            if command == "stop":
+                stop.wait()  # A serial stop loop cannot reach this barrier.
+            else:
+                assert command == "start" and carried_bus
+                start.wait()  # Nor can a serial start loop.
+            calls.append((command, name))
+            return {}
 
-        def require_idle(self, root, names):
-            assert names == ["worker"]
-            assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
-            raise OwnerBusyRefusal()
+        def relock(self):
+            assert commands[-1][-5:] == (
+                "submodule", "update", "--init", "--recursive", "--checkout")
 
-    stack = BusyStack(REPO)
-    with pytest.raises(OwnerBusyRefusal):
-        live(REPO, root, "", "", (), stack, stack, None, "worker")
-    assert calls == [("threads",)]
-    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+        def prepare_native(self):
+            pass
 
+        def verify(self, root):
+            return {"threads": len(names)}
 
-LIVE_DRIVER = """
-import signal, sys
-from pathlib import Path
-from upgrade_bus import Stack, live, stopped
+    def carry(root, pending, staged, revisions):
+        assert sorted(calls) == sorted(("stop", name) for name in names)
+        carried_bus.append(root)
+        return []
 
-
-class Owners(Stack):
-    def require_idle(self, root, names):
-        pass
-
-    def cli(self, root, *arguments):
-        print(' '.join(arguments), flush=True)
-        return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
-
-
-for each in (signal.SIGTERM, signal.SIGINT):
-    signal.signal(each, stopped)
-root = Path(sys.argv[1])
-live(root, root, "", "", (), Owners(root), Owners(root), None, "worker")
-"""
+    monkeypatch.setattr(upgrade_bus, "carry_all", carry)
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
+    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "absent-route.json")
+    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
+    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
+    stack = Installed(tmp_path / "checkout")
+    result = upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None, "worker")
+    assert result["stopped_and_started"] == names
+    assert sorted(calls) == sorted((command, name) for command in ("stop", "start") for name in names)
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+    assert commands[0] == ("git", "-C", stack.checkout, "merge", "--ff-only", "-q", "new")
 
 
-def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
-    """A reader holds the route; SIGTERM while the upgrade waits for it runs the abort: the bus
-    reads READY and the stopped thread is started again."""
-    import fcntl
-    import signal
+def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path):
+    from threading import Barrier
 
-    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
+    names = ["failed", "other", "last"]
+    admitted = Barrier(len(names), timeout=10)
+    finished = []
 
-    root = tmp_path / "bus"
-    Comms(root)
-    routes = tmp_path / "home/.local/state/agent-comms"
-    routes.mkdir(parents=True)
-    reader = os.open(routes, os.O_RDONLY | os.O_DIRECTORY)
-    fcntl.flock(reader, fcntl.LOCK_SH)
-    try:
-        tool = subprocess.Popen(
-            [sys.executable, "-c", LIVE_DRIVER, str(root)], text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env={**os.environ, "HOME": str(tmp_path / "home"),
-                 "PYTHONPATH": os.pathsep.join(str(REPO / part) for part in ("src", "tools"))})
-        waited = ""
-        while "Waiting for default-route readers" not in waited:
-            line = tool.stderr.readline()
-            assert line, waited + tool.stdout.read()
-            waited += line
-        assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
-        tool.send_signal(signal.SIGTERM)
-        out, err = tool.communicate(timeout=60)
-    finally:
-        os.close(reader)
-    assert tool.returncode != 0
-    assert "stopped by SIGTERM" in err and "aborted before the backup" in err
-    assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
-    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+    class Installed(Stack):
+        def cli(self, root, *arguments):
+            admitted.wait()
+            name = arguments[-1]
+            finished.append(name)
+            if name == "failed":
+                raise UpgradeRefused("stop failed")
+            return {}
+
+    with pytest.raises(UpgradeRefused, match="stop failed"):
+        Installed(REPO).owners(tmp_path, "stop", names)
+    assert sorted(finished) == sorted(names)
+
+
+def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(tmp_path, monkeypatch):
+    import tools.upgrade_bus as upgrade_bus
+
+    commands = []
+
+    def run(*command):
+        commands.append(command)
+        return ""
+
+    monkeypatch.setattr(upgrade_bus, "run", run)
+    revisions = Revisions(tmp_path / "repo", tmp_path / "trees")
+    selected = revisions.tree("abcdef123456")
+    assert commands == [
+        ("git", "-C", revisions.repo, "worktree", "add", "--detach", "-q", selected, "abcdef123456"),
+        ("git", "-C", selected, "submodule", "update", "--init", "--recursive", "--checkout"),
+    ]
+
+    def missing_dependency(*command):
+        assert command[3:] == ("submodule", "update", "--init", "--recursive", "--checkout")
+        raise UpgradeRefused("missing pinned dependency")
+
+    monkeypatch.setattr(upgrade_bus, "run", missing_dependency)
+    with pytest.raises(UpgradeRefused, match="missing pinned dependency"):
+        revisions.tree("abcdef123456")
+    assert revisions.trees == {"abcdef123456": selected}  # Failed preparation still owns cleanup.
 
 
 def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tmp_path, monkeypatch):
@@ -576,9 +600,6 @@ def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tm
             assert arguments == ("threads",)
             return {"threads": []}
 
-        def require_idle(self, root, names):
-            assert not names
-
         def relock(self):
             pass
 
@@ -591,7 +612,6 @@ def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tm
 
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
     monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
-    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     stack = Installed(tmp_path / "checkout")
     with pytest.raises(RuntimeError, match="carry failed after writing"):
@@ -680,9 +700,6 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
         def cli(self, root, *arguments):
             return {"threads": []}
 
-        def require_idle(self, root, names):
-            pass
-
         def relock(self):
             pass
 
@@ -694,7 +711,6 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
 
     monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "")
-    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
     # A rehearsal places the route under its own home, so the route sits under this one.
     monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
     monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))

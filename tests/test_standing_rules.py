@@ -143,6 +143,19 @@ def working(comms, name, created):
             name, frozenset(), str(comms.root), session_file=str(path), created_at=created))
 
 
+def test_idle_reads_external_execution_and_requires_an_actual_recent_turn(standing, tmp_path):
+    from agent_comms.transcript_events import AssistantTranscript
+    comms, _, module = standing
+    for name in ("external-working", "external-empty"):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.transcripts.external("external-working").finish(
+        turn_id="current", item_id="answer", events=(AssistantTranscript("working", position="answer"),))
+    names = [thread.name for thread in module.WheelSpin.idle(comms, "lead")]
+    assert "external-working" in names
+    assert "external-empty" not in names and "worker" not in names
+
+
 def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
         commander, standing, tmp_path, monkeypatch):
     from agent_comms.storage_rules import StorageRule
@@ -215,34 +228,13 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     assert comms.goals.todos.get("P2").holder == "worker"
 
 
-def test_fork_now_and_unjudged_follow_the_unjudged_edits(commander, standing):
+def test_unjudged_follows_the_unjudged_edits(commander, standing):
     comms, state, module = standing
-    assert lines(comms, module.ForkNow) == lines(comms, module.Unjudged) == []
+    assert lines(comms, module.Unjudged) == []
     create(commander, 'P1')
     native_judge_edits(commander, module.judge, [dict(id=f'e{n}', at=200., path='a.py',
         hunks=[dict(old='before', new='after')]) for n in range(70)])
     assert lines(comms, module.Unjudged) == ["UNJUDGED 70 edits -> judge or fork a judge slice"]
-    [fork] = lines(comms, module.ForkNow)
-    assert fork.startswith("FORK NOW: load 10 (1 open orders, 1 overdue, 70 unjudged edits) needs 1")
-
-
-def test_fork_now_reads_the_load_of_the_bus_it_is_asked_about(commander, standing, tmp_path):
-    """Three overdue orders on one bus need a fork there; a second bus without orders carries no load."""
-    from agent_comms.tool_caller import ThreadCaller
-
-    comms, _, _ = standing
-    for problem in ("P1", "P2", "P3"):
-        create(commander, problem)
-    other = Comms(tmp_path / "other-bus")
-    other.registry.declare(other.registry.new_thread("lead", frozenset(), str(tmp_path), created_at=1.0))
-
-    def fork_now(bus):
-        read = CommsStandingRulesTool().apply(bus, ThreadCaller("lead"))
-        return [line for line in read.broken if line.startswith("FORK NOW")]
-
-    assert [line.split(") ")[0] for line in fork_now(comms)] == [
-        "FORK NOW: load 9 (3 open orders, 3 overdue, 0 unjudged edits"]
-    assert fork_now(other) == []
 
 
 def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monkeypatch):
@@ -271,7 +263,7 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
 def test_defect_text_without_slop_line_needs_no_label():
     """Only a text that names a defect in a Slop: line needs its label outside that line."""
     assert DefectText.found("Yes, go ahead.") == [] and DirectiveText.refused("Yes, go ahead.") == ()
-    slop = "Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
+    slop = "Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
     assert DefectText.found(slop + "\nRead the count from its owner.") == [slop]
     assert DirectiveText.refused(slop + "\nRead the count from its owner.") == (DefectText.refusal,)
     assert DefectText.found(slop + "\nThe copy at tools.py:829 is wrong.") == []
@@ -287,7 +279,7 @@ def test_a_claude_ai_directive_passes_the_commanders_wording_with_no_rules_revie
         return CommsSendTool(sender="claude-ai", target="worker", body=body).apply(comms, CALLER)
 
     for body, refusal in (
-        ("Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
+        ("Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
          "Read the count from its owner.", "Not blunt"),
         ("The canonical count at tools.py:829 is wrong: read it from its owner.", "Jargon"),
         ("Thanks for moving the count at tools.py:829 into its owner, that is correct.", "Soft wording"),

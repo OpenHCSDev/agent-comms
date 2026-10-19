@@ -38,7 +38,7 @@ from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, ReleaseTodo, SendBackVerdict, StrikeReason,
-    StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
+    StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo, Slop, DeclarationDerivation)
 from agent_comms.turn_context import GoalSegment
 
 
@@ -418,6 +418,45 @@ def test_delivery_time_has_its_own_named_requirement():
         UnrecordedEventTime().require_delivery()
 
 
+def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
+    location = FileLine(__file__, 1)
+    for pattern in Slop.patterns():
+        slop = Slop(pattern, 'the count of open orders', location, DeclarationDerivation, location)
+        assert FieldCodec.decode(Slop, FieldCodec.encode(slop)) == slop
+        assert pattern in slop.render()
+        body = (f'Slop: {pattern}; fact the count of open orders; at {__file__}:1; '
+                f'derive declaration on {__file__}:1')
+        assert Slop.from_order(body) == [slop]
+    with pytest.raises(ValueError, match='MADEUP-999'):
+        Slop('MADEUP-999', 'the count of open orders', location, DeclarationDerivation, location)
+    for pattern in ('MADEUP-999', 'state'):
+        with pytest.raises(ValueError, match=pattern) as refused:
+            Slop.from_order(f'Slop: {pattern}; fact the count of open orders; at {__file__}:1; '
+                            f'derive declaration on {__file__}:1')
+        assert Slop.USAGE in str(refused.value)
+    valid = (f'Slop: MEMB-1; fact the count of open orders; at {__file__}:1; '
+             f'derive declaration on {__file__}:1')
+    malformed = 'Slop: MADEUP-999; an incomplete line must not disappear'
+    for body in (malformed, valid + '\n' + malformed, malformed + '\n' + valid):
+        with pytest.raises(ValueError, match='Slop: PATTERN-ID'):
+            Slop.from_order(body)
+    assert len(Slop.from_order(valid + '\n' + valid)) == 2
+
+
+def test_order_send_refuses_unknown_pattern_before_recording(commander_script):
+    script, repo = commander_script
+    extra = (f'Slop: MADEUP-999; fact the count of open orders; at {__file__}:1; '
+             f'derive declaration on {__file__}:1\n')
+    with pytest.raises(ValueError, match='MADEUP-999'):
+        problem(script, order_body(repo, extra=extra))
+    assert script.held_orders() == ()
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    with pytest.raises(ValueError, match='MADEUP-999'):
+        judge.BackVerb(ids=('edit:1234',), msg='m1', lines=('one',), why='wrong', roast='r', fix='f',
+                       pattern='MADEUP-999', fact='the count of open orders', at=f'{__file__}:1',
+                       derive='declaration', by=f'{__file__}:1').slop()
+
+
 def test_commander_script_records_every_order_step_in_core(commander, commander_script):
     """problem, send, strike, hunt, done and close each change the Todo in Core; no order state is written to files."""
     comms, _ = commander
@@ -438,10 +477,23 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
     numbered = body.read_text().replace('Problem: NEW', f'Problem: {created.id}')
+    # The refusal itself supplies the exact replacement argument; no DM lookup.
+    with pytest.raises(ValueError) as refusal:
+        script.send('worker', due, numbered)
+    expected = f"worker already holds P1; pass --replaces {created.messages[-1].message_id}"
+    assert str(refusal.value) == expected
+    replaces = str(refusal.value).split('--replaces ', 1)[1]
+    print(f'Refused order: {refusal.value}')
     # Without --clean this replaces the prior order and counts a send-back.
-    script.send('worker', due, numbered, replaces=created.messages[-1].message_id)
+    script.send('worker', due, numbered, replaces=replaces)
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
+    print(f'Accepted replacement: {sent_back.order.id}')
+    # A historical send cannot replace the latest order.
+    with pytest.raises(ValueError, match=sent_back.messages[-1].message_id):
+        script.send('worker', due, numbered, replaces=replaces)
+    with pytest.raises(ValueError, match='no order message was recorded'):
+        replace(sent_back, messages=()).require_replacement(replaces)
     (link,) = sent_back.messages[-1:]
     sent = next(m.body for m in comms.views.history_page(CommandTarget.named('worker'), viewer='lead').messages if m.message_id == link.message_id)
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
@@ -477,6 +529,95 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
 
 def problem(script, body):
     script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, f'{__file__}:1')
+
+
+def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
+        commander, commander_script):
+    from agent_comms.rule_reviews import (
+        AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews,
+    )
+
+    comms, _ = commander
+    script, repo = commander_script
+    (repo / 'count.txt').write_text('0\n')
+    body = Path(order_body(repo))
+    problem(script, str(body))
+    body.write_text(body.read_text().replace('Problem: NEW', 'Problem: P1'))
+    reviews = RuleReviews(comms.root)
+    reviews.write('lead', DrawnRuleReviewEntry(('Keep the current order message with its Todo.',), 0))
+    reviews.write('lead', AnsweredRuleReviewEntry(
+        1, 'P1 keeps the current message in its Todo and prints it when refusing replacement.'))
+    command = [str(Path(sys.executable).with_name('agent-comms-commander')),
+               'order', 'send', 'worker', '23:59', str(body)]
+    env = {**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
+           'AGENT_COMMS_ROOT': str(comms.root)}
+    refused = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+    assert refused.returncode != 0
+    current = comms.goals.todos.get('P1')
+    expected = f'worker already holds P1; pass --replaces {current.messages[-1].message_id}'
+    assert expected in refused.stderr
+    replacement = re.search(r'pass --replaces (\w+)', refused.stderr).group(1)
+    print(expected)
+    accepted = subprocess.run([*command, '--replaces', replacement], env=env,
+                              capture_output=True, text=True, timeout=30)
+    assert accepted.returncode == 0, accepted.stderr
+    assert comms.goals.todos.get('P1').order.id != current.order.id
+    print(f'Accepted --replaces {replacement}: {accepted.stdout.strip()}')
+
+
+@pytest.mark.parametrize('spelling', ['agent-comms', '.', 'absolute'])
+def test_check_repo_resolves_once_for_send_and_correction(
+        commander, commander_script, monkeypatch, tmp_path, spelling):
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={
+        'repos': (script.Repo.of(repo),)}))
+    monkeypatch.chdir(repo)
+    # A same-named directory must not override the configured repository.
+    (repo / 'agent-comms').mkdir()
+    (repo / 'count.txt').write_text('0\n')
+    marker = tmp_path / 'check-cwd'
+    command = f'pwd > {shlex.quote(str(marker))}; cat count.txt'
+    git = lambda *args: subprocess.run(
+        ['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@t', *args],
+        check=True, capture_output=True, text=True).stdout.strip()
+    git('add', 'count.txt')
+    git('commit', '-qm', 'base')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    directory = str(repo) if spelling == 'absolute' else spelling
+    body = order_body(repo, f'{command} -> 1')
+    Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {directory}'))
+    problem(script, body)
+    sent = comms.goals.todos.get('P1')
+    assert sent.order.check.directory == str(repo.resolve())
+    assert marker.read_text().strip() == str(repo.resolve())
+    script.correct_check('P1', f'{directory} :: {command} -> 0',
+                         'The recorded expected count was wrong; the unchanged file contains zero.')
+    corrected = comms.goals.todos.get('P1')
+    assert corrected.order.id == sent.order.id
+    assert corrected.order.check.directory == str(repo.resolve())
+    assert marker.read_text().strip() == str(repo.resolve())
+
+
+@pytest.mark.parametrize('entrypoint', ['send', 'correct'])
+def test_missing_check_repo_refuses_before_recording(
+        commander, commander_script, tmp_path, entrypoint):
+    comms, _ = commander
+    script, repo = commander_script
+    (repo / 'count.txt').write_text('0\n')
+    if entrypoint == 'correct':
+        problem(script, order_body(repo))
+    before = comms.goals.todos.for_commander(comms.registry.require('lead').incarnation)
+    missing = tmp_path / 'missing-repo'
+    with pytest.raises(SystemExit, match='is not a directory'):
+        if entrypoint == 'send':
+            body = order_body(repo)
+            Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {missing}'))
+            problem(script, body)
+        else:
+            script.correct_check('P1', f'{missing} :: printf 0 -> 0',
+                                 'The recorded check must run in the correct configured source checkout.')
+    assert comms.goals.todos.for_commander(comms.registry.require('lead').incarnation) == before
 
 
 def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
@@ -620,7 +761,7 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
 
 
 @pytest.mark.parametrize('printed, refused', [
-    ("printf 'no count here'", 'The order check printed no integer, so no count of 1.'),
+    ("printf 'no count here'", 'The order check cannot prove CountCheckResult(expected=1): it printed no integer.'),
     ('echo 2', 'The order check is 1 away from CountCheckResult(expected=1).'),
     ('echo found 1', None),
 ])
@@ -1187,7 +1328,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
                   why='The changes repair the existing canonical state owner', lines=('value = 2',),
                   msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner').message.message_id)
     command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
-        **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        **fields, roast='r', fix='f', pattern='IDEN-5', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
@@ -1210,7 +1351,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
-        slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        pattern='IDEN-5', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1').run()
     saved = comms.goals.todos.get('P1')
     assert len(saved.verdicts) == len(saved.strikes) == 1
@@ -1301,7 +1442,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
 VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
     'superseded': "e1:ab --line one --why 'The task moved to a different implementation owner' --by m2",
-    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
+    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop IDEN-5"
             " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
 }
 
