@@ -59,8 +59,8 @@ from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
-                    DirectiveText, OrderProgress, OrderVerdict, PlainText, PullRequests,
-                    StrikeReason, Todo, TodoOperation, VerdictAudience)
+                    OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
+                    TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -1041,17 +1041,6 @@ class CommsRenameSelfTool(ThreadToolRequest):
         return comms.threads.rename_self(self.new_name, caller=caller)
 
 
-@dataclass(frozen=True)
-class DirectiveCaller(ThreadCaller):
-    """The owner's voice: each send directs a unit, so it passes DirectiveText and needs this
-    caller's rules review, drawn, answered and under 20 minutes old."""
-
-    def require_directive(self, comms: Comms, body: str) -> None:
-        due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
-        if refused := (*DirectiveText.refused(body), *due):
-            raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
-
-
 @dataclass(frozen=True, kw_only=True)
 class CommsSendTool(ToolRequest):
     label = "Comms Send"
@@ -1077,6 +1066,7 @@ class CommsSendTool(ToolRequest):
         caller.require_directive(comms, self.body)
         body = VerdictAudience(self.audience).addressed(self.target, self.body)
         result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 
 

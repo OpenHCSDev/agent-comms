@@ -401,8 +401,9 @@ class MergedProgress(FoundProgress):
 
 
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
-    """The fleet's next install: one time for the bus, set by the commander when it plans an
-    upgrade. Merged and delivered orders wait on it; none of them carries it as its own deadline."""
+    """The fleet's next install: one time for the bus and the unit that runs it, set by the
+    commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
+    carries it as its own deadline. Install, maintenance and carry work is the installer's."""
 
     @staticmethod
     def path_in(root: Path) -> Path:
@@ -413,27 +414,43 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         path = cls.path_in(root)
         if not path.exists():
             return UnplannedInstallDeadline()
-        return PlannedInstallDeadline(RecordedEventTime(**json.loads(path.read_text())))
+        record = json.loads(path.read_text())
+        return PlannedInstallDeadline(RecordedEventTime(record.pop("at")), **record)
 
     @abstractmethod
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         """One INSTALL line for every order waiting on install; it strikes nobody."""
+
+    @abstractmethod
+    def refusal(self, work: str, commander: str) -> str:
+        """Why the commander does not run the installer's work itself."""
 
 
 class UnplannedInstallDeadline(InstallDeadline):
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
+    def refusal(self, work: str, commander: str) -> str:
+        return (f"{work.capitalize()} is the installer's work, and no install is planned. "
+                "Plan one with agent-comms-commander order install HH:MM UNIT, "
+                f"then order the {work} from that unit.")
+
 
 @dataclass(frozen=True)
 class PlannedInstallDeadline(InstallDeadline):
     at: RecordedEventTime
+    installer: str
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
         staged = path.with_suffix(".tmp")
-        staged.write_text(json.dumps({"at": self.at.at}))
+        staged.write_text(json.dumps({"at": self.at.at, "installer": self.installer}))
         staged.replace(path)
+
+    def refusal(self, work: str, commander: str) -> str:
+        return (f"{work.capitalize()} is {self.installer}'s work, as the planned installer, not "
+                f"{commander}'s. Send it as an order: agent-comms-commander order send --to "
+                f"{self.installer}, naming the {work} to run.")
 
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         if not waiting:
@@ -1654,8 +1671,8 @@ class TodoStore(TypedStore):
             (owner.name, owner.wire_birth)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        """The orders serving one request: a Goal on the commander's thread."""
-        return self._open(
+        """Every order that served one request, a Goal on the commander's thread, open or done."""
+        return self._select(
             "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 

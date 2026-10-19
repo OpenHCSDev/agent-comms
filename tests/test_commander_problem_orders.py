@@ -795,6 +795,47 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     assert stalled() == []
 
 
+def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_serves_it(
+        commander, tmp_path, monkeypatch):
+    """claude-ai's sends through the connector are directives: one to a thread holding owner requests
+    is recorded on its open request with a deadline, or opens a new request once that one is done;
+    a thread holding no request records nothing. Past its deadline it alarms until an order serves
+    the request."""
+    from agent_comms import standing_rules
+    from agent_comms.connector import CALLER
+    from agent_comms.goal_actions import CompletedGoalAction
+    from agent_comms.goals import RequestDirective
+    from agent_comms.tools import CommsSendTool
+    comms, caller = commander
+    comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
+    def direct(target, body):
+        CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
+        return comms.bus.log.latest_sequence()
+    def unacted(after):
+        monkeypatch.setattr(standing_rules.time, 'time', lambda: after)
+        return [rule.line() for rule in standing_rules.DirectiveUnacted.violations(comms, 'lead')]
+    worker = comms.registry.require('worker').goal
+    seq = direct('lead', 'Make the slowdowns impossible by mechanism.')
+    assert direct('worker', 'A note to a unit, not a request.') and comms.registry.require('worker').goal == worker
+    goal = comms.registry.require('lead').goal
+    (directive,) = goal.order.directives
+    assert (goal.id, directive.seq, directive.served) == ('request', seq, 0)
+    assert unacted(directive.deadline - 1) == []
+    due = time.strftime('%H:%M', time.localtime(directive.deadline))
+    assert unacted(directive.deadline + 1) == [
+        f'DIRECTIVE UNACTED: claude-ai {seq} on request request, due {due}'
+        ' -> order its next step or mark the request done']
+    create(commander, 'P1')
+    assert unacted(directive.deadline + 1) == []
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
+    seq = direct('lead', 'A second directive after the first request is done.')
+    goal = comms.registry.require('lead').goal
+    assert goal.id != 'request' and goal.state.active and goal.text == 'A second directive after the first request is done.'
+    assert goal.order.directives == (RequestDirective(seq, goal.order.directives[0].deadline, 0),)
+    assert unacted(goal.order.directives[0].deadline + 1) != []
+
+
 def stray(commander, problem, generation):
     """A pending problem stored the way pre-P48 joins and refused sends left them: under a Goal id that is
     not the unit's open Goal."""
@@ -1227,16 +1268,18 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
 ])
 def test_tactical_refused_from_the_commander_session_only(commander, commander_script, monkeypatch, capsys,
                                                           command, kind):
-    """lead's registered process runs in Claude session s1 and worker holds the installer problem:
-    tactical work run in s1 is refused with the order to send worker; the same command from another
-    session, and an order whose body names the command, pass. Once lead's process is gone no session
-    can be classified, so every session is refused with the read error."""
+    """lead's registered process runs in Claude session s1. With no install planned, tactical work
+    run in s1 is refused with the instruction to plan one; once the install is planned for worker,
+    it is refused with the order to send worker. The same command from another session, and an
+    order whose body names the command, pass. Once lead's process is gone no session can be
+    classified, so every session is refused with the read error."""
     import io, os, subprocess
     from dataclasses import replace
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.commander import send_guard
+    from agent_comms.recorded_time import RecordedEventTime
+    from agent_comms.todos import PlannedInstallDeadline
     comms, _ = commander
-    create(commander, 'P168')
     process = subprocess.Popen(['sleep', '60'], env={**os.environ, 'CLAUDE_CODE_SESSION_ID': 's1'})
     try:
         comms.registry.declare(replace(comms.registry.require('lead'),
@@ -1248,9 +1291,13 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
             send_guard.main([])
             return capsys.readouterr().out
 
+        unplanned = json.loads(guarded(command, 's1'))['hookSpecificOutput']['permissionDecisionReason']
+        assert f"{kind.capitalize()} is the installer's work, and no install is planned" in unplanned
+        assert 'agent-comms-commander order install HH:MM UNIT' in unplanned
+        PlannedInstallDeadline(RecordedEventTime(2000.0), 'worker').plan(comms.root)
         refused = json.loads(guarded(command, 's1'))['hookSpecificOutput']
         assert refused['permissionDecision'] == 'deny'
-        assert f"{kind.capitalize()} is worker's work, as holder of P168" in refused['permissionDecisionReason']
+        assert f"{kind.capitalize()} is worker's work, as the planned installer" in refused['permissionDecisionReason']
         assert 'order send --to worker' in refused['permissionDecisionReason']
         assert guarded(command, 's2') == ''
         assert guarded(f'agent-comms-commander order send --to worker --body "run {command}"', 's1') == ''
