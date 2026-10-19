@@ -22,7 +22,7 @@ from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
-from .todos import TodoStore
+from .todos import TodoConflict, TodoStore
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
@@ -88,7 +88,7 @@ class Messaging:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
             todos.correct(owner.name, committed.message_id, body)
-        except Exception as error:
+        except TodoConflict as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
             correction = CorrectionComplete()

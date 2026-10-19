@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import os
 import time
 from contextlib import contextmanager
@@ -17,8 +16,6 @@ from uuid import uuid4
 
 from .store_files import _atomic_write_text
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
-
-_LOG = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic
@@ -126,16 +123,12 @@ def request_observation_path(root, turn_id):
 
 
 def _record_request_observation(root, lease, record):
-    try:
-        path = request_observation_path(root, lease.turn_id)
-        directory = path.parent
-        directory.mkdir(mode=0o700, exist_ok=True)
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        with os.fdopen(descriptor, "w") as output:
-            output.write(json.dumps(record) + "\n")
-    except OSError:
-        # Optional observation cannot change an authorized original's outcome.
-        _LOG.warning("Native request timing diagnostic unavailable", exc_info=True)
+    path = request_observation_path(root, lease.turn_id)
+    directory = path.parent
+    directory.mkdir(mode=0o700, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(descriptor, "w") as output:
+        output.write(json.dumps(record) + "\n")
 
 
 def terminal_failure_reason(event: dict) -> FailureReason:
