@@ -216,7 +216,7 @@ def test_only_substantive_direct_reply_prevents_release(
     tmp_path, role, body, expected_changed, released
 ):
     comms, _goal = _waiting(tmp_path)
-    comms.messaging.send_message("child", "owner", body, role=role)
+    comms.messaging.send("child", "owner", body, role=role).message
     child_fence = _finish(comms, "child", "child-turn")
     changed = comms.goals.release_waits_after_terminal_turn(child_fence)
     assert changed == expected_changed
@@ -310,7 +310,7 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
 
     def late_send():
         checked.set()
-        comms.messaging.send_message("child", "owner", "Late direct reply")
+        comms.messaging.send("child", "owner", "Late direct reply").message
         sent.set()
 
     real_history = RecordedGoalWait.has_reply
@@ -392,7 +392,7 @@ def test_delayed_old_terminal_cannot_release_newer_turn_before_reply(tmp_path, r
     assert comms.registry.require("owner").goal.state.active
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     # The newer turn publishes after the OLD callback, before its own callback.
-    comms.messaging.send_message("child", "owner", "New turn's substantive answer")
+    comms.messaging.send("child", "owner", "New turn's substantive answer").message
     assert comms.goals.release_waits_after_terminal_turn(new_fence) == ()
     assert comms.registry.require("owner").goal.state.active
     assert comms.registry.require("owner").goal.id == goal.id
@@ -554,7 +554,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(
         await asyncio.wait_for(old_task, 5)
         assert comms.registry.require("owner").goal.state.active
         assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
-        comms.messaging.send_message(child, "owner", "New turn's result")
+        comms.messaging.send(child, "owner", "New turn's result").message
         assert comms.goals.release_waits_after_terminal_turn(new_fence) == ()
         assert comms.registry.require("owner").goal.state.active
         assert native.provider.posts == len(native.saved_inputs()) == 1
@@ -593,7 +593,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
 
     monkeypatch.setattr(agent, "_emit_event", observe)
     origins = (
-        (comms.messaging.send_message("owner", child, "Finish work"),) if reply else ()
+        (comms.messaging.send("owner", child, "Finish work").message,) if reply else ()
     )
     async with asyncio.timeout(20):
         await agent.turns.run_agent_turn(child, child, "Finish work", origins=origins)

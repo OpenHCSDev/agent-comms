@@ -21,7 +21,7 @@ from .comms import Comms
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
 from .messages import AlertKind, NoticeRole
-from .message_reference import MessageReference
+from .send_result import SendResult
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
@@ -160,18 +160,26 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.CommittedProgress)
     async def committed_progress(self, event: events.CommittedProgress) -> None:
-        await Coordination.run_worker(partial(self.publish_progress, event.text))
+        await self.report_sends(await Coordination.run_worker(partial(self.publish_progress, event.text)))
 
-    def publish_progress(self, progress: str) -> None:
+    async def report_sends(self, results: Iterable[SendResult]) -> None:
+        for result in results:
+            for text in result.notices:
+                await self.consume(events.Notice(text=text))
+
+    def publish_progress(self, progress: str) -> tuple[SendResult, ...]:
         """Join the committed notice and consume its streamed text together."""
         if self.reply_targets:
             if progress and "".join(self.reply_parts) == progress:
                 # Pi committed this assistant message before tool work.
                 # Publish it once as visible, non-waking progress; the
                 # final reply contains only subsequent assistant text.
-                for target in self.reply_targets:
-                    self.comms.messaging.send(self.thread_name, target, progress, role=NoticeRole())
+                results = tuple(self.comms.messaging.send(
+                    self.thread_name, target, progress, role=NoticeRole()
+                ) for target in self.reply_targets)
                 self.reply_parts.clear()
+                return results
+        return ()
 
     @handles(events.Error)
     async def error(self, event: events.Error) -> object:
@@ -269,32 +277,32 @@ class TurnProgress(events.AgentEventConsumer):
             self.result = published
         await self.publication.dispatch(published)
 
-    def publish_success(self) -> None:
+    def publish_success(self) -> tuple[SendResult, ...]:
         """Join each acquired original send before releasing the turn lease."""
-        published: list[MessageReference] = []
+        published: list[SendResult] = []
 
         def record_publication() -> None:
             self.comms.transcripts.record_turn_publication(
                 lease=self.turn_lease,
                 checkpoint=self.checkpoint,
                 routing=self.routing,
-                published=tuple(published),
+                published=tuple(result.message.reference for result in published),
             )
 
         with ExitStack() as publications:
             publications.callback(record_publication)
             if self.reply_parts:
                 for target in self.reply_targets:
-                    message = self.comms.messaging.send_message(
+                    published.append(self.comms.messaging.send(
                         self.thread_name, target, "".join(self.reply_parts)
-                    )
-                    published.append(message.reference)
+                    ))
         self.comms.agents.recover_completed_turn(self.turn_lease, self.thread.backend)
+        return tuple(published)
 
-    def publish_checkpoint(self):
+    def publish_checkpoint(self) -> tuple[SendResult, ...]:
         """Close terminal publication and its original read before ACP delivery."""
         if self.result is not None and self.result.ok:
-            self.publish_success()
+            return self.publish_success()
         else:
             # Streamed chunks were provisional. A failed or missing terminal
             # result cannot turn them into a completed wire reply. Keep the
@@ -318,24 +326,27 @@ class TurnProgress(events.AgentEventConsumer):
                     )
                 )
             )
+            results = []
             for target in notice_targets:
                 prefix = "Request failed" if target in self.reply_targets else "Delivery failed"
-                self.comms.messaging.send(
+                results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
                     f"{prefix}: backend turn did not complete. "
                     f"[Open diagnostic]({diagnostic_path.as_uri()})",
                     AlertKind,
                     role=NoticeRole(),
-                )
-        return self.comms.transcripts.transcript_checkpoint(self.thread_name)
+                ))
+            return tuple(results)
 
     async def publish_result(self):
         if self.result is None:
             await self.consume(events.Done(text="Native turn ended without a result", ok=False))
         # Cancellation must join original sends, their annotation and the
         # checkpoint before OwnedTurn can settle or release its lease.
-        checkpoint = await Coordination.run_worker(self.publish_checkpoint)
+        await self.report_sends(await Coordination.run_worker(self.publish_checkpoint))
+        checkpoint = await Coordination.run_worker(partial(
+            self.comms.transcripts.transcript_checkpoint, self.thread_name))
         await self.runtime.session_update(
             session_id=self.session_id,
             update=AgentMessageChunk(

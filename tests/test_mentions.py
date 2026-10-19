@@ -80,7 +80,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert "only resolved mentioned identities may respond: @beta" in mentioned_prompt
     assert "unmentioned observers dismiss quietly" in mentioned_prompt
 
-    agent_chatter = comms.messaging.send_message("alpha", "#team", "status only")
+    agent_chatter = comms.messaging.send("alpha", "#team", "status only").message
     assert agent_chatter.role.response_policy(agent_chatter) is InformationalPolicy.instance()
     assert not agent_chatter.response_eligibility(("beta",)).recipients
     assert not agent_chatter.role.response_policy(agent_chatter).starts_turn_for(agent_chatter, "beta")
@@ -88,7 +88,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert "Response policy: informational; observe and dismiss without replying" in agent_prompt
     assert "delivery and history remain #team" in agent_prompt
 
-    informational = comms.messaging.send_message("alpha", "#team", "notice only", role=NoticeRole())
+    informational = comms.messaging.send("alpha", "#team", "notice only", role=NoticeRole()).message
     assert informational.role.response_policy(informational) is InformationalPolicy.instance()
     assert not informational.response_eligibility(("alpha", "beta")).recipients
     assert not informational.role.response_policy(informational).starts_turn_for(informational, "beta")
@@ -163,7 +163,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     for name in ("sender", "owner"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
-    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, role=NoticeRole())
+    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, role=NoticeRole()).message.message_id
     notice = list(comms.views.channel_history_page("#team").messages)[-1]
     assert isinstance(notice.role, NoticeRole) and not notice.role.response_policy(notice).starts_turn
     with comms.bus.opened_activity() as clocks:

@@ -250,8 +250,8 @@ async def configured_pure_channel(arguments):
                             expected = tuple(row.assignment_id for row in claims if row.recipient == native.owner_thread)
                             assert membership[native.input_id] == expected, "Native input did not capture the complete ordered wave"
                             with NativeEntry.open_evidence(Path(native.session_file)) as evidence:
-                                _, entries = evidence.observe()
-                            tracked = NativeEntry.tracked_users(entries)[native.input_id]
+                                evidence.observe()
+                                tracked = evidence.tracked(native.input_id)
                             assert all(assignment_id in tracked.message.text for assignment_id in expected)
                             assert all(json.dumps(original.body,ensure_ascii=True) in tracked.message.text
                                        for original in originals)

@@ -27,7 +27,7 @@ def selects(path: Path, root: Path) -> bool:
 class RoutePackage(Carry):
     """The route keeps its root and root ID and drops the package."""
 
-    after = "carry_read_ledger"
+    after = None
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

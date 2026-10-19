@@ -62,7 +62,7 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
             indexed.set()
 
         monkeypatch.setattr(maintenance, "_drain_candidate", observe)
-        message = comms.messaging.send_message("sender", "beta", "selected original")
+        message = comms.messaging.send("sender", "beta", "selected original").message
         assert indexed.wait(timeout=5), "deferred checkpoint did not catch up"
         page = WakeCandidateIndex(comms.bus.log).page(
             root_id=root_id,
@@ -102,7 +102,7 @@ def test_notification_runs_after_wire_and_bus_locks_and_scheduler_defect_raises(
             "agent_comms.candidate_maintenance.schedule_candidate_catchup", observe
         )
         with pytest.raises(OSError, match="synthetic derived projection failure"):
-            comms.messaging.send_message("sender", "beta", "still committed")
+            comms.messaging.send("sender", "beta", "still committed").message
         # The scheduler defect is visible only after physical lock release; the
         # durable append exists and its caller must treat the outcome as unknown.
         assert comms.bus.log.latest_sequence() == 1
@@ -189,7 +189,7 @@ def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tm
 
     monkeypatch.setattr(maintenance, "_drain_candidate", observed_drain)
     monkeypatch.setattr(maintenance, "schedule_candidate_catchup", _SCHEDULE)
-    messages = [comms.messaging.send_message("sender", "beta", str(n) + "x" * (128 * 1024))
+    messages = [comms.messaging.send("sender", "beta", str(n) + "x" * (128 * 1024)).message
                 for n in range(128)]
     with finished:
         assert finished.wait_for(retired, timeout=15), "maintenance did not finish"

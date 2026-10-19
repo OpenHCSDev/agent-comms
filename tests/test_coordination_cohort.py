@@ -405,7 +405,7 @@ def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
     default = Comms(root)
     default.registry.register(default.registry.new_thread(name='sender', tags=frozenset(), worktree=str(root)))
     default.registry.register(default.registry.new_thread(name='Alice', tags=frozenset(), worktree=str(root)))
-    default.messaging.send_message("sender", "Alice", "ordinary")
+    default.messaging.send("sender", "Alice", "ordinary").message
     gated = Comms(root)
     before = (root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="unmarked bus data"):

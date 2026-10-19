@@ -113,7 +113,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     register(comms, "peer")
     comms.agents.begin_turn("peer", "peer-turn")
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for the peer"))
-    message = comms.messaging.send_message("peer", "owner", "Review this uncertain reply")
+    message = comms.messaging.send("peer", "owner", "Review this uncertain reply").message
     store = InputDispositions(tmp_path)
     claim_scope = comms.registry.snapshot().claimed_generations["owner"]
     key = f"bus:{message.seq}"
@@ -132,7 +132,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     assert row.accepts_reservation and row.reviewed_for_goal(goal.id)
     assert not (tmp_path / "acp_delivery_cursors.json").exists()
     # A later native-started reply is already handled, regardless of display reads.
-    second = comms.messaging.send_message("peer", "owner", "Native reply")
+    second = comms.messaging.send("peer", "owner", "Native reply").message
     second_key = f"bus:{second.seq}"
     store.record(
         second_key,

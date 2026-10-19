@@ -25,7 +25,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         with store.session.read():
             assert Participants.select(store.session._connection) == []
-        message = comms.messaging.send_message("sender", "#team", "Hello @receiver")
+        message = comms.messaging.send("sender", "#team", "Hello @receiver").message
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         assert {r.canonical_thread for r in initial.audience.recipients} == {
             "receiver", "stopped-reviewer", "unstarted-reviewer"
@@ -39,7 +39,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
         assert assignments[0].wire_seq == message.seq
         before = tuple(store.participants.get(r.recipient_lookup)
                        for r in initial.audience.recipients)
-        again = comms.messaging.send_message("sender", "#team", "Second @receiver")
+        again = comms.messaging.send("sender", "#team", "Second @receiver").message
         assert await _accept_visible_deliveries(
             comms.bus, root_id, store.session.path, lookup, cursor, owner_name=receiver.name
         ) == again.seq
