@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import (
-    CountCheckResult, Goal, NoGoal, NoReportedTurn, ReportedTurn, SilentCheckResult,
+    CountCheckResult, Goal, NoGoal, NoReportedTurn, ReportedTurn, ReportedTurnState, SilentCheckResult,
 )
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.threads import Thread
@@ -27,6 +27,11 @@ from agent_comms.tools import ToolRequest
 
 
 def test_reported_turn_states_preserve_existing_wire_values():
+    schema = {"anyOf": [{"type": "null"}, {"type": "string"}]}
+    assert FieldCodec.value_schema(ReportedTurnState) == schema
+    assert FieldCodec.record_schema(Goal)["properties"]["reported_turn"] == schema
+    assert FieldCodec.value_schema(NoReportedTurn) == {"anyOf": [{"type": "null"}]}
+    assert FieldCodec.value_schema(ReportedTurn) == {"anyOf": [{"type": "string"}]}
     absent = Goal('work', 'goal', published_seq=0)
     assert absent.reported_turn == NoReportedTurn()
     assert not absent.reports_turn('turn')
