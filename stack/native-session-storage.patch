@@ -2378,3 +2378,9 @@
 -        if (!inputId || this.sessionManager.getTrackedInput(inputId) ||
 +        if (!inputId || !this._nativeInputClaims.has(inputId) ||
              this._awaitingNativeInputIds.has(inputId) ||
+@@ -1566,4 +1556,3 @@
+         for (const inputId of removedIds) {
+-            if (!this.sessionManager.getTrackedInput(inputId))
+-                this._nativeInputClaims.delete(inputId);
++            this._nativeInputClaims.delete(inputId);
+         }
