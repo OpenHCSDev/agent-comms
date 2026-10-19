@@ -46,8 +46,10 @@ class NotificationsView(RevisionView):
 
 class BusSourceView(RevisionView):
     def differs(self, before: tuple[FileRevision, ...], current: tuple[FileRevision, ...]) -> bool:
-        return any(FileRevision.source_changed(earlier, now)
-                   for earlier, now in zip_longest(before, current))
+        return any(
+            FileRevision.source_changed(earlier, now)
+            for earlier, now in zip_longest(before, current)
+        )
 
 
 STATUS_SOURCE = (StoresView, StatusView, SidebarView)

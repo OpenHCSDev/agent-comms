@@ -43,9 +43,10 @@ from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope
                          NamedViewer)
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
-from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView, 
-                             NotificationsView, RegistrationsView, RevisionView, SidebarView, StoresView)
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView,
+                             NotificationsView, RegistrationsView, RevisionView,
+                             SidebarView, StoresView)
 from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadIncarnation
@@ -882,4 +883,4 @@ class WireRevision(ReadState):
         """Whether any source feeding `view` differs, by the view's comparison."""
         return any(source.metadata.get("differs", view.differs)(
             getattr(self, source.name), getattr(later, source.name))
-            for source in fields(self) if isinstance(view, source.metadata["views"]))
+            for source in fields(self) if isinstance(view, source.metadata.get("views", ())))
