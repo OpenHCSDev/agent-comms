@@ -302,7 +302,8 @@ if TYPE_CHECKING:
     from .messages import Message
     from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistrySnapshot, UserThreadLookup
+    from .threads import Thread
     from .registry_provenance import RegistryProvenance
     from .wire_log import OpenedWireSource
 
@@ -676,7 +677,8 @@ class DMDisplayBasis:
                 fetched_through=page.newest_seq or 0,
             )
             with registry.store.locked(mode=SharedLock()):
-                basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path))
+                basis.validate_identity(
+                    snapshot, RecordedBusIdentity.capture(bus.log.path), registry.user_thread())
             return replace(page, selection=DMSelection(basis))
 
     def identity(self, history_revision: FileRevision | None) -> DMDisplayIdentity:
@@ -722,17 +724,15 @@ class DMDisplayBasis:
         """
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(root / "wire", mode=SharedLock()), _store_lock(registry.store.path):
-            snapshot = registry.store.read_snapshot_unlocked()
-            self.validate_for(
-                root,
-                worktree,
-                peer,
-                through,
-                snapshot,
-                RecordedBusIdentity.capture(bus.log.path),
-            )
-            self.displayed.tail.mark(bus.reads, self.displayed, through)
+        with _store_lock(root / "wire", mode=SharedLock()):
+            user = registry.user_thread()
+            with registry.store.locked():
+                snapshot = registry.store.read_snapshot_unlocked()
+                self.validate_for(
+                    root, worktree, peer, through, snapshot,
+                    RecordedBusIdentity.capture(bus.log.path), user,
+                )
+                self.displayed.tail.mark(bus.reads, self.displayed, through)
 
     def validate_for(
         self,
@@ -742,6 +742,7 @@ class DMDisplayBasis:
         through: int,
         snapshot: RegistrySnapshot,
         bus_identity: RecordedBusIdentity,
+        user: UserThreadLookup[Thread],
     ) -> None:
         if (self.root, self.worktree, self.requested_peer) != (
             str(root.resolve()),
@@ -753,23 +754,23 @@ class DMDisplayBasis:
         info = root.stat()
         if (info.st_dev, info.st_ino) != self.root_identity:
             raise DMScopeChanged("DM root was replaced; refresh the page.")
-        self.validate_identity(snapshot, bus_identity)
+        self.validate_identity(snapshot, bus_identity, user)
 
     def validate_identity(
-        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity
+        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity,
+        user: UserThreadLookup[Thread],
     ) -> None:
         """Fetch and painted acknowledgement share actual identity/scope validation.
 
         Heartbeat, turn state and another view's read progress are not identity.
         """
+        selected = user.require(
+            DMScopeChanged("DM viewer/peer incarnation changed; refresh the page."))
         try:
-            selected = next(
-                human for thread in snapshot.threads.values() for human in thread.role.human(thread)
-            )
             viewer = snapshot.threads[self.viewer]
             target = snapshot.participant(self.requested_peer)
             scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
-        except (KeyError, StopIteration, UnregisteredThreadError) as error:
+        except (KeyError, UnregisteredThreadError) as error:
             raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.") from error
         if (
             selected.incarnation != self.viewer_identity
