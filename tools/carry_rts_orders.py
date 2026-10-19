@@ -23,7 +23,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (ApplicationOrderRun, Assignment, AwaitingFirstCall,
     MechanicalOrderRun, NoGoalReference, ObservedFirstCall, OrderMessage,
-    PendingProblemOrder, StrikeTodo, TodoStore)
+    PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, TodoStore, WithdrawTodo)
 
 
 @dataclass(frozen=True)
@@ -85,6 +85,10 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
                 selected[pid] = unit, old, parsed
                 if commit:
                     merged[pid] = commit
+    missing = sorted(selected.keys() - problems.keys())
+    if missing:
+        print(json.dumps({'orders_missing_problem_rows': missing}, indent=2))
+        raise ValueError('The commander must restore the missing problem rows before transfer')
     comms = Comms(root)
     actor = comms.registry.require('claude-code')
     store = TodoStore(root)
@@ -107,12 +111,22 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
     report = {'source_sha256': {name: hashlib.sha256(data).hexdigest()
                                for name, data in source.items()},
               'orders': len(rows), 'strikes': sum(len(row[-1]) for row in rows),
-              'unordered_findings': len(problems) - len(selected),
+              'unordered_findings': len(problems.keys() - selected.keys()),
+              'orders_missing_problem_rows': sorted(selected.keys() - problems.keys()),
               'already_merged': merged, 'board_orders': []}
     if not apply:
         print(json.dumps(report, indent=2))
         return 0
     existing = {todo.id: todo for todo in store.history_for_commander(actor.incarnation)}
+    for pid, current in existing.items():
+        if current.assignment is not None and pid not in selected:
+            reason = 'This old order is absent from the current open RTS orders.'
+            if pid in problems:
+                store.apply(pid, ReleaseTodo(current.revision, actor.incarnation,
+                    current.held(), StrikeReason(reason)))
+            else:
+                store.apply(pid, WithdrawTodo(current.revision, actor.incarnation,
+                    current.held(), reason))
     for pid, repo, text, owner, old, order, history in rows:
         if pid in existing:
             current = store.get(pid)
@@ -129,8 +143,9 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
         # Historical strikes include former holders; replaying StrikeTodo.apply would
         # wrongly require those holders to be the current assignment. Restore their
         # actual Core records, together, through the record's own SQLite codec.
+        restored = replace(current, strikes=history, revision=current.revision + 1)
         with store.writing() as db:
-            replace(current, strikes=history, revision=current.revision + 1).upsert(db)
+            restored.upsert(db)
         recorded = store.get(pid)
         if (recorded.holder != owner.name or recorded.deadline != old.deadline()
                 or recorded.order.id != old.msg or recorded.strikes != history):
@@ -139,7 +154,7 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
     if any((rts / name).read_bytes() != data for name, data in source.items()):
         raise ValueError('RTS changed during transfer; destination is not ready for installation')
     if retire:
-        for name in ('order.py', 'judge.py', 'rotate.py', 'tool_watch.py',
+        for name in ('order.py', 'judge.py', 'rotate.py', 'tool_watch.py', 'shift_after_window.py',
                      'deadlines.json', 'problems.json', 'strikes.jsonl'):
             (rts / name).rename(rts / (name + '.retired-p707'))
     print(json.dumps(report, indent=2))
