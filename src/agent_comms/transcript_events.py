@@ -71,6 +71,7 @@ class ImportedReply(ImportedMessage):
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
+    position: int | str
     routing = None
     source = None
     timestamp = None
@@ -136,7 +137,7 @@ class RecordedTranscript(TranscriptEvent):
 class TextTranscript(TranscriptEvent):
 
     def as_context(self) -> ContextTranscript:
-        return ContextTranscript(self.text, timestamp=self.timestamp)
+        return ContextTranscript(self.text, timestamp=self.timestamp, position=self.position)
 
     starts_activity = True
 
@@ -184,13 +185,23 @@ class WireTextTranscript(MarkdownTranscript):
     """Immutable presentation of one original committed wire record."""
 
     source: MessageReference = field()
+    position: ClassVar[int]
     routed = True
+
+    @property
+    def position(self) -> int:
+        return self.source.seq
 
 
 @dataclass(frozen=True, kw_only=True)
 class IncomingTranscript(TextTranscript):
     message: Message
     reader: str
+    position: ClassVar[int]
+
+    @property
+    def position(self) -> int:
+        return self.message.seq
 
     @property
     def text(self):
@@ -243,6 +254,20 @@ class NoticeTranscript(AgentTextTranscript):
     def as_context(self) -> NoticeTranscript:
         # Native failures remain visible notices, including bounded triage.
         return self
+
+
+@dataclass(frozen=True)
+class ForkOriginTranscript(NoticeTranscript):
+    """The declared first row before a fork's recorded history."""
+
+    position: ClassVar[int] = -2
+
+
+@dataclass(frozen=True)
+class ForkTaskTranscript(UserTranscript):
+    """The declared task row following a fork's origin."""
+
+    position: ClassVar[int] = -1
 
 
 class SentTranscript(OutgoingRoute, WireTextTranscript):
