@@ -32,8 +32,8 @@ open-PR/open-issue branch-link rule. `PullRequests.listed` now owns exact order-
 through named query records including the target branch. No verdict, strike, delivery or branch store
 was added. The integration is the observation at completion, not a later claim of installation.
 
-AST evidence used refactor-audit's `Package.load` with Python 3.14: 382 production modules parsed,
-zero omissions. The only production `OrderDelivery.verified` caller is `DeliverTodo.prepare`;
+Before/after AST evidence used refactor-audit's `Package.load` with Python 3.14: 382 Core production
+modules parsed, zero omissions. The final installed-Toad syntax pass parsed 283 modules, zero omissions. The only production `OrderDelivery.verified` caller is `DeliverTodo.prepare`;
 creation is in `commander.order.done` and `CommsOrderDoneTool`. Goal summaries consume the order's
 `line`. The installed Toad source has no order-delivery consumer; its unrelated input-delivery types
 are not this family. A preliminary NRA run under its old Python 3.12 omitted Python 3.14 syntax;
@@ -101,7 +101,8 @@ Nothing was merged, published as a runtime, restarted or installed.
   collection: the shared interpreter has no pytest. An isolated-venv attempt was refused by the
   existing StorageRule; no alternate installation was attempted. A shared test interpreter with
   pytest, or a reviewed dev-dependency installation by its owner, is needed for the suite.
-- The two standalone record/codec sanity functions passed under the same bounded/background
+- Final checks on source checkpoint ec5f94568: Core/Toad AST passes above, the candidate CLI entrypoint,
+  and both standalone record/codec sanity functions passed under the same bounded/background
   command form. They check every DeliveryMerge member and named external non-main target decoding;
   they are not substituted for the actual CLI proof.
 - The real second-strike response still held P1. Main has a limit predicate and an explicit fire tool,
@@ -112,4 +113,3 @@ Nothing was merged, published as a runtime, restarted or installed.
   canonical order channel. Those changes must remain in the same transaction as retained operations;
   this checkpoint does not edit their classes or TodoStore.rows/apply. Their exact published commit
   is a dependency for that continuing write-path change.
-
