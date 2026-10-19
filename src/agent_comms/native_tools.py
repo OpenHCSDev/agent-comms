@@ -12,7 +12,7 @@ from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, Writab
 from .field_codec import FieldCodec
 from .native_tool_call import CodingCall, SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
-from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
+from .tool_declaration import EditCallFacts, ReplacementEdit, ToolDeclaration, one_line
 
 class NativeToolDeclaration(ToolDeclaration):
     """A declared tool participating in the existing native owner check."""
@@ -172,7 +172,7 @@ class MutatingPathTool(PathTool):
         return (WriteStorageEffect(physical_path(self.path, cwd)),)
 
     def edit_calls(self, call_id, at, thread, problem):
-        return (EditCall(call_id, at, thread, self.path, self.replacements(), problem),)
+        return (EditCallFacts.capture(call_id, at, thread, self.path, self.replacements(), problem),)
 
 
 @dataclass(frozen=True, kw_only=True)
