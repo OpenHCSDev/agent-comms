@@ -92,7 +92,7 @@ for line in sys.stdin:
             finish_event=finish_event,
             persistent_session=persistent,
             native_start=lambda public_id, native_id, text: starts.append(text) or True,
-        ):
+         session_directory=Path(str(tmp_path))):
             events.append(event)
             inject = (
                 isinstance(event, ae.ContextUsageObservation) and event.context_used == PiCount.from_wire(2)
