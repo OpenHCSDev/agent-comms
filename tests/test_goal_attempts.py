@@ -13,6 +13,7 @@ from queue import Empty
 import pytest
 
 from agent_comms.diagnostics import FailureReason
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_attempts import (
     GoalAttemptSchema,
     GoalAttemptStore,
@@ -29,7 +30,8 @@ from agent_comms.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from agent_comms.pi_counts import PiCount
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_payloads import PiUsage
 from agent_comms.typed_table import StringEnumStorage
 
 pytestmark = pytest.mark.skipif(
@@ -412,8 +414,10 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     store.create_goal("goal")
     reservation = store.reserve("goal", 1)
     permit = store.claim_launch(reservation)
-    first = {"input": 100, "output": 20, "totalTokens": 120, "cost": {"total": 0.1}}
-    second = {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}}
+    first = PiUsage.from_wire(
+        {"input": 100, "output": 20, "totalTokens": 120, "cost": {"total": 0.1}})
+    second = PiUsage.from_wire(
+        {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}})
 
     permit.record_provider_usage(store, "response-1", first)
     permit.record_provider_usage(store, "response-1", first)
@@ -424,10 +428,20 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     reopened = GoalAttemptStore(store.root)
     totals = ProviderUsageTotal.for_goal(reopened, "goal")
     assert totals.responses == 2
-    assert totals.input_tokens == 140
-    assert totals.output_tokens == 30
+    assert totals.input_tokens == PiCount.from_wire(140)
+    assert totals.output_tokens == PiCount.from_wire(30)
     assert totals.total_tokens == PiCount.from_wire(170)
     assert str(totals.cost_total) == "0.3"
+
+
+@pytest.mark.parametrize("cost", [-0.1, float("nan"), float("inf")])
+def test_usage_decoding_refuses_a_cost_that_is_not_a_finite_nonnegative_number(cost):
+    with pytest.raises(MalformedRecord, match="finite nonnegative"):
+        PiUsage.from_wire({"input": 1, "cost": {"total": cost}})
+
+
+def test_a_negative_token_count_decodes_as_unreported():
+    assert PiUsage.from_wire({"input": -1, "output": 2}).input == UnreportedCount()
 
 
 @pytest.mark.parametrize("phase", ["reserved", "claimed"])

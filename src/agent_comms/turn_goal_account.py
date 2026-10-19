@@ -129,7 +129,7 @@ class TurnGoalAccount:
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal_id = self.comms.registry.require(self.thread_name).goal.active().reported_id()
         permit = self.originated.get(goal_id, self.permit)
-        if not permit.charge_for(goal_id, self.comms.goals, str(event.response_id), event.usage.to_wire()):
+        if not permit.charge_for(goal_id, self.comms.goals, str(event.response_id), event.usage):
             self.unattributed_usage.append((str(event.response_id), event.usage))
 
     def tool_ended(self, event: events.ToolEnd) -> None:
@@ -163,7 +163,7 @@ class TurnGoalAccount:
     def _record_origin_usage(self, permit: LaunchPermit) -> None:
         store = self.comms.goals.open_goal_store()
         for response_id, usage in self.unattributed_usage:
-            permit.record_provider_usage(store, response_id, usage.to_wire())
+            permit.record_provider_usage(store, response_id, usage)
         self.unattributed_usage.clear()
         self.pending_origins[self.thread_name] = permit.reservation.goal_id
 

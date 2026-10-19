@@ -107,6 +107,7 @@ class NativeBoundary(ExitStack):
         from .store_files import ExclusiveLock, SharedLock, StoreLock
 
         try:
+            self.activity = self.enter_context(self.bus.opened_activity())
             with self.measurements.operation("file_exclusion"):
                 locks = self.enter_context(StoreLock.ordered(
                     {self.bus: SharedLock(), self.bus.log: ExclusiveLock(),

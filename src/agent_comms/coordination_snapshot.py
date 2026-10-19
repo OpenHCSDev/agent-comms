@@ -374,7 +374,7 @@ class RecoverySnapshot:
                     bus_lock, registry,
                     Message(owner.name, owner.name,
                             f"{outcome.release_wording}: {names}", ClaimNoticeKind),
-                    worktree=worktree, incarnation=incarnation,
+                    worktree=worktree, incarnation=incarnation, activity=boundary.activity,
                     releases=tuple(ClaimRelease(claim.resource, claim.generation)
                                    for claim in released),
                 )
