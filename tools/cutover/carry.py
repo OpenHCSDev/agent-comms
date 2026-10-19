@@ -223,13 +223,18 @@ class Step:
     """The todo column this step adds, as its ``column`` declares it."""
     after_line: int = 0
 
-    def current(self, checkout: Path) -> type[Carry]:
-        """Load current checkout tools, never a second Core source tree."""
+    def require_current(self, checkout: Path) -> None:
+        """Check source identity before stopping; no target Core types are imported."""
         if self.revision != self.chain_revision:
             raise RuntimeError(f'{self.name} requires tools/upgrade_bus.py for its historical full upgrade')
         source = checkout / STEPS / f'{self.name}.py'
         if source.read_bytes() != git(checkout, 'show', f'{self.revision}:{STEPS}/{source.name}'):
             raise RuntimeError(f'Conversion source changed since planning: {source}')
+
+    def current(self, checkout: Path) -> type[Carry]:
+        """Load current checkout tools, never a second Core source tree."""
+        self.require_current(checkout)
+        source = checkout / STEPS / f'{self.name}.py'
         module = importlib.import_module(f'.{self.name}', __package__)
         if Path(module.__file__).resolve() != source.resolve():
             raise RuntimeError('Conversion was loaded from a different checkout')
@@ -448,13 +453,12 @@ class PreparedCarries(ABC):
         # is no empty snapshot whose missing ledger could mean an empty history.
         source = (destination.data_root
                   if not published and destination.path.exists() else root)
-        conversions = tuple((step, step.current(checkout))
-                            for step in chain.pending(CarryLedger(source).applied()))
-        if not conversions:
+        steps = chain.pending(CarryLedger(source).applied())
+        for step in steps:
+            step.require_current(checkout)
+        if not steps:
             return NoConversion(root)
-        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
-            for _, conversion in conversions for path in conversion.backup_files(root)))))
-        return PendingConversion(chain, conversions, files, destination)
+        return PendingConversion(chain, steps, destination, checkout)
 
     @abstractmethod
     def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
@@ -538,9 +542,9 @@ class NoConversion(PreparedCarries):
 @dataclass(frozen=True)
 class PendingConversion(PreparedCarries):
     chain: CarryChain
-    conversions: tuple[tuple[Step, type[Carry]], ...]
-    files: tuple[Path, ...]
+    steps: tuple[Step, ...]
     backup: StoreBackup
+    checkout: Path
 
     def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
         import time
@@ -573,13 +577,17 @@ class PendingConversion(PreparedCarries):
         return self.backup.data_root if self.backup.path.exists() else self.backup.root
 
     def capture(self) -> PreparedCarries:
-        backup = StoreBackup.take(self.backup.root, self.backup.route, self.files, self.backup.path)
+        root = self.backup.root
+        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
+            for step in self.steps for path in step.current(self.checkout).backup_files(root)))))
+        backup = StoreBackup.take(root, self.backup.route, files, self.backup.path)
         print(f'Backed up selected stores: {backup.path}', flush=True)
         return replace(self, backup=backup)
 
     def apply(self, root: Path) -> None:
         ledger = CarryLedger(root)
-        for step, conversion in self.conversions:
+        for step in self.steps:
+            conversion = step.current(self.checkout)
             result = ledger.apply(self.chain, step.name,
                 lambda conversion=conversion: conversion.carry(root, apply=True))
             print(json.dumps(result.report(step.name, True)), flush=True)

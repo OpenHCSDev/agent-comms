@@ -530,7 +530,7 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
 async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
     from functools import partial
     from agent_comms.activity import ActivityState
-    from agent_comms.cli_bridges.shared import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
+    from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
     from agent_comms.maintenance_barrier import MaintenanceOperator
     from agent_comms.recorded_time import RecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript

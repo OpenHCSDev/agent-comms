@@ -77,10 +77,6 @@ class ImportedReply(ImportedMessage):
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     category: ClassVar[type[MessageCategory]]
     position: int | str
-
-    @property
-    @abstractmethod
-    def category(self) -> type[MessageCategory]: ...
     routing = None
     source = None
     timestamp = None

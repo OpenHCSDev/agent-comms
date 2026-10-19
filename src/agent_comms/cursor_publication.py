@@ -7,7 +7,6 @@ the durable cursor. Every observation reads NativeSourceCursor's original proof.
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from dataclasses import dataclass, field
 from functools import partial
 from contextlib import asynccontextmanager
@@ -28,7 +27,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
-from .coordination_errors import CoordinationError
+from .coordination_errors import ParticipantNotRegistered
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
@@ -171,6 +170,9 @@ class CursorPublication:
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             if defer_busy and current == scope:
                 raise
+            return CursorEnvelope(current, revision, UnavailableCursorObservation())
+        except ParticipantNotRegistered:
+            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         if current != scope:

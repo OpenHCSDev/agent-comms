@@ -21,7 +21,9 @@ from agent_comms.transcript_events import AssistantTranscript, ToolEndTranscript
 from agent_comms.turn_context import CodexRolloutProvenance
 
 from .history import CodexHistory, JsonLinesFile, OfflineHistory
-from .shared import FinishedItem, HistoryNotice, SessionFacts, Summarized, TranscriptUpdate
+from agent_comms.runtime_updates import (
+    FinishedItem, HistoryNotice, RuntimeUpdate, SessionFacts, Summarized,
+)
 
 
 @dataclass
@@ -48,7 +50,7 @@ class RolloutItem(OpenWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = RolloutItemHeader
 
-    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
         return ()
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
@@ -80,7 +82,7 @@ class MessageItem(RolloutItem, ABC):
 class UserMessageItem(MessageItem):
     wire_tag = 'message/user'
 
-    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
         return (FinishedItem('', self.id, (UserTranscript(self.text, position=position),)),)
 
     def request(self) -> str:
@@ -90,7 +92,7 @@ class UserMessageItem(MessageItem):
 class AssistantMessageItem(MessageItem):
     wire_tag = 'message/assistant'
 
-    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
         return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=position),)),)
 
 
@@ -120,7 +122,7 @@ class FunctionCallItem(RolloutItem):
     def raw_input(self) -> dict[str, JsonValue]:
         return TypeAdapter(dict[str, JsonValue]).validate_json(self.arguments)
 
-    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
         state.tools[self.call_id] = self.name
         return (FinishedItem('', self.call_id, (ToolStartTranscript(
             position=position, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
@@ -142,7 +144,7 @@ class FunctionCallOutputItem(RolloutItem):
     call_id: str = ''
     output: JsonValue = ''
 
-    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
         text = self.output if isinstance(self.output, str) else json.dumps(self.output, ensure_ascii=False)
         return (FinishedItem('', self.call_id + ':result', (ToolEndTranscript(
             position=position, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
@@ -161,10 +163,10 @@ class RolloutRecord(OpenWire, ABC):
     def entries(self) -> tuple[RolloutItem, ...]:
         return ()
 
-    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
+    def own_updates(self) -> tuple[RuntimeUpdate, ...]:
         return ()
 
-    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[RuntimeUpdate, ...]:
         return (*self.own_updates(), *(update for item in self.entries() for update in item.updates(state, position)))
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
@@ -199,7 +201,7 @@ class SessionMetaRecord(RolloutRecord):
     def session(self) -> SessionMeta:
         return self.payload
 
-    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
+    def own_updates(self) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(source_id=self.payload.id, project=self.payload.cwd),)
 
 
@@ -211,7 +213,7 @@ class TurnContextRecord(RolloutRecord):
     wire_tag = 'turn_context'
     payload: TurnContext
 
-    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
+    def own_updates(self) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(project=self.payload.cwd),)
 
 
@@ -233,7 +235,7 @@ class CompactedRecord(RolloutRecord):
     def entries(self) -> tuple[RolloutItem, ...]:
         return tuple(self.payload.replacement_history)
 
-    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
+    def own_updates(self) -> tuple[RuntimeUpdate, ...]:
         private = (HistoryNotice('Codex guardian history is source-private and was not imported.'),
                    ) if self.payload.guardian_history else ()
         return (Summarized(self.payload.message or self.payload.summary), *private)
@@ -251,7 +253,7 @@ ROLLOUT_RECORD = TypeAdapter(RolloutRecord.declared_union())
 
 
 @dataclass(frozen=True)
-class HistoricalInstruction(TranscriptUpdate):
+class HistoricalInstruction(RuntimeUpdate):
     """Where one instruction of the source session is, so its exact text can be read later."""
     source: CodexRolloutProvenance
 
@@ -270,7 +272,7 @@ class CodexRollout(JsonLinesFile, CodexHistory, OfflineHistory):
     records = ROLLOUT_RECORD
     state = RolloutState
 
-    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
+    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         """The first record names the session; the selected history may start long after it."""
         for offset, raw in self.complete_lines(stream, 0, boundary):
             record = self.decode_line(raw, offset)
@@ -281,7 +283,7 @@ class CodexRollout(JsonLinesFile, CodexHistory, OfflineHistory):
         raise ValueError('A Codex rollout starts with its session metadata.')
 
     def record_updates(self, record: RolloutRecord, state: RolloutState, offset: int,
-                       raw: bytes) -> Iterator[TranscriptUpdate]:
+                       raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from record.updates(state, offset)
         digest = hashlib.sha256(raw).hexdigest()
         for index, _ in enumerate(record.instructions()):

@@ -2,7 +2,7 @@
 import pytest
 
 from agent_comms.activity import ActivityState
-from agent_comms.cli_bridges.shared import (
+from agent_comms.runtime_updates import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )

@@ -15,7 +15,7 @@ import pytest
 
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.activity import Activity, ActivityLog, ActivityState
-from agent_comms.cli_bridges.shared import ThreadOutput
+from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
@@ -639,10 +639,10 @@ def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
         stack.require_uv()
 
 
-def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):
+def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
     """A bridge publishes from its own process, and the upgrade reads the store's files raw
-    for the backup and its digests. Neither may let the bridge write before the carry is
-    judged, nor into the failed bus an abort keeps as evidence."""
+    for the backup and its digests. The bridge may not write while those are read, nor into
+    the failed bus a restore keeps as evidence."""
     unit = comms.registry.declare(comms.registry.new_thread(
         "hold-unit", frozenset({"hold"}), str(comms.root), execution=ExternalThreadExecution))
     transcript = ExternalTranscript(comms.root, unit.incarnation)
@@ -670,6 +670,69 @@ def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms)
     name = str(ExternalTranscript.path_in(comms.root).relative_to(comms.root))
     assert backup.files() == before
     assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
+
+
+def rehearsed(stack: Stack, root: Path) -> dict:
+    from tools.upgrade_bus import rehearse
+    return rehearse(root, (), stack, None)
+
+
+def installed_live(stack: Stack, root: Path) -> dict:
+    from tools.upgrade_bus import live
+    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker")
+
+
+@pytest.mark.parametrize("install", [rehearsed, installed_live])
+def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path, monkeypatch, install):
+    """The d88a12185 rehearsal: ToolCallIndex's BEGIN IMMEDIATE timed out against the
+    installer's own transcript hold, which then stayed up across every carry."""
+    import tools.upgrade_bus as upgrade_bus
+    from cutover.carry_tool_call_index import ToolCallIndex
+
+    unit = comms.registry.declare(comms.registry.new_thread(
+        "index-unit", frozenset({"index"}), str(comms.root), execution=ExternalThreadExecution))
+    with ExternalTranscript(comms.root, unit.incarnation).writing():
+        pass
+    path = ExternalTranscript.path_in(comms.root)
+    with closing(CoordinationStore.writer(path)) as db, db:
+        for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'index' "
+                                   "AND sql IS NOT NULL").fetchall():
+            db.execute(f'DROP INDEX "{index}"')
+    monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
+    with transcripts_held(comms.root), pytest.raises(sqlite3.OperationalError, match="locked"):
+        ToolCallIndex.carry(comms.root, apply=True)
+
+    def tool_call_index(root, pending, staged, revisions):
+        return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
+
+    class Installed(Stack):
+        def cli(self, root, *arguments):
+            return {"threads": []}
+
+        def require_idle(self, root, names):
+            pass
+
+        def relock(self):
+            pass
+
+        def prepare_native(self):
+            pass
+
+        def verify(self, root):
+            return {"read": ExternalTranscript.path_in(root).exists()}
+
+    monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "")
+    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
+    # A rehearsal places the route under its own home, so the route sits under this one.
+    monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
+    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
+    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
+    result = install(Installed(tmp_path / "checkout", tmp_path / "home"), comms.root)
+    step, = result["steps"]
+    assert step["changed"] == step["indexes"] > 0
+    assert result["files"]["rewritten"] == 1
+    assert result["read"] == {"read": True}
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):

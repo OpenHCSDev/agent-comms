@@ -8,7 +8,7 @@ import os
 import socket
 import struct
 from collections.abc import Callable
-from contextlib import ExitStack, suppress
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -317,7 +317,6 @@ class ToolTransport(Generic[Call]):
         finally:
             writer.close()
             try:
-                with suppress(ConnectionError):
-                    await writer.wait_closed()
+                await writer.wait_closed()
             finally:
                 self._handlers.discard(task)

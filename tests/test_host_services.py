@@ -7,7 +7,6 @@ from typing import ClassVar, Self
 
 import pytest
 
-from agent_comms import connector
 from agent_comms.host_services import HostService, ServiceNotServingError
 from agent_comms.host_services.connector import ConnectorService
 
@@ -36,7 +35,7 @@ def host(monkeypatch):
             return INSTALLED if self.generation == 0 else self.restarted_runtime
 
     monkeypatch.setattr('time.sleep', lambda seconds: None)
-    monkeypatch.setattr(connector.ServiceProcess, 'listeners', classmethod(lambda cls, port: ()))
+    monkeypatch.setattr(ConnectorService, 'running', classmethod(lambda cls: ()))
     yield ProbeService
     del HostService.__registry__[ProbeService.declared_name]
 
