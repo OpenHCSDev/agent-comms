@@ -18,7 +18,7 @@ from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable
 
 
-def declaration(root: Path, name: str, created_at: float = 0) -> Thread:
+def declaration(root: Path, name: str, created_at: float = 1) -> Thread:
     return Thread(
         name,
         frozenset({"proof"}),
