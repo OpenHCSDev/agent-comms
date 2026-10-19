@@ -1,12 +1,12 @@
 # Commander in Core: shipped owners and remaining work
 
-Source baseline: **`origin/main` at `011084fc5`**, checked 2026-10-21. Paths and line
+Source baseline: **`origin/main` at `011084fc5`**, checked 2026-10-19. Paths and line
 numbers below refer to that revision, not an installed build. This is a source
 reconciliation, not evidence that the parity session or the scratch-state move ran.
 The implementation order belongs to the `PlanPhase` family in
 `src/agent_comms/plan_phases.py:28`; the remaining work belongs to
 [the commander-native plan](../../plans/commander-native-plan.md#reconciled-gaps-phase-2-source-check).
-Its gap rows G1–G17 cover the differences described here.
+Its gap rows G1–G18 cover the differences described here.
 
 ## Entry points, not another tool catalog
 
@@ -125,9 +125,12 @@ catches renamed decisions (G1). Installation checks a file exists, not its runti
 Core/Toad revisions or containment of the delivered commit (G5;
 `src/agent_comms/todos.py:1923`).
 
-**Assignment and strikes.** `Assignment` retains previous owners and requires a real
-traced location when moving to another owner after two distinct owners
-(`src/agent_comms/todos.py:1466`, `src/agent_comms/todos.py:1496`). Delivered orders refuse
+**Assignment and strikes.** `Assignment` retains previous owners and checks a traced
+location when moving to another owner after two distinct owners
+(`src/agent_comms/todos.py:1466`, `src/agent_comms/todos.py:1496`). `Todo.assigned` invokes
+that check only while an assignment still exists; release-then-assign preserves history
+but skips that check (G18; `src/agent_comms/todos.py:2040`,
+`src/agent_comms/todos.py:2047`). Delivered orders refuse
 transfer (`src/agent_comms/todos.py:1302`). `StrikeTodo` records the reason; `VoidStrikeTodo`
 keeps the original strike and its void (`src/agent_comms/todos.py:1622`,
 `src/agent_comms/todos.py:1776`). The two-strike limit is on `ProblemGoalOrder`
@@ -240,7 +243,7 @@ operational acts happened; the plan's parity gate still requires their recorded 
 
 The packaged skill still instructs `agent-comms-commander` loops, file-based board work
 and a `growth-watch` command (`src/agent_comms/skills/comms-commander/SKILL.md:10`,
-`src/agent_comms/skills/comms-commander/SKILL.md:15`,
+`src/agent_comms/skills/comms-commander/SKILL.md:19`,
 `src/agent_comms/skills/comms-commander/SKILL.md:46`). The command dispatcher discovers
 actual package modules (`src/agent_comms/commander/cli.py:14`); there is no
 `growth_watch.py` module at this baseline. Tool-only instructions and declared rule loading
