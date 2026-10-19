@@ -191,7 +191,8 @@ class Thread(ThreadProvenance):
         """The launch environment this thread's owner process carries."""
         from .launch_runtime import ThreadLaunch
 
-        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
+        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task,
+                            managed=False, startup_input=None)
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
