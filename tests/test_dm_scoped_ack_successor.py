@@ -17,7 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest, PageBounds
 from agent_comms.store_files import _store_lock
-from agent_comms.read_basis import ReadCursor, ConversationCursor
+from agent_comms.read_basis import ReadCursor, ConversationCursor, DMSelection
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
@@ -29,13 +29,8 @@ def _peer(root: Path, name: str) -> Thread:
 
 
 def _mark(comms, peer, root, page):
-    assert page.display_basis is not None and page.newest_seq is not None
-    comms.views.mark_dm_view_read(
-        peer,
-        worktree=str(root),
-        through=page.newest_seq,
-        expected_display_basis=page.display_basis,
-    )
+    assert isinstance(page.selection, DMSelection) and page.newest_seq is not None
+    comms.views.mark_page_read(page, worktree=str(root))
 
 
 def test_dm_preparation_releases_native_claim_lock(tmp_path, monkeypatch):
@@ -81,7 +76,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     # The old spelling is now an alias for the SAME incarnation. A fresh
     # page, not stale name text, is authoritative after the rename.
     fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert fresh.display_basis is not None and fresh.display_basis.peer == "renamed"
+    assert isinstance(fresh.selection, DMSelection) and fresh.selection.basis.peer == "renamed"
     _mark(comms, "peer", tmp_path, fresh)
     assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 0
     comms.messaging.send("renamed", viewer, "after bound").message.message_id
@@ -94,7 +89,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old peer painted").message.message_id
     old = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert old.display_basis is not None
+    assert isinstance(old.selection, DMSelection)
     comms.registry.unregister("peer")
     comms.registry.remove("peer")
     comms.registry.declare(_peer(tmp_path, "peer"))
@@ -108,8 +103,8 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
     fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert fresh.display_basis is not None
-    assert fresh.display_basis.peer_created_at != old.display_basis.peer_created_at
+    assert isinstance(fresh.selection, DMSelection)
+    assert fresh.selection.basis.peer_created_at != old.selection.basis.peer_created_at
 
 
 def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
@@ -118,14 +113,9 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old viewer painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert page.display_basis is not None
+    assert isinstance(page.selection, DMSelection)
     with pytest.raises(DMScopeChanged, match="different root, worktree or peer"):
-        comms.views.mark_dm_view_read(
-            "peer",
-            worktree=str(tmp_path / "foreign"),
-            through=page.newest_seq,
-            expected_display_basis=page.display_basis,
-        )
+        comms.views.mark_page_read(page, worktree=str(tmp_path / "foreign"))
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
     comms.registry.declare(comms.registry.new_thread(viewer, frozenset(), str(tmp_path), role=UserThreadRole))
@@ -143,7 +133,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     old_viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", old_viewer, "old viewer painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert page.display_basis is not None and page.display_basis.viewer == old_viewer
+    assert isinstance(page.selection, DMSelection) and page.selection.basis.viewer == old_viewer
     comms.registry.declare(comms.registry.new_thread('new_user', frozenset(), str(tmp_path), role=UserThreadRole))
     # Normal registry rename retains the old human declaration but moves its
     # insertion position behind new_user. user_identity now selects new_user.
@@ -186,7 +176,7 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     monkeypatch.setattr(ConversationMessagePageRequest, "displayed", interpose)
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.messages == (messages["peer"],)
-    assert page.display_basis is not None
+    assert isinstance(page.selection, DMSelection)
     _mark(comms, "peer", tmp_path, page)
     cursor = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     expected = {messages["peer"].seq, messages[marked_sender].seq}

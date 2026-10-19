@@ -7,20 +7,14 @@ from abc import ABC, abstractmethod
 from collections import deque
 from contextlib import closing
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .messages import Message
 from .page_traversal import NewerTraversal, OlderTraversal, PageCursor, PageTraversal
-from .private_path import FileRevision
 from .read_basis import (
-    ChannelDisplayScope, DisplayBasis, DisplaySelection, DMDisplayBasis,
-    MessageDisplayScope,
+    DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope,
 )
 from .wire_log import WireSnapshot
-
-if TYPE_CHECKING:
-    from .read_basis import HistoricalDisplay
-
 
 @dataclass(frozen=True, slots=True)
 class MessagePage:
@@ -34,10 +28,7 @@ class MessagePage:
     messages: tuple[Message, ...]
     has_older: bool
     has_newer: bool
-    display_scope: ChannelDisplayScope | None = None
-    display_basis: DMDisplayBasis | None = None
-    historical_display: HistoricalDisplay | None = None
-    history_revision: FileRevision | None = None
+    selection: SelectedDisplay
     source_pages: tuple[MessagePage, ...] = ()
     bytes_read: int = 0
 
@@ -62,11 +53,6 @@ class MessagePage:
     @property
     def newest_evidence(self) -> MessagePage | None:
         return self.evidence_for(self.messages[-1]) if self.messages else None
-
-    @property
-    def selection(self) -> DisplaySelection:
-        """Derive the selected conversation from this page's original evidence."""
-        return DisplaySelection.from_page(self)
 
     @property
     def oldest_cursor(self) -> PageCursor | None:
@@ -109,7 +95,7 @@ class PageWindow:
         return tuple(row.message for row in self.rows)
 
     def page(self, has_older: bool, has_newer: bool) -> MessagePage:
-        return MessagePage(self.messages, has_older, has_newer, bytes_read=self.bytes)
+        return MessagePage(self.messages, has_older, has_newer, NoDisplaySelection(), bytes_read=self.bytes)
 
     def take(self, traversal: PageTraversal, row: MessagePageRow) -> bool:
         if not self.bounds.fits(len(self.rows) + 1, self.bytes + row.size):
@@ -179,7 +165,7 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
     """Captured membership, direction and bounds for indexed paging."""
 
     bounds: PageBounds = NEWEST_PAGE
-    empty: ClassVar[MessagePage] = MessagePage((), False, False)
+    empty: ClassVar[MessagePage] = MessagePage((), False, False, NoDisplaySelection())
 
     def indexed(self, index, source: WireSnapshot) -> MessagePage:
         traversal = self.bounds.traversal
