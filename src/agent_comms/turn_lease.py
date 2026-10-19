@@ -114,99 +114,16 @@ class TurnDeclaration(SubclassUnion, affix=""):
     phase: TurnPhase
     started_at: float | None
 
-    @abstractmethod
-    def leases(
-        self,
-        incarnation: ThreadIncarnation,
-        record: StoredTurnRecord,
-    ) -> Iterator[TurnLeaseFence]: ...
-
-    @abstractmethod
-    def held_by(self, lease: TurnLeaseFence) -> bool: ...
-
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return self.phase.project_activity(activity)
-
-    @property
-    @abstractmethod
-    def executing(self) -> bool: ...
-
-    @property
-    @abstractmethod
-    def report_turn(self) -> str: ...
-
-    @abstractmethod
-    def require_active(self) -> ActiveTurn: ...
-
-    @abstractmethod
-    def has_claim(self, claim_scope: int) -> bool: ...
-
-    @abstractmethod
-    def validate_owner(self, process: ProcessState, generation: int) -> None: ...
-
-    @abstractmethod
-    def require_idle(self) -> None: ...
-
-    @abstractmethod
-    def require_current(self, claim_scope: int, generation: int) -> None: ...
-
-    @abstractmethod
-    def require_turn(self, turn_id: TurnId) -> None: ...
-
-    @abstractmethod
-    def without_claim(self) -> TurnDeclaration: ...
-
-    @abstractmethod
-    def observed_id(self, finished: str | None) -> str | None: ...
-
-    @abstractmethod
-    def started_by(self, updated_at_ms: int) -> bool: ...
-
-    @abstractmethod
-    def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]: ...
-
-    @abstractmethod
-    def matches(self, turn_id: TurnId) -> bool: ...
-
-    @abstractmethod
-    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> IdleTurn: ...
-
-    @abstractmethod
-    def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]: ...
-
-    @abstractmethod
-    def observed_task_turn(self, identity: TurnIdentity, turn: TurnId, thread: Thread) -> bool: ...
-
-    @abstractmethod
-    def selection_matches(self, actual: object, expected: object) -> bool: ...
-
-    @abstractmethod
-    def answered_by(
-        self, messaging: Messaging, owner: Thread, target: str,
-    ) -> tuple[MessageReference, ...]: ...
-
-    @abstractmethod
-    async def observe_compaction(
-        self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent,
-    ) -> None: ...
-
-    @abstractmethod
-    async def cancel_turn(self, runner: TurnRunner, session_id: str, owner: Thread) -> None: ...
-
-    @abstractmethod
-    def report_wait_turn(self) -> ReportTurn: ...
-
-    @abstractmethod
-    def matches_report(self, turn_id: str, generation: int) -> bool: ...
-
-
-class IdleTurn(TurnDeclaration, declared_name=None):
-    """Idle behavior is shared by an empty owner and a recorded failure."""
 
     phase = IdlePhase()
     started_at = None
     executing = False
-    report_turn = ""
+
+    @property
+    def report_turn(self) -> str:
+        return ""
 
     def require_active(self) -> ActiveTurn:
         raise RelationViolationError("registry owner has no active turn")
@@ -226,7 +143,7 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def require_turn(self, turn_id: TurnId) -> None:
         raise RelationViolationError("live owner does not hold the requested turn")
 
-    def without_claim(self) -> IdleTurn:
+    def without_claim(self) -> TurnDeclaration:
         return self
 
     def observed_id(self, finished: str | None) -> str | None:
@@ -241,13 +158,6 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def matches(self, turn_id: TurnId) -> bool:
         return False
 
-    def leases(
-        self,
-        incarnation: ThreadIncarnation,
-        record: StoredTurnRecord,
-    ) -> Iterator[TurnLeaseFence]:
-        return iter(())
-
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return False
 
@@ -260,14 +170,10 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def selection_matches(self, actual: object, expected: object) -> bool:
         return actual == expected
 
-    def answered_by(
-        self, messaging: Messaging, owner: Thread, target: str,
-    ) -> tuple[MessageReference, ...]:
+    def answered_by(self, messaging: Messaging, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         return ()
 
-    async def observe_compaction(
-        self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent,
-    ) -> None:
+    async def observe_compaction(self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent) -> None:
         pass
 
     async def cancel_turn(self, runner: TurnRunner, session_id: str, owner: Thread) -> None:
@@ -279,17 +185,21 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def matches_report(self, turn_id: str, generation: int) -> bool:
         return False
 
-    def write(self, record: StoredTurnRecord) -> None:
-        pass
-
-    def notify(self, messaging: Messaging, name: str) -> None:
-        pass
-
     def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> IdleTurn:
         return NoTurn()
 
     def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]:
         return iter(())
+
+
+class IdleTurn(TurnDeclaration, declared_name=None):
+    """Only ended states can publish their terminal record and consequences."""
+
+    def write(self, record: StoredTurnRecord) -> None:
+        pass
+
+    def notify(self, messaging: Messaging, name: str) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -342,17 +252,13 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     def selection_matches(self, actual: object, expected: object) -> bool:
         return True
 
-    def answered_by(
-        self, messaging: Messaging, owner: Thread, target: str,
-    ) -> tuple[MessageReference, ...]:
+    def answered_by(self, messaging: Messaging, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         lease = owner.require_turn_lease()
         inputs = InputDispositions(messaging.root).in_turn(self.id)
         with messaging.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, messaging.registry.snapshot(), target)
 
-    async def observe_compaction(
-        self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent,
-    ) -> None:
+    async def observe_compaction(self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent) -> None:
         await CompactionObservation(
             runner, session_id, owner.require_turn_lease(), self.phase
         ).dispatch(event)
@@ -411,12 +317,10 @@ class ActiveTurn(RecordMember, TurnDeclaration):
             yield self
 
     def observed_task_turn(self, identity: TurnIdentity, turn: TurnId, thread: Thread) -> bool:
-        return any(
-            (lease.identity, lease.turn_id) == (identity, turn.value)
-            or identity.generation == lease.identity.generation - 1
-            for lease in thread.turn_record.leases(
-                thread.incarnation, thread.process_identity, thread.turn_generation
-            )
+        self.validate_owner(thread.process_identity, thread.turn_generation)
+        return self.claimed_generation is not None and self.turn_generation is not None and (
+            self.matches_report(turn.value, identity.generation)
+            or identity.generation == self.turn_generation - 1
         )
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
@@ -427,20 +331,6 @@ class ActiveTurn(RecordMember, TurnDeclaration):
         return self.held_by(lease) or (
             self.claimed_generation is None
             and replace(self, claimed_generation=lease.claimed_generation).held_by(lease))
-
-    def leases(
-        self,
-        incarnation: ThreadIncarnation,
-        record: StoredTurnRecord,
-    ) -> Iterator[TurnLeaseFence]:
-        if self.claimed_generation is None or self.turn_generation is None:
-            return
-        yield TurnLeaseFence(
-            TurnIdentity(incarnation, self.turn_generation),
-            self.id,
-            self.claimed_generation,
-            record=record,
-        )
 
     def observed_id(self, finished: str | None) -> str:
         return self.id
@@ -517,15 +407,7 @@ class TurnRecord(SubclassUnion, affix=""):
         generation: int,
     ) -> TurnLeaseFence:
         self.read().require_active()
-        for lease in self.leases(incarnation, process, generation):
-            return lease
         raise RelationViolationError("An authorized original turn is required")
-
-    def leases(
-        self, incarnation: ThreadIncarnation, process: ProcessState, generation: int
-    ) -> Iterator[TurnLeaseFence]:
-        self.read().require_idle()
-        return iter(())
 
 
 @dataclass(frozen=True)
@@ -590,12 +472,15 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
         record._publish_unlocked(turn)
         return record
 
-    def leases(
-        self, incarnation: ThreadIncarnation, process: ProcessState, generation: int
-    ) -> Iterator[TurnLeaseFence]:
-        active = self.read()
+    def require_lease(
+        self, incarnation: ThreadIncarnation, process: ProcessState, generation: int,
+    ) -> TurnLeaseFence:
+        active = self.read().require_active()
         active.validate_owner(process, generation)
-        return active.leases(incarnation, self)
+        if active.claimed_generation is None or active.turn_generation is None:
+            raise RelationViolationError("An authorized original turn is required")
+        return TurnLeaseFence(TurnIdentity(incarnation, active.turn_generation), active.id,
+                              active.claimed_generation, record=self)
 
     def without_claim(self) -> None:
         self._publish_unlocked(self.read().without_claim())

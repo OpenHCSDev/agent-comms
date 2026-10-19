@@ -390,12 +390,9 @@ class Thread(ThreadProvenance):
         )
 
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
-        return any(
-            (lease.identity, lease.turn_id) == (identity, turn.value)
-            for lease in self.turn_record.leases(
-                self.incarnation, self.process_identity, self.turn_generation
-            )
-        )
+        active = self.turn_record.read()
+        active.validate_owner(self.process_identity, self.turn_generation)
+        return identity.incarnation == self.incarnation and active.matches_report(turn.value, identity.generation)
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.

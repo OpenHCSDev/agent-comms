@@ -46,14 +46,10 @@ class RegistryClaimCheck(RegistryIdentityCheck):
     """
 
     def model_matches(self) -> bool:
-        return self.expected.turn_record.read().selection_matches(
-            self.actual.model, self.expected.model
-        )
+        return self.expected.turn_record.read().selection_matches(self.actual.model, self.expected.model)
 
     def thinking_matches(self) -> bool:
-        return self.expected.turn_record.read().selection_matches(
-            self.actual.thinking_level, self.expected.thinking_level
-        )
+        return self.expected.turn_record.read().selection_matches(self.actual.thinking_level, self.expected.thinking_level)
 
 
 class RunningTurnRegistryCheck(RegistryClaimCheck):
