@@ -30,19 +30,31 @@ class Client:
         pass
 
 
+@pytest.fixture
+async def live_owner(tmp_path):
+    comms, agent, _, _ = _owner(tmp_path)
+    try:
+        yield comms, agent
+    finally:
+        await agent.shutdown()
+
+
 def capture(comms):
     return HumanInputOrigin.capture(comms, comms.registry.snapshot().claimed_identity("beta"))
 
 
-def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tmp_path):
+async def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(live_owner):
     from agent_comms.acp_extension import (
         AvailableQueueProjection, PendingQueueProjection, QueueChangedUpdate,
         LiveQueueScope, NoQueueScope, UnavailableQueueProjection,
     )
-    comms, agent, _, _ = _owner(tmp_path)
+    comms, agent = live_owner
     comms.messaging.initialize_private_initial_protocol()
-    claim_scope = comms.registry.snapshot().claimed_identity('beta')
-    scope = LiveQueueScope('beta', claim_scope, comms.registry.require('beta').pid)
+    scope = await agent.inputs.queue_binding('beta')
+    assert scope == LiveQueueScope(
+        'beta', comms.registry.snapshot().claimed_identity('beta'),
+        comms.registry.require('beta').require_process().pid,
+    )
     for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
         observation = QueueChangedUpdate(NoQueueScope(), 0, projection)
         assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
@@ -59,50 +71,49 @@ def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tm
     assert not stored_inputs(agent.inputs.dispositions.root).rows
 
 
-async def test_original_human_followup_survives_forwarding_reservation_and_native_disposition(tmp_path):
-    comms, agent, _, _ = _owner(tmp_path)
+async def test_original_human_followup_survives_forwarding_reservation_and_native_disposition(live_owner):
+    comms, agent = live_owner
     comms.messaging.initialize_private_initial_protocol()
     agent.on_connect(Client())
     comms.agents.begin_turn("beta", "held-native", "Existing original")
     agent.inputs.state("beta").inbox = asyncio.Queue()
     origin = capture(comms)
-    before = list(comms.bus.full_history_page().messages)
+    with comms.bus.log.checked_read() as source:
+        before = tuple(source.public_records())
     command = QueuePromptRequest("Never replay UNKNOWN", origin=origin)
     assert decode_request(encode_request(command)) == command
-    try:
-        await agent.prompt(session_id="beta", prompt=[TextContentBlock(type="text", text=command.user_text)],
-                           field_meta=encode_request(command))
-        inputs = agent.inputs.dispositions
-        key = "acp:" + command.input_id
-        row = stored_inputs(inputs.root).lookup(key)
-        assert row.origin == origin and row.source_text == command.user_text
-        assert len(stored_inputs(inputs.root).rows) == 1 and list(comms.bus.full_history_page().messages) == before
-        from agent_comms.turn_context import UserFollowupSegment
-        queued = agent.inputs.state('beta').inbox.get_nowait()
-        assert queued.input_id.value == command.input_id
-        assert queued.content.text == 'User follow-up:\n' + command.user_text
-        contribution, = queued.content.contributions
-        assert contribution.kind is UserFollowupSegment
-        assert row.context_provenance() in contribution.provenance
-        native_id = "b" * 32
-        sent = "User follow-up:\n" + command.user_text
-        assert inputs.bind(key, claim_scope=row.claim_scope, turn_id="held-native", native_id=native_id, text=sent)
-        assert inputs.started(key, turn_id="held-native", native_id=native_id, text=sent)
-        # Existing terminal settlement never rewrites a started original as
-        # unsent or grants a replay; the canonical native completion owns that.
-        assert inputs.settle_unbound((key,)).lookup(key).has_started
-        terminal = stored_inputs(inputs.root).lookup(key)
-        assert terminal.origin == origin
-        assert terminal.has_started and terminal.source_text == command.user_text
-        assert terminal.origin.retained_fact(terminal).for_owner(
-            comms.registry.require("beta"), comms.registry.snapshot()
-        ) == CurrentHumanInputTaskFact(terminal)
-    finally:
-        await agent.shutdown()
+    await agent.prompt(session_id="beta", prompt=[TextContentBlock(type="text", text=command.user_text)],
+                       field_meta=encode_request(command))
+    inputs = agent.inputs.dispositions
+    key = "acp:" + command.input_id
+    row = stored_inputs(inputs.root).lookup(key)
+    assert row.origin == origin and row.source_text == command.user_text
+    with comms.bus.log.checked_read() as source:
+        assert len(stored_inputs(inputs.root).rows) == 1 and tuple(source.public_records()) == before
+    from agent_comms.turn_context import UserFollowupSegment
+    queued = agent.inputs.state('beta').inbox.get_nowait()
+    assert queued.input_id.value == command.input_id
+    assert queued.content.text == 'User follow-up:\n' + command.user_text
+    contribution, = queued.content.contributions
+    assert contribution.kind is UserFollowupSegment
+    assert row.context_provenance() in contribution.provenance
+    native_id = "b" * 32
+    sent = "User follow-up:\n" + command.user_text
+    assert inputs.bind(key, claim_scope=row.claim_scope, turn_id="held-native", native_id=native_id, text=sent)
+    assert inputs.started(key, turn_id="held-native", native_id=native_id, text=sent)
+    # Existing terminal settlement never rewrites a started original as
+    # unsent or grants a replay; the native completion owns that.
+    assert inputs.settle_unbound((key,)).lookup(key).has_started
+    terminal = stored_inputs(inputs.root).lookup(key)
+    assert terminal.origin == origin
+    assert terminal.has_started and terminal.source_text == command.user_text
+    assert terminal.origin.retained_fact(terminal).for_owner(
+        comms.registry.require("beta"), comms.registry.snapshot()
+    ) == CurrentHumanInputTaskFact(terminal)
 
 
-def test_foreign_or_changed_origin_refused_before_any_reservation(tmp_path):
-    comms, agent, _, _ = _owner(tmp_path)
+async def test_foreign_or_changed_origin_refused_before_any_reservation(live_owner):
+    comms, agent = live_owner
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
     invalid = (replace(origin, root_id="f" * 32),
@@ -123,8 +134,8 @@ def test_foreign_or_changed_origin_refused_before_any_reservation(tmp_path):
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
 
-def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp_path):
-    comms, agent, _, _ = _owner(tmp_path)
+async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(live_owner):
+    comms, agent = live_owner
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
     neutral = ReservedInput("old", None, "beta", origin.claim_scope.claimed_generation,
@@ -148,8 +159,8 @@ def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp
 
 
 @pytest.mark.parametrize("state", [ActiveGoal(), PausedGoal(), CompletedGoal()])
-async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_path, state):
-    comms, agent, _, _ = _owner(tmp_path)
+async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(live_owner, state):
+    comms, agent = live_owner
     comms.messaging.initialize_private_initial_protocol()
     absent = capture(comms)
     assert absent.goal == AbsentGoalCheckpoint()
@@ -198,13 +209,13 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
         comms.registry.require("beta").goal.require_checkpoint(goal.revision_key)
 
 
-async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tmp_path):
+async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(live_owner):
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop, UserTaskSupersession
     from agent_comms.retained_task_facts import RetainedTaskFacts
     from agent_comms.threads import Thread
     from agent_comms.turn_context import WireProvenance
 
-    comms, agent, _, _ = _owner(tmp_path)
+    comms, agent = live_owner
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
