@@ -188,7 +188,7 @@ def sql_execution(
 ):
     ExecutionRecord(
         execution_id=name, origin=ExecutionOrigin(origin),
-        lifecycle=ExecutionState.decode(status).load(ordinal),
+        lifecycle=ExecutionState.member_named(status).load(ordinal),
         owner_thread=thread, owner_lookup=owner, revision=1,
         max_attempts=max_attempts, reason_code=None, created_at_ms=0, updated_at_ms=0,
     ).insert(db)

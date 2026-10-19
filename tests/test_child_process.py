@@ -273,7 +273,7 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
 
     try:
         value = TestObservationOutcome("observed")
-        assert ChildOutcome.decode("test_observation") is TestObservationOutcome
+        assert ChildOutcome.member_named("test_observation") is TestObservationOutcome
         assert FieldCodec.decode(ChildOutcome, FieldCodec.encode(value)) == value
     finally:
         ChildOutcome.__registry__.pop("test_observation")

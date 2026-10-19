@@ -218,4 +218,4 @@ class ThreadStatusName(TextRepresentation[ThreadStatus]):
 
     @classmethod
     def from_text(cls, value: str) -> ThreadStatus:
-        return ThreadStatus.decode(value)()
+        return ThreadStatus.member_named(value)()

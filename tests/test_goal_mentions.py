@@ -179,7 +179,7 @@ def test_owner_rename_keeps_only_the_bound_owner_incarnation(tmp_path: Path) -> 
 def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
     manual = comms.relationships.edit(
-        "owner", RelationshipEdit.decode("add"), "peer", "Accepted review separately"
+        "owner", RelationshipEdit.member_named("add"), "peer", "Accepted review separately"
     )
     original = (comms.relationships.store.path).read_bytes()
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Please consider @peer"))
@@ -201,10 +201,10 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
         "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
     assert _rows(comms, "owner")[0][0].sources == ("explicit", "goal_mention")
-    comms.relationships.edit("owner", RelationshipEdit.decode("remove"), "peer")
+    comms.relationships.edit("owner", RelationshipEdit.member_named("remove"), "peer")
     assert _rows(comms, "owner")[0][0].sources == ("goal_mention",)
     comms.relationships.edit(
-        "owner", RelationshipEdit.decode("add"), "peer", "Explicit retained note"
+        "owner", RelationshipEdit.member_named("add"), "peer", "Explicit retained note"
     )
     comms.goals.update_goal(
         "owner", EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="No peer mention")
@@ -231,7 +231,7 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
 ) -> None:
     comms = _wire(tmp_path)
     manual = comms.relationships.edit(
-        "owner", RelationshipEdit.decode("add"), "peer", "Explicit note survives"
+        "owner", RelationshipEdit.member_named("add"), "peer", "Explicit note survives"
     )
     assert manual is not None
     if goal_mention:

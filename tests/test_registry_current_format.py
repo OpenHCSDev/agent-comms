@@ -20,7 +20,7 @@ from agent_comms.threads import Thread
 def test_goal_family_survives_registry_and_history_reopen(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     for name in GoalState.names():
-        state_type = GoalState.decode(name)
+        state_type = GoalState.member_named(name)
         state = (
             BlockedGoal(block_reason="Waiting for the fixture dependency")
             if state_type is BlockedGoal else state_type()

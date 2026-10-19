@@ -34,7 +34,7 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
 
         value = FieldCodec.decode(str | None, value)
         try:
-            return cls.decode(value)
+            return cls.member_named(value)
         except ValueError:
             return UnreportedStopReason
 
@@ -164,7 +164,7 @@ class CompactionReason(DeclaredFamily, affix="CompactionReason"):
 
         value = FieldCodec.decode(str | None, value)
         try:
-            return cls.decode(value)
+            return cls.member_named(value)
         except ValueError:
             return UnknownCompactionReason
 
@@ -248,7 +248,7 @@ class ThinkingLevelValue(FieldRepresentation):
     def decode(cls, value: object) -> type[ThinkingChoice]:
         if value is None:
             return NoThinkingOverride
-        return ThinkingLevel.decode(FieldCodec.decode(str, value))
+        return ThinkingLevel.member_named(FieldCodec.decode(str, value))
 
     @classmethod
     def encode(cls, value: object) -> str | None:

@@ -338,7 +338,7 @@ class SessionConfigOptions(ConfigOptions):
         self, config_id: str, session_id: str, value: str | bool
     ) -> SetSessionConfigOptionResponse:
         try:
-            member = CatalogConfigOption.decode(config_id)
+            member = CatalogConfigOption.member_named(config_id)
             if not isinstance(value, str):
                 raise ValueError("Expected string setting")
         except ValueError:

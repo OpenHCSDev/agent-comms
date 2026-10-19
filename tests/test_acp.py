@@ -152,7 +152,7 @@ class TestHandlers:
             level = getattr(command, "level", None)
             return StateData(
                 model=ReportedModel(provider=provider, id=model_id, name=model_id),
-                thinking_level=(ThinkingLevel.decode(level) if level else OffThinkingLevel),
+                thinking_level=(ThinkingLevel.member_named(level) if level else OffThinkingLevel),
             )
 
         monkeypatch.setattr("agent_comms.pi_commands.SettingCommand.configure", configure)

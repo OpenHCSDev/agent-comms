@@ -399,7 +399,7 @@ class RuntimeConnection:
             writer.write(
                 (
                     json.dumps(
-                        RuntimeRequest.decode(action).proxy_payload(
+                        RuntimeRequest.member_named(action).proxy_payload(
                             self.session_id, self.controller_token, kwargs
                         )
                     )
