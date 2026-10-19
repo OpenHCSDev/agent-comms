@@ -879,6 +879,22 @@ def stray(commander, problem, generation):
         order=order(comms.root, 'order-' + problem), goal=GoalRef('lead', lead.created_at, 'request'))
 
 
+def test_imported_order_completion_uses_order_identity_and_keeps_goal(commander):
+    comms, caller = commander
+    todo = stray(commander, 'P603', 'rts-order:source')
+    original_goal = comms.registry.require('worker').goal
+    request = CommsOrderDoneTool(problem=todo.id, order_id=todo.order.id,
+        delivery=OperationDelivery(), claims=working(comms))
+    with pytest.raises(ValueError, match='order changed'):
+        replace(request, order_id='replaced-order').apply(comms, caller)
+    assert comms.goals.todos.get(todo.id) == todo
+    request.apply(comms, caller)
+    assert not comms.goals.todos.get(todo.id).pending
+    assert comms.registry.require('worker').goal == original_goal
+    with pytest.raises(ValueError, match='Only an open order'):
+        request.apply(comms, caller)
+
+
 def completed_with_pending(commander):
     """ci-1370's shape: the Goal completed on its only problem, then later problems were stored under it
     and under a Goal that was never published."""
