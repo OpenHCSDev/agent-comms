@@ -1,16 +1,11 @@
-"""Commander load and forks (HARD RULE: as soon as the commander is overwhelmed it forks; a structural reflex).
+"""Report commander load and live forks; no command refuses on capacity.
 
-Load is measured from the files the fleet already writes, never from how the commander feels:
-each open order counts 1 and each overdue order 2 more. Any unjudged edits together count as
-one PER_COMMANDER slice of judging work; no edits count as zero. One commander carries
-PER_COMMANDER load. Forks register by passing `--fork NAME` to order, which touches
-forks/NAME.beat; a beat younger than BEAT_AGE is a live fork. While load needs more forks than are
-live, order refuses the main commander's actions and rotate prints FORK NOW, so the only
-way forward is forking a slice.
+Each open order counts 1, each overdue order 2 more, and every 10 unjudged edits 1.
+Forks register with `--fork NAME`; a heartbeat younger than BEAT_AGE is live.
 """
 from __future__ import annotations
 
-import math, os, sys, time
+import os, time
 from dataclasses import dataclass
 
 from ..comms import Comms
@@ -18,7 +13,6 @@ from . import order
 from .config import CommanderConfig
 
 FORKS = f'{CommanderConfig.installed().state}/forks'
-PER_COMMANDER = 6
 BEAT_AGE = 10 * 60
 
 
@@ -50,34 +44,13 @@ class Load:
                    CommsUnjudgedTool.count(comms, commander), tuple(live_forks()))
 
     @property
-    def judging_load(self) -> int:
-        """The whole unjudged backlog is one commander's slice, regardless of its length."""
-        return PER_COMMANDER if self.unjudged else 0
-
-    @property
-    def total(self) -> int:
-        return self.owed + 2 * self.overdue + self.judging_load
-
-    @property
-    def needed(self) -> int:
-        return math.ceil(self.total / PER_COMMANDER) - 1
-
-    @property
-    def short(self) -> bool:
-        """Live forks do not cover the load: the commander must fork now."""
-        return len(self.forks) < self.needed
+    def total(self) -> float:
+        return self.owed + 2 * self.overdue + self.unjudged / 10
 
     def __str__(self) -> str:
         return (f'load {self.total:.0f} ({self.owed} open orders, {self.overdue} overdue, '
-                f'{self.unjudged} unjudged edits: {self.judging_load} judging load) '
-                f'needs {self.needed} live fork(s), '
-                f'{len(self.forks)} live {list(self.forks)}; fork a slice now (each fork passes --fork NAME to order)')
-
-    def require(self) -> None:
-        if self.short:
-            sys.exit(f'REFUSED, nothing recorded: overloaded: {self}.')
+                f'{self.unjudged} unjudged edits), {len(self.forks)} live forks {list(self.forks)}')
 
 
 def main(a):
-    load = Load.of(order.COMMS, order.ME)
-    print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')
+    print(Load.of(order.COMMS, order.ME))
