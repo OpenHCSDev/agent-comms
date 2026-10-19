@@ -144,7 +144,7 @@ class LoadForkingParityRow(ParityRow):
     number = 17
     capability = "Load and forking"
     current = "`capacity.py`: six units, ten-minute beat age; `forks/`"
-    native = "`commander_load.CommanderLoad.of`; `commander_measurements.ForkNow`"
+    native = "Reporting-only `commander_load.CommanderLoad.of`; P253 removes forking policy"
     phases = (ControlPlanePhase,)
 
 
@@ -152,7 +152,7 @@ class GrowthAlarmParityRow(ParityRow):
     number = 18
     capability = "Growth alarm"
     current = "`growth_watch.py`: merges growing src by more than 40 net lines"
-    native = "`commander_measurements.MergeGrowth`: configured repositories and merged PRs"
+    native = "`commander.config.Repo.main_changes` → `commander_measurements.MergeGrowth.read`"
     phases = (ControlPlanePhase,)
 
 
@@ -235,7 +235,7 @@ class MeasuredLoadParityRow(ParityRow):
     number = 28
     capability = "Measured load and self-report"
     current = "`capacity.py` unit count"
-    native = "`commander_load.CommanderLoad.of`: debts, inflow, calibration and context"
+    native = "Reporting-only `commander_load.CommanderLoad.of`: orders, overdue, edits and live forks"
     phases = (ControlPlanePhase,)
 
 
