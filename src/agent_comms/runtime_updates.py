@@ -17,7 +17,12 @@ from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .recorded_time import EventTime, UnrecordedEventTime
-from .transcript_events import LiveTextTranscript, NoticeTranscript, ToolStartTranscript, TranscriptEvent
+from .transcript_events import (
+    LiveTextTranscript,
+    NoticeTranscript,
+    ToolStartTranscript,
+    TranscriptEvent,
+)
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -46,8 +51,9 @@ class DraftAccumulator:
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(self._start.phase.summary, position=self._start.item_id,
-                                 timestamp=self.started_at.recorded_at('A draft notice')),)
+        return (NoticeTranscript(
+            self._start.phase.summary, position=self._start.item_id,
+            timestamp=self.started_at.recorded_at('A draft notice')),)
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
         return (DraftItem(turn_id, item_id, self),)
@@ -115,6 +121,7 @@ class TextDraft(DraftAccumulator):
             (self.event_type(text, position=self.position,
                              timestamp=self.started_at.recorded_at("A transcript event")),) if text else ()
         )
+
 
 class ParagraphDraft(TextDraft):
     separator = "\n\n"
