@@ -19,10 +19,10 @@ from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
-    CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
+    CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
-    CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
+    CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
     CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool, CommsVerdictTool,
     CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
@@ -91,6 +91,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsOrderCheckTool, {"problem": "P1", "check": FieldCodec.encode(
         OrderCheck(str(comms.root), "printf 1", CountCheckResult(1))),
         "why": "The recorded check counted the wrong file"}, lead
+    yield CommsOrderWorkTool, {"problem": "P1"}, lead
     yield CommsOrderDoneTool, {"problem": "P1", "delivery": FieldCodec.encode(OperationDelivery())}, lead
     (comms.root / "installed-evidence").write_text("Verified installed path")
     yield CommsProblemCloseTool, {
@@ -104,6 +105,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsTurnsTool, {"thread": "worker"}, lead
     yield CommsThreadsTool, {}, lead
     yield CommsThreadsTool, {}, nobody
+    yield CommsStandingRulesTool, {"thread": "lead"}, lead
     monkeypatch.setattr(WorkBranches, "read", lambda self, snapshot: ())  # It asks gh.
     yield CommsWorkBranchesTool, {"checkout": str(project)}, lead
     yield CommsCollaborationTool, {"action": "add", "peer": "worker", "note": "Pairing"}, lead

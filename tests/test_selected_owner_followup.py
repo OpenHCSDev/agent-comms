@@ -130,8 +130,6 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
 async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatch, change, expected_state):
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -342,8 +340,6 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
 
     monkeypatch.setattr(agent.turns, "extension_ui_permission", permission)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
     started = []

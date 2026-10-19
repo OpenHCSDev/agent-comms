@@ -16,6 +16,7 @@ import tokenize
 import typing
 from abc import abstractmethod
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -27,7 +28,7 @@ from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from cutover.carry import STEPS, Step
 from stored_formats import StoredForm
-from agent_comms.field_codec import FieldCodec, projected
+from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
 
@@ -114,9 +115,15 @@ class OccurrenceMeasure(CountedSource):
     def occurrences(node: ast.AST) -> int:
         """Return this node's contribution, excluding its descendants."""
 
+    @staticmethod
+    def sites(tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        """The nodes this measure reads; every node unless a measure excludes some."""
+        return ast.walk(tree)
+
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        return sum(cls.occurrences(node) for node in ast.walk(ast.parse(source, filename)))
+        tree = ast.parse(source, filename)
+        return sum(cls.occurrences(node) for node in cls.sites(tree, filename))
 
     @classmethod
     def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
@@ -269,7 +276,7 @@ class ChangedSource:
         return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
 
 
-class CleanChangedLines:
+class CleanChangedLines(OccurrenceMeasure):
     """No occurrence may be written, even when another occurrence is deleted."""
 
     @staticmethod
@@ -277,10 +284,14 @@ class CleanChangedLines:
         return range(node.lineno, node.end_lineno + 1)
 
     @classmethod
-    def count_changed(cls, source: ChangedSource) -> int:
-        return sum(count for node in ast.walk(source.tree)
-                   if (count := cls.occurrences(node))
-                   and not source.lines.isdisjoint(cls.site_lines(node)))
+    def changed_sites(cls, source: ChangedSource) -> list[int]:
+        """The first changed line of each occurrence written on a changed line."""
+        sites = []
+        for node in cls.sites(source.tree, source.path):
+            if ((count := cls.occurrences(node))
+                    and (touched := source.lines.intersection(cls.site_lines(node)))):
+                sites.extend([min(touched)] * count)
+        return sites
 
 
 class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
@@ -334,9 +345,114 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
-    def count_changed(cls, source: ChangedSource) -> int:
-        return super().count_changed(source) + len(cls.prose_lines(source) & source.lines)
+    def changed_sites(cls, source: ChangedSource) -> list[int]:
+        return [*super().changed_sites(source), *(cls.prose_lines(source) & source.lines)]
 
+
+@dataclass(frozen=True)
+class DecoratorBinding:
+    """The spellings one module binds to a declared decorator, read from its imports alone.
+
+    A decorator of the same name declared or imported from anywhere else marks nothing.
+    """
+
+    names: frozenset[str]
+
+    @classmethod
+    def of(cls, decorator: typing.Callable[..., object], tree: ast.AST,
+           filename: str) -> DecoratorBinding:
+        owner, name = decorator.__module__, decorator.__name__
+        parts = Path(filename).with_suffix("").parts
+        module = parts[1:] if parts[:1] == ("src",) else parts
+        package = module[:-1]
+        names = {name} if ".".join(module) == owner else set()
+        for node in ast.walk(tree):
+            match node:
+                case ast.Import(names=aliases):
+                    names.update(f"{alias.asname or alias.name}.{name}"
+                                 for alias in aliases if alias.name == owner)
+                case ast.ImportFrom(module=source, names=aliases, level=level):
+                    base = package[:len(package) - level + 1] if level else ()
+                    resolved = ".".join((*base, source) if source else base)
+                    for alias in aliases:
+                        if f"{resolved}.{alias.name}" == owner:
+                            names.add(f"{alias.asname or alias.name}.{name}")
+                        if resolved == owner and alias.name == name:
+                            names.add(alias.asname or name)
+        return cls(frozenset(names))
+
+    def marks(self, decorator: ast.expr) -> bool:
+        return ast.unparse(decorator) in self.names
+
+
+class NoneSpelling(MroDispatch):
+    """One node's spellings of absence as None, never evaluated code."""
+
+    def __init__(self) -> None:
+        self.found = 0
+
+    @staticmethod
+    def absent(node: ast.AST) -> bool:
+        match node:
+            case ast.Constant(value=None):
+                return True
+        return False
+
+    @handles(ast.Compare)
+    def identity(self, node: ast.Compare) -> None:
+        left = node.left
+        for operator, right in zip(node.ops, node.comparators, strict=True):
+            match operator:
+                case ast.Is() | ast.IsNot():
+                    self.found += self.absent(left) or self.absent(right)
+            left = right
+
+    @handles(ast.BinOp)
+    def union(self, node: ast.BinOp) -> None:
+        match node:
+            case ast.BinOp(op=ast.BitOr(), left=left, right=right):
+                self.found += self.absent(left) or self.absent(right)
+
+    @handles(ast.Subscript)
+    def typing_spelling(self, node: ast.Subscript) -> None:
+        match node.value, node.slice:
+            case ast.Name(id="Optional") | ast.Attribute(attr="Optional"), _:
+                self.found += 1
+            case ast.Name(id="Union") | ast.Attribute(attr="Union"), ast.Tuple(elts=members):
+                self.found += any(self.absent(member) for member in members)
+
+    @handles(ast.keyword)
+    def default(self, node: ast.keyword) -> None:
+        match node:
+            case ast.keyword(arg="default", value=value):
+                self.found += self.absent(value)
+
+
+class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
+    """Absence spelled as None: ``is None`` tests, annotations that allow None, ``default=None``.
+
+    Absence belongs to a declared null member that answers for itself. A decoder that
+    meets None from outside declares itself with ``boundary_decoder``; its body is not counted.
+    """
+
+    @classmethod
+    def sites(cls, tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        marker = DecoratorBinding.of(boundary_decoder, tree, filename)
+        pending = [tree]
+        while pending:
+            node = pending.pop()
+            match node:
+                case ast.FunctionDef(decorator_list=decorators) | ast.AsyncFunctionDef(
+                        decorator_list=decorators) if any(map(marker.marks, decorators)):
+                    continue
+            yield node
+            pending.extend(ast.iter_child_nodes(node))
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        spelling = NoneSpelling()
+        spelling.dispatch_sync(node)
+        return spelling.found
 
 class FunctionLocalImport(PerFileMeasure):
     """Imports executed inside a function, including nested local classes."""
@@ -1134,6 +1250,7 @@ class Comparison:
     base: dict[str, int]
     head: dict[str, int]
     introduced: dict[str, int]
+    introduced_lines: dict[str, list[int]]
 
     @projected(view="report")
     def delta(self) -> dict[str, int]:
@@ -1163,13 +1280,18 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
         measured_base, measured_head = measure.compare(repo, base, head, paths, root)
         before.update(measured_base)
         after.update(measured_head)
-    introduced = {}
+    introduced, introduced_lines = {}, {}
     strict_measures = Measure.members_with(CleanChangedLines)
     for path in sorted(paths & python_paths(repo, head, root)):
         source = ChangedSource.read(repo, base, head, path)
         for measure in strict_measures:
-            introduced[f"{measure.__name__}:{path}"] = measure.count_changed(source)
-    return Comparison(root, base, head, tuple(sorted(paths)), before, after, introduced)
+            identity = f"{measure.__name__}:{path}"
+            sites = measure.changed_sites(source)
+            introduced[identity] = len(sites)
+            if sites:
+                introduced_lines[identity] = sorted(sites)
+    return Comparison(root, base, head, tuple(sorted(paths)), before, after,
+                      introduced, introduced_lines)
 
 
 def main() -> int:

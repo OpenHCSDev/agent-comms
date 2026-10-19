@@ -30,7 +30,7 @@ from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
 from .turn_lease import TurnLeaseFence
-from .turn_digests import ThreadTurns, TurnDigestRead
+from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_sources import (
@@ -142,6 +142,9 @@ class TranscriptPage:
     after: TranscriptCursor
     has_older: bool
     has_newer: bool
+    # Captured with the source read, not reconstructed from rendered events.
+    # None is reserved for hand-built pages without a retained source witness.
+    snapshot: TranscriptReadIdentity | None = None
 
     def resolve_sent_messages(self, reports):
         """Prove bounded full reports without replacing their input objects."""
@@ -373,6 +376,7 @@ class TranscriptRead:
         identity = self.identity
         return self.owner._thread_transcript_page(
             self.source,
+            identity=identity,
             before=identity.before,
             after=identity.after,
             max_messages=20,
@@ -530,8 +534,8 @@ class Transcripts:
             through,
         )
 
-    def turns(self, name: str, *, last: int = TurnDigestRead.last) -> ThreadTurns:
-        return TurnDigestRead(self.root, self.registry.snapshot().require(name), last).read()
+    def turns(self, name: str, bound: TurnBound) -> ThreadTurns:
+        return TurnDigestRead(self.root, self.registry.snapshot().require(name), bound).read()
 
     def external(self, name: str) -> ExternalTranscript:
         """Where a CLI bridge publishes the items of its sessionless bus thread."""
@@ -583,20 +587,25 @@ class Transcripts:
         # A mounted inherited window remains pinned to its ancestor and byte
         # boundary when the child persists its own session. New unpinned reads
         # select the child's file; existing scroll cursors keep working.
-        page = self._page_source(name, through, historical_source)
-        return self._thread_transcript_page(
-            page,
-            before=before,
-            after=after,
-            max_messages=max_messages,
-            max_bytes=max_bytes,
-            through=through,
-        )[0]
+        read = self.capture_page_read(
+            name, before=before, after=after, through=through,
+            historical_source=historical_source,
+        )
+        page, _ = self._thread_transcript_page(
+            read.source, identity=read.identity,
+            before=before, after=after,
+            max_messages=max_messages, max_bytes=max_bytes,
+            through=read.identity.page_bound,
+        )
+        if not read.content_current():
+            raise StaleRevision("Transcript read inputs changed during preparation")
+        return page
 
     def _thread_transcript_page(
         self,
         page: PageSource,
         *,
+        identity: TranscriptReadIdentity,
         before: TranscriptCursor | None,
         after: TranscriptCursor | None,
         max_messages: int,
@@ -645,6 +654,7 @@ class Transcripts:
                 events, start, end,
                 has_older,
                 end != frontier,
+                identity,
             ),
             draft,
         )

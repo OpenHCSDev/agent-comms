@@ -22,6 +22,7 @@ from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
+from .todos import TodoStore
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
 from .task_sources import TaskChange, OriginalTaskChange
@@ -99,6 +100,7 @@ class Messaging:
                 )
             else:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
+        TodoStore(self.root).correct(owner.name, committed.message_id, body)
         return committed
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:

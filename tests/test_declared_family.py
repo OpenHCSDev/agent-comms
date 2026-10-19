@@ -79,6 +79,34 @@ def test_slots_root_keeps_its_declared_affix():
     assert ByteLimit(4).amount() == 4
 
 
+def test_child_roots_share_behavior_not_membership_and_survive_slots():
+    class Behavior(DeclaredFamily):
+        def answer(self):
+            return 7
+
+    @dataclass(frozen=True, slots=True)
+    class Left(Behavior, affix="Item"):
+        pass
+
+    @dataclass(frozen=True, slots=True)
+    class Right(Behavior, affix="Item"):
+        pass
+
+    def declare(root):
+        @dataclass(frozen=True, slots=True)
+        class ValueItem(root):
+            pass
+        return ValueItem
+
+    left, right = declare(Left), declare(Right)
+    assert Behavior.members_with(Behavior) == ()
+    assert Left._family_root is Left and Right._family_root is Right
+    assert Left.members_with(Left) == (left,)
+    assert Right.members_with(Right) == (right,)
+    assert Left.decode("value") is left and Right.decode("value") is right
+    assert left().answer() == right().answer() == 7
+
+
 def test_collisions_fail_without_replacing_owner():
     with pytest.raises(DuplicateRegistryKeyError, match="http_ready"):
 

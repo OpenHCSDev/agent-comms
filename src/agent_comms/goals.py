@@ -238,15 +238,48 @@ class CountCheckResult(CheckResult):
         if self.expected < 0:
             raise ValueError("An expected count must be nonnegative.")
 
-    @staticmethod
-    def printed(stdout: bytes) -> int | None:
-        """The count a check printed (its last integer), or None when it printed no integer."""
-        counts = re.findall(r"\d+", stdout.decode(errors="replace"))
-        return int(counts[-1]) if counts else None
-
     def require(self, result):
-        if not isinstance(result.outcome, ExitedOutcome) or self.printed(result.stdout) != self.expected:
-            raise ValueError(f"The order check did not print its expected last integer {self.expected}.")
+        if not isinstance(result.outcome, ExitedOutcome):
+            raise ValueError(f"The order check did not exit, so it printed no count of {self.expected}.")
+        CheckPrinted.decoded(result.stdout).require(self.expected)
+
+
+class CheckPrinted(DeclaredFamily, affix="Printed"):
+    """What an order check printed: a count (its last integer) or no integer at all."""
+
+    @staticmethod
+    def decoded(stdout: bytes) -> CheckPrinted:
+        counts = re.findall(r"\d+", stdout.decode(errors="replace"))
+        return CountPrinted(int(counts[-1])) if counts else NoIntegerPrinted()
+
+    @abstractmethod
+    def require(self, expected: int) -> None: ...
+
+    @abstractmethod
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
+        """Why a check that must fail before any work proves nothing yet."""
+
+
+@dataclass(frozen=True)
+class CountPrinted(CheckPrinted):
+    count: int
+
+    def require(self, expected: int) -> None:
+        if self.count != expected:
+            raise ValueError(f"The order check printed {self.count}, not its expected count {expected}.")
+
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
+        return (f"Check already prints {self.count} before any work: `{command}` proves nothing; "
+                "write a check that fails now",) * (self.count == expected)
+
+
+@dataclass(frozen=True)
+class NoIntegerPrinted(CheckPrinted):
+    def require(self, expected: int) -> None:
+        raise ValueError(f"The order check printed no integer, so no count of {expected}.")
+
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
+        return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
 
 
 @dataclass(frozen=True)

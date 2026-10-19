@@ -61,6 +61,11 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
             raise cls(f"{subject}: {error}") from error
 
 
+def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
+    """Declares a decoder that meets absence from outside, so its None spellings are not debt."""
+    return decoder
+
+
 @dataclass(frozen=True)
 class FieldPlan:
     """One field's wire keys, checks and compiled value decoder."""
@@ -121,6 +126,7 @@ class FieldPlan:
             raise MalformedRecord(f"Missing required field {self.key}")
         return values[self.name]
 
+    @boundary_decoder
     def decoded(self, data: object) -> dict[str, object]:
         captured = self.captured(data)
         if self.name not in captured:
@@ -248,32 +254,23 @@ class WireValue(WireForm):
         return cls.from_wire(value)
 
 
-class SubclassUnion(WireValue):
-    """An untagged wire union derives its alternatives from direct declarations."""
+class SubclassUnion(DeclaredFamily, WireValue):
+    """An untagged wire family; each union declares its own root with affix=""."""
 
     accepts_null = True
     external_json_shape = True
-    _decoder: ClassVar[UnionDecoder[Self]]
-    _members: ClassVar[dict[str, type[Self]]]
 
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        if SubclassUnion in cls.__bases__:
-            cls._members = {}
-            return
-        for base in cls.__bases__:
-            if SubclassUnion in base.__bases__:
-                # Slots rebuilds keep the member's name, including for nested classes.
-                base._members[cls.__name__] = cls
-                base._decoder = ValueDecoder.for_members(tuple(base._members.values()))
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return False
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        return cls._decoder.decode(data)
+        return ValueDecoder.for_members(cls.members_with(cls)).decode(data)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(cls._decoder.target)
+        return FieldCodec.value_schema(ValueDecoder.for_members(cls.members_with(cls)).target)
 
 
 class NullMember(WireValue):
@@ -669,10 +666,7 @@ class FieldCodec(Sealed):
 
     @staticmethod
     def _tag(value: object) -> dict[str, object]:
-        if isinstance(value, DeclaredFamily):
-            root = cast(type[DeclaredFamily], type(value)._family_root)
-            return {root.family_discriminator: value.declared_name}
-        return {}
+        return value.record_tag() if isinstance(value, DeclaredFamily) else {}
 
     @classmethod
     def encode_fields(cls, value: object) -> dict[str, object]:
@@ -932,6 +926,7 @@ class ValueDecoder[T](ABC):
         return cls(target)
 
     @classmethod
+    @cache
     def for_members[M](cls, members: tuple[type[M], ...]) -> UnionDecoder[M]:
         return UnionDecoder(
             reduce(or_, members),
@@ -947,6 +942,7 @@ class ValueDecoder[T](ABC):
         encoded = FieldCodec.encode(value, self.target)
         return json.dumps(encoded)
 
+    @boundary_decoder
     def decode_editor(self, value):
         return None if value is None else json.loads(value)
 
@@ -1034,6 +1030,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
+    @boundary_decoder
     def decode(self, data):
         representation = self.representation
         if data is None and not representation.accepts_null:
@@ -1247,6 +1244,8 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         if get_origin(declared) is dict and get_args(declared)[0] is str:
             declared = get_args(declared)[1]
         if not (isinstance(declared, type) and issubclass(declared, DeclaredFamily)):
+            return None
+        if not declared.decodes_tagged_records():
             return None
         members = declared._member_declarations()
         if declared not in members or any(

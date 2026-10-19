@@ -1,5 +1,6 @@
 """A real local RPC child pauses the owner before the fenced prompt write."""
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 import json
@@ -21,9 +22,7 @@ from test_coordinated_runtime import _root
 
 
 @pytest.mark.asyncio
-async def test_private_native_raw_prompt_refused_after_pause_ack(
-    tmp_path: Path, tmp_path_factory
-) -> None:
+async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path, tmp_path_factory, *, native_runtime_package) -> None:
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     received = tmp_path / "received.jsonl"
     child_pid = tmp_path / "child-pid"
@@ -49,7 +48,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
         f"    with open({str(received)!r}, 'a') as log: log.write(line)\n"
     )
 
-    def launch(*, worktree, session, **_kwargs):
+    def launch(package, *, worktree, session, **_kwargs):
         # Keep the real selected tool socket inside the owned basetemp and
         # below the operating system Unix socket path limit.
         session_dir = tmp_path_factory.getbasetemp() / "native-pause"
@@ -65,17 +64,13 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
             worktree,
             env,
             SelectedSession(session_dir),
-            tmp_path,
+            native_runtime_package,
             root=worktree, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
-    with (
-        patch("agent_comms.native_pi._trusted_package", lambda _package: None),
-        patch.object(native_pi.NativePiRpcLaunch, "acquire_tracked", return_value=launch),
-        pytest.raises(RelationViolationError, match="Maintenance"),
-    ):
+    with patch.object(native_pi.NativePiRpcLaunch, 'tracked', side_effect=launch), pytest.raises(RelationViolationError, match='Maintenance'):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
         ).run()
     assert comms.owners.maintenance.read().phase == MaintenancePhase.decode("paused")
     writes = [json.loads(line) for line in received.read_text().splitlines()]

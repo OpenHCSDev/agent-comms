@@ -1,6 +1,8 @@
 """Todo creation and assignment retain exact owners, revisions and goal references."""
 
 from __future__ import annotations
+from contextlib import closing
+from dataclasses import replace
 from agent_comms.registration import Registration
 
 from concurrent.futures import ProcessPoolExecutor
@@ -9,6 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from cutover.carry_todo_open_indexes import TodoOpenIndexes
+from agent_comms.coordination_database import CoordinationStore
+
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
@@ -16,7 +21,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment, ChangeTodoState, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
-    TodoConflict, TodoError, TodoState, TodoStore,
+    BlockedTodoState, OperationDelivery, Todo, TodoConflict, TodoError, TodoState, TodoStore,
 )
 
 
@@ -76,6 +81,63 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     with pytest.raises(TodoConflict):
         store.apply("todo-1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
     assert store.get("todo-1") == original
+
+
+def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
+
+    store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
+    first = store.create("P1", "org/repo", "Open order", creator=lead, owner=lead,
+        generation="one", goal=GoalRef("lead", 1.0, "request"),
+        deadline=RecordedEventTime(1000), order=order(tmp_path))
+    second = replace(first, id="P2", state=BlockedTodoState)
+    delivered = first.order.delivered(OperationDelivery(at=RecordedEventTime(20))).installed(
+        "The installed application now shows every expected saved message correctly.", "evidence")
+    with store.writing() as db:
+        second.insert(db)
+        for number in range(3, 303):
+            replace(first, id=f"P{number}", state=DoneTodoState,
+                assignment=None, order=delivered).insert(db)
+    with closing(CoordinationStore.writer(store.path)) as db:
+        indexes = tuple(name for name, in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"))
+        for name in indexes:
+            db.execute(f'DROP INDEX "{name}"')
+        db.commit()
+    assert TodoOpenIndexes.carry(tmp_path, apply=False).changed == 2
+    assert TodoOpenIndexes.carry(tmp_path, apply=True).changed == 2
+    assert TodoOpenIndexes.carry(tmp_path, apply=True).changed == 0
+
+    decoded = []
+    construct = FieldCodec.construct
+
+    def count(target, values):
+        if target is Todo:
+            decoded.append(values["id"])
+        return construct(target, values)
+
+    monkeypatch.setattr(FieldCodec, "construct", staticmethod(count))
+    assert store.for_commander(lead.incarnation) == (first, second)
+    assert decoded == ["P1", "P2"]
+    decoded.clear()
+    assert store.holds_pending(lead.incarnation)
+    assert decoded == ["P1", "P2"]
+    decoded.clear()
+    assert store.held_for_commander(lead.incarnation) == (first, second)
+    assert decoded == ["P1", "P2"]
+    decoded.clear()
+    assert store.held_by(lead.incarnation, "lead") == (first, second)
+    assert decoded == ["P1", "P2"]
+    decoded.clear()
+    assert store.held_by(lead.incarnation, "another-unit") == ()
+    assert decoded == []
+    with store.snapshot() as db:
+        states = TodoState.open_names()
+        placeholders = ','.join('?' for state in states)
+        plans = tuple(db.execute(f"EXPLAIN QUERY PLAN SELECT * FROM todo "
+            f"WHERE creator=? AND creator_created=? AND state IN ({placeholders})",
+            (lead.name, lead.created_at, *states)))
+        assert any("USING INDEX" in row[-1] for row in plans)
 
 
 def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Path) -> None:

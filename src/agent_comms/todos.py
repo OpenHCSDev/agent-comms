@@ -15,6 +15,7 @@ import time
 import asyncio
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 
@@ -27,7 +28,7 @@ from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, JsonStorage, TypedStore, TypedTable
+from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
@@ -134,21 +135,48 @@ class OperationDelivery(OrderDelivery):
 @dataclass(frozen=True)
 class PullRequest:
     number: int
-    title: str
+    branch: str
     head: str
     merge: str | None = None
     merged_at: float | None = None
     updated_at: float = 0.0
 
     @classmethod
-    def listed(cls, number: str, title: str, head: str, merge: str, merged: str,
+    def listed(cls, number: str, branch: str, head: str, merge: str, merged: str,
                updated: str) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
-        return cls(int(number), title, head, merge or None,
+        return cls(int(number), branch, head, merge or None,
                    _github_time(merged) if merged else None, _github_time(updated))
 
-    def names(self, problem: str) -> bool:
-        return re.search(rf"\b{re.escape(problem)}\b", self.title) is not None
+
+@dataclass(frozen=True)
+class OrderBranch(DeclaredFamily, affix="Branch"):
+    """The branch an order's checkout works on: the one link from an order to its pull requests."""
+
+    @classmethod
+    def checked_out(cls, checkout: Path) -> OrderBranch:
+        named = subprocess.run(("git", "-C", str(checkout), "symbolic-ref", "--short", "-q",
+                                "HEAD"), capture_output=True, text=True, timeout=30)
+        return NoOrderBranch() if named.returncode else CheckedOutBranch(named.stdout.strip())
+
+    @abstractmethod
+    def carries(self, pr: PullRequest) -> bool: ...
+
+
+@dataclass(frozen=True)
+class CheckedOutBranch(OrderBranch):
+    name: str
+
+    def carries(self, pr: PullRequest) -> bool:
+        return pr.branch == self.name
+
+
+@dataclass(frozen=True)
+class NoOrderBranch(OrderBranch):
+    """No checkout, or one with a detached HEAD: no pull request is the order's."""
+
+    def carries(self, pr: PullRequest) -> bool:
+        return False
 
 
 def _github_time(text: str) -> float:
@@ -169,8 +197,8 @@ class PullRequests:
     def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
         listed = subprocess.run(
             ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
-             "--json", "number,title,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
-             '.[] | [.number, .title, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
+             "--json", "number,headRefName,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
+             '.[] | [.number, .headRefName, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
              " .updatedAt] | @tsv"),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
@@ -193,10 +221,14 @@ class ProgressSource:
     def since(self) -> float:
         return self.todo.order.at.recorded_at("An order")
 
+    @cached_property
+    def branch(self) -> OrderBranch:
+        return OrderBranch.checked_out(self.checkout)
+
     def requests(self, state: str) -> list[PullRequest]:
-        """PRs naming the problem touched since the order; an older one served an earlier order."""
+        """PRs from the order's branch touched since the order; older ones served an earlier one."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state)
-                if pr.names(self.todo.id) and pr.updated_at >= self.since]
+                if self.branch.carries(pr) and pr.updated_at >= self.since]
 
     def commit(self, *excluded: str) -> tuple[str, float] | None:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
@@ -244,6 +276,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     @property
     def moved(self) -> float | None:
         return None
+
+    def untouched(self, now: float) -> bool:
+        """An open pull request nobody has touched for five minutes."""
+        return False
 
 
 @dataclass(frozen=True)
@@ -330,6 +366,9 @@ class OpenPrProgress(FoundProgress):
     @property
     def line(self) -> str:
         return f"PR #{self.number} open at {self.head}"
+
+    def untouched(self, now: float) -> bool:
+        return now - self.at > 300
 
 
 @dataclass(frozen=True)
@@ -881,6 +920,10 @@ class TodoState(DeclaredFamily, affix="TodoState"):
     open: ClassVar[bool] = True  # on the board until closed with installed evidence
 
     @classmethod
+    def open_names(cls) -> tuple[str, ...]:
+        return tuple(member.declared_name for member in cls.members_with(cls) if member.open)
+
+    @classmethod
     def prepare_change(cls, goals, current):
         pass
 
@@ -1086,6 +1129,31 @@ class CorrectCheckTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class WordingCorrection(TodoOperation):
+    """Core's answer to a published unit message whose words hide what happened; no strike."""
+    message_id: str
+    words: tuple[str, ...]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        corrections = (*current.corrections, self)
+        return replace(current, corrections=corrections, revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class OrderMessage(TodoOperation):
+    """The bus message the commander sent this order in; a verdict citing it lands here."""
+    actor: ThreadIncarnation
+    message_id: str
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        _text(self.message_id, "Order message ID", 200)
+        return replace(current, messages=(*current.messages, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class ServeTodo(TodoOperation):
     """The commander names the plan phase an open order serves; it keeps its id and holder."""
     actor: ThreadIncarnation
@@ -1197,6 +1265,8 @@ class ChangeTodoState(TodoOperation):
 
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
+
     id: str = field(metadata={"sql": Column(primary_key=True)})
     repo: str
     text: str
@@ -1213,6 +1283,8 @@ class Todo(TypedTable):
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
     verdicts: tuple[OrderVerdict, ...] = ()
+    corrections: tuple[WordingCorrection, ...] = ()
+    messages: tuple[OrderMessage, ...] = ()
 
     @property
     def pending(self):
@@ -1232,6 +1304,12 @@ class Todo(TypedTable):
     def holder(self) -> str | None:
         """The unit holding this problem; None once it is closed or released."""
         return None if self.assignment is None else self.assignment.owner
+
+    def held(self) -> Assignment:
+        """The open order's assignment; a problem nobody holds has no order work."""
+        if self.assignment is None:
+            raise TodoError(f"{self.id} has no open order.")
+        return self.assignment
 
     @property
     def strike_count(self) -> int:
@@ -1288,6 +1366,10 @@ class Todo(TypedTable):
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
         if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
             raise TodoConflict(self)
+
+    def sent_in(self, message_id: str) -> bool:
+        """Whether the commander sent this order in that bus message."""
+        return any(message.message_id == message_id for message in self.messages)
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
         if self.creator_identity != actor:
@@ -1395,18 +1477,35 @@ class TodoStore(TypedStore):
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
-        return any(todo.pending for todo in self._select(
+        return any(todo.pending for todo in self._open(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
             (owner.name, owner.wire_birth)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """The orders serving one request: a Goal on the commander's thread."""
-        return self._select(
+        return self._open(
             "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?", (commander.name, commander.created_at))
+        return self._open("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+
+    def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",
+            (commander.name, commander.wire_birth))
+
+    def held_by(self, commander: ThreadIncarnation, unit: str) -> tuple[Todo, ...]:
+        return self._open(
+            "creator=? AND creator_created=? AND json_extract(assignment,'$.owner')=?",
+            (commander.name, commander.wire_birth, unit))
+
+    def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+
+    def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        states = TodoState.open_names()
+        selected = ','.join('?' for state in states)
+        return self._select(f"state IN ({selected}) AND ({where})", (*states, *parameters))
 
     def create(
         self,
@@ -1456,6 +1555,19 @@ class TodoStore(TypedStore):
                 return current
             result.upsert(db)
             return self._current(db, todo_id)
+
+    def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
+        """Correct every open order the unit holds when its published text uses jargon."""
+        if not (words := tuple(PlainText.found(text))) or not self.path.exists():
+            return ()
+        with self.writing() as db:
+            held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
+                    if todo.state.open)
+            corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
+                              for todo in held)
+            for todo in corrected:
+                todo.upsert(db)
+            return corrected
 
     def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
         """Release every open problem the unit holds from this commander in one write; each

@@ -12,8 +12,9 @@ and ``tools`` on the path. Three rules make a step safe to run on any bus at any
   reuse of a deleted step's name.
 
 A step that can no longer run against the current source is deleted. Its code
-stays in Git: a bus whose ledger lacks it runs it from the last revision that
-held it (``tools/upgrade_bus.py``). So deleting a step never strands a bus.
+stays in Git: a bus whose ledger lacks it runs it from the revision that last wrote
+it, against the source it was written for (``tools/upgrade_bus.py``). So deleting a
+step never strands a bus.
 
 Each bus records the steps applied to it in ``carries.json``. Only this family
 reads or writes that file; nothing in ``src/`` depends on it.
@@ -293,12 +294,13 @@ class CarryChain:
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
-        """A step no longer in the tree, at the last revision that held it; None if
+        """A step no longer in the tree, at the main-line revision that last wrote it: the
+        source it was written against, not the later source beside its deletion. None if
         that revision held a plain script rather than a step."""
         path = f"{STEPS}/{name}.py"
-        deletion = git(repo, "log", "--no-renames", "-1", "--format=%H", "--diff-filter=D", revision, "--", path).decode().strip()
-        holder = git(repo, "rev-parse", f"{deletion}^").decode().strip()
-        return Step.declared(name, git(repo, "show", f"{holder}:{path}"), holder)
+        written = git(repo, "log", "-m", "--first-parent", "--no-renames", "-1", "--format=%H",
+                      "--diff-filter=AM", revision, "--", path).decode().strip()
+        return Step.declared(name, git(repo, "show", f"{written}:{path}"), written)
 
     def require_next(self, name: str, applied: tuple[str, ...]) -> None:
         """A step applies to a bus that already records it or whose next pending step it is.
@@ -366,6 +368,11 @@ class TodoColumnCarry(Carry):
             db.rollback()
             return count
         saved = f"{table}_before_{cls.column}"
+        indexes = tuple(db.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+            (table,)))
+        for name, in indexes:
+            db.execute(f'DROP INDEX "{name}"')
         db.execute(f'ALTER TABLE "{table}" RENAME TO "{saved}"')
         Todo.create(db)
         columns = Todo._column_list(expected)

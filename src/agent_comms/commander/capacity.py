@@ -18,9 +18,9 @@ BEAT_AGE = 10 * 60
 
 def load() -> tuple[float, str]:
     from . import judge, order
-    owed = [t for t in order.open_todos() if t.pending]
-    overdue = sum(1 for t in owed if time.time() > t.deadline.at)
-    unjudged = len(judge.unjudged())
+    owed = [t for t in order.held_orders() if t.pending]
+    overdue = sum(t.late_since(time.time()) is not None for t in owed)
+    unjudged = len(judge.Edit.unjudged())
     return len(owed) + 2 * overdue + unjudged / 10, f'{len(owed)} open orders, {overdue} overdue, {unjudged} unjudged edits'
 
 

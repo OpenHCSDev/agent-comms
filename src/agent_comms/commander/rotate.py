@@ -10,7 +10,7 @@ from .config import CommanderConfig
 CONFIG = CommanderConfig.installed()
 
 def unjudged(unit=None):
-    return sum(1 for e in judge.unjudged() if unit in (None, e['thread']))
+    return sum(1 for edit in judge.Edit.unjudged() if unit in (None, edit.thread))
 
 
 def broken_rules(after=0.0):
@@ -22,8 +22,8 @@ def broken_rules(after=0.0):
 def owed_orders() -> dict[str, list[Todo]]:
     """Each unit's open orders."""
     owed: dict[str, list[Todo]] = {}
-    for todo in order.open_todos():
-        owed.setdefault(todo.assignment.owner, []).append(todo)
+    for todo in order.held_orders():
+        owed.setdefault(todo.held().owner, []).append(todo)
     return owed
 
 
