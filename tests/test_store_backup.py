@@ -69,6 +69,43 @@ def test_no_conversion_has_no_snapshot_or_recovery_work(tmp_path):
     assert not destination.path.exists()
 
 
+def test_acp_conversion_backups_restore_registry_guard_and_ledger(private_comms, tmp_path):
+    from agent_comms.comms import Comms
+    from agent_comms.registry_store import RegistryStore
+    from agent_comms.store_files import _store_lock
+    from agent_comms.thread_identity import AcpThreadRole
+
+    root = private_comms.root
+    registry = private_comms.registry
+    registry.declare(registry.new_thread('worker', frozenset({'acp'}), str(tmp_path)))
+    store = RegistryStore(root / 'registry.json')
+    checkout = Path(__file__).resolve().parents[1]
+    chain = CarryChain.at(checkout, 'HEAD')
+    ledger = CarryLedger(root)
+    for step in chain.steps:
+        if step.name != 'carry_acp_roles':
+            ledger.record(step.name)
+    before = {path: path.read_bytes() for path in (store.path, store.guard_path, ledger.path)}
+    route = tmp_path / 'route.json'
+    route.write_text('unchanged route')
+    destination = StoreBackup(root, route, tmp_path / 'backup')
+    plan = PreparedCarries.at(checkout, root, destination, False)
+    assert isinstance(plan, PendingConversion)
+    assert [step.name for step, _ in plan.conversions] == ['carry_acp_roles']
+    assert set(plan.files) == set(before)
+    with _store_lock(root / 'wire'):
+        captured = plan.capture()
+        captured.apply(root)
+        assert Comms(root).registry.require('worker').role is AcpThreadRole
+        assert not captured.original()
+        assert PreparedCarries.at(checkout, root, destination, True) == NoConversion(root)
+        captured.backup.restore()
+    assert {path: path.read_bytes() for path in before} == before
+    assert not Comms(root).registry.require('worker').role.acp_thread(
+        Comms(root).registry.require('worker'))
+    assert route.read_text() == 'unchanged route'
+
+
 def test_ledger_does_not_repeat_a_recorded_conversion(tmp_path):
     checkout = Path(__file__).resolve().parents[1]
     chain = CarryChain.at(checkout, 'HEAD')

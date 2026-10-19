@@ -14,6 +14,11 @@ class AcpRoles(Carry):
     after = "carry_starting_activity"
 
     @classmethod
+    def backup_files(cls, root: Path) -> tuple[Path, ...]:
+        store = RegistryStore(root / "registry.json")
+        return store.path, store.guard_path
+
+    @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         store = RegistryStore(root / "registry.json")
         if not store.path.exists():
