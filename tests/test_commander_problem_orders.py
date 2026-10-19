@@ -385,7 +385,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
     assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
 
-    script.hunt(f'{__file__}:1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
+    script.hunt(f'{__file__}:1', 'P1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
     assert [h.sent for h in comms.goals.todos.get('P1').hunts] == [sent_back.order.id]
 
     (repo / 'count.txt').write_text('1\n')
@@ -425,11 +425,25 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
-    script.strike('worker', 'P1 left count.txt at zero and reported it fixed')
+    script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
     script.send('worker', '23:59', body, 'request')
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
     script.send('worker', '23:59', body, 'request')
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
+
+
+def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_why_cites(
+        commander, commander_script, monkeypatch):
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'post', lambda recipients, body: 'sent')
+    (repo / 'count.txt').write_text('0\n')
+    problem(script, order_body(repo))
+    create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
+    script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed')
+    assert [script.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
+    script.hunt(f'{__file__}:1', 'P2', 'P1 rereads the counter per event; this read of the P2 path found it clean', None)
+    assert [len(comms.goals.todos.get(pid).hunts) for pid in ('P1', 'P2')] == [0, 1]
 
 
 def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_module(
@@ -479,7 +493,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    script.strike('worker', 'P1 was sent back once before its check was corrected')
+    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
@@ -580,7 +594,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     create(commander, 'P1')
     posted = []
     monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
-    script.strike('worker', 'P1 was struck for lateness against the wrong delivered commit')
+    script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit')
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and script.struck(current, 'worker') == 0

@@ -35,7 +35,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 - **Rudeness carries intent and authority.** A polite order reads as a suggestion. Every order names what was stupid, slop or wrong and why; `order send` refuses an order with no blunt label unless `--clean`. Rude means blunt about the work, never slurs.
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
 - **Every order goes through `order send UNIT HH:MM BODYFILE`.** It refuses soft wording, orders without numbered edits, a report line or banned shapes, and records the deadline.
-- **Strikes, then fire.** A send-back, missed deadline, false claim or off-order edit is `order strike UNIT --why ...`. Two strikes on one task takes the task away the same tick and reassigns every board row the unit owns. `order done UNIT` only after reading the diff that meets the order.
+- **Strikes, then fire.** A send-back, missed deadline, false claim or off-order edit is `order strike UNIT PID --why ...`. Two strikes on one task takes the task away the same tick and reassigns every board row the unit owns. `order done UNIT` only after reading the diff that meets the order.
 - **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
 - **Judged against what the commander would have done.** If a unit action is not what you would have done given what it knew, say why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
@@ -59,7 +59,7 @@ Pick the next unit. Read its actual state, not its message: its worktree, `git l
 Update the board row, move on. One line per unit touched.
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
-- **Idle ticks hunt.** Never report "still waiting": read a hot path for per-event or per-history work and order the fix with `order hunt FILE:LINE --why ... --sent ORDER`.
+- **Idle ticks hunt.** Never report "still waiting": read a hot path for per-event or per-history work and order the fix with `order hunt FILE:LINE PID --why ... --sent ORDER`.
 
 ## Slop is a defined term
 
@@ -85,7 +85,7 @@ Update the board row, move on. One line per unit touched.
 
 ## The public record
 
-- **Every failure goes on the record in plain words.** `order strike UNIT --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically.
+- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically.
 - **Work lives on main or on a branch with a linked PR or issue.** The overdue loop lists branches ahead of main with no PR; each goes to its owner that tick.
 
 ## Orders
