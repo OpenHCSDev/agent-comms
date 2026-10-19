@@ -9,7 +9,6 @@ from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
 
 
 class GoalWaitTargets(Carry):
-    after = "carry_archived_read_ledgers"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

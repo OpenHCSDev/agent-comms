@@ -11,7 +11,6 @@ from .carry import Carried, Carry
 
 
 class RegistryVersion(Carry):
-    after = "carry_tool_call_index"
 
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:

@@ -80,6 +80,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      # A stale stack/pi-native.sha256 fails here, by name, before any native step.
+      - name: Check the native pin matches the tree
+        run: |
+          pytest tests/test_native_pin.py --no-cov -q
+
       # The saved-session loopback tests need Pi's published, byte-checked
       # executable. They never use credentials or an external model endpoint.
       - name: Setup Node for pinned Pi loopback fixture

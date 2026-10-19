@@ -35,7 +35,7 @@ from agent_comms.registry_store import RegistryNeedsConversion, RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
+from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
@@ -51,10 +51,10 @@ from tools.upgrade_bus import (
 REPO = Path(__file__).resolve().parents[1]
 
 
-def step_source(after: str | None) -> str:
+def step_source(family: str = "Carry") -> str:
     return (
-        "from cutover.carry import Carried, Carry\n\n"
-        f"class Step(Carry):\n    after = {after!r}\n\n"
+        f"from cutover.carry import Carried, {family}\n\n"
+        f"class Step({family}):\n"
         "    @classmethod\n    def carry(cls, root, *, apply):\n        return Carried(0)\n"
     )
 
@@ -70,102 +70,89 @@ class Repository:
         return subprocess.check_output(["git", "-C", str(self.path), *args], text=True, timeout=10).strip()
 
     def commit(self, steps: dict[str, str | None]) -> str:
-        for name, source in steps.items():
-            path = self.path / STEPS / f"{name}.py"
-            if source is None:
-                path.unlink()
-            else:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(source)
-        self.git("add", "--all")
-        self.git("commit", "-qm", "steps")
+        """One commit per step, in order, as the main line adds steps one at a time."""
+        for name, source in steps.items() or [(None, None)]:
+            if name is not None:
+                path = self.path / STEPS / f"{name}.py"
+                if source is None:
+                    path.unlink()
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(source)
+            self.git("add", "--all")
+            self.git("commit", "-qm", f"step {name}")
         return self.git("rev-parse", "HEAD")
 
 
-def test_steps_at_head_form_one_chain_and_each_module_declares_its_step():
-    chain = CarryChain.at(REPO, "HEAD")
-    names = [step.name for step in chain.steps]
-    assert chain.steps[0].after is None
-    assert [step.after for step in chain.steps[1:]] == names[:-1]
-    for step in chain.steps:
-        if step.revision == "HEAD":
-            (declared,) = [value for value in vars(importlib.import_module(f"cutover.{step.name}")).values()
-                           if isinstance(value, type) and issubclass(value, Carry) and value is not Carry]
-            assert declared.name() == step.name
-            assert declared.after == step.after
+def test_each_step_at_head_is_the_one_carry_its_module_declares():
+    for step in CarryChain.at(REPO, "HEAD").steps:
+        module = importlib.import_module(f"cutover.{step.name}")
+        (declared,) = [value for value in vars(module).values() if isinstance(value, type)
+                       and issubclass(value, Carry) and value.__module__ == module.__name__]
+        assert (declared.__name__, declared.name()) == (step.declaration, step.name)
+        assert declared.__mro__[1] is step.family
 
 
-def test_retained_read_ledger_still_reaches_its_cursor_conversions():
-    chain = CarryChain.at(REPO, "HEAD")
-    pending = chain.pending(("carry_read_ledger",))
-    names = [step.name for step in pending]
-    assert names.index("carry_p495_read_ledger") < names.index("carry_archived_read_ledgers")
-    assert names.index("carry_archived_read_ledgers") < names.index("carry_goal_wait_targets")
-    assert all(step.revision != "HEAD" for step in pending
-               if step.name in ("carry_p495_read_ledger", "carry_archived_read_ledgers"))
-
-
-def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
+def test_steps_run_in_the_order_the_main_line_merged_them(tmp_path):
+    """A merge brings in its side's steps in the order that side added them."""
     repo = Repository(tmp_path)
-    held = repo.commit({"carry_a": step_source(None), "carry_b": step_source("carry_a")})
-    repo.commit({"carry_a": None, "carry_c": step_source("carry_b")})
+    repo.commit({"carry_a": step_source()})
+    repo.git("checkout", "-qb", "side")
+    repo.commit({"carry_c": step_source(), "carry_d": step_source()})
+    repo.git("checkout", "-q", "-")
+    repo.commit({"carry_b": step_source()})
+    repo.git("merge", "-q", "--no-ff", "--no-edit", "side")
     chain = CarryChain.at(tmp_path, "HEAD")
-    assert [(step.name, step.revision) for step in chain.steps] == [
-        ("carry_a", held), ("carry_b", "HEAD"), ("carry_c", "HEAD")]
-    assert [step.name for step in chain.pending(())] == ["carry_a", "carry_b", "carry_c"]
-    assert [step.name for step in chain.pending(("carry_a",))] == ["carry_b", "carry_c"]
+    assert [step.name for step in chain.steps] == ["carry_a", "carry_b", "carry_c", "carry_d"]
     with pytest.raises(ValueError, match="skips a step"):
-        chain.pending(("carry_b",))
+        chain.pending(("carry_a", "carry_c"))
+
+
+def test_steps_one_commit_adds_together_are_refused(tmp_path):
+    repo = Repository(tmp_path)
+    for name in ("carry_a", "carry_b"):
+        (tmp_path / STEPS).mkdir(parents=True, exist_ok=True)
+        (tmp_path / STEPS / f"{name}.py").write_text(step_source())
+    repo.commit({})
+    with pytest.raises(UnorderedSteps, match="in one commit"):
+        CarryChain.at(tmp_path, "HEAD")
+
+
+def test_a_deleted_step_is_retired_and_never_runs_again(tmp_path):
+    repo = Repository(tmp_path)
+    repo.commit({"carry_a": step_source(), "carry_b": step_source(), "carry_c": step_source()})
+    repo.commit({"carry_b": None, "carry_d": step_source()})
+    chain = CarryChain.at(tmp_path, "HEAD")
+    assert [step.name for step in chain.steps] == ["carry_a", "carry_c", "carry_d"]
+    assert chain.retired == {"carry_b"}
+    assert [step.name for step in chain.pending(())] == ["carry_a", "carry_c", "carry_d"]
+    assert [step.name for step in chain.pending(("carry_a", "carry_b", "carry_c"))] == ["carry_d"]
+    assert [step.name for step in chain.pending(("carry_a",))] == ["carry_c", "carry_d"]
     with pytest.raises(ValueError, match="does not declare"):
         chain.pending(("carry_a", "carry_z"))
-    repo.commit({"carry_c": None})
-    assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
-        ("carry_a", held), ("carry_b", "HEAD")]
-
-
-
-def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):
-    """Finished migrations leave Git history but no longer enter the executable chain."""
-    repo = Repository(tmp_path)
-    repo.commit({"carry_external_pages": step_source(None)})
-    repo.commit({"carry_route_index": step_source("carry_external_pages"),
-                 "carry_wake_index": step_source("carry_route_index")})
-    repo.commit({"carry_route_index": None, "carry_wake_index": None})
-    repo.commit({"carry_display_counts": step_source("carry_external_pages")})
-    chain = CarryChain.at(tmp_path, "HEAD")
-    assert [step.name for step in chain.steps] == ["carry_external_pages", "carry_display_counts"]
-    assert [step.name for step in chain.pending(("carry_external_pages",))] == ["carry_display_counts"]
     with pytest.raises(ValueError, match="skips a step"):
-        chain.pending(("carry_display_counts",))
+        chain.pending(("carry_c",))
 
 
-def test_a_bus_that_ran_a_retired_step_plans_the_kept_steps_after_it(tmp_path):
-    """The live shape: steps retired after a bus ran them, and a newer step placed
-    before one it ran."""
+def test_a_todo_column_runs_before_the_row_steps_merged_ahead_of_it(tmp_path):
+    """Row steps read todos as today's Todo, so a later column step moves ahead of them;
+    a bus that ran those row steps before the column step existed still takes it."""
     repo = Repository(tmp_path)
-    repo.commit({"carry_pages": step_source(None)})
-    repo.commit({"carry_index": step_source("carry_pages"),
-                 "carry_run": step_source("carry_index")})
-    repo.commit({"carry_messages": step_source("carry_run")})
-    repo.commit({"carry_index": None, "carry_messages": step_source("carry_pages"),
-                 "carry_run": step_source("carry_messages")})
+    repo.commit({"carry_a": step_source(), "carry_rows": step_source("TodoRows"),
+                 "carry_b": step_source(), "carry_column": step_source("TodoColumnCarry")})
     chain = CarryChain.at(tmp_path, "HEAD")
-    assert [step.name for step in chain.steps] == ["carry_pages", "carry_messages", "carry_run"]
-    assert chain.retired == {"carry_index"}
-    assert [step.name for step in chain.pending(("carry_pages", "carry_index", "carry_run"))] == [
-        "carry_messages"]
-    with pytest.raises(ValueError, match="does not declare"):
-        chain.pending(("carry_pages", "carry_index", "carry_never"))
+    assert [step.name for step in chain.steps] == ["carry_a", "carry_column", "carry_rows", "carry_b"]
+    assert [step.name for step in chain.pending(("carry_a", "carry_rows", "carry_b"))] == [
+        "carry_column"]
     with pytest.raises(ValueError, match="skips a step"):
-        chain.pending(("carry_run",))
+        chain.pending(("carry_rows",))
 
 
 def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgrades_in_order(tmp_path):
     (tmp_path / "repo").mkdir()
     repo = Repository(tmp_path / "repo")
     runnable = "\nif __name__ == '__main__':\n    Step.main()\n"
-    repo.commit({"carry_a": step_source(None) + runnable, "carry_b": step_source("carry_a") + runnable,
-                 "carry_c": step_source("carry_b") + runnable})
+    repo.commit({name: step_source() + runnable for name in ("carry_a", "carry_b", "carry_c")})
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
         [str(REPO / "src"), str(REPO / "tools"), str(repo.path / "tools")])}
 
@@ -191,21 +178,10 @@ def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgra
     assert CarryLedger(ledgerless).applied() == ("carry_a", "carry_b", "carry_c")
 
 
-@pytest.mark.parametrize("steps", [
-    {"carry_a": step_source(None), "carry_b": step_source(None)},
-    {"carry_a": step_source(None), "carry_b": step_source("carry_a"), "carry_c": step_source("carry_a")},
-])
-def test_steps_that_do_not_form_one_chain_are_refused(tmp_path, steps):
-    repo = Repository(tmp_path)
-    repo.commit(steps)
-    with pytest.raises(ValueError, match="one chain"):
-        CarryChain.at(tmp_path, "HEAD")
-
-
 def test_a_carry_module_outside_the_chain_is_refused(tmp_path):
     """A conversion written as a standalone script would never run on an upgraded bus."""
     repo = Repository(tmp_path)
-    repo.commit({"carry_a": step_source(None),
+    repo.commit({"carry_a": step_source(),
                  "carry_script": "def carry(root):\n    pass\n"})
     with pytest.raises(ValueError, match="carry_script holds no Carry step"):
         CarryChain.at(tmp_path, "HEAD")
@@ -222,21 +198,21 @@ def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
 
 @pytest.mark.refactor_guard
 @pytest.mark.parametrize("change, edited", [
-    ({"carry_b": step_source("carry_a")}, 0),
-    ({"carry_a": step_source(None).replace("Carried(0)", "Carried(1)")}, 1),
-    ({"carry_a": step_source("carry_previous")}, 0),
-    ({"carry_a": step_source(None) +
+    ({"carry_b": step_source()}, 0),
+    ({"carry_a": step_source().replace("Carried(0)", "Carried(1)")}, 1),
+    ({"carry_a": step_source().replace("(Carry):\n", "(Carry):\n    after = 'carry_previous'\n")}, 0),
+    ({"carry_a": step_source() +
       "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 0),
-    ({"carry_a": step_source(None).replace("Carried(0)", "Carried(1)") +
+    ({"carry_a": step_source().replace("Carried(0)", "Carried(1)") +
       "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 1),
-    ({"carry_a": step_source(None) +
+    ({"carry_a": step_source() +
       "\n    @classmethod\n    def before_stop(cls, root, *, apply):\n        return Carried(1)\n"}, 1),
-    ({"carry_a": None, "carry_renamed": step_source(None)}, 1),
+    ({"carry_a": None, "carry_renamed": step_source()}, 1),
     ({"carry_a": None}, 0),
 ])
 def test_a_step_on_main_is_never_edited_renamed_or_reused(tmp_path, change, edited):
     repo = Repository(tmp_path)
-    base = repo.commit({"carry_a": step_source(None)})
+    base = repo.commit({"carry_a": step_source()})
     head = repo.commit(change)
     assert EditedCarry.compare(tmp_path, base, head, set(), "src") == (
         {"EditedCarry": 0}, {"EditedCarry": edited})
@@ -245,9 +221,9 @@ def test_a_step_on_main_is_never_edited_renamed_or_reused(tmp_path, change, edit
 @pytest.mark.refactor_guard
 def test_a_deleted_step_name_is_never_reused(tmp_path):
     repo = Repository(tmp_path)
-    repo.commit({"carry_a": step_source(None)})
+    repo.commit({"carry_a": step_source()})
     deleted = repo.commit({"carry_a": None})
-    readded = repo.commit({"carry_a": step_source(None)})
+    readded = repo.commit({"carry_a": step_source()})
     assert EditedCarry.compare(tmp_path, deleted, readded, set(), "src")[1] == {"EditedCarry": 1}
 
 
@@ -266,7 +242,7 @@ SPELLED = "    root: Annotated[str, Id128Text]\n"
 @pytest.mark.parametrize("before, version, fields, step, uncarried", [
     (PLAIN, 1, PLAIN + "    label: str\n", {}, 1),
     (PLAIN, 2, PLAIN + "    label: str\n", {}, 1),
-    (PLAIN, 2, PLAIN + "    label: str\n", {"carry_record": step_source(None)}, 0),
+    (PLAIN, 2, PLAIN + "    label: str\n", {"carry_record": step_source()}, 0),
     (PLAIN, 1, PLAIN + "    kind: ClassVar[str] = 'x'\n", {}, 0),
     (SPELLED, 1, "    root: Annotated[str, RootId]\n", {}, 0),
     (PLAIN, 1, SPELLED, {}, 1),
@@ -305,7 +281,7 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
     (repo.path / "src/probe_api.py").write_text("OLD = 1\nNEW = 2\n")
     newer = repo.commit({"carry_probe": (
         "from probe_api import NEW\n\nfrom cutover.carry import Carried, Carry\n\n\n"
-        "class Probe(Carry):\n    after = None\n\n"
+        "class Probe(Carry):\n"
         "    @classmethod\n    def before_stop(cls, root, *, apply):\n"
         "        (root / 'stopped').write_text(str(NEW))\n        return Carried(1, {}, ('stopped',))\n\n"
         "    @classmethod\n    def carry(cls, root, *, apply):\n"
@@ -407,7 +383,7 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     route.chmod(0o600)
 
     chain = CarryChain.at(REPO, "HEAD").steps
-    steps = {step.name: step.current(REPO) for step in chain if step.revision == "HEAD"}
+    steps = {step.name: step.current(REPO) for step in chain}
 
     def invoke(name, *flags):
         # Exercise the real CLI owner without starting a fresh interpreter for every
@@ -418,11 +394,6 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
         return json.loads(capsys.readouterr().out)
 
     for name in steps:
-        # The older bus ran each deleted step while the tree still held it.
-        for deleted in chain[len(CarryLedger(root).applied()):]:
-            if deleted.revision == "HEAD":
-                break
-            CarryLedger(root).record(deleted.name)
         before = bus_files(root)
         carried(root, before, [invoke(name)])
         applied = invoke(name, "--apply")
@@ -639,10 +610,10 @@ def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
         stack.require_uv()
 
 
-def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):
+def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
     """A bridge publishes from its own process, and the upgrade reads the store's files raw
-    for the backup and its digests. Neither may let the bridge write before the carry is
-    judged, nor into the failed bus an abort keeps as evidence."""
+    for the backup and its digests. The bridge may not write while those are read, nor into
+    the failed bus a restore keeps as evidence."""
     unit = comms.registry.declare(comms.registry.new_thread(
         "hold-unit", frozenset({"hold"}), str(comms.root), execution=ExternalThreadExecution))
     transcript = ExternalTranscript(comms.root, unit.incarnation)
@@ -670,6 +641,69 @@ def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms)
     name = str(ExternalTranscript.path_in(comms.root).relative_to(comms.root))
     assert backup.files() == before
     assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
+
+
+def rehearsed(stack: Stack, root: Path) -> dict:
+    from tools.upgrade_bus import rehearse
+    return rehearse(root, (), stack, None)
+
+
+def installed_live(stack: Stack, root: Path) -> dict:
+    from tools.upgrade_bus import live
+    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker")
+
+
+@pytest.mark.parametrize("install", [rehearsed, installed_live])
+def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path, monkeypatch, install):
+    """The d88a12185 rehearsal: ToolCallIndex's BEGIN IMMEDIATE timed out against the
+    installer's own transcript hold, which then stayed up across every carry."""
+    import tools.upgrade_bus as upgrade_bus
+    from cutover.carry_tool_call_index import ToolCallIndex
+
+    unit = comms.registry.declare(comms.registry.new_thread(
+        "index-unit", frozenset({"index"}), str(comms.root), execution=ExternalThreadExecution))
+    with ExternalTranscript(comms.root, unit.incarnation).writing():
+        pass
+    path = ExternalTranscript.path_in(comms.root)
+    with closing(CoordinationStore.writer(path)) as db, db:
+        for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'index' "
+                                   "AND sql IS NOT NULL").fetchall():
+            db.execute(f'DROP INDEX "{index}"')
+    monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
+    with transcripts_held(comms.root), pytest.raises(sqlite3.OperationalError, match="locked"):
+        ToolCallIndex.carry(comms.root, apply=True)
+
+    def tool_call_index(root, pending, staged, revisions):
+        return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
+
+    class Installed(Stack):
+        def cli(self, root, *arguments):
+            return {"threads": []}
+
+        def require_idle(self, root, names):
+            pass
+
+        def relock(self):
+            pass
+
+        def prepare_native(self):
+            pass
+
+        def verify(self, root):
+            return {"read": ExternalTranscript.path_in(root).exists()}
+
+    monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "")
+    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
+    # A rehearsal places the route under its own home, so the route sits under this one.
+    monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
+    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
+    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
+    result = install(Installed(tmp_path / "checkout", tmp_path / "home"), comms.root)
+    step, = result["steps"]
+    assert step["changed"] == step["indexes"] > 0
+    assert result["files"]["rewritten"] == 1
+    assert result["read"] == {"read": True}
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):

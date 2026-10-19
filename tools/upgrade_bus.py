@@ -36,7 +36,7 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from contextlib import ExitStack, contextmanager, suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -190,11 +190,9 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
         if "--before-stop" in flags:
             return TodoColumnCarry.before_stop(root, apply=True)
         return TodoColumnCarry.carry_step(
-            root, step, CarryChain.at(revisions.repo, step.chain_revision), apply=True)
+            root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
-    # Historical conversions use their own source, but their old CLI cannot decide
-    # the target chain's order or recognize steps added after that source revision.
     worker = (
         "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
         "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
@@ -222,7 +220,7 @@ def carry_all(
     for step in pending:
         with _store_lock(root / "wire"):
             result = CarryLedger(root).apply(
-                CarryChain.at(revisions.repo, step.chain_revision), step.name,
+                CarryChain.at(revisions.repo, step.revision), step.name,
                 lambda: carry(step, root, stack, revisions, "--apply"))
         results.append(result.report(step.name, True))
     return results
@@ -262,13 +260,19 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         stack.prepare_native()
         with transcripts_held(copy):
             before = bus_files(copy)
-            steps = [*before_stop(copy, pending, stack, revisions),
-                     *carry_all(copy, pending, stack, revisions)]
-            files = carried(copy, before, steps)
-            read = stack.verify(copy)
+        stopping = before_stop(copy, pending, stack, revisions)
         # Optional connector qualification belongs to its own round_trip command;
         # a native-only bus must not acquire a fabricated director to update.
-        return {"steps": steps, "files": files, "read": read}
+        return carry_and_read(copy, before, pending, stack, stack, revisions, stopping)
+
+
+def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
+                   reader: Stack, revisions: Revisions, stopping: list[dict]) -> dict:
+    """The pass a rehearsal and a live install share once ``before`` was read under the
+    transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
+    step's process, so a step that writes the transcript store could not run under it."""
+    steps = [*stopping, *carry_all(root, pending, staged, revisions)]
+    return {"steps": steps, "files": carried(root, before, steps), "read": reader.verify(root)}
 
 
 def route_readers(patience: int = 120) -> None:
@@ -395,16 +399,14 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         maintenance.clear(held)
         raise
     lock = installed.lock
-    transcripts = ExitStack()
     try:
         for name in running:
             installed.cli(root, "stop", "--name", name)
         route_readers()
-        transcripts.enter_context(transcripts_held(root))
-        backup = Backup.take(root, ROUTE, (root,),
-            root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
+        with transcripts_held(root):
+            backup = Backup.take(root, ROUTE, (root,),
+                root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
-        transcripts.close()
         maintenance.clear(held)
         start(installed, root, running)
         print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
@@ -415,24 +417,20 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         installed.relock()
         installed.prepare_native()
-        steps = carry_all(root, pending, staged, revisions)
-        files = carried(root, backup.files(), steps)
-        read = installed.verify(root)
+        passed = carry_and_read(root, backup.files(), pending, staged, installed, revisions, [])
         maintenance.clear(held)
         services = HostService.restart_running(installed.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
-        transcripts.close()
     except BaseException as error:
         state = maintenance.read()
         state.phase.hold_for(maintenance, state, MaintenanceOperator("upgrade-bus"))
-        transcripts.close()
         print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
               f"maintenance held, checkout and bus preserved; backup: {backup.path}",
               file=sys.stderr)
         raise
     start(installed, root, running)
-    return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
-            "services": services, "backup": str(backup.path)}
+    return {"stopped_and_started": running, **passed, "services": services,
+            "backup": str(backup.path)}
 
 
 def start(stack: Stack, root: Path, names: list[str]) -> None:

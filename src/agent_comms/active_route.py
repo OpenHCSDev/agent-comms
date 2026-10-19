@@ -32,6 +32,11 @@ class CommsRoute(ABC):
 
     root: Path
 
+    @classmethod
+    def current(cls, path: Path | None = None) -> CommsRoute:
+        """The published route, independent of any client root override."""
+        return read_active_route(path) or LocalRoute.default()
+
     def observe_root(self) -> Path:
         return self.root.resolve()
 
@@ -47,8 +52,7 @@ class CommsRoute(ABC):
         Independent private roots do not participate in default publication.
         Refuse a publication in progress rather than park a half-open client.
         """
-        published = read_active_route()
-        current_root = published.root if published else Path.home() / ".agent-comms"
+        current_root = CommsRoute.current().root
         if self.root.resolve() == current_root.resolve():
             with guard_default_route_write(self.root, blocking=False):
                 yield
@@ -60,6 +64,10 @@ class CommsRoute(ABC):
 @dataclass(frozen=True, slots=True)
 class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
+
+    @classmethod
+    def default(cls) -> LocalRoute:
+        return cls(Path.home() / ".agent-comms")
 
 
 
@@ -139,7 +147,7 @@ def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRou
         return LocalRoute(Path(root).expanduser().absolute())
     if "AGENT_COMMS_ROOT" in os.environ:
         return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute())
-    return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
+    return CommsRoute.current()
 
 
 class RoutePublicationUnknownError(RelationViolationError):
@@ -149,7 +157,7 @@ class RoutePublicationUnknownError(RelationViolationError):
 @contextmanager
 def guard_original_root_write(root: Path) -> Iterator[None]:
     """Fence a cooperating write through the historical root after migration."""
-    original_root = Path.home() / ".agent-comms"
+    original_root = LocalRoute.default().root
     if root.expanduser().resolve() == original_root.resolve():
         with guard_default_route_write(original_root):
             yield
@@ -229,7 +237,7 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
             raise ValueError("active comms route directory changed or is not owned")
         if stat.S_IMODE(info.st_mode) != 0o700:
             os.fchmod(directory, 0o700)
-        route = read_active_route(path) or LocalRoute(Path.home() / ".agent-comms")
+        route = CommsRoute.current(path)
         # Local roots may be created under this guard. ActiveRoute owns the
         # stronger observation of an already published root and its identity.
         if expected_root.expanduser().resolve() != route.observe_root():
