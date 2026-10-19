@@ -29,7 +29,7 @@ from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.restart_refusals import OwnerBusyRefusal
 from agent_comms.store_files import _atomic_write_text, _store_lock
-from .cutover.carry import CarryLedger, PreparedCarries
+from .cutover.carry import PreparedCarries
 from .cutover.backup import StoreBackup
 
 
@@ -120,9 +120,7 @@ class RuntimePublication:
         input is resubmitted. Unrelated maintenance and changed incarnations
         are refused rather than guessed.
         """
-        backup = self.unfinished_backup(root)
-        ledger = CarryLedger(backup.data_root if backup is not None else root)
-        carries = PreparedCarries.at(checkout, root, ledger.applied())
+        carries = PreparedCarries.at(checkout, root, self.backup(root), self.published())
         self.require_cli(root)
         path = active_route_path()
         route = read_active_route(path)
@@ -170,17 +168,16 @@ class RuntimePublication:
                         remaining.append(original.name)
                 request = OwnerRestartRequest(names=tuple(remaining),
                     source_interpreter=intent.previous + '/bin/python')
-                backup = self.unfinished_backup(root)
-                if backup is not None and not backup.original():
+                if not carries.original():
                     if any(original.process.alive() for original in intent.owners):
                         raise RuntimeError('Cannot restore data while an original worker is running')
-                    with _store_lock(root / 'wire'), self.selected_route(root):
-                        self.restore_backup(backup)
+                    with _store_lock(root / 'wire'):
+                        carries.restore_if_unpublished(self.published, lambda: self.selected_route(root))
                 with ExitStack() as publication:
                     publication.enter_context(resources)
                     # Runs before reader restoration, including when stopping or
                     # conversion failed. Unconfirmed data keeps readers stopped.
-                    publication.callback(self.release_if_safe, root, barrier, hold)
+                    publication.callback(self.release_if_safe, carries, barrier, hold)
                     HeldRuntimePublication(self.runtime, self.links, hold, intent.owners,
                                            carries).restart(comms.owners, request)
                     # Re-entering after process death has no in-memory handoff.
@@ -194,7 +191,7 @@ class RuntimePublication:
                 intent_path.unlink()
                 return tuple(original.name for original in intent.owners)
             finally:
-                self.release_if_safe(root, barrier, hold)
+                self.release_if_safe(carries, barrier, hold)
 
     def backup(self, root: Path) -> StoreBackup:
         key = hashlib.sha256(os.fsencode(root.resolve())).hexdigest()
@@ -204,24 +201,9 @@ class RuntimePublication:
     def published(self) -> bool:
         return StoppedOwnerInstallation.current_pointer().resolve(strict=True) == self.runtime.resolve()
 
-    def unfinished_backup(self, root: Path) -> StoreBackup | None:
-        backup = self.backup(root)
-        return backup if not self.published() and backup.path.exists() else None
-
-    def restore_backup(self, backup: StoreBackup | None) -> None:
-        if backup is not None and not self.published():
-            backup.restore()
-            backup.retire()
-
-    def release_if_safe(self, root: Path, barrier, hold: MaintenanceState) -> None:
-        if barrier.read() != hold:
-            return
-        backup = self.unfinished_backup(root)
-        if backup is not None:
-            if not backup.original():
-                return
-            backup.retire()
-        barrier.clear(hold)
+    def release_if_safe(self, carries: PreparedCarries, barrier, hold: MaintenanceState) -> None:
+        if barrier.read() == hold and carries.cleanup(self.published()):
+            barrier.clear(hold)
 
     @contextmanager
     def selected_route(self, root: Path):
@@ -261,25 +243,19 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
 
     def complete(self, stopped: StoppedOwnerBatch):
         root = stopped.lifecycle.root
-        backup = None
-        if self.carries.conversions:
-            destination = self.backup(root)
-            backup = StoreBackup.take(root, destination.route, self.carries.files, destination.path)
-            print(f'Backed up selected stores: {backup.path}', flush=True)
-        try:
+        with ExitStack() as conversion:
+            carries = self.carries.capture()
+            conversion.callback(carries.restore_if_unpublished, self.published,
+                                lambda: self.selected_route(root))
             # owner_restart.py:267 enters OwnerLifecycle.restart_wire(), retained
             # in stopped.ownership until this complete() returns or launches.
-            self.carries.apply(root)
+            carries.apply(root)
             # The CLI borrows the active route shared. Run it before the exclusive
             # pointer switch, while the stopped batch still holds the wire lock.
             self.require_cli(root, 'status')
             with self.selected_route(root):
                 if not self.published():
                     self.publish_links()
-        except BaseException:
-            with self.selected_route(root):
-                self.restore_backup(backup)
-            raise
         stopped.lifecycle.maintenance.clear_stopped(self.maintenance_hold, stopped.wire_descriptor)
         return stopped.launch(LaunchRuntime(self.runtime / 'bin/python'))
 

@@ -40,6 +40,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo, TodoStore
 from agent_comms.typed_table import TypedStore
+from .backup import StoreBackup
 
 STEPS = Path("tools/cutover")
 
@@ -435,22 +436,93 @@ class CarryChain:
         return tuple(step for step, applied_step in zip(self.steps, done) if not applied_step)
 
 
-@dataclass(frozen=True)
-class PreparedCarries:
-    """Resolve current conversions and their store scope once, before stopping readers."""
+class PreparedCarries(ABC):
+    """A resolved conversion choice owns its saved data and its failure behavior."""
 
+    @classmethod
+    def at(cls, checkout: Path, root: Path, destination: StoreBackup,
+           published: bool) -> PreparedCarries:
+        revision = git(checkout, 'rev-parse', 'HEAD').decode().strip()
+        chain = CarryChain.at(checkout, revision)
+        # Only a pending conversion can have left a publication backup. There
+        # is no empty snapshot whose missing ledger could mean an empty history.
+        source = (destination.data_root
+                  if not published and destination.path.exists() else root)
+        conversions = tuple((step, step.current(checkout))
+                            for step in chain.pending(CarryLedger(source).applied()))
+        if not conversions:
+            return NoConversion(root)
+        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
+            for _, conversion in conversions for path in conversion.backup_files(root)))))
+        return PendingConversion(chain, conversions, files, destination)
+
+    @property
+    @abstractmethod
+    def data_root(self) -> Path: ...
+
+    @abstractmethod
+    def capture(self) -> PreparedCarries: ...
+
+    @abstractmethod
+    def apply(self, root: Path) -> None: ...
+
+    @abstractmethod
+    def original(self) -> bool: ...
+
+    @abstractmethod
+    def restore_if_unpublished(self, published: Callable[[], bool], restoring: Callable) -> None: ...
+
+    @abstractmethod
+    def retire(self) -> None: ...
+
+    def cleanup(self, published: bool) -> bool:
+        if published:
+            return True
+        if not self.original():
+            return False
+        self.retire()
+        return True
+
+
+@dataclass(frozen=True)
+class NoConversion(PreparedCarries):
+    root: Path
+
+    @property
+    def data_root(self) -> Path:
+        return self.root
+
+    def capture(self) -> PreparedCarries:
+        return self
+
+    def apply(self, root: Path) -> None:
+        pass
+
+    def original(self) -> bool:
+        return True
+
+    def restore_if_unpublished(self, published: Callable[[], bool], restoring: Callable) -> None:
+        pass
+
+    def retire(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class PendingConversion(PreparedCarries):
     chain: CarryChain
     conversions: tuple[tuple[Step, type[Carry]], ...]
     files: tuple[Path, ...]
+    backup: StoreBackup
 
-    @classmethod
-    def at(cls, checkout: Path, root: Path, applied: tuple[str, ...]) -> PreparedCarries:
-        revision = git(checkout, 'rev-parse', 'HEAD').decode().strip()
-        chain = CarryChain.at(checkout, revision)
-        conversions = tuple((step, step.current(checkout)) for step in chain.pending(applied))
-        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
-            for _, conversion in conversions for path in conversion.backup_files(root)))))
-        return cls(chain, conversions, files)
+    @property
+    def data_root(self) -> Path:
+        return self.backup.data_root if self.backup.path.exists() else self.backup.root
+
+    def capture(self) -> PreparedCarries:
+        backup = StoreBackup.take(self.backup.root, self.backup.route, self.files, self.backup.path)
+        print(f'Backed up selected stores: {backup.path}', flush=True)
+        return replace(self, backup=backup)
 
     def apply(self, root: Path) -> None:
         ledger = CarryLedger(root)
@@ -460,6 +532,19 @@ class PreparedCarries:
             print(json.dumps(result.report(step.name, True)), flush=True)
             if conversion.carry(root, apply=False).changed:
                 raise RuntimeError(f'{step.name} did not finish its conversion')
+
+    def original(self) -> bool:
+        return not self.backup.path.exists() or self.backup.original()
+
+    def restore_if_unpublished(self, published: Callable[[], bool], restoring: Callable) -> None:
+        if not published():
+            with restoring():
+                self.backup.restore()
+                self.backup.retire()
+
+    def retire(self) -> None:
+        if self.backup.path.exists():
+            self.backup.retire()
 
 
 class TodoColumnCarry(TodoRows):
