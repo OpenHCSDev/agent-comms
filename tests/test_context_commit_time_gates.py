@@ -42,7 +42,7 @@ def _callers(name: str) -> set[str]:
     # notification, presentation or observation module opens it.
     ("open_evidence", {"attempt_recovery.py", "native_entries.py", "native_pi.py", "native_transcript.py"}),
     ("open_input_evidence", set()),
-    ("read_evidence", {"attempt_recovery.py", "historical_native_inputs.py", "native_pi.py"}),
+    ("read_evidence", {"attempt_recovery.py", "native_pi.py"}),
 ])
 def test_native_evidence_has_fixed_readers(name, owners):
     assert _callers(name) == owners
@@ -50,7 +50,7 @@ def test_native_evidence_has_fixed_readers(name, owners):
 
 @pytest.mark.refactor_guard
 @pytest.mark.parametrize("name", [
-    "recorded_times", "recorded_progress", "AssignmentContext", "RemovedContextProgress",
+    "recorded_times", "recorded_progress", "AssignmentContext", "RemovedContextProgress", "open_input_evidence",
 ])
 def test_rederived_read_time_is_deleted(name):
     for module, tree in _modules().items():
