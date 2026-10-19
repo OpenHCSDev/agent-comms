@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ObservedActivity
+from .channels import AllChannel
+from .messages import AlertKind
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion
@@ -218,9 +220,6 @@ class FailedTurn(EndedTurn):
     error: str
 
     def notify_failure(self, messaging, name: str) -> None:
-        from .channels import AllChannel
-        from .messages import AlertKind
-
         owner = messaging.registry.require(name)
         messaging.send(owner.name, owner.parent or AllChannel.declared_name,
             f"Turn {self.id} failed:\n{self.error}", type=AlertKind)

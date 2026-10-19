@@ -36,6 +36,7 @@ from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
+from .turn_lease import TurnEnding
 from .turn_phase import PreparingPhase, TurnPhase
 
 
@@ -273,8 +274,6 @@ class SelectedParticipant(MroDispatch):
             current.require_active_turn()
             yield current
         except BaseException as error:
-            from .turn_lease import TurnEnding
-
             comms.agents.finish_turn(lease, TurnEnding.from_exception(error))
             raise
         else:
