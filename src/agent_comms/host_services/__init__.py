@@ -48,7 +48,7 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
             instance.restart_onto(installed)
             for member in cls.members_with(cls)
             for instance in member.running()
-            if instance.runtime().parent.resolve().parent.parent == installation.resolve()
+            if instance.runtime().parent.resolve().is_relative_to(installation.resolve())
         )
 
     def restart_onto(self, installed: Path) -> str:

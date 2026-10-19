@@ -58,5 +58,13 @@ def test_only_running_services_restart_and_each_must_serve_the_installed_runtime
         HostService.restart_running(INSTALLED, INSTALLATION)
 
 
+def test_services_restart_only_inside_the_published_installation(host):
+    host.instances = [host(0)]
+    assert HostService.restart_running(INSTALLED, Path('/other-installation')) == ()
+    assert host.instances == [host(0)]
+    (report,) = HostService.restart_running(INSTALLED, INSTALLATION)
+    assert host.instances == [host(1)] and str(INSTALLED) in report
+
+
 def test_the_connector_is_a_declared_service():
     assert ConnectorService in HostService.members_with(HostService)

@@ -1080,7 +1080,7 @@ class Publication:
             replace_link(link, CURRENT / target.relative_to(self.runtime.path.resolve(strict=True)))
         self.move_extensions(previous)
         replace_link(CURRENT, self.runtime.path)
-        services = HostService.restart_running(self.runtime.python, previous.path.parent)
+        services = HostService.restart_running(self.runtime.python, self.runtime.path.parent)
         maintenance.clear(hold)
         return services
 
