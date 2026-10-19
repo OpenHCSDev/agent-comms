@@ -20,7 +20,7 @@ def test_native_draft_growth_throttle_and_retirement(tmp_path, monkeypatch):
     with store.writer_connection(check_same_thread=False) as connection:
         statements = []
         connection.set_trace_callback(lambda sql: statements.append((threading.get_ident(), sql)))
-        publication = TurnDraftPublication(store.lookup, connection, 'turn')
+        publication = TurnDraftPublication(store, connection, 'turn')
         publication.begin_message(1.0)
         turn = object.__new__(TrackedTurnSession)
         turn.text_parts = []
