@@ -1148,6 +1148,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
+    def reissued(self, at: float) -> PendingProblemOrder:
+        """This order sent again at ``at`` to a new owner, its first-call window kept."""
+        raise ValueError("Only an undelivered order can change owner.")
+
     @classmethod
     def pull_request_ids(cls, body: str) -> tuple[str, ...]:
         return tuple(line.removeprefix(cls.pull_request_label).strip()
@@ -1246,10 +1250,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
-        raise ValueError("Only an undelivered order can change owner.")
-
-    def reissued(self, at: float) -> PendingProblemOrder:
-        """This order sent again at ``at`` to a new owner, its first-call window kept."""
         raise ValueError("Only an undelivered order can change owner.")
 
     def untouched(self, touched: Sequence[str]) -> int:

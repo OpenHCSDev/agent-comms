@@ -34,21 +34,33 @@ class WheelSpin(StandingRule, declared_name=None):
         held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CommanderConfig.installed().parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
-        return sorted((thread for thread in comms.registry.all_threads().values()
-                       if thread.name not in excluded
-                       and TurnDigestRead(comms.root, thread, bound).native()),
-                      key=lambda thread: thread.name)
+        return sorted(
+            (
+                thread
+                for thread in comms.registry.all_threads().values()
+                if thread.name not in excluded
+                and TurnDigestRead(comms.root, thread, bound).native()
+            ),
+            key=lambda thread: thread.name,
+        )
 
     def assign(self, comms: Comms, commander: str, unit: Thread) -> None:
         """The order sent again to ``unit`` through its Goal, with the order's own text."""
         todo = comms.goals.todos.get(self.todo.id)
         order = todo.order.reissued(time.time())
-        comms.goals.update_goal(unit.name, OrderGoalAction(
-            problem=todo.id, expected_revision=todo.revision, order=order,
-            request=todo.goal.request(), deadline=todo.deadline, commander=commander,
-            traced=todo.order.owner))
+        comms.goals.update_goal(
+            unit.name,
+            OrderGoalAction(
+                problem=todo.id,
+                expected_revision=todo.revision,
+                order=order,
+                request=todo.goal.request(),
+                deadline=todo.deadline,
+                commander=commander,
+                traced=order.owner,
+            ),
+        )
         comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(todo)}")
-
 
 
 @dataclass(frozen=True)
@@ -59,11 +71,16 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.paired(comms, commander, comms.goals.todos.for_commander(
-            comms.registry.require(commander).incarnation))
+        return cls.paired(
+            comms,
+            commander,
+            comms.goals.todos.for_commander(comms.registry.require(commander).incarnation),
+        )
 
     @classmethod
-    def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
+    def paired(
+        cls, comms: Comms, commander: str, todos: Iterable[Todo]
+    ) -> tuple[UnownedWheelSpin, ...]:
         """Each unowned pending row with the first idle unit not struck on it."""
         rows = (todo for todo in todos if todo.pending and not todo.holder)
         idle, found = cls.idle(comms, commander), []
@@ -76,8 +93,10 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         return tuple(found)
 
     def line(self) -> str:
-        return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
-                f" -> Core gives it to {self.unit}")
+        return (
+            f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
+            f" -> Core gives it to {self.unit}"
+        )
 
     def enforce(self, comms: Comms, commander: str) -> None:
         self.assign(comms, commander, comms.registry.require(self.unit))

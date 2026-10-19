@@ -16,9 +16,8 @@ from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
 
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
-from .declared_family import declared_words
 from .cli_options import JsonFlagRecord
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireValue
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
@@ -171,7 +170,7 @@ class BirthlessIncarnation(ThreadIncarnation):
     WIRE_BIRTH: ClassVar[float]
     members: ClassVar[dict[float, type[BirthlessIncarnation]]] = {}
 
-    def __init_subclass__(cls, **kwargs) -> None:
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         if cls.WIRE_BIRTH in BirthlessIncarnation.members:
             raise TypeError(f"Wire birth {cls.WIRE_BIRTH} is already declared")
@@ -295,8 +294,9 @@ class ThreadIncarnationRecord:
     created_at: float
 
     def incarnation(self) -> ThreadIncarnation:
-        member = BirthlessIncarnation.members.get(self.created_at)
-        return RecordedThreadIncarnation(self.name, self.created_at) if member is None else member(self.name)
+        if self.created_at in BirthlessIncarnation.members:
+            return BirthlessIncarnation.members[self.created_at](self.name)
+        return RecordedThreadIncarnation(self.name, self.created_at)
 
     @classmethod
     def decode(cls, name: str, birth: float) -> ThreadIncarnation:
