@@ -16,9 +16,7 @@ from agent_comms.selected_tool_broker import verify_sent_full_input
 
 def reply(tmp_path: Path, error: Exception) -> str:
     """What the agent reads as the tool result when the owner refuses a call."""
-    directory = tmp_path / "socket"
-    directory.mkdir(mode=0o700, exist_ok=True)
-    return CodingToolSocket(directory, secrets.token_hex(32), None).failure_response(error)["error"]
+    return CodingToolSocket.failure_response(error)["error"]
 
 
 def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_path):

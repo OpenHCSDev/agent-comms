@@ -1,6 +1,7 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
 import json
+import os
 import secrets
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -116,7 +117,7 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
 
 
 @pytest.mark.asyncio
-async def test_malformed_edit_reports_error_and_allows_a_later_tool_round(tmp_path):
+async def test_malformed_edit_reports_error_and_allows_a_later_tool_round(tmp_path, tool_listener):
     from agent_comms.native_tool_call import SelectedToolDenied
     from agent_comms.selected_tool_broker import consume_selected_slot
 
@@ -131,7 +132,7 @@ async def test_malformed_edit_reports_error_and_allows_a_later_tool_round(tmp_pa
             return NoRoomNeeded()
 
     owner = Owner()
-    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
     socket.turn = object()
     malformed = {"path": "x", "edits": [{"oldText": "old", "newText": "new", "newText_should_not_exist": "extra"}]}
     for id, name, args in (("bad-edit", "edit", malformed), ("later-read", "read", {"path": "x"})):
@@ -166,7 +167,7 @@ def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
 
 
 @pytest.mark.asyncio
-async def test_multicall_native_transport_matches_events_and_refuses_duplicate(tmp_path):
+async def test_multicall_native_transport_matches_events_and_refuses_duplicate(tmp_path, tool_listener):
     class Owner:
         input_id = secrets.token_hex(16)
         calls = []
@@ -177,7 +178,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
 
     owner = Owner()
     tmp_path.chmod(0o700)
-    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
     socket.turn = object()
     # Actual owner claim_scope/storage is covered separately. This exercises the
     # strict native-event/socket correlation and multiple normal tool calls.
@@ -189,7 +190,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
     for id, name, args in calls:
         socket.tool_started(ToolExecutionStart(tool_call_id=id, tool_name=name, args=args))
         raw = (
-            json.dumps({"token": socket.token, "call_id": id, "name": name, "arguments": args})
+            json.dumps({"token": socket.listener.token, "call_id": id, "name": name, "arguments": args})
             + "\n"
         ).encode()
         assert await socket.handle_request(raw) == {"ok": True}
@@ -210,12 +211,12 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
 
 def _request(socket, id, name, args):
     return (
-        json.dumps({"token": socket.token, "call_id": id, "name": name, "arguments": args}) + "\n"
+        json.dumps({"token": socket.listener.token, "call_id": id, "name": name, "arguments": args}) + "\n"
     ).encode()
 
 
 @pytest.mark.asyncio
-async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_path):
+async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_path, tool_listener):
     import asyncio
 
     checking, release = asyncio.Event(), asyncio.Event()
@@ -229,7 +230,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
             return NoRoomNeeded()
 
     owner = Owner()
-    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
     socket.turn = object()
     socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
     socket.tool_started(ToolExecutionStart(tool_call_id="late", tool_name="read", args={"path": "a"}))
@@ -244,7 +245,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("refused", [False, True])
-async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog, refused):
+async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog, refused, tool_listener):
     """The live owner logged two tracebacks when Pi gave up on a slow tool check."""
     import asyncio
     import os
@@ -263,14 +264,13 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
             return NoRoomNeeded()
 
     tmp_path.chmod(0o700)
-    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
+    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
     socket.turn = object()
-    socket.expected_pid = os.getpid()
     await socket.start()
     try:
         call = ("slow", "read", {"path": "a"})
         socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
-        reader, writer = await asyncio.open_unix_connection(str(socket.address))
+        reader, writer = await asyncio.open_unix_connection(str(socket.listener.address))
         writer.write(_request(socket, *call))
         await writer.drain()
         # Pi's side: stop waiting and reset the connection before the owner
@@ -292,7 +292,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
 
 
 @pytest.mark.asyncio
-async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(tmp_path):
+async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(tmp_path, tool_listener):
     import asyncio
     import os
 
@@ -303,13 +303,12 @@ async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(t
             raise AssertionError("an unstarted call was checked")
 
     tmp_path.chmod(0o700)
-    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
+    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
     socket.turn = object()
     call = ("never", "read", {"path": "a"})
     socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
-    socket.bind_process(os.getpid())
     await socket.start()
-    reader, writer = await asyncio.open_unix_connection(str(socket.address))
+    reader, writer = await asyncio.open_unix_connection(str(socket.listener.address))
     try:
         writer.write(_request(socket, *call))
         await writer.drain()

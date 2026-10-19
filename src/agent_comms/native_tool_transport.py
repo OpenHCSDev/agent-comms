@@ -13,16 +13,21 @@ from contextlib import AsyncExitStack, ExitStack
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Generic, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .child_process import join_retirement
 from .field_codec import MalformedRecord, Token256Text
-from .native_tool_call import NativeToolCall, OwnerToolConnection, SelectedToolDenied, DuplicateToolCallIdentity
+from .native_tool_call import (
+    DuplicateToolCallIdentity,
+    NativeToolCall,
+    OwnerToolConnection,
+    SelectedToolDenied,
+)
 from .pi_payloads import PiContent, ToolCallContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 
 if TYPE_CHECKING:
-    from .pi_events import ToolExecutionStart, ToolExecutionEnd
+    from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
 _LOG = logging.getLogger(__name__)
 
@@ -182,29 +187,8 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
 
 
 
-class ToolTransport(Generic[Call]):
-    """Authenticated native child transport; the policy decides which requests may run."""
-
-    max_request = 1024 * 1024
-
-    @property
-    def connection(self) -> OwnerToolConnection:
-        return OwnerToolConnection(str(self.address), self.token)
-
-    @property
-    def retainable(self) -> bool:
-        return True
-
-    @classmethod
-    async def open(cls, turn, ownership, *policy):
-        transport = cls(turn.launch.session.directory, os.urandom(32).hex(), *policy)
-        transport.turn = turn
-        ownership.push_async_callback(transport.close)
-        await transport.start()
-        return transport
-
-    def bind_process(self, pid: int) -> None:
-        self.expected_pid = pid
+class ToolListener:
+    """One private endpoint and joined resource lifetime, independent of child binding."""
 
     def __init__(self, directory: Path, token: str) -> None:
         try:
@@ -212,9 +196,87 @@ class ToolTransport(Generic[Call]):
         except MalformedRecord as error:
             raise ValueError("Selected tool transport requires a random 256-bit token") from error
         self.path = Path(directory).absolute() / "s"
-        self._resources = AsyncExitStack()
         self.token = token
-        self.expected_pid: int | None = None
+        self._resources = AsyncExitStack()
+        if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
+            raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
+        PrivateDirectoryRole.require(self.path.parent.lstat())
+        if self.path.parent.resolve() != self.path.parent:
+            raise SelectedToolDenied("Selected tool socket parent is not private")
+        if self.path.exists() or self.path.is_symlink():
+            raise SelectedToolDenied("Selected tool socket already exists")
+        with ExitStack() as prepared:
+            self.address = prepared.enter_context(PrivateSocketRole.address(self.path))
+            self.socket = prepared.enter_context(socket.socket(socket.AF_UNIX))
+            self.socket.bind(str(self.address))
+            prepared.callback(self.path.unlink, missing_ok=True)
+            os.chmod(self.path, 0o600)
+            self._resources.enter_context(prepared.pop_all())
+
+    @property
+    def connection(self) -> OwnerToolConnection:
+        return OwnerToolConnection(str(self.address), self.token)
+
+    async def listen(self, transport: ToolTransport) -> None:
+        try:
+            self.server = await asyncio.start_unix_server(
+                transport._handle, sock=self.socket, limit=transport.max_request + 1,
+                start_serving=False, cleanup_socket=False,
+            )
+            self._resources.push_async_callback(transport._drain_calls)
+            self._resources.push_async_callback(self.server.wait_closed)
+            self._resources.push_async_callback(transport._drain_handlers)
+            self._resources.callback(self.server.close)
+            await self.server.start_serving()
+        except BaseException:
+            await self.close()
+            raise
+
+    @cached_property
+    def _retirement(self) -> asyncio.Task[None]:
+        return asyncio.create_task(self._resources.aclose())
+
+    async def close(self) -> None:
+        await join_retirement(self._retirement)
+
+
+@dataclass(frozen=True)
+class UnboundToolTransport(Generic[Call]):
+    """A prepared endpoint cannot accept requests until its actual child exists."""
+
+    listener: ToolListener
+    bind: Callable[[int], ToolTransport[Call]]
+
+    async def bind_process(self, pid: int) -> ToolTransport[Call]:
+        transport = self.bind(pid)
+        await transport.start()
+        return transport
+
+
+class ToolTransport(Generic[Call]):
+    """A child-bound request policy. An instance always has its authenticated PID."""
+
+    max_request = 1024 * 1024
+
+    @property
+    def retainable(self) -> bool:
+        return True
+
+    @classmethod
+    async def open(cls, turn, ownership, *policy) -> UnboundToolTransport:
+        listener = ToolListener(turn.launch.session.directory, os.urandom(32).hex())
+        ownership.push_async_callback(listener.close)
+
+        def bind(pid: int):
+            transport = cls(listener, *policy, pid=pid)
+            transport.turn = turn
+            return transport
+
+        return UnboundToolTransport(listener, bind)
+
+    def __init__(self, listener: ToolListener, *, pid: int) -> None:
+        self.listener = listener
+        self.expected_pid = pid
         self.calls: NativeToolCallTable[Call] = NativeToolCallTable()
         self._handlers: set[asyncio.Task] = set()
 
@@ -248,7 +310,7 @@ class ToolTransport(Generic[Call]):
             event.tool_call_id, "Native tool terminal has no declared call"
         )
         call.finish(
-            event.tool_name, event.is_error, self.path.parent, input_id,
+            event.tool_name, event.is_error, self.listener.path.parent, input_id,
             identity.round_number,
         )
 
@@ -267,44 +329,18 @@ class ToolTransport(Generic[Call]):
         await call.authorize(lambda: self.allow(self.calls.identity_for(call).round_number, call))
         return {"ok": True}
 
-    def failure_response(self, error: Exception) -> dict[str, object]:
+    @staticmethod
+    def failure_response(error: Exception) -> dict[str, object]:
         return {"ok": False, "error": "Selected tool denied or outcome UNKNOWN; no retry"}
 
     async def start(self) -> None:
-        if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
-            raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
-        info = self.path.parent.lstat()
-        if PrivateDirectoryRole.violation(info) is not None or self.path.parent.resolve() != self.path.parent:
-            raise SelectedToolDenied("Selected tool socket parent is not private")
-        if self.path.exists() or self.path.is_symlink():
-            raise SelectedToolDenied("Selected tool socket already exists")
-        try:
-            self.address = self._resources.enter_context(PrivateSocketRole.address(self.path))
-            listener = self._resources.enter_context(socket.socket(socket.AF_UNIX))
-            listener.bind(str(self.address))
-            self._resources.callback(self.path.unlink, missing_ok=True)
-            os.chmod(self.path, 0o600)
-            self._server = await asyncio.start_unix_server(
-                self._handle, sock=listener, limit=self.max_request + 1,
-                start_serving=False, cleanup_socket=False,
-            )
-            self._resources.push_async_callback(self._server.wait_closed)
-            self._resources.push_async_callback(self._drain_handlers)
-            self._resources.callback(self._server.close)
-            await self._server.start_serving()
-        except BaseException:
-            await self.close()
-            raise
-
-    @cached_property
-    def _retirement(self) -> asyncio.Task[None]:
-        return asyncio.create_task(self._close())
+        await self.listener.listen(self)
 
     async def close(self) -> None:
-        await join_retirement(self._retirement)
+        await self.listener.close()
 
-    async def _close(self) -> None:
-        await self._resources.aclose()
+    async def _drain_calls(self) -> None:
+        """Retire policy-owned call resources after handler and server retirement."""
 
     async def _drain_handlers(self) -> None:
         handlers = tuple(self._handlers)
@@ -328,11 +364,9 @@ class ToolTransport(Generic[Call]):
     async def _reply(self, reader: asyncio.StreamReader,
                      writer: asyncio.StreamWriter) -> ToolConnectionOutcome:
         try:
-            if not self._server.is_serving():
+            if not self.listener.server.is_serving():
                 raise SelectedToolDenied("Owner tool socket is closed")
             sock = writer.get_extra_info("socket")
-            if sock is None or self.expected_pid is None:
-                raise SelectedToolDenied("Selected tool child is not bound")
             pid, uid, _gid = struct.unpack(
                 "3i", sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
             )
@@ -344,7 +378,7 @@ class ToolTransport(Generic[Call]):
                 return ToolChildGone("unanswered")
             response = await self.handle_request(raw)
             answer = "allowed"
-        except (ValueError, TimeoutError) as error:
+        except (SelectedToolDenied, MalformedRecord) as error:
             # Only declared denials and malformed child input become a refusal.
             # Owner defects propagate; they never become a successful answer.
             response = self.failure_response(error)

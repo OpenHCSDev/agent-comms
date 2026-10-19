@@ -9,6 +9,8 @@ import os
 import secrets
 import sys
 from pathlib import Path
+from contextlib import AsyncExitStack
+from types import SimpleNamespace
 
 import pytest
 
@@ -34,7 +36,7 @@ def _wire(token: str, **changes: object) -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> None:
+async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path, tool_listener) -> None:
     class Owner:
         input_id = secrets.token_hex(16)
 
@@ -44,7 +46,7 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
 
     tmp_path.chmod(0o700)
     owner = Owner()
-    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
     socket.turn = owner
     first_arguments = {"path": "one"}
     socket.announce((ToolCallContent(id="reused", name="read", arguments=first_arguments),))
@@ -52,7 +54,7 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
         ToolExecutionStart(tool_call_id="reused", tool_name="read", args=first_arguments)
     )
     request = json.dumps({
-        "token": socket.token,
+        "token": socket.listener.token,
         "call_id": "reused",
         "name": "read",
         "arguments": first_arguments,
@@ -68,7 +70,7 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
 
     second_arguments = {"path": "two"}
     second_request = json.dumps({
-        "token": socket.token,
+        "token": socket.listener.token,
         "call_id": "reused",
         "name": "read",
         "arguments": second_arguments,
@@ -93,14 +95,14 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     assert first.slot(owner.input_id, 0) != second.slot(owner.input_id, 1)
 
 
-def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(tmp_path: Path) -> None:
+def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(tmp_path: Path, tool_listener) -> None:
     class Owner:
         input_id = secrets.token_hex(16)
 
         async def allow(self, round_number, call) -> None:
             raise AssertionError("invalid round must not allow a call")
 
-    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
+    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
     repeated = ToolCallContent(id="duplicate", name="read", arguments={"path": "one"})
     with pytest.raises(DuplicateToolCallIdentity, match="repeats call identity 'duplicate'"):
         socket.announce((repeated, repeated))
@@ -326,18 +328,23 @@ def test_post_reservation_effect_unknown_is_never_retried(
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
-def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) -> None:
+def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path, tool_listener) -> None:
     tmp_path.chmod(0o700)
     token = secrets.token_hex(32)
     observed: list[broker.SelectedToolRequest] = []
 
     async def run() -> None:
-        server = broker.SelectedToolSocket(tmp_path, token, observed.append)
+        wrong = broker.SelectedToolSocket(
+            tool_listener(tmp_path, token), observed.append, pid=os.getpid() + 100000)
+        await wrong.start()
+        try:
+            assert not await query(wrong.listener.path, _wire(token))
+        finally:
+            await wrong.close()
+        server = broker.SelectedToolSocket(
+            tool_listener(tmp_path, token), observed.append, pid=os.getpid())
         await server.start()
         try:
-            server.expected_pid = os.getpid() + 100000
-            assert not await query(server.path, _wire(token))
-            server.expected_pid = os.getpid()
             for changes in (
                 {"resource": "../escape"},
                 {"resource": "/absolute"},
@@ -348,10 +355,10 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) ->
                 {"contents": "\ud800"},
                 {"root": "forged"},
             ):
-                assert not await query(server.path, _wire(token, **changes))
+                assert not await query(server.listener.path, _wire(token, **changes))
             assert not observed and not server.calls
             arguments = {"resource": "notes.txt", "contents": "é"}
-            pending = asyncio.create_task(query(server.path, _wire(token)))
+            pending = asyncio.create_task(query(server.listener.path, _wire(token)))
             await asyncio.sleep(0)
             assert not pending.done()  # Socket arrival is not a native start.
             server.announce(
@@ -371,8 +378,8 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) ->
                 )
             )
             assert await pending
-            assert not await query(server.path, _wire("0" * 64))
-            assert not await query(server.path, _wire(token))  # Consumed exactly once.
+            assert not await query(server.listener.path, _wire("0" * 64))
+            assert not await query(server.listener.path, _wire(token))  # Consumed exactly once.
             assert observed == [
                 broker.SelectedToolRequest(
                     "call_1", broker.SelectedWriteArguments("notes.txt", "é")
@@ -380,7 +387,7 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) ->
             ]
         finally:
             await server.close()
-        assert not server.path.exists()
+        assert not server.listener.path.exists()
 
     async def query(path: Path, payload: bytes) -> bool:
         reader, writer = await asyncio.open_unix_connection(str(path))
@@ -411,17 +418,11 @@ async def test_shipped_javascript_tool_uses_authenticated_owner_socket(tmp_path)
         target.write_text(request.arguments.contents)
         broker.record_selected_terminal(tmp_path, input_id, request.call_id)
 
-    socket = broker.SelectedToolSocket(tmp_path, token, commit)
+    resources = AsyncExitStack()
+    unbound = await broker.SelectedToolSocket.open(
+        SimpleNamespace(launch=SimpleNamespace(session=SimpleNamespace(directory=tmp_path))),
+        resources, commit)
     arguments = {"resource": "notes.txt", "contents": "paired producer é"}
-    socket.announce(
-        (ToolCallContent(id="paired", name="selected_claimed_write", arguments=arguments),)
-    )
-    socket.tool_started(
-        ToolExecutionStart(
-            tool_call_id="paired", tool_name="selected_claimed_write", args=arguments
-        )
-    )
-    await socket.start()
     process = None
     try:
         extension = Path(broker.__file__).with_name("selected_claimed_write.mjs")
@@ -433,14 +434,20 @@ async def test_shipped_javascript_tool_uses_authenticated_owner_socket(tmp_path)
 import {{OwnerToolConnection}} from {json.dumps(extension.with_name('owner_tool_socket.mjs').as_uri())};
 let tool;
 register({{registerTool(value) {{tool = value}}}});
+await new Promise(resolve => process.stdin.once('data', resolve));
 await tool.execute('paired', {json.dumps(arguments)}, new AbortController().signal, undefined,
-    {{ownerTools: OwnerToolConnection.capture({json.dumps({'path': str(socket.address), 'token': token})})}});
+    {{ownerTools: OwnerToolConnection.capture({json.dumps({'path': str(unbound.listener.address), 'token': token})})}});
 """,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        socket.expected_pid = process.pid
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
+        socket = await unbound.bind_process(process.pid)
+        socket.announce((ToolCallContent(
+            id="paired", name="selected_claimed_write", arguments=arguments),))
+        socket.tool_started(ToolExecutionStart(
+            tool_call_id="paired", tool_name="selected_claimed_write", args=arguments))
+        stdout, stderr = await asyncio.wait_for(process.communicate(input=b"go"), timeout=5)
         assert process.returncode == 0, (stdout, stderr)
         socket.tool_finished(
             ToolExecutionEnd(
@@ -454,4 +461,4 @@ await tool.execute('paired', {json.dumps(arguments)}, new AbortController().sign
         if process is not None and process.returncode is None:
             process.kill()
             await process.wait()
-        await socket.close()
+        await resources.aclose()

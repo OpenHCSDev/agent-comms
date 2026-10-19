@@ -4,6 +4,8 @@ import asyncio
 import json
 import os
 import secrets
+import socket as sockets
+from contextlib import AsyncExitStack
 from types import SimpleNamespace
 
 import pytest
@@ -12,12 +14,13 @@ import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.native_tool_transport import ToolTransport, UnboundToolTransport
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
 
 @pytest.fixture(params=["coding", "selected"])
-def policy(request, tmp_path):
+def policy(request, tmp_path, tool_listener):
     tmp_path.chmod(0o700)
     token, input_id = secrets.token_hex(32), secrets.token_hex(16)
     effects = []
@@ -38,11 +41,11 @@ def policy(request, tmp_path):
         return NoRoomNeeded()
 
     socket = (
-        broker.SelectedToolSocket(tmp_path, token, lambda call: commit(call, 0))
+        broker.SelectedToolSocket(tool_listener(tmp_path, token), lambda call: commit(call, 0), pid=os.getpid())
         if selected
         else CodingToolSocket(
-            tmp_path, token,
-            SimpleNamespace(allow=allow_coding),
+            tool_listener(tmp_path, token),
+            SimpleNamespace(allow=allow_coding), pid=os.getpid(),
         )
     )
 
@@ -323,8 +326,7 @@ async def test_lost_terminal_receipt_cannot_be_replaced_by_error(policy, monkeyp
 async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     p = policy
     await p.socket.start()
-    p.socket.expected_pid = os.getpid()
-    reader, writer = await asyncio.open_unix_connection(str(p.socket.path))
+    reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.path))
     writer.write(p.raw())
     await writer.drain()
     async with asyncio.timeout(2):
@@ -334,7 +336,7 @@ async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     assert await reader.read() == b""
     writer.close()
     await writer.wait_closed()
-    assert not p.socket.path.exists() and not p.socket._handlers
+    assert not p.socket.listener.path.exists() and not p.socket._handlers
     with pytest.raises(SelectedToolDenied):
         p.socket.assert_complete()
     assert not p.effects
@@ -358,10 +360,9 @@ async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
     monkeypatch.setattr(p.socket, "_reply", observe_reply)
     p.announce()
     p.start()
-    p.socket.expected_pid = os.getpid()
     await p.socket.start()
     try:
-        reader, writer = await asyncio.open_unix_connection(str(p.socket.address))
+        reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.address))
         try:
             writer.write(p.raw())
             await writer.drain()
@@ -382,7 +383,7 @@ async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
     assert closed.count(observed[0]) == 1
 
 
-async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
+async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path, tool_listener):
     tmp_path.chmod(0o700)
     observed = []
 
@@ -391,8 +392,8 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
         return NoRoomNeeded()
 
     socket = CodingToolSocket(
-        tmp_path, secrets.token_hex(32),
-        SimpleNamespace(allow=allow_coding),
+        tool_listener(tmp_path, secrets.token_hex(32)),
+        SimpleNamespace(allow=allow_coding), pid=os.getpid(),
     )
     socket.turn = SimpleNamespace(command=SimpleNamespace(input_id=secrets.token_hex(16)))
     arguments = {"path": "x"}
@@ -403,7 +404,7 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     def raw(id):
         return (
             json.dumps(
-                {"token": socket.token, "call_id": id, "name": "read", "arguments": arguments}
+                {"token": socket.listener.token, "call_id": id, "name": "read", "arguments": arguments}
             )
             + "\n"
         ).encode()
@@ -429,3 +430,70 @@ def test_selected_slot_rejects_second_call(policy):
     policy.announce()
     with pytest.raises(SelectedToolDenied):
         policy.announce("second")
+
+
+@pytest.mark.parametrize("bind_child", [False, True])
+async def test_only_child_bound_transport_can_reply(tmp_path, bind_child):
+    turn = SimpleNamespace(launch=SimpleNamespace(session=SimpleNamespace(directory=tmp_path)))
+    async with AsyncExitStack() as resources:
+        unbound = await ToolTransport.open(turn, resources)
+        assert isinstance(unbound, UnboundToolTransport)
+        assert not hasattr(unbound, "_reply") and not hasattr(unbound, "_handle")
+        with pytest.raises(TypeError, match="pid"):
+            ToolTransport(unbound.listener)
+        with pytest.raises(ConnectionRefusedError):
+            await asyncio.open_unix_connection(str(unbound.listener.address))
+        if bind_child:
+            bound = await unbound.bind_process(os.getpid())
+            assert isinstance(bound, ToolTransport)
+            assert bound.expected_pid == os.getpid()
+            assert bound.listener.server.is_serving()
+    assert not (tmp_path / "s").exists()
+
+
+@pytest.mark.parametrize("failure", [ValueError("owner defect"), TimeoutError("owner deadline")])
+async def test_owner_failures_are_not_converted_to_refusals(policy, monkeypatch, failure):
+    p = policy
+
+    def fail_selected(_call):
+        raise failure
+
+    async def fail_coding(_turn, _round, _call):
+        raise failure
+
+    if p.selected:
+        monkeypatch.setattr(p.socket, "action", fail_selected)
+    else:
+        monkeypatch.setattr(p.socket.owner, "allow", fail_coding)
+    p.announce()
+    p.start()
+    await p.socket.start()
+    reader = asyncio.StreamReader()
+    reader.feed_data(p.raw())
+    reader.feed_eof()
+
+    def unexpected_reply(_raw):
+        pytest.fail("an owner defect became a tool reply")
+
+    peer, client = sockets.socketpair()
+    with peer, client:
+        writer = SimpleNamespace(get_extra_info=lambda _key: peer, write=unexpected_reply)
+        with pytest.raises(type(failure), match=str(failure)) as caught:
+            await p.socket._reply(reader, writer)
+        assert caught.value is failure
+        assert not p.effects
+
+
+async def test_malformed_child_json_receives_a_declared_refusal(policy):
+    p = policy
+    await p.socket.start()
+    reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.address))
+    try:
+        writer.write(b"{\n")
+        await writer.drain()
+        assert json.loads(await reader.readline())["ok"] is False
+        assert await reader.read() == b""
+        assert not p.effects
+    finally:
+        writer.close()
+        await writer.wait_closed()
