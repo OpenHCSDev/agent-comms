@@ -22,18 +22,24 @@ from install_gate import (
     REPO,
     ExistingStatusChecks,
     FieldCodec,
+    GateArguments,
     GateError,
+    GateReport,
     InstallSurface,
     Machine,
     MalformedRecord,
     MissingProtection,
     NoStatusChecks,
     NumberedAppIdentity,
+    ParentBaseRevision,
     ProtectionAnswer,
     PullRequestAnswer,
     RequiredCheck,
+    RevisionGateCommand,
     RouteDocument,
     SnapshotCopy,
+    UncheckedSourceCoverage,
+    UnfinishedGateResult,
     affected,
     prepare_home,
     rehearse,
@@ -268,6 +274,21 @@ class InstallGateTests(unittest.TestCase):
         with patch("install_gate.api_payload") as publish:
             missing.required_status_checks.require("owner/repo")
             self.assertTrue(publish.call_args.args[2].strict)
+
+    def test_unexpected_failure_is_not_hidden_and_does_not_report_empty_coverage(self):
+        args = GateArguments(
+            repo=REPO, base=ParentBaseRevision(), scratch=self.root, python=Path(sys.executable)
+        )
+        with (
+            patch("install_gate.affected", side_effect=PermissionError("source unavailable")),
+            self.assertRaisesRegex(PermissionError, "source unavailable"),
+        ):
+            RevisionGateCommand("HEAD").execute(args, "owner/repo")
+        (report_path,) = self.root.glob("report-*.json")
+        report = FieldCodec.decode(GateReport, FieldCodec.parse(report_path.read_text()))
+        self.assertIsInstance(report.affected, UncheckedSourceCoverage)
+        self.assertIsInstance(report.result, UnfinishedGateResult)
+        self.assertFalse(report.result.successful)
 
 
 if __name__ == "__main__":

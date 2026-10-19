@@ -685,11 +685,25 @@ class InterruptedGateResult(MachinesGateResult):
         return False
 
 
+class SourceCoverage(DeclaredFamily, affix="SourceCoverage"):
+    """An interrupted source read is not an empty set of affected paths."""
+
+
+@dataclass(frozen=True)
+class UncheckedSourceCoverage(SourceCoverage):
+    pass
+
+
+@dataclass(frozen=True)
+class CheckedSourceCoverage(SourceCoverage):
+    paths: tuple[str, ...]
+
+
 @dataclass(frozen=True)
 class GateReport:
     head: str
     base: str
-    affected: tuple[str, ...]
+    affected: SourceCoverage
     result: GateResult
 
 
@@ -769,12 +783,13 @@ class CheckGateCommand(GateCommand):
     def execute(self, args: GateArguments, repository: str) -> int:
         target = self.target(args, repository)
         report_path = args.scratch / f"report-{target.head[:12]}-{os.getpid()}.json"
-        changed: tuple[str, ...] = ()
+        coverage: SourceCoverage = UncheckedSourceCoverage()
         results: dict[str, MachineResult] = {}
         result: GateResult = UnfinishedGateResult(results)
         try:
             target.start(repository, args.repo)
             changed = tuple(affected(args.repo, target.base, target.head))
+            coverage = CheckedSourceCoverage(changed)
             result = (
                 OutsideInstallGateResult()
                 if target.outside(changed)
@@ -790,7 +805,7 @@ class CheckGateCommand(GateCommand):
         finally:
             report_path.write_text(
                 json.dumps(
-                    FieldCodec.encode(GateReport(target.head, target.base, changed, result)),
+                    FieldCodec.encode(GateReport(target.head, target.base, coverage, result)),
                     indent=2,
                 )
                 + "\n"

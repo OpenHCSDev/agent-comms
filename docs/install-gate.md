@@ -36,6 +36,12 @@ Owner changes across the complete gate family:
   results cannot pass solely because the child exits zero.
 - Only named failure types are handled. Unexpected failures still write a
   failed result and post failure in `finally`, then propagate unchanged.
+  Source coverage has explicit unchecked and checked records; an interrupted
+  read is not reported as an empty set of affected paths.
+- The child owner's asynchronous wait runs until completion. Its short bounded
+  reap is only used after exit, so a real install is not accidentally cut off
+  after two seconds. Storage policy is captured once per snapshot, not reread
+  for every archive entry.
 
 Before/after production evidence: StringSubscript 37 -> 0; FamilyFlattened
 4 -> 0; TypeSwitch 1 (three arms) -> 0; NoneAbsence 3 -> 0;
@@ -126,8 +132,9 @@ It privately copies the configured npm cache: native preparation's pinned MCP
 install deliberately runs offline, so a new HOME must not discard that input.
 uv keeps using its existing cache instead of cloning the same dependencies
 again at every checkpoint; lock resolution still upgrades the declared mains.
-The previous executable is this machine's installed runtime; foreign runtime
-paths are recorded, not assumed runnable locally. The target revision supplies
+The previous executable is this machine's installed runtime. The unused
+foreign-runtime field was deleted; a remote executable path is not assumed
+runnable locally. The target revision supplies
 the installer and runtime being checked. A zero exit without an actual carry,
 file-comparison and CLI-read receipt is rejected.
 
