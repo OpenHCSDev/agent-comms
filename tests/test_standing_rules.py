@@ -124,12 +124,13 @@ def test_bridge_down_while_the_commander_endpoint_receives_nothing(commander, tm
 
 def working(comms, name, created):
     """A unit whose native session records a turn now."""
-    from datetime import datetime, timezone
-    stamp = datetime.now(timezone.utc).isoformat()
+    from datetime import UTC, datetime
+    stamp = datetime.now(UTC).isoformat()
     path = comms.root / f"{name}-session.jsonl"
     rows = [dict(type="session", id=f"{name}-session", version=3, timestamp=stamp),
             dict(type="message", id=f"{name}-input", timestamp=stamp,
-                 message=dict(role="user", content="Repair the owner", timestamp=time.time() * 1000))]
+                 message=dict(role="user", content="Repair the owner",
+                              timestamp=time.time() * 1000))]
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
     if name in comms.registry.all_threads():
@@ -151,7 +152,8 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     unit.mkdir(parents=True)
 
     def git(*args):
-        return subprocess.run(["git", "-C", str(unit), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        return subprocess.run(["git", "-C", str(unit), "-c", "user.name=t", "-c", "user.email=t@t",
+                               *args],
                               check=True, capture_output=True, text=True).stdout
 
     def commit(left):
@@ -190,10 +192,12 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     assert moved.order.id != todo.order.id and moved.order.check == todo.order.check
 
     create(commander, "P2", owner="worker", deadline=time.time() + 3600)
-    comms.goals.fire("worker", StrikeReason("The unit was taken off P2 so the test leaves it unowned."), "lead")
+    taken = StrikeReason("The unit was taken off P2 so the test leaves it unowned.")
+    comms.goals.fire("worker", taken, "lead")
     assert comms.goals.todos.get("P2").holder is None
     read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
-    assert "WHEEL SPIN: worker holds no order while P2 is unowned -> Core gives it to worker" in read.broken
+    assert ("WHEEL SPIN: worker holds no order while P2 is unowned -> Core gives it to worker"
+            in read.broken)
     assert comms.goals.todos.get("P2").holder == "worker"
 
 

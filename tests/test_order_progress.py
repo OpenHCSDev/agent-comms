@@ -8,8 +8,9 @@ import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.tools import CommsOrderDoneTool
-from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
-    OperationDelivery, PlannedInstallDeadline, PullRequest, PullRequests, PushedProgress, UnreadProgress)
+from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
+    OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline, PullRequest,
+    PullRequests, PushedProgress, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule

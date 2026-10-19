@@ -114,7 +114,8 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         return self.delivered_commit
 
     async def require_source(self, check: OrderCheck) -> None:
-        delivered = (await self.run(check, "git", "rev-parse", f"{self.delivered}^{{commit}}")).strip()
+        delivered = (await self.run(
+            check, "git", "rev-parse", f"{self.delivered}^{{commit}}")).strip()
         base = await self.run(check, "git", "merge-base", self.delivered, self.commit)
         if base.strip() != delivered:
             raise ValueError(
@@ -243,7 +244,8 @@ class DistanceReadings:
             if last.distance >= first.distance:
                 return f"; distance {last.distance}, not falling"
             rate = (first.distance - last.distance) / max(last.at - first.at, 1.0)
-            return f"; distance {last.distance}, projected done {_clock(last.at + last.distance / rate)}"
+            done = _clock(last.at + last.distance / rate)
+            return f"; distance {last.distance}, projected done {done}"
         return ""
 
 
@@ -289,14 +291,16 @@ class ProgressSource:
             "log", "--first-parent", f"--since={after}", "--format=%H %ct", "HEAD",
             "--not", base).splitlines()))]
         points = [(base, self.since), *commits][-2:]
-        return DistanceReadings(tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points))
+        return DistanceReadings(
+            tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points))
 
     def distance(self, base: str, sha: str) -> int:
         """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
         ``base`` has not touched."""
         check = self.todo.order.check
         touched = self.git("diff", "--name-only", base, sha).split()
-        return check.result.distance(asyncio.run(check.run_at(sha, str(self.checkout)))) + self.todo.order.untouched(touched)
+        run = asyncio.run(check.run_at(sha, str(self.checkout)))
+        return check.result.distance(run) + self.todo.order.untouched(touched)
 
 
 @dataclass(frozen=True)
@@ -421,7 +425,8 @@ class CommittedProgress(Moving, FoundProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha[:9], at=at, readings=source.readings()) for sha, at in source.commits("--remotes"))
+        return (cls(sha[:9], at=at, readings=source.readings())
+                for sha, at in source.commits("--remotes"))
 
     @property
     def state(self) -> str:
@@ -435,7 +440,8 @@ class PushedProgress(CommittedProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha[:9], at=at, readings=source.readings()) for sha, at in source.commits("origin/HEAD"))
+        return (cls(sha[:9], at=at, readings=source.readings())
+                for sha, at in source.commits("origin/HEAD"))
 
     @property
     def state(self) -> str:

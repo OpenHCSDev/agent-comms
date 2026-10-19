@@ -321,7 +321,8 @@ class OrderCheck:
 
     LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)")
     # The revision is the run's parameter; a check line never chooses it.
-    CHECKOUT: ClassVar[re.Pattern] = re.compile(r"(?:git\s+fetch\b[^&]*&&\s*)?git\s+checkout\b[^&]*&&\s*")
+    CHECKOUT: ClassVar[re.Pattern] = re.compile(
+        r"(?:git\s+fetch\b[^&]*&&\s*)?git\s+checkout\b[^&]*&&\s*")
     timeout: ClassVar[int] = 300
     measured: ClassVar[dict[tuple[OrderCheck, str], ChildResult]] = {}
 

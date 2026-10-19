@@ -12,7 +12,8 @@ from typing import ClassVar
 
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
-from ..standing_rules import ReasonedStandingRule, StandingRule
+from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingRule,
+                              UndatedStandingRule)
 from ..goals import Goal
 from ..threads import Thread
 from ..todos import OrderProgress, PullRequests, StrikeTodo, Todo
@@ -24,7 +25,7 @@ CONFIG = CommanderConfig.installed()
 
 
 @dataclass(frozen=True)
-class Detached(StandingRule):
+class Detached(UndatedStandingRule):
     unit: str
     unread: int
     orders: tuple[str, ...]
@@ -45,7 +46,7 @@ class Detached(StandingRule):
 
 
 @dataclass(frozen=True)
-class RequestStalled(StandingRule):
+class RequestStalled(UndatedStandingRule):
     goal: Goal
 
     @classmethod
@@ -71,7 +72,7 @@ class WheelSpin(StandingRule, declared_name=None):
 
     @classmethod
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
-        """Units with a native turn in the last ten minutes and no order; excludes parked threads."""
+        """Units with a native turn in the last ten minutes and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CONFIG.parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
@@ -92,7 +93,7 @@ class WheelSpin(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
-class FlatWheelSpin(WheelSpin):
+class FlatWheelSpin(WheelSpin, DatedStandingRule):
     """Two distance readings with no fall while the unit kept working."""
 
     since: float
@@ -128,7 +129,7 @@ class FlatWheelSpin(WheelSpin):
 
 
 @dataclass(frozen=True)
-class UnownedWheelSpin(WheelSpin):
+class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     """A unit holds no next order while the board has unowned rows."""
 
     unit: str
@@ -137,17 +138,19 @@ class UnownedWheelSpin(WheelSpin):
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
         rows = (todo for todo in comms.goals.todos.for_commander(
             comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
-        return tuple(cls(todo, unit.name) for unit, todo in zip(cls.idle(comms, commander), rows))
+        idle = cls.idle(comms, commander)
+        return tuple(cls(todo, unit.name) for unit, todo in zip(idle, rows, strict=False))
 
     def line(self) -> str:
-        return f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned -> Core gives it to {self.unit}"
+        return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
+                f" -> Core gives it to {self.unit}")
 
     def enforce(self, comms: Comms, commander: str) -> None:
         self.assign(comms, commander, comms.registry.require(self.unit))
 
 
 @dataclass(frozen=True)
-class ForkNow(StandingRule):
+class ForkNow(UndatedStandingRule):
     """The load on the asked Comms needs more live forks than there are."""
 
     load: capacity.Load
@@ -162,7 +165,7 @@ class ForkNow(StandingRule):
 
 
 @dataclass(frozen=True)
-class Unjudged(ReasonedStandingRule):
+class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
     text = "UNJUDGED {why} edits -> judge or fork a judge slice"
 
@@ -173,7 +176,7 @@ class Unjudged(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
-class MergeGrowth(StandingRule):
+class MergeGrowth(DatedStandingRule):
     """A merge to a fleet repository's main that grew its source by more than the limit, judged by
     its own first-parent diff and read from git on every read; nothing about it is stored."""
 
