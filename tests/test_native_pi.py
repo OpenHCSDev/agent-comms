@@ -91,7 +91,7 @@ def test_read_only_journal_parser_is_not_recovery_authority(tmp_path: Path) -> N
     assert first.session_id == "sid"
     assert first.session_entry_id == "entry"
     assert first.request_generation == 1
-    with pytest.raises(NativePiUnavailable, match="specified input"):
+    with pytest.raises(NativePiUnavailable, match="assembled-context proof"):
         NativeContextProof.read_evidence(session, "d" * 32)
 
 
