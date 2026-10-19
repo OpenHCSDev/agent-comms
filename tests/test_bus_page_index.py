@@ -12,6 +12,8 @@ import pytest
 
 from agent_comms.bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
 from agent_comms.comms import Comms
+from agent_comms.message_page import MessagePageRequest
+from agent_comms.read_basis import AllDisplayScope
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
@@ -51,7 +53,7 @@ def retained_source(root, count, *, access=ArchivedAccess()):
 
 def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_path):
     empty = Comms(tmp_path / 'empty').bus
-    assert empty.full_history_page().messages == ()
+    assert empty.log.read_page(MessagePageRequest(AllDisplayScope())).messages == ()
     assert not (empty.log.path.parent / 'bus_page_index.sqlite3').exists()
 
     bus = retained_source(tmp_path / 'owned', 9, access=WritableAccess())
