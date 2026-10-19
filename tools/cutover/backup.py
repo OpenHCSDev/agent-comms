@@ -106,16 +106,16 @@ class Backup:
     def original(self) -> bool:
         return self.files() == bus_files(self.root)
 
-    def retire(self) -> None:
+    def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
         self.path.rename(archived)
-        self.path = archived
         directory = os.open(archived.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory)
         finally:
             os.close(directory)
         print(f'Restored data backup kept at {archived}', flush=True)
+        return archived
 
     def restore_route(self) -> None:
         if (self.path / 'active-route.json').exists():
