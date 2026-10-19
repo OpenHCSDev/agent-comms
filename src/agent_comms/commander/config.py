@@ -1,7 +1,8 @@
 """The commander facts a commander thread's registration holds, recorded by `agent-comms install`.
 
 Every commander tool reads its board, paths and repositories from the registration of the
-thread calling it (see `caller`); none of them hardcodes a home directory, a bus root or a unit name.
+thread calling it (see `caller`); none of them hardcodes a home directory, a bus root or
+a unit name.
 """
 from __future__ import annotations
 
@@ -34,12 +35,8 @@ class Repo:
         return cls(checkout=checkout.resolve(), github='/'.join(github))
 
 
-class CommanderFacts(SubclassUnion, RegistrationInheritance["CommanderFacts"], affix=""):
+class CommanderFacts(SubclassUnion, affix=""):
     """What a thread's registration holds to command with."""
-
-    @classmethod
-    def apply(cls, incoming: CommanderFacts, previous: CommanderFacts) -> CommanderFacts:
-        return incoming.registered(previous)
 
     @abstractmethod
     def registered(self, previous: CommanderFacts) -> CommanderFacts:
@@ -49,15 +46,22 @@ class CommanderFacts(SubclassUnion, RegistrationInheritance["CommanderFacts"], a
     def config(self, thread: str) -> CommanderConfig: ...
 
 
+class InheritCommanderFacts(RegistrationInheritance[CommanderFacts]):
+    @classmethod
+    def apply(cls, incoming: CommanderFacts, previous: CommanderFacts) -> CommanderFacts:
+        return incoming.registered(previous)
+
+
 @dataclass(frozen=True)
 class NoCommanderFacts(NullMember, CommanderFacts):
-    """A thread that commands nothing; declaring a thread again without facts keeps its recorded ones."""
+    """A thread that commands nothing; declaring it again without facts keeps its recorded ones."""
 
     def registered(self, previous: CommanderFacts) -> CommanderFacts:
         return previous
 
     def config(self, thread: str) -> CommanderConfig:
-        raise RelationViolationError(f'{thread} holds no commander facts; run agent-comms install --commander {thread}')
+        raise RelationViolationError(
+            f'{thread} holds no commander facts; run agent-comms install --commander {thread}')
 
 
 @dataclass(frozen=True)

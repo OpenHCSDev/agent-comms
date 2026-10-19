@@ -1,4 +1,5 @@
 """The commander a commander tool acts for: the registered thread whose process runs the tool."""
+
 from __future__ import annotations
 
 import os
@@ -21,9 +22,9 @@ def lineage(pid: int) -> tuple[ProcessIdentity, ...]:
     line: list[ProcessIdentity] = []
     while pid > 1:
         # Fields after comm's final ')' start at field 3, so ppid is the second.
-        stat = Path(f'/proc/{pid}/stat').read_text()
+        stat = Path(f"/proc/{pid}/stat").read_text()
         line.append(ProcessIdentity.capture(pid))
-        pid = int(stat.rsplit(') ', 1)[1].split()[1])
+        pid = int(stat.rsplit(") ", 1)[1].split()[1])
     return tuple(line)
 
 
@@ -43,14 +44,15 @@ class Commander:
             for thread in threads:
                 if thread.process_identity == identity:
                     return cls.registered(comms, thread)
-        raise RelationViolationError(f'pid {pid} runs for no registered thread: no commander')
+        raise RelationViolationError(f"pid {pid} runs for no registered thread: no commander")
 
     @classmethod
     def registered(cls, comms: Comms, thread: Thread) -> Commander:
         if CommanderConfig.TAG not in thread.tags:
             raise RelationViolationError(
-                f'{thread.name} is not a registered commander: its registration lacks the'
-                f' {CommanderConfig.TAG} tag; run agent-comms install --commander {thread.name}')
+                f"{thread.name} is not a registered commander: its registration lacks the"
+                f" {CommanderConfig.TAG} tag; run agent-comms install --commander {thread.name}"
+            )
         return cls(comms, thread.name, thread.commander_config.config(thread.name))
 
     @classmethod
