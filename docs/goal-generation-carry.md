@@ -26,8 +26,9 @@ written by the carry.
 **Zero recorded attempts does not prove that a goal never ran.** The carried
 READY row describes a newly recorded unreserved generation. It does not describe
 past execution of the goal. BlockedState owns refusal of ordinary Active/Resume
-transitions for every actor; only the existing explicit owner Retry action may
-reactivate a blocked goal and authorize a fresh generation. UNKNOWN input remains
+transitions for every actor; only the explicit Retry action, taken by the unit,
+its commander or the owner, may reactivate a blocked goal and authorize a fresh
+generation. UNKNOWN input remains
 untouched and is not the fresh continuation's source.
 
 Goals already owns store opening. OwnedTurn.stream now asks that owner to open
