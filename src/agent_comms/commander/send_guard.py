@@ -23,7 +23,7 @@ from typing import ClassVar
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
-from ..todos import TodoError
+from ..todos import InstallDeadline
 from . import order
 
 Words = tuple[str, ...]
@@ -95,9 +95,8 @@ class RawSendCommand(GuardedCommand):
 
 @dataclass(frozen=True)
 class TacticalCommand(GuardedCommand):
-    """Work the unit holding the installer problem owns. Each shape is the words a command runs,
+    """Work the bus's planned installer owns. Each shape is the words a command runs,
     in order, matched against its words' path parts and stems."""
-    problem: ClassVar[str] = 'P168'
     work: ClassVar[str] = 'tactical work'
     shapes: ClassVar[tuple[Words, ...]] = ()
 
@@ -117,14 +116,7 @@ class TacticalCommand(GuardedCommand):
 
     @classmethod
     def refusal(cls) -> str:
-        try:
-            owner = order.COMMS.goals.todos.get(cls.problem).held().owner
-        except TodoError as error:
-            return (f'{cls.work.capitalize()} belongs to the holder of {cls.problem}, and there is '
-                    f'none ({error}). Order {cls.problem} to a unit instead of running it.')
-        return (f"{cls.work.capitalize()} is {owner}'s work, as holder of {cls.problem}, not "
-                f"{order.ME}'s. Send it as an order: agent-comms-commander order send --to "
-                f'{owner}, naming the {cls.work} to run.')
+        return InstallDeadline.read(order.COMMS.root).refusal(cls.work, order.ME)
 
 
 @dataclass(frozen=True)
