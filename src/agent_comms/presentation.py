@@ -825,10 +825,10 @@ class WireRevision(ReadState):
         }
         return cls(**captured, expiry_tick=expiry_tick)
 
-    def conversation_selection_changed_since(self, earlier: WireRevision) -> bool:
-        return ((self.registry, self.catalog, self.history) !=
+    def selection_reusable_from(self, earlier: WireRevision) -> bool:
+        return ((self.registry, self.catalog, self.history) ==
                 (earlier.registry, earlier.catalog, earlier.history)
-                or self.changed_since(BusSourceView(), earlier))
+                and not self.changed_since(BusSourceView(), earlier))
 
     def changed_threads(self, previous: ThreadsObserved, comms: Comms,
                         activity: Mapping[str, ObservedActivity]) -> frozenset[str]:

@@ -71,23 +71,33 @@ class HistoryView(ABC):
         return MessagePageRequest(scope, bounds)
 
 
+class ConversationObservation:
+    """A first observation has no selection and therefore always reads."""
+
+    def capture(self, stores: WireRevision, read: Callable[[], ConversationRevision]) -> ConversationRevision:
+        return read()
+
+    def display_changed_before(self, later: ConversationRevision) -> bool:
+        return True
+
+
 @dataclass(frozen=True, slots=True)
-class ConversationRevision:
+class ConversationRevision(ConversationObservation):
     """Core's captured selection and original store observation for one view."""
 
     stores: WireRevision
     selection: DisplayIdentity
 
-    @classmethod
-    def capture(cls, stores: WireRevision, earlier: ConversationRevision | None,
-                read: Callable[[], ConversationRevision]) -> ConversationRevision:
-        if earlier is not None and not stores.conversation_selection_changed_since(earlier.stores):
-            return cls(stores, earlier.selection)
-        return read()
+    def capture(self, stores: WireRevision, read: Callable[[], ConversationRevision]) -> ConversationRevision:
+        return (type(self)(stores, self.selection) if stores.selection_reusable_from(self.stores)
+                else read())
 
-    def display_changed_since(self, earlier: ConversationRevision) -> bool:
-        return (self.selection != earlier.selection
-                or self.stores.changed_since(BusSourceView(), earlier.stores))
+    def display_changed_since(self, earlier: ConversationObservation) -> bool:
+        return earlier.display_changed_before(self)
+
+    def display_changed_before(self, later: ConversationRevision) -> bool:
+        return (self.selection != later.selection
+                or later.stores.changed_since(BusSourceView(), self.stores))
 
 
 class ConversationHistoryView:
@@ -99,10 +109,10 @@ class ConversationHistoryView:
         return page.selection.identity == earlier.selection.identity
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: str, earlier: ConversationRevision | None,
+    def revision(cls, views: HistoryViews, target: str, earlier: ConversationObservation,
                  *, worktree: str) -> ConversationRevision:
-        return ConversationRevision.capture(
-            views.revision(), earlier, partial(cls._read_revision, views, target, worktree))
+        return earlier.capture(
+            views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
     def _read_revision(cls, views: HistoryViews, target: str, worktree: str) -> ConversationRevision:

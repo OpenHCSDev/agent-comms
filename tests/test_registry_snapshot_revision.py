@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from agent_comms.comms import Comms
-from agent_comms.historical_views import ChannelDisplayHistory, DMDisplayHistory
+from agent_comms.historical_views import ChannelDisplayHistory, ConversationObservation, DMDisplayHistory
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _atomic_write_text
@@ -55,8 +55,8 @@ def test_channel_and_dm_revisions_use_the_cached_registry_snapshot(tmp_path):
     comms.messaging.user_identity(str(tmp_path))
     snapshot = comms.registry.snapshot()
     with patch.object(RegistrySnapshot, "capture", side_effect=AssertionError("snapshot rebuilt")):
-        channel = ChannelDisplayHistory.revision(comms.views, "#any", None, worktree=str(tmp_path))
-        dm = DMDisplayHistory.revision(comms.views, "worker", None, worktree=str(tmp_path))
+        channel = ChannelDisplayHistory.revision(comms.views, "#any", ConversationObservation(), worktree=str(tmp_path))
+        dm = DMDisplayHistory.revision(comms.views, "worker", ConversationObservation(), worktree=str(tmp_path))
         assert channel.selection.viewer == dm.selection.viewer
         assert comms.registry.snapshot() is snapshot
 
