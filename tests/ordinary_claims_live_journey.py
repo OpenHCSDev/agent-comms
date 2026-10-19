@@ -93,7 +93,7 @@ async def journey(arguments):
             comms.registry.require(name), arguments.native_launcher, LaunchRuntime.running())
         await agent.sessions.start_owner(str(project), name)
         async with attachment(comms, project, name, env) as (client, observer):
-            for outcome in ('success', 'cancelled', 'failed'):
+            for outcome in arguments.outcomes:
                 target = project / f'{outcome}.txt'
                 marker = project / f'{outcome}.marker'
                 command = f"printf running > {marker}; sleep 30; printf finished > {marker}"
@@ -150,4 +150,6 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='openai-codex/gpt-6.1-sol')
     parser.add_argument('--native-launcher', required=True)
     parser.add_argument('--expect-stale', action='store_true')
+    parser.add_argument('--outcomes', nargs='+', choices=('success', 'cancelled', 'failed'),
+                        default=('success', 'cancelled', 'failed'))
     asyncio.run(journey(parser.parse_args()))

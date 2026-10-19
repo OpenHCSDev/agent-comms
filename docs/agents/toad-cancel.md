@@ -6,7 +6,7 @@ Owner: pi-toad-cancel. Branch: fix/toad-cancel. Draft PR: https://github.com/Ope
 
 The nine blocked source claims on pi-cn-p3 were ordinary acquisitions (bus sequences 1561–1566 and 1568–1570), all with `claim_scope=None`. `OwnedSend.claim_resource` published them; only `RecoverySnapshot.release_resources` retired selected-attempt claims. This was a missing ordinary resource lifetime, not a selected UNKNOWN settlement failure.
 
-`OwnedTurn.stream` now closes its real backend stream before retiring the acquisitions held by its `OwnedSend`, including cancellation and failure. `ClaimWrites.release_resources` owns the shared bounded exact-acquisition release; selected recovery consumes it too. No schema, timer, owner-name comparison or retry is added. Abrupt process death before ordinary cleanup is not proved by this change; those unbound acquisitions lack a durable ordinary-turn identity.
+`OwnedTurn.stream` now closes its real backend stream before retiring the acquisitions held by its `OwnedSend`, including cancellation and failure. Ordinary retirement borrows NativeBoundary directly in the resource worker; it does not open an unused SQL connection. `ClaimWrites.release_resources` owns the shared bounded exact-acquisition release; selected recovery consumes it too. No schema, timer, owner-name comparison or retry is added. Abrupt process death before ordinary cleanup is not proved by this change; those unbound acquisitions lack a durable ordinary-turn identity.
 
 AST source census used the existing debt-ratchet `ChangedSource.tree` over all 662 Core and installed Toad Python modules. Zero parse omissions. Declaration/call/write sites retained in `/home/ts/.cache/agent-scratch/pi-toad-cancel/ast-before.txt`. Dynamic dispatch is source evidence, not a proven runtime caller. NRA could not import against installed metaclass-registry, and its own Python 3.12 cannot parse this project's 3.14 syntax; no NRA completion claimed.
 
@@ -45,15 +45,19 @@ Both: PASS_REAL_PI_ACP_JOURNEY
 
 The injected child death reports `Native tool outcome remains UNKNOWN`, as it must. Releasing a cooperative file claim does not authorize replay or deny prior side effects.
 
+After merging current main and removing the unnecessary SQL open, repeated one fresh **cancelled** case only on final source (`--outcomes cancelled`, final-cancel/result.json). Actual configured Pi wrote the file, entered bash's 30-second sleep, survived the second ACP attach/detach, then explicit ACP cancel returned `cancelled`, with **claim_remaining=false**. PASS_REAL_PI_ACP_JOURNEY. No earlier UNKNOWN input was replayed.
+
 ## Sanity checks and limits
 
 `PYTHONPATH=src timeout 300 /home/ts/code/projects/agent-comms/.venv/bin/python -X faulthandler -m pytest -o addopts='' -n 0 --no-cov -q tests/test_ordinary_native_claim.py tests/test_envelope_claim_transitions.py`: **13 passed**. The ordinary-write check no longer monkeypatches CodingToolOwner.allow or asserts that terminal claims survive.
+
+A final serial batch after main integration passed **15** claim checks; its one ordinary-native fixture failed *before sending input* because native get_state preflight exceeded 10 seconds (zero localhost provider posts, zero input proofs). Available RAM had fallen to 3.6 GiB, with 15.8 GiB swap used; no cap was raised and that attempt was not retried. The separate final configured-provider cancellation journey then passed. This is not a clean full-suite result.
 
 The earlier six-test batch was not a passing suite: three selected-release tests reached an already-deleted `HistoryViews.full_history_page` API after successfully clearing claims; the existing real worker stop/start fixture timed out awaiting its later edit. Its run is retained under `failed-focused-run/`. Default whole-package coverage also rejected the narrow batch. No fake-based disposition test is claimed as acceptance. These failures are not used to explain or design the fix.
 
 The first setup attempts stopped before the intended operation: missing participant bootstrap, unsupported off thinking, and foreign scratch destinations. They are retained separately; the latter's actual Pi response confirms both tools were refused, rather than inferring no effects from a failed call. The final driver uses the real launch preparation and declared StorageRoots. No UNKNOWN attempt was replayed.
 
-Scratch native artifact: copied the existing reviewed native package into this checkout's ignored `stack/.pi-native-a0f57a811b47862f` for the source runtime; removed after real borrower inspection and owner shutdown. No installed package, live launcher, or restart queue changed. The actual source checkout was supplied outside `/home/ts/wt`; attempted relocation was denied by the enforced storage rule, so it remains at its assigned persistent path. Virtualenv creation was also denied; all work used shared interpreters.
+Scratch native artifact: copied the existing reviewed native package into this checkout's ignored `stack/.pi-native-a0f57a811b47862f` for the source runtime; removed after real borrower inspection and owner shutdown. No installed package, live launcher, or restart queue changed. The actual source checkout was supplied outside `/home/ts/wt`; attempted relocation was denied by the enforced storage rule, so it remains at its assigned persistent path. The failed default pytest run was moved from its generated /tmp path to the owned persistent `failed-focused-run/`, preserving its sessions. Virtualenv creation was also denied; all work used shared interpreters.
 
 ## Assumed
 
@@ -69,5 +73,5 @@ Scratch native artifact: copied the existing reviewed native package into this c
 - [x] Attach and disconnect a second stdio ACP client during real 30-second Pi bash operations on main and branch. Neither cancels.
 - [x] Confirm success, explicit cancellation and native-child failure release through the real native path.
 - [x] Focused checks: ordinary native write and claim transitions, 13 passed.
-- [ ] Standalone debt ratchet.
+- [ ] Final standalone debt ratchet. Initial report found two missing new annotations, two new local imports and a 21-line source increase; annotations/imports are repaired, unused SQL work deleted, and this feature's 21 net source lines declared through the existing Src-Budget commit trailer. No semantic-debt allowance is used.
 - [x] Record remaining trigger uncertainty accurately; do not manufacture an attach failure.

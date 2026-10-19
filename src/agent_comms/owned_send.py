@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_coding_tools import CodingToolOwner
+from .coordination_session import NativeBoundary
+from .coordinator import Coordination
 from .messages import ClaimNoticeKind
 
 from .ordinary_turn_rules import (
@@ -207,15 +209,13 @@ class OwnedSend(CodingToolOwner):
 
     async def release_resources(self) -> None:
         """The ordinary turn owns its acquisitions through native/tool retirement."""
-        from .coordinator import Coordination
-
-        def release(store):
-            with store.session.boundary(self.comms.bus) as boundary:
+        def release() -> None:
+            with NativeBoundary(self.comms.bus) as boundary:
                 boundary.bus.publisher.release_resources(
                     boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
                 )
 
-        await Coordination.run_async(self.comms.root / "coordination.sqlite3", release)
+        await Coordination.run_worker(release)
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)

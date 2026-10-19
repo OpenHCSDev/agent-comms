@@ -44,7 +44,7 @@ from .errors import (
 )
 from .field_codec import FieldCodec, Id128Text
 from .mentions import ThreadMention
-from .messages import Message
+from .messages import ClaimNoticeKind, Message
 from .private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
@@ -56,6 +56,7 @@ from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
 
+    from .coordination_session import NativeBoundary
     from .private_bus_checkpoint import CheckedRead
     from .registration import Registration
 
@@ -136,15 +137,15 @@ class PrivateWrites(Publisher):
 class ClaimWrites(PrivateWrites):
     """Publishes claim envelopes."""
 
-    def release_resources(self, boundary, claims: Sequence[ClaimOwner], wording: str) -> None:
+    def release_resources(
+        self, boundary: NativeBoundary, claims: Sequence[ClaimOwner], wording: str,
+    ) -> None:
         """Release only still-current acquisitions, in bounded whole-set envelopes.
 
         The resource lifetime supplies its original acquisition witnesses. A
         delayed retirement cannot release a successor's generation or a manual
         claim absent from that lifetime. The caller holds the native boundary.
         """
-        from .messages import ClaimNoticeKind
-
         metadata = self.log.private_marker_unlocked()
         with boundary.bus_lock.current_source(self.log, metadata) as source:
             owned = tuple(claim for claim in claims if source.claim(claim.resource) == claim)
