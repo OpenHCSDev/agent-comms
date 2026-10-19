@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import ClassVar
 
 from ..comms import Comms
+from ..stall_watcher import WheelSpin
 from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, UndatedStandingRule)
 from ..goals import Goal
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo
 from ..turn_digests import TurnDigestRead, TurnsSince
-from . import capacity, judge
+from . import judge
 from .config import CommanderConfig, Repo
-from ..stall_watcher import WheelSpin
 
 CONFIG = CommanderConfig.installed()
 
@@ -93,21 +93,6 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 " across two readings"), commander)
         for unit in self.idle(comms, commander)[:1]:
             self.assign(comms, commander, unit)
-
-
-@dataclass(frozen=True)
-class ForkNow(UndatedStandingRule):
-    """The load on the asked Comms needs more live forks than there are."""
-
-    load: capacity.Load
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[ForkNow, ...]:
-        load = capacity.Load.of(comms, commander)
-        return (cls(load),) * load.short
-
-    def line(self) -> str:
-        return f"FORK NOW: {self.load}"
 
 
 @dataclass(frozen=True)
