@@ -27,7 +27,7 @@ import sys
 import time
 import urllib.request
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -380,7 +380,7 @@ class Connector:
         )
         return app
 
-    async def watch_orders(self, app: web.Application):
+    async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """The running Core service advances stalled orders without a commander call."""
         with self.opened_wire() as comms:
             task = asyncio.create_task(

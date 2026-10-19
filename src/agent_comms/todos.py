@@ -370,7 +370,7 @@ class ProgressSource:
 
 
 class MeasuredProgressSource(ProgressSource):
-    """The board's distance view admits Check execution; the watchdog only reads activity."""
+    """The board's distance view runs the Check; the stall watcher only reads activity."""
 
     def readings(self) -> DistanceReadings:
         """The order's base, then each branch commit since the order; the last two are read."""
@@ -409,8 +409,8 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def from_source(cls, source: ProgressSource) -> OrderProgress:
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
-            return next((progress for member in members for progress in member.observations(source)),
-                        NoCommitProgress())
+            return next((progress for member in members
+                         for progress in member.observations(source)), NoCommitProgress())
         except subprocess.TimeoutExpired as unread:
             return UnreadProgress(str(unread))
 
@@ -426,7 +426,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The order's distance readings; progress that read no commit has none."""
         return DistanceReadings()
 
-    def advance(self, todo: Todo, now: float) -> Todo:
+    def advance(self, todo: Todo, ordered: float, now: float) -> Todo:
         """Progress with no stall consequence leaves its order unchanged."""
         return todo
 
@@ -470,6 +470,10 @@ class Stalling:
 
     seconds: ClassVar[int] = 600
 
+    @property
+    @abstractmethod
+    def state(self) -> str: ...
+
     @abstractmethod
     def last_move(self, ordered: float) -> float: ...
 
@@ -483,8 +487,8 @@ class Stalling:
     def stalled(self, ordered: float, now: float) -> bool:
         return now >= self.stall_at(ordered)
 
-    def advance(self, todo: Todo, now: float) -> Todo:
-        if not self.stalled(todo.order.at.recorded_at("An order"), now):
+    def advance(self, todo: Todo, ordered: float, now: float) -> Todo:
+        if not self.stalled(ordered, now):
             return todo
         owner, actor = todo.held(), todo.creator_identity
         reason = StrikeReason(f"{owner.owner} stalled on {todo.id}: {self.stall_reason()}")
@@ -2327,7 +2331,7 @@ class TodoStore(TypedStore):
                 with self.writing() as db:
                     current = self._current(db, todo.id)
                     current.require_result(todo)
-                    result = progress.advance(current, observed_at)
+                    result = progress.advance(current, source.since, observed_at)
                     if result != current:
                         result.upsert(db)
                         changed.append(result)

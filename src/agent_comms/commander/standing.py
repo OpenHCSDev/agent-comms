@@ -141,10 +141,11 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
             comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
         idle, found = cls.idle(comms, commander), []
         for todo in rows:  # a unit struck on a problem never gets that problem back
-            unit = next((unit for unit in idle if not todo.live_strikes(unit.name)), None)
-            if unit is not None:
-                idle.remove(unit)
-                found.append(cls(todo, unit.name))
+            for unit in idle:
+                if not todo.live_strikes(unit.name):
+                    idle.remove(unit)
+                    found.append(cls(todo, unit.name))
+                    break
         return tuple(found)
 
     def line(self) -> str:
