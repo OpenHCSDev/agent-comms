@@ -581,7 +581,8 @@ def hunt(where, pid, why, sent=None):
         f'Refused: {pid} is not an open tracked problem; a hunt is recorded on one. '
         + HuntVerb.usage())
     if sent and todo.order.id != sent:
-        sys.exit(f'Refused: {sent} is not the open order of {pid}; send it first. {HuntVerb.usage()}')
+        sys.exit(f'Refused: {sent} is not the open order of {pid}; send it first. '
+                 + HuntVerb.usage())
     ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
     call(CommsTodoTool(id=todo.id, operation=RecordHuntTodo(
         todo.revision, COMMS.registry.require(ME).incarnation,
