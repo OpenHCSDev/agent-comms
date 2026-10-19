@@ -64,10 +64,12 @@ async def ready(path: Path) -> None:
 @pytest.mark.asyncio
 async def test_bounded_run_retires_real_child_and_defiant_grandchild(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "tree.json"
-    result = await BoundedRun.run((sys.executable, "-c", TREE, str(acknowledgement)), timeout=1)
-    assert isinstance(result.outcome, TimedOutOutcome)
-    assert result.stdout == b"tree ready\n"
-    assert all(not member.alive() for member in identities(acknowledgement))
+    async with BoundedRun.session((sys.executable, "-c", TREE, str(acknowledgement)), timeout=30) as child:
+        # The child announces both live identities; machine load is not readiness.
+        assert await child.stdout.readline() == b"tree ready\n"
+        outcome = await child.finish()
+        assert isinstance(outcome, TimedOutOutcome)
+        assert all(not member.alive() for member in identities(acknowledgement))
 
 
 @pytest.mark.asyncio
