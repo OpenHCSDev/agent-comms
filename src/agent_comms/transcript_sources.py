@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .typed_table import TypedStore
+from .typed_table import StoreWriter
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
@@ -280,13 +280,13 @@ class LaterTranscript(TranscriptTraversal):
 
 
 class TranscriptDraft:
-    def end_turn(self, transcript: TypedStore) -> None:
+    def end_turn(self, transcript: StoreWriter) -> None:
         """An absent draft needs no write."""
 
     def append_text(self, text: str):
         return self
 
-    def publish(self, transcript: TypedStore) -> None:
+    def publish(self, transcript: StoreWriter) -> None:
         """An absent draft needs no publication."""
 
     def external_row(self):

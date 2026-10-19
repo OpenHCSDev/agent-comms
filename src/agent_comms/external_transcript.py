@@ -25,7 +25,7 @@ from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
-from .typed_table import Column, ForeignKey, Index, RealStorage, TypedRow, TypedStore, TypedTable
+from .typed_table import Column, ForeignKey, Index, RealStorage, StoreWriter, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
@@ -254,7 +254,7 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
             return
         transcript = ExternalTranscript(root, original.owner_lookup)
         with transcript.writer_connection() as connection:
-            publication = TurnDraftPublication(root, original.owner_lookup, connection, input_id)
+            publication = TurnDraftPublication(original.owner_lookup, connection, input_id)
             try:
                 yield publication
             finally:
@@ -264,11 +264,11 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
         from dataclasses import replace
         return replace(self, events=tuple(replace(event, text=event.text + text) for event in self.events))
 
-    def publish(self, transcript: TypedStore) -> None:
+    def publish(self, transcript: StoreWriter) -> None:
         with transcript.writing() as connection:
             self.upsert(connection)
 
-    def end_turn(self, transcript: TypedStore) -> None:
+    def end_turn(self, transcript: StoreWriter) -> None:
         with transcript.writing() as connection:
             self.delete(connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
 
@@ -495,11 +495,11 @@ class DraftPublication:
         pass
 
 
-class TurnDraftPublication(ExternalTranscript, DraftPublication):
+class TurnDraftPublication(DraftPublication, StoreWriter):
     """A native turn owns one connection; each message owns one draft identity."""
 
-    def __init__(self, root: Path, lookup: str, connection: Connection, turn_id: str):
-        super().__init__(root, lookup)
+    def __init__(self, lookup: str, connection: Connection, turn_id: str):
+        self.lookup = lookup
         self.connection = connection
         self.turn_id = turn_id
         self.current: TranscriptDraft = NoDraft()
