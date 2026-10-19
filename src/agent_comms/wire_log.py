@@ -483,7 +483,7 @@ class WireStoreLock(StoreLock):
         log = WireLog(path)
         private_marker = log._claim_marker_unlocked()
         if private_marker is None:
-            log._sync_replaced_page_index_unlocked(mode)
+            log._sync_page_index_unlocked(mode)
             yield None
             return
         marker_info = log.metadata_path.lstat()
@@ -497,7 +497,7 @@ class WireStoreLock(StoreLock):
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
         with opened_private_checkpoint_unlocked(log, private_marker, mode=mode) as source:
-            log._sync_replaced_page_index_unlocked(mode)
+            log._sync_page_index_unlocked(mode)
             yield source
 
 
@@ -766,10 +766,7 @@ class WireLog(StoreLockOwner):
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
-        # The append owns derived offsets too: readers never advance them.
-        with ExitStack() as resources, self.page_index_type(self.path) as index:
-            opened = self._open_snapshot_unlocked(resources, metadata, metadata.last_seq)
-            index.sync(opened)
+        self._sync_page_index_unlocked(ExclusiveLock())
         StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
@@ -896,12 +893,15 @@ class WireLog(StoreLockOwner):
             raise RelationViolationError("Private checkpoint lacks its claim read barrier.")
         return metadata if metadata.claims else None
 
-    def _sync_replaced_page_index_unlocked(self, mode: LockMode) -> None:
-        with self.page_index_type(self.path) as index:
-            if index.replaced_by(ObservedPath.at(self.path)):
-                mode.require_writer()
-                with ExitStack() as resources:
-                    opened = self._open_snapshot_unlocked(resources, self.private_marker_unlocked(), 0)
+    def _sync_page_index_unlocked(self, mode: LockMode) -> None:
+        """Lend readers only indexed cuts; missing or stale coverage needs a writer."""
+        with ExitStack() as resources:
+            opened = self._open_snapshot_unlocked(resources, self.private_marker_unlocked(), 0)
+            if not opened.complete_prefix.boundary:
+                return
+            with self.page_index_type(self.path) as index:
+                if not index.covers(opened):
+                    mode.require_writer()
                     index.sync(opened)
 
     @property
