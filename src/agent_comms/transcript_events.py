@@ -6,22 +6,29 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
-from pydantic import JsonValue
 from urllib.parse import quote
+
+from pydantic import JsonValue
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .message_reference import MessageReference
 from .messages import Message
 from .order_story import StoryEvent
-from .recorded_time import EventTime, UnrecordedEventTime
-from .message_reference import MessageReference
+from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 from .ui_model.message_category import (
-    MessageCategory, UserCategory, AgentCategory, InboundCategory, OutboundCategory,
-    OtherCategory, ThinkingCategory, ToolCategory,
+    AgentCategory,
+    InboundCategory,
+    MessageCategory,
+    OtherCategory,
+    OutboundCategory,
+    ThinkingCategory,
+    ToolCategory,
+    UserCategory,
 )
 
 if TYPE_CHECKING:
@@ -373,7 +380,7 @@ class ToolStartTranscript(ToolTranscript):
                 self.tool_name, self.tool, self.raw_input)
             calls[self.tool_call_id] = OrderCall(
                 self.tool_call_id, self.tool_name, digest, RunningCallState,
-                UnrecordedEventTime() if self.timestamp is None else EventTime.capture(self.timestamp))
+                GeneratedTimestamp.decode(self.timestamp))
 
     def imported(self) -> ImportedMessage:
         return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"

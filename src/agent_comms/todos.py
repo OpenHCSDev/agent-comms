@@ -7,13 +7,13 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import re
-import subprocess
 import sqlite3
+import subprocess
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
@@ -22,24 +22,30 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
 from .change_report import FileLine
+from .channel_targets import CommandTarget
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
-from .order_story import FleetStoryEvent, StoryEvent, StoryLine, StorySource
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
     boundary_decoder,
 )
-from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from .order_story import FleetStoryEvent, StoryEvent, StoryLine, StorySource
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .standing_rules import UndatedStandingRule
+from .storage_rules import StorageRule
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
-from .standing_rules import UndatedStandingRule
-from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -1073,6 +1079,9 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
+    def issued(self) -> CheckedProblemOrder:
+        raise ValueError("This problem has no issued order.")
+
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
 
@@ -1167,6 +1176,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     pending: ClassVar[bool]
     line: ClassVar[str]
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
+
+    def issued(self) -> CheckedProblemOrder:
+        return self
 
     def story(self, problem: str) -> tuple[StoryLine, ...]:
         return (StoryLine(self.at, f"{problem}: ordered {self.id}: {'; '.join(self.edits)}"),)
@@ -2275,6 +2287,10 @@ class TodoStore(TypedStore):
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
         return self._one(self._select("id=?", (todo_id,)), todo_id)
+
+    def assigned_problem(self, todo_id: str) -> tuple[Todo, ...]:
+        """The canonical assigned row; an unassigned problem has no work source."""
+        return self._select("id=? AND assignment IS NOT NULL", (todo_id,))
 
     def list(self, repo: str) -> tuple[Todo, ...]:
         return self._select("repo=?", (_repo(repo),))

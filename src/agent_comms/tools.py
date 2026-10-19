@@ -5,33 +5,39 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from collections.abc import Mapping
-from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
-from .progress_claims import ProgressClaim
-from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
-from .cli_commands import (
-    ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
-    PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
-    ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
-    HistoryCliCommand,
-    _json_object, option,
-)
-from .thread_execution import (
-    ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
-    StartOwnerControl, ThreadCommandAvailability,
-)
-from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
+from .change_report import ChangeReport
+from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
 from .channel_targets import ChannelTarget, CommandTarget
 from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .cli_commands import (
+    ArchiveCliCommand,
+    CliCommand,
+    DeleteViewCliCommand,
+    ForkCliCommand,
+    HistoryCliCommand,
+    PinChannelCliCommand,
+    PinThreadCliCommand,
+    StartCliCommand,
+    StopCliCommand,
+    ThreadArchivedResult,
+    ThreadCreatedResult,
+    ThreadsCliCommand,
+    ThreadStoppedResult,
+    _json_object,
+    option,
+)
+from .cli_result import ToolCatalogResult
+from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
@@ -40,50 +46,88 @@ from .goal_actions import (
     GoalPrecondition,
     ModelInvocable,
     OrderGoalAction,
-    SetGoalAction, TransitionGoalAction,
+    SetGoalAction,
+    TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_waits import StandbyReview
-from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
+from .goal_waits import StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
-from .rule_reviews import RuleReviewEntry, RuleReviews
-from .standing_rules import RulesDue, StandingRule
-from .plan_phases import OrderPhase
-from .message_reference import MessageReference
-from .message_page import PageBounds
 from .history_result import HistoryPageResult
-from .page_traversal import PageCursor
-from .messages import Message
-from .owner_lifecycle import OwnerStartResult
-from .presentation import ChannelView
-from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
-from .owner_lifecycle import OwnerRestartSelection
-from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as enqueue_restart
-from .restart_queue import status as restart_status
-from .thread_management import RenameThreadResult
-from .transcript_events import SentTranscript
-from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
-                    OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
-                    TodoOperation, VerdictAudience)
-from .change_report import ChangeReport
-from .messages import InfoKind, MessageKind, NoticeRole
-from .native_tools import NativeToolDeclaration, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
-from .cli_result import ToolCatalogResult
-from .tool_result import ToolResult
-from .send_result import CorrectionResult, SendResult
-from .coordination_tables.refusals import SendRefusal
-from .task_sources import (
-    CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
-    TaskScopeSelection, OriginalTaskChange,
-)
-from .order_work import OrderWork
+from .input_attempt import UnresolvedInput
+from .launch_runtime import LaunchRuntime
+from .message_page import PageBounds
+from .message_reference import MessageReference
+from .messages import InfoKind, Message, MessageKind, NoticeRole
+from .native_tools import NativeRequestTools, NativeToolDeclaration
 from .order_story import FleetStory, OrderStory
-from .turn_digests import LastTurns, OrderEditCountRead, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
-from .relationships import RelationshipEdit
-from .work_branches import WorkBranch, WorkBranches
+from .order_work import OrderWorkResult
+from .owner_lifecycle import OwnerRestartSelection, OwnerStartResult
+from .page_traversal import PageCursor
+from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
+from .plan_phases import OrderPhase
+from .presentation import ChannelView
+from .progress_claims import ProgressClaim
+from .relationships import (
+    Collaboration,
+    GoalDerivedContact,
+    GoalMentionDiagnostic,
+    RelationshipEdit,
+)
+from .restart_queue import QueuedRestart
+from .restart_queue import cancel as cancel_restart
+from .restart_queue import enqueue as enqueue_restart
+from .restart_queue import status as restart_status
+from .rule_reviews import RuleReviewEntry, RuleReviews
+from .send_result import CorrectionResult, SendResult
+from .standing_rules import RulesDue, StandingRule
+from .task_sources import (
+    Constraint,
+    CurrentTaskScopeSelection,
+    Decision,
+    OriginalTaskChange,
+    Subtask,
+    TaskAttachment,
+    TaskChange,
+    TaskScopeSelection,
+)
+from .thread_execution import (
+    ArchiveOwnerControl,
+    NativeOwnerCommand,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+    ThreadCommandAvailability,
+)
+from .thread_management import RenameThreadResult
+from .todos import (
+    CorrectCheckTodo,
+    DeliverTodo,
+    InstallTodo,
+    OrderDelivery,
+    OrderProgress,
+    OrderVerdict,
+    PlainText,
+    PullRequests,
+    ServeTodo,
+    StrikeReason,
+    Todo,
+    TodoOperation,
+    VerdictAudience,
+)
+from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
 from .tool_output import MAX_INLINE_OUTPUT_BYTES
+from .tool_result import ToolResult
+from .transcript_events import SentTranscript
+from .turn_digests import (
+    LastTurns,
+    OrderEditCountRead,
+    OrderEditsRead,
+    ThreadTurns,
+    TurnDigestRead,
+    TurnsSince,
+    UnjudgedEdits,
+)
+from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -958,9 +1002,8 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
         todo = comms.goals.todos.get(self.problem)
         events = list(todo.story())
-        if todo.assignment is not None:
-            work = CommsOrderWorkTool(problem=self.problem).apply(comms, caller)
-            events.extend(event for call in work.calls for event in call.story(self.problem))
+        work = CommsOrderWorkTool(problem=self.problem).apply(comms, caller)
+        events.extend(work.story())
         return OrderStory(self.problem, todo.order.line,
                           tuple(sorted(events, key=lambda event: event.at.chronology())))
 
@@ -985,11 +1028,8 @@ class CommsOrderWorkTool(ReadTool, ToolRequest):
                    "first, from the unit's own turn records.")
     problem: str = tool_field("Problem ID")
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
-        todo = comms.goals.todos.get(self.problem)
-        since = todo.order.at.recorded_at("An order")
-        turns = comms.transcripts.turns(todo.held().owner, TurnsSince(since))
-        return OrderWork.read(self.problem, turns.thread, since, turns.turns)
+    def apply(self, comms: Comms, caller: ToolCaller) -> OrderWorkResult:
+        return OrderWorkResult.for_problem(comms, self.problem)
 
 
 @dataclass(frozen=True, kw_only=True)

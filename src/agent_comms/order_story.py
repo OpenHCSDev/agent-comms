@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 
 from .recorded_time import EventTime
@@ -15,7 +15,7 @@ class StoryLine:
     text: str
 
 
-class StorySource(ABC):
+class StorySource:
     """An existing record that contributes its own dated facts."""
 
     def story(self, problem: str) -> tuple[StoryLine, ...]:
