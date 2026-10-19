@@ -34,6 +34,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.native_runtime_input import NativeRuntimeInput
 import sqlite3
 from contextlib import closing
+from agent_comms.channel_targets import CommandTarget
 
 provider_failure = False
 original_status = BaseHTTPRequestHandler.send_response
@@ -81,7 +82,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     await until(pilot, lambda: isinstance(comms.agents.activity_of('beta', snapshot=comms.registry.snapshot()).readiness,
                                         UnavailableDrainReadiness), 25)
     assert len(requests) == 2
-    failure_source = next(message for message in list(comms.bus.channel_history_page('#team').messages)
+    failure_source = next(message for message in list(comms.views.history_page(CommandTarget.named('#team')).messages)
                           if message.body == 'NEW_PRIVATE_CONTROLLED_PROVIDER_FAILURE')
     with closing(sqlite3.connect((comms.root/'coordination.sqlite3').as_uri()+'?mode=ro',uri=True)) as db:
         retained_input, = NativeRuntimeInput.select(db)
@@ -91,8 +92,8 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     channel.prompt.prompt_text_area.focus()
     await pilot.press('enter')
     await until(pilot, lambda: any(message.body == 'NEW_PRIVATE_INDEPENDENT_PENDING_CHANNEL'
-                                 for message in list(comms.bus.channel_history_page('#team').messages)))
-    pending_source = next(message for message in list(comms.bus.channel_history_page('#team').messages)
+                                 for message in list(comms.views.history_page(CommandTarget.named('#team')).messages)))
+    pending_source = next(message for message in list(comms.views.history_page(CommandTarget.named('#team')).messages)
                           if message.body == 'NEW_PRIVATE_INDEPENDENT_PENDING_CHANNEL')
     await until(pilot, lambda: any('Not read yet' in str(item.title)
                                  for item in channel.query(MessageNotifications)))

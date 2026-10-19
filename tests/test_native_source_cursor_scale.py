@@ -27,6 +27,7 @@ from test_native_prompt_binding import (
     _root,
     fake_native_package_acquisition,
 )
+from agent_comms.channels import ANY_CHANNEL
 
 
 @pytest.fixture
@@ -88,7 +89,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
         assert current.injected_seq == selected.seq
         # Publication adds an original passive reply. Covered no-wake source
         # can advance through it; the injected native source stays selected.
-        assert current.covered_seq == list(comms.views.full_history_page().messages)[-1].seq
+        assert current.covered_seq == list(comms.views.history_page(ANY_CHANNEL).messages)[-1].seq
         assert current.input_id == second.input_id
         assert (
             current.owner_claimed_generation

@@ -16,6 +16,7 @@ from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
+from agent_comms.channels import ANY_CHANNEL
 
 
 def source_witness(bus):
@@ -65,7 +66,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
         page = reader.read(limit=1, partial=True)
         assert page.more_sources and page.blocked_seq == first.seq
         assert page.covered_seq == 0 and page.injected_source_seqs == ()
-        assert [message.seq for message in list(comms.bus.full_history_page().messages)] == [first.seq, second.seq]
+        assert [message.seq for message in list(comms.views.history_page(ANY_CHANNEL).messages)] == [first.seq, second.seq]
         with pytest.raises(ValueError, match="received bool"):
             reader.read(limit=True)
 

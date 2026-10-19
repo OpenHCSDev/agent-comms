@@ -16,6 +16,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from agent_comms.channel_targets import CommandTarget
 
 
 async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch):
@@ -38,7 +39,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
                     if index == 2:
                         observed.extend(
                             (message.body, isinstance(message.role, NoticeRole))
-                            for message in list(comms.views.channel_history_page("#team").messages)
+                            for message in list(comms.views.history_page(CommandTarget.named("#team")).messages)
                         )
                     assert index <= 2
                     if index == 1:
@@ -151,7 +152,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             assert len(requests) == 2
             assert observed == [("Working", True)]
             assert [
-                (message.body, isinstance(message.role, NoticeRole)) for message in list(comms.views.channel_history_page("#team").messages)
+                (message.body, isinstance(message.role, NoticeRole)) for message in list(comms.views.history_page(CommandTarget.named("#team")).messages)
             ] == [("Working", True), ("Done", False)]
         finally:
             await agent.shutdown()

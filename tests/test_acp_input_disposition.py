@@ -38,6 +38,7 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import sent_text, stored_inputs
 from native_backend_fixture import wait_for
+from agent_comms.channels import ANY_CHANNEL
 
 
 class Updates:
@@ -595,7 +596,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             # Nothing is left to start another turn for, and the sender got one answer.
             await wait_for(lambda: owner.inputs.state(session).wake_task is None)
             assert native.provider.posts == 2
-            assert len([m for m in list(comms.views.full_history_page().messages) if m.sender == session]) == 1
+            assert len([m for m in list(comms.views.history_page(ANY_CHANNEL).messages) if m.sender == session]) == 1
         finally:
             held.set()
 

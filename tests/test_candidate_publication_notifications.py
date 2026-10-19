@@ -27,6 +27,7 @@ from agent_comms.wake_candidate_index import (
 from test_claim_bus_read import record_context, selected_turn
 from test_coordination_response import _ready
 from test_optional_awareness_projection import _root, _accepted, _owner, _projection
+from agent_comms.channels import ANY_CHANNEL
 
 _SCHEDULE = candidate_maintenance.schedule_candidate_catchup
 
@@ -121,7 +122,7 @@ def test_response_catches_up_and_supplies_recipient_awareness(tmp_path, notifica
         assert awareness.selected[0].assignment.wire_seq == acknowledgement.seq
         segments = awareness.segments(16384)
         assert segments and not any(isinstance(segment, OmittedAwareness) for segment in segments)
-        assert len(list(case.bus.full_history_page().messages)) == 2
+        assert len(list(case.comms.views.history_page(ANY_CHANNEL).messages)) == 2
         resolve_existing_response(case.store, case.bus, case.fence,
                                   exact_target=case.reply_target, owner_witness=case.witness)
         assert calls == [case.bus.log.path.stat().st_size]
@@ -160,7 +161,7 @@ def test_selected_claim_and_terminal_release_notify_after_their_boundaries(tmp_p
         assert calls == [first_bytes, comms.bus.log.path.stat().st_size]
         assert finished.wait(5)
         assert not comms.bus.log.claim_projection()
-        release = list(comms.bus.full_history_page().messages)[-1].claim_transition.releases[0]
+        release = list(comms.views.history_page(ANY_CHANNEL).messages)[-1].claim_transition.releases[0]
         assert (release.resource, release.generation) == (claim.resource, claim.generation)
 
 

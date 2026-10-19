@@ -32,6 +32,7 @@ from agent_comms.ui_model.observation import (
     SidebarReading,
 )
 from agent_comms.ui_model.unread import IndexingUnread
+from agent_comms.channels import ANY_CHANNEL
 
 
 def test_display_metrics_store_only_append_facts(tmp_path):
@@ -609,7 +610,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
         second = publish_initial(comms, 'sender', '#team', '@Alice next')
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     assert source.stream.closed
-    assert [message.message_id for message in list(comms.bus.full_history_page().messages)] == [
+    assert [message.message_id for message in list(comms.views.history_page(ANY_CHANNEL).messages)] == [
         first.message_id, second.message_id
     ]
 

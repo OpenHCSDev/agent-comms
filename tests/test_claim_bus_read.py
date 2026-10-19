@@ -47,6 +47,8 @@ from agent_comms.turn_context import (
     SegmentManifest,
     TranscriptSegment,
 )
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.channels import ANY_CHANNEL
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -167,7 +169,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
-        claims = [m for m in list(comms.views.full_history_page().messages) if m.claim_transition is not None]
+        claims = [m for m in list(comms.views.history_page(ANY_CHANNEL).messages) if m.claim_transition is not None]
         assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
         ]
@@ -175,7 +177,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         snapshot = comms.registry.snapshot()
         dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
         assert comms.bus.log.read_page(ConversationMessagePageRequest(dm_scope)).messages == ()
-        raw_channel = comms.views.channel_history_page("#team").messages
+        raw_channel = comms.views.history_page(CommandTarget.named("#team")).messages
         assert [message.body for message in raw_channel] == ["@Alice investigate"]
         channel = comms.views.channel_display_page("#team").messages
         assert [message.body for message in channel] == ["@Alice investigate"]
@@ -237,7 +239,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
                         await asyncio.sleep(0.01)
             assert target.read_text() == "value = 2\n"
             assert [
-                (m.sender, m.target, m.body) for m in list(comms.views.full_history_page().messages)
+                (m.sender, m.target, m.body) for m in list(comms.views.history_page(ANY_CHANNEL).messages)
             ] == [
                 ("sender", session, "Change the value"),
                 (session, session, "Claimed"),

@@ -13,6 +13,7 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from pi_session_turn import one_turn_events
+from agent_comms.channel_targets import CommandTarget
 
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
@@ -196,7 +197,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                     "headless", [{"type": "text", "text": "!relay #all headless native route"}]
                 )
                 assert response.stop_reason == "end_turn"
-                assert [m.body for m in list(comms.views.channel_history_page("#all").messages)] == [
+                assert [m.body for m in list(comms.views.history_page(CommandTarget.named("#all")).messages)] == [
                     "headless native route"
                 ]
                 assert not comms.registry.require("headless").active_turn.executing

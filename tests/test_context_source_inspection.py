@@ -19,6 +19,7 @@ from agent_comms.turn_context import (
     SystemLayerSegment, TranscriptSegment, TurnContext,
 )
 from test_private_bus_checkpoint import _root
+from agent_comms.channels import ANY_CHANNEL
 
 
 def system(provenance, content="Original instruction π"):
@@ -269,7 +270,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     comms.bus.log.record_context(captured)
     page = comms.bus.log.context_manifest_page(owner.name, comms.registry)
     assert tuple(resource.value for resource in page.resources) == (captured,)
-    assert list(comms.bus.full_history_page().messages) == []
+    assert list(comms.views.history_page(ANY_CHANNEL).messages) == []
     assert comms.bus.log.latest_sequence() == 0
     assert captured.public_text_recorded
     assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\

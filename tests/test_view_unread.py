@@ -13,6 +13,7 @@ from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.private_path import FileRevision
 from agent_comms.view_unread import ReplyIndex
+from agent_comms.channels import ANY_CHANNEL
 
 
 def test_complete_reply_prefix_counts_during_growth_but_not_after_truncation(tmp_path):
@@ -136,5 +137,5 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         assert child.returncode == 9
         reopened = wire(root)
         reopened.channels.set_channel_any_mode("#team", True)
-        assert [message.seq for message in list(reopened.views.full_history_page().messages)] == [1, 2]
+        assert [message.seq for message in list(reopened.views.history_page(ANY_CHANNEL).messages)] == [1, 2]
         assert reopened.views.viewer_snapshot(str(root)).channel_unread["#team"] == 2

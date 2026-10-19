@@ -31,6 +31,7 @@ from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
 from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
+from agent_comms.channels import ANY_CHANNEL
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -123,7 +124,7 @@ async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path, nati
                 while native.provider.posts < 1 or agent.turns.turn_state(session).active.phase.busy:
                     await asyncio.sleep(0.01)
             replies = [
-                (m.target, m.body) for m in list(comms.views.full_history_page().messages) if m.sender == session
+                (m.target, m.body) for m in list(comms.views.history_page(ANY_CHANNEL).messages) if m.sender == session
             ]
             assert replies == [("sender", "Blocked: the edit did not run.")]
             assert not comms.registry.require(session).active_turn.executing

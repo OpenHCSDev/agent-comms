@@ -30,6 +30,7 @@ from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread, current_thread
+from agent_comms.channels import ANY_CHANNEL
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -603,7 +604,7 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     assert [row.seq for row in messages] == [1, 2, 3]
     assert len({row.message_id for row in messages}) == 3
     reopened = Comms(tmp_path)
-    assert list(reopened.views.full_history_page().messages) == messages
+    assert list(reopened.views.history_page(ANY_CHANNEL).messages) == messages
     reopened.registry.rename("a", "renamed")
     monkeypatch.setattr(reopened.bus.log, "full_history_snapshot", lambda: pytest.fail("full scan"))
     newest = reopened.views.history_page(CommandTarget.named("b"), PageBounds(limit=1), viewer="renamed")

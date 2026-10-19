@@ -17,6 +17,7 @@ from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
 from agent_comms.transcript_events import ToolEndTranscript, TranscriptEvent
 from pi_session_turn import one_turn_events
+from agent_comms.channels import ANY_CHANNEL
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -174,7 +175,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
         "from": "sender", "to": "recipient", "body": "Original private publication"}, caller=NoThreadCaller())
     raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}
     result = PiToolResult.from_wire(raw)
-    message, = list(comms.views.full_history_page().messages)
+    message, = list(comms.views.history_page(ANY_CHANNEL).messages)
     assert result.sent_message(True) == SentTranscript.from_message(message)
     assert result.sent_message(False) is None
     saved = ToolResultMessage.from_wire({

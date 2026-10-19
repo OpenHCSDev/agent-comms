@@ -28,6 +28,7 @@ from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenB
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
 from stored_inputs import stored_inputs
+from agent_comms.channels import ANY_CHANNEL
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
@@ -290,7 +291,7 @@ async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypat
     try:
         with pytest.raises(RequestError):
             await agent.prompt("project", [{"type": "text", "text": "#all look"}, IMAGE])
-        assert not list(agent._comms.views.full_history_page().messages)
+        assert not list(agent._comms.views.history_page(ANY_CHANNEL).messages)
 
     finally:
         agent.sessions.proxies.clear()

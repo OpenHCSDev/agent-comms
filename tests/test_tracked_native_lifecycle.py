@@ -21,6 +21,7 @@ from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
 from delivery_owner_fixture import canonical_agent
 from test_coordinated_runtime import _root
+from agent_comms.channels import ANY_CHANNEL
 
 PACKAGE = str(pinned_native_package())
 
@@ -155,7 +156,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
             assert result.publications
             assert elapsed >= seconds
             assert provider.posts == 2
-            assert list(comms.views.full_history_page().messages)[-1].body == provider.text
+            assert list(comms.views.history_page(ANY_CHANNEL).messages)[-1].body == provider.text
         else:
             async with asyncio.timeout(20):
                 while not (tmp_path / "native-started").exists():

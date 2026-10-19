@@ -17,6 +17,7 @@ from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime import SocketClient
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.channels import ANY_CHANNEL
 
 
 async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
@@ -126,7 +127,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         for _ in range(20):
             await agent.inputs.drain_inbox(owner.name)
         assert agent.cursors.delivery(owner.name).revision == settled_revision
-        assert list(comms.views.full_history_page().messages) == []  # No input submitted or replayed.
+        assert list(comms.views.history_page(ANY_CHANNEL).messages) == []  # No input submitted or replayed.
     finally:
         drains = [state.drain_task for state in agent.inputs.drained.values() if state.drain_task]
         for task in drains:

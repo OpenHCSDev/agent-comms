@@ -34,6 +34,7 @@ from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.channels import ANY_CHANNEL
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -148,7 +149,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 )
                 == selected_owner
             )
-            assert len(list(comms.views.full_history_page().messages)) == 2
+            assert len(list(comms.views.history_page(ANY_CHANNEL).messages)) == 2
             # Simulate a crash after the durable rename intent but before SQL
             # owner CAS: an already selected attempt and exact resource claim
             # must not admit a new claim or touch the existing file.
@@ -280,4 +281,4 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 publish_selected_resource_claim(
                     comms, store, claim_scope, "Alice", ExistingFileClaim(Path(resource))
                 )
-            assert len(list(comms.views.full_history_page().messages)) == 2
+            assert len(list(comms.views.history_page(ANY_CHANNEL).messages)) == 2

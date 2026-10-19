@@ -17,6 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.channel_targets import CommandTarget
 
 
 @pytest.mark.parametrize(
@@ -212,7 +213,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 ]
                 assert [event.text for event in incoming] == [origin.body for origin in messages]
             if case in {"deliver", "rename", "batch_rename"}:
-                assert list(comms.views.channel_history_page("#team").messages)[-1].body == "RECEIVED"
+                assert list(comms.views.history_page(CommandTarget.named("#team")).messages)[-1].body == "RECEIVED"
             if not success:
                 updates = []
 

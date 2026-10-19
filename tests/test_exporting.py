@@ -27,6 +27,7 @@ from agent_comms.exporting import (
 )
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from agent_comms.channels import ANY_CHANNEL
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:
@@ -290,7 +291,7 @@ def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
 
     assert through == 1
     assert [item.body for item in snapshot] == ["captured"]
-    assert [item.body for item in list(comms.views.full_history_page().messages)] == ["captured", "too late"]
+    assert [item.body for item in list(comms.views.history_page(ANY_CHANNEL).messages)] == ["captured", "too late"]
 
 
 def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_path):

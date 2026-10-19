@@ -28,6 +28,7 @@ from agent_comms.errors import (
 from agent_comms.messages import Message, InfoKind
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
+from agent_comms.channels import ANY_CHANNEL
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
@@ -53,7 +54,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     comms, store, root_id, lookups = _root(tmp_path)
     channel = comms.messaging.send_user_message("#team", "hello @alice", worktree=str(tmp_path))
     assert channel.sender_role == UserThreadRole
-    assert [row.body for row in list(comms.views.channel_history_page("#team").messages)] == ["hello @alice"]
+    assert [row.body for row in list(comms.views.history_page(CommandTarget.named("#team")).messages)] == ["hello @alice"]
     initial = comms.bus.log.read_delivery_cohort(root_id, channel.seq)
     assert initial.message == channel
     assert {member.recipient_lookup for member in initial.audience.recipients} == set(
@@ -121,7 +122,7 @@ def test_initial_origin_owns_sender_check_and_append_failure(
     monkeypatch.setattr(comms.bus.log, "append_private_unlocked", fail_after_append)
     with pytest.raises(lost):
         comms.bus.publisher.publish_ordinary(Message(accepted, "bob", "uncertain", InfoKind), origin=origin)
-    assert len(list(comms.bus.full_history_page().messages)) == 1
+    assert len(list(comms.views.history_page(ANY_CHANNEL).messages)) == 1
 
 
 def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
@@ -132,7 +133,7 @@ def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     first = comms.bus.publisher.publish_ordinary(message, origin=origin)
     with pytest.raises(RelationViolationError, match="already exists"):
         comms.bus.publisher.publish_ordinary(message, origin=origin)
-    assert [row.message_id for row in list(comms.bus.full_history_page().messages)] == [first.message_id]
+    assert [row.message_id for row in list(comms.views.history_page(ANY_CHANNEL).messages)] == [first.message_id]
 
 
 def test_post_append_error_is_unknown_and_never_automatically_replayed(
@@ -156,7 +157,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     assert error.wire_root_id == root_id
     initial = comms.bus.log.read_delivery_cohort(root_id, error.wire_seq)
     assert initial.message.message_id == error.message_id
-    assert len(list(comms.bus.full_history_page().messages)) == 1
+    assert len(list(comms.views.history_page(ANY_CHANNEL).messages)) == 1
     monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', original)
     user = comms.registry.require(initial.message.sender)
     same_input = Message(
@@ -171,7 +172,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
             same_input,
             origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
-    assert len(list(comms.bus.full_history_page().messages)) == 1
+    assert len(list(comms.views.history_page(ANY_CHANNEL).messages)) == 1
 
 
 def test_reservation_only_unknown_blocks_same_id_and_later_gap(
@@ -197,7 +198,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
         comms.messaging.send_user_message("alice", "first input", worktree=str(tmp_path))
     assert raised.value.wire_root_id == root_id
     assert captured["id"] == raised.value.message_id
-    assert list(comms.bus.full_history_page().messages) == []
+    assert list(comms.views.history_page(ANY_CHANNEL).messages) == []
     assert comms.bus.log.private_marker_unlocked().last_seq == 1
     monkeypatch.setattr(os, "open", original_open)
     second = Comms(comms.root)
@@ -208,15 +209,15 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
             same,
             origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
-    assert list(second.bus.full_history_page().messages) == []
+    assert list(second.views.history_page(ANY_CHANNEL).messages) == []
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
         second.messaging.send_user_message("alice", "different new human input", worktree=str(tmp_path))
-    assert list(second.bus.full_history_page().messages) == []
+    assert list(second.views.history_page(ANY_CHANNEL).messages) == []
     later_agent = publish_initial(second, "alice", "bob", "unrelated agent input")
     assert later_agent.seq == 2
     with pytest.raises(RelationViolationError, match="sequence gap has UNKNOWN"):
         second.messaging.send_user_message("alice", "new human input", worktree=str(tmp_path))
-    assert len(list(second.bus.full_history_page().messages)) == 1
+    assert len(list(second.views.history_page(ANY_CHANNEL).messages)) == 1
 
 
 def test_cancellation_after_append_entry_is_typed_unknown(
@@ -235,7 +236,7 @@ def test_cancellation_after_append_entry_is_typed_unknown(
     assert comms.bus.log.read_delivery_cohort(root_id, raised.value.wire_seq).message.message_id == (
         raised.value.message_id
     )
-    assert len(list(comms.bus.full_history_page().messages)) == 1
+    assert len(list(comms.views.history_page(ANY_CHANNEL).messages)) == 1
 
 
 def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None:

@@ -15,6 +15,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.channels import ANY_CHANNEL
 
 # The native package executes against only the loopback model declared below.
 tmp_path = private_root_fixture
@@ -128,7 +129,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         )
 
     def replies():
-        return [message for message in list(comms.views.full_history_page().messages) if message.sender == "recipient"]
+        return [message for message in list(comms.views.history_page(ANY_CHANNEL).messages) if message.sender == "recipient"]
 
     try:
         comms.owners.start("recipient")

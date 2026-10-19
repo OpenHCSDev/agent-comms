@@ -48,6 +48,7 @@ from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
 from agent_comms.message_page import PageBounds
+from agent_comms.channels import ANY_CHANNEL
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
@@ -98,8 +99,8 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     assert set(raw[PRIVATE_WIRE_FIELD]) == {"kind", "version", "initial"}
     assert raw[PRIVATE_WIRE_FIELD]["kind"] == "initial"
     assert raw["seq"] == message.seq and raw["id"] == message.message_id
-    assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in list(comms.bus.full_history_page().messages))
-    assert [item.seq for item in comms.bus.full_history_page(PageBounds(max_bytes=32)).messages] == [
+    assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in list(comms.views.history_page(ANY_CHANNEL).messages))
+    assert [item.seq for item in comms.views.history_page(ANY_CHANNEL, PageBounds(max_bytes=32)).messages] == [
         message.seq
     ]
     verified = comms.bus.log.read_delivery_cohort(root_id, message.seq)
@@ -128,7 +129,7 @@ def test_initial_sideband_never_enters_export_or_public_page_budget(tmp_path: Pa
     first = publish_initial(comms, "sender", "#team", "first @Alice")
     second = publish_initial(comms, "sender", "#team", "second @Bob")
     budget = sum(len(json.dumps(message.to_wire()).encode()) + 1 for message in (first, second))
-    page = comms.bus.full_history_page(PageBounds(max_bytes=budget))
+    page = comms.views.history_page(ANY_CHANNEL, PageBounds(max_bytes=budget))
     assert [item.seq for item in page.messages] == [first.seq, second.seq]
     output = tmp_path / "public.jsonl"
     comms.views.export_wire(
@@ -320,7 +321,7 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
             exact_target=case.reply_target, owner_witness=case.witness,
         )
         assert case.bus.log.read_keyed_response(intent) == first
-        assert [m.seq for m in list(case.bus.full_history_page().messages)] == [case.origin_seq, first.seq]
+        assert [m.seq for m in list(case.comms.views.history_page(ANY_CHANNEL).messages)] == [case.origin_seq, first.seq]
         delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)
         assert delivery.audience.canonical_members == {"sender"}
         assert delivery.decisions[0].wake_mode.triage

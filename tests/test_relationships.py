@@ -13,6 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
+from agent_comms.channels import ANY_CHANNEL
 
 
 def add_peer(root, peer):
@@ -52,7 +53,7 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     assert (mirror.owner, mirror.peer, mirror.note) == ("peer", "owner", "Review")
     assert collaboration_rows(comms, "owner")[0].target == "peer"
     assert collaboration_rows(comms, "peer")[0].target == "owner"
-    assert list(comms.views.full_history_page().messages) == []
+    assert list(comms.views.history_page(ANY_CHANNEL).messages) == []
     assert comms.registry.snapshot() == before
     reopened = Comms(comms.root)
     original = reopened.relationships.collaborations("owner")[0]
@@ -158,7 +159,7 @@ def test_concurrent_add_remove_never_leaves_one_sided_contact(tmp_path):
         assert len(
             json.loads((comms.root / "relationships.json").read_text())["collaborations"]
         ) == len(left)
-    assert not list(comms.views.full_history_page().messages)
+    assert not list(comms.views.history_page(ANY_CHANNEL).messages)
 
 
 def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkeypatch):

@@ -105,17 +105,17 @@ class TestHistory:
         chat.messaging.send("PR111", "#ci", "one").message.message_id
         chat.messaging.send("fixer", "#ci", "two").message.message_id
         chat.messaging.send("PR111", "#all", "three").message.message_id
-        assert [m.body for m in list(chat.views.channel_history_page("#ci").messages)] == ["one", "two"]
+        assert [m.body for m in list(chat.views.history_page(CommandTarget.named("#ci")).messages)] == ["one", "two"]
 
     def test_global_channel_history(self, chat):
         chat.messaging.send("PR111", "#all", "hello").message.message_id
-        assert [m.body for m in list(chat.views.channel_history_page("#all").messages)] == ["hello"]
+        assert [m.body for m in list(chat.views.history_page(CommandTarget.named("#all")).messages)] == ["hello"]
         with pytest.raises(ValueError, match="not a channel"):
-            list(chat.views.channel_history_page("broadcast").messages)
+            list(chat.views.history_page(CommandTarget.named("broadcast")).messages)
 
     def test_channel_history_rejects_dm_target(self, chat):
         with pytest.raises(ValueError, match="not a channel"):
-            list(chat.views.channel_history_page("fixer").messages)
+            list(chat.views.history_page(CommandTarget.named("fixer")).messages)
 
 
 class TestChannelsDerived:

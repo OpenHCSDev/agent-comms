@@ -13,6 +13,7 @@ from agent_comms.wire_record import WireRecord, AuthoredObservationWireRecord, R
 from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root, _page
+from agent_comms.channels import ANY_CHANNEL
 
 
 def manifest(owner, generation=1):
@@ -67,21 +68,21 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
     assert comms.bus.log.latest_sequence()==first.seq
-    assert len(list(comms.bus.full_history_page().messages))==1
+    assert len(list(comms.views.history_page(ANY_CHANNEL).messages))==1
     assert _page(comms,lookup)[0].offset>prior[0].offset
     assert _page(comms,lookup)[1:]==prior[1:]
     with comms.bus.opened_activity() as clocks:
         assert clocks.channels==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
     assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
-    assert list(comms.bus.full_history_page().messages)==[first]
+    assert list(comms.views.history_page(ANY_CHANNEL).messages)==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]
     second=publish_initial(comms, 'sender','#team','@Alice next original message')
     assert second.seq==first.seq+1
     comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
     reopened=Comms(comms.root)
-    assert list(reopened.bus.full_history_page().messages)==[first,second]
+    assert list(reopened.views.history_page(ANY_CHANNEL).messages)==[first,second]
     assert len(_page(reopened,lookup)[1])==2
     monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
     recent, limited = reopened.relationships._recent_messages()

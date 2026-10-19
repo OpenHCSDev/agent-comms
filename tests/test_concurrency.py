@@ -20,6 +20,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
+from agent_comms.channels import ANY_CHANNEL
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -131,7 +132,7 @@ class TestConcurrentWire:
             [(str(root), sender, 40) for sender in senders],
         )
 
-        messages = list(wire(root).views.full_history_page(PageBounds(limit=len(senders) * 40)).messages)
+        messages = list(wire(root).views.history_page(ANY_CHANNEL, PageBounds(limit=len(senders) * 40)).messages)
         assert len(messages) == len(senders) * 40
         assert [message.seq for message in messages] == list(range(1, len(messages) + 1))
         assert len({message.body for message in messages}) == len(messages)

@@ -26,6 +26,7 @@ from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.channels import ANY_CHANNEL
 
 
 def _wire(tmp_path: Path) -> Comms:
@@ -92,7 +93,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     reopened = Comms(comms.root)
     assert _rows(reopened, "peer")[0][0].goal_contacts == (contact,)
     assert not comms.relationships.store.path.exists()
-    assert list(comms.views.full_history_page().messages) == []
+    assert list(comms.views.history_page(ANY_CHANNEL).messages) == []
 
 
 def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(

@@ -22,6 +22,7 @@ from agent_comms.peer_relevance import (
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.threads import Thread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
+from agent_comms.channels import ANY_CHANNEL
 
 
 def _wire(tmp_path, *threads):
@@ -145,7 +146,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     shown = json.loads(_partner_activity(comms, "owner")[0].text().splitlines()[-1])
     assert shown[0]["peer"] == "partner" and shown[0]["state"] == "completed"
     # The change is read at the partner's next turn: nothing was sent and nobody was woken.
-    assert list(comms.views.full_history_page().messages) == []
+    assert list(comms.views.history_page(ANY_CHANNEL).messages) == []
     assert comms.bus.pending_counts_all(["owner", "partner", "mate"]) == dict.fromkeys(
         ("owner", "partner", "mate"), 0
     )

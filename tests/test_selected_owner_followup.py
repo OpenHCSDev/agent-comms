@@ -21,6 +21,7 @@ from test_acp_private_nk_delivery import tmp_path as private_root_fixture
 from test_coordinated_runtime import _fake_model
 from stored_inputs import stored_inputs
 from selected_owner_rpc_fixture import scripted_owner, recorded_request, requests
+from agent_comms.channels import ANY_CHANNEL
 
 tmp_path = private_root_fixture
 
@@ -92,7 +93,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
             with pytest.raises(NativePiTerminalFailure, match="Scripted provider failure") as failed:
                 await asyncio.wait_for(wake, 12)
             assert isinstance(failed.value.failure, ModelRequestFailed)
-            notice = list(comms.views.full_history_page().messages)[-1]
+            notice = list(comms.views.history_page(ANY_CHANNEL).messages)[-1]
             assert isinstance(notice.role, NoticeRole) and notice.type is AlertKind
             assert notice.target == "sender" and "No automatic retry" in notice.body
             assert "Scripted provider failure" in drain_diagnostic(comms, "beta").reason

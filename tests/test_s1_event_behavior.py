@@ -26,6 +26,7 @@ from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from stored_inputs import stored_inputs
+from agent_comms.channels import ANY_CHANNEL
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -244,7 +245,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     if not value.successful:
         with pytest.raises(RequestError, match="Internal error"):
             await progress.publish_result()
-        messages = list(comms.bus.full_history_page().messages)
+        messages = list(comms.views.history_page(ANY_CHANNEL).messages)
         assert not any(row.body == "provisional" for row in messages)
         assert any(isinstance(row.role, NoticeRole) and "[Open diagnostic]" in row.body for row in messages)
         assert progress.result is not None and progress.result.diagnostic == diagnostic
@@ -380,7 +381,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             assert native.provider.posts == (2 if committed_progress else 1)
         inputs = stored_inputs(comms.root).rows
         assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
-        rows = list(comms.bus.full_history_page().messages)
+        rows = list(comms.views.history_page(ANY_CHANNEL).messages)
         replies = [row for row in rows if row.sender == name]
         if provider_status == 200:
             assert [(row.body, isinstance(row.role, NoticeRole)) for row in replies] == (

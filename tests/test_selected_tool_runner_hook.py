@@ -27,6 +27,7 @@ from agent_comms.selected_tool_broker import (
 )
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
+from agent_comms.channels import ANY_CHANNEL
 
 
 @pytest.fixture
@@ -194,7 +195,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
     assert session_dir == kwargs_seen[0]["session"].directory
     assert "selected_claimed_write at most once" in calls[0][1]
     assert "using no tools" not in calls[0][1]
-    assert not any(message.claim_transition for message in list(comms.views.full_history_page().messages))
+    assert not any(message.claim_transition for message in list(comms.views.history_page(ANY_CHANNEL).messages))
 
 
 @pytest.mark.asyncio
@@ -292,4 +293,4 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
         is None
     )
     assert len(calls) == len(bound) == 1
-    assert not any(message.claim_transition for message in list(comms.views.full_history_page().messages))
+    assert not any(message.claim_transition for message in list(comms.views.history_page(ANY_CHANNEL).messages))

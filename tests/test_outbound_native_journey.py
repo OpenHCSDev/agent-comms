@@ -12,6 +12,7 @@ from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from agent_comms.channels import ANY_CHANNEL
 
 
 
@@ -99,7 +100,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
                 )
             except acp.RequestError as failure:
                 raise AssertionError(f"Actual ACP error data: {failure.data!r}") from failure
-            wire = list(comms.bus.full_history_page().messages)
+            wire = list(comms.views.history_page(ANY_CHANNEL).messages)
             originals = [
                 message for message in wire if message.body == "Original outbound ownership handoff"
             ]

@@ -23,6 +23,7 @@ from agent_comms.transcripts import TranscriptCursor, TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 import pytest
+from agent_comms.channels import ANY_CHANNEL
 
 
 def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
@@ -193,7 +194,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
     assert reopened.events == (replace(events[0], reader="renamed"), events[1])
-    assert list(comms.bus.full_history_page().messages)[-1] == message
+    assert list(comms.views.history_page(ANY_CHANNEL).messages)[-1] == message
 
 
 async def test_original_target_handling_revokes_open_sender_read_without_new_message(tmp_path, monkeypatch, *, native_runtime_package):  # noqa: F811

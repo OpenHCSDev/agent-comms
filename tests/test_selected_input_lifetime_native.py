@@ -32,6 +32,7 @@ from agent_comms.wake_policy import PassiveWake
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.channels import ANY_CHANNEL
 
 tmp_path = private_root_fixture
 
@@ -185,7 +186,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert caught.value.context.session_file == Path(seed.session_file)
     assert all(not child.alive() for child in journey.children)
     assert not journey.comms.registry.require("beta").active_turn.executing
-    notice = list(journey.comms.views.full_history_page().messages)[-1]
+    notice = list(journey.comms.views.history_page(ANY_CHANNEL).messages)[-1]
     assert isinstance(notice.role, NoticeRole) and "No automatic retry" in notice.body
     delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in delivery.decisions)
@@ -215,7 +216,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert result.input_id != caught.value.context.input_id
     assert all(row in journey.records() for row in before)
     assert not journey.replies
-    assert any(m.body == "NEW_INPUT_COMPLETED" for m in list(journey.comms.views.full_history_page().messages))
+    assert any(m.body == "NEW_INPUT_COMPLETED" for m in list(journey.comms.views.history_page(ANY_CHANNEL).messages))
     print(
         "SAVED_NATIVE_TERMINAL",
         "direct",

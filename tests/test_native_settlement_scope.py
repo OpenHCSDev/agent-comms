@@ -17,6 +17,7 @@ from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.selected_claim import publish_selected_resource_claim
 from agent_comms.threads import Thread
 from test_claim_bus_read import selected_turn, settle_failed
+from agent_comms.channels import ANY_CHANNEL
 
 
 def strand_terminal(monkeypatch, store):
@@ -47,7 +48,7 @@ def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeyp
         with store.session.settlement() as boundary:
             store.session.release_resources(terminal, terminal.attempt.lifecycle, boundary)
         assert dict(comms.bus.log.claim_projection()) == {str(later_file): later}
-        release = list(comms.views.full_history_page().messages)[-1]
+        release = list(comms.views.history_page(ANY_CHANNEL).messages)[-1]
         assert release.target == terminal.assignments[0].lifecycle.exact_target
         assert isinstance(release.role, NoticeRole)
         assert release.claim_transition.incarnation == claimed.incarnation

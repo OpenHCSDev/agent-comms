@@ -32,6 +32,7 @@ from agent_comms.wake_candidate_index import (
 )
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.channels import ANY_CHANNEL
 
 tmp_path = private_root_fixture
 
@@ -222,7 +223,7 @@ async def test_native_full_four_tools_publish_and_release(
         assert len(requests) == 2 + triage
         assert outcome.publications
         responses = [
-            m for m in list(comms.views.full_history_page().messages) if m.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
+            m for m in list(comms.views.history_page(ANY_CHANNEL).messages) if m.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert not comms.registry.require("beta").active_turn.executing

@@ -16,6 +16,7 @@ from agent_comms.execution_states import FailedExecution
 from agent_comms.obligation_states import FailedResponse
 from agent_comms.owner_fence import OwnerFence
 from test_claim_bus_read import selected_turn
+from agent_comms.channels import ANY_CHANNEL
 
 
 @pytest.mark.parametrize("outcome", ["failure", "unknown"])
@@ -49,7 +50,7 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
         ).fetchone()
         assert tuple(phase) == (expected_outcome.declared_name, expected_outcome.declared_name)
         assert dict(comms.bus.log.claim_projection()) == {}
-        notice = list(comms.views.full_history_page().messages)[-1]
+        notice = list(comms.views.history_page(ANY_CHANNEL).messages)[-1]
         release = notice.claim_transition.releases[0]
         expected = (
             f"Released files after a turn with unknown outcome; read them before editing: {resource.name}"
@@ -92,10 +93,10 @@ def test_terminal_release_spans_the_existing_envelope_bound():
         from test_claim_bus_read import settle_failed
         settle_failed(store)
         assert dict(comms.bus.log.claim_projection()) == {}
-        releases = [m.claim_transition for m in list(comms.views.full_history_page().messages)
+        releases = [m.claim_transition for m in list(comms.views.history_page(ANY_CHANNEL).messages)
                     if m.claim_transition and m.claim_transition.releases]
         assert [len(row.releases) for row in releases] == [32, 3]
-        notices = [m for m in list(comms.views.full_history_page().messages)
+        notices = [m for m in list(comms.views.history_page(ANY_CHANNEL).messages)
                    if m.claim_transition and m.claim_transition.releases]
         assert all(m.body.startswith("Released files after a failed turn: ") for m in notices)
         assert sum(m.body.count("file-") for m in notices) == 35
@@ -179,6 +180,6 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
                 assert tuple(NativeRuntimeInput.one(store.session._connection, input_id=row.input_id)
                              for row in old_bytes) == old_bytes
                 assert not store.snapshots.get(terminal.execution.execution_id).can_retry
-            assert any(m.body == "Edited after restart." for m in list(comms.views.full_history_page().messages))
+            assert any(m.body == "Edited after restart." for m in list(comms.views.history_page(ANY_CHANNEL).messages))
         finally:
             await asyncio.to_thread(comms.owners.stop, "worker")

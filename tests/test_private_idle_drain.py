@@ -29,6 +29,7 @@ from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from agent_comms.channels import ANY_CHANNEL
 
 
 @pytest.mark.asyncio
@@ -166,7 +167,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             await progress.chunk(events.Chunk("committed progress"))
             await progress.committed_progress(events.CommittedProgress("committed progress"))
             assert progress.reply_parts == []
-            assert [(row.body, isinstance(row.role, NoticeRole)) for row in list(comms.bus.full_history_page().messages)] == [
+            assert [(row.body, isinstance(row.role, NoticeRole)) for row in list(comms.views.history_page(ANY_CHANNEL).messages)] == [
                 ("committed progress", True),
             ]
             progress.result = events.Done("refused", False)
@@ -193,7 +194,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
                 finish.set()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            rows = list(comms.bus.full_history_page().messages)
+            rows = list(comms.views.history_page(ANY_CHANNEL).messages)
             assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
             assert "[Open diagnostic]" in rows[-1].body
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
