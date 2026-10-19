@@ -8,12 +8,14 @@ from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
-from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
+from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field, field_validator, model_validator
 
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
+from .field_codec import TimestampText
+from .recorded_time import MissingTranscriptTimestampError
 from .external_transcript import RequestedEarlierPage
 
 if TYPE_CHECKING:
@@ -30,6 +32,24 @@ async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
 class WireModel(BaseModel):
     """Strict fields at an external protocol boundary."""
     model_config = ConfigDict(strict=True)
+
+
+class TimestampedWire(WireModel):
+    """A source record's original ISO timestamp, decoded before making any events."""
+
+    timestamp: float
+
+    @model_validator(mode='before')
+    @classmethod
+    def require_source_time(cls, value):
+        if isinstance(value, dict) and value.get('timestamp') is None:
+            raise MissingTranscriptTimestampError(f'{cls.__name__} has no recorded timestamp')
+        return value
+
+    @field_validator('timestamp', mode='before')
+    @classmethod
+    def epoch(cls, value: str) -> float:
+        return TimestampText.from_text(value).at.timestamp()
 
 
 class RegisteredWireMeta(AutoRegisterMeta, type(WireModel)):
