@@ -23,7 +23,7 @@ from .private_path import FileRevision
 from .transcript_sources import TranscriptSource
 
 
-def _reverse_records(
+def reverse_records(
     path: Path, before: int, *, floor: int = 0
 ) -> Generator[tuple[int, int, bytes], None, None]:
     """Scan offsets in fixed chunks, then read each complete record exactly once.
@@ -349,7 +349,7 @@ class NativeTranscript(TranscriptSource):
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size
         floor = max(0, end - max_bytes) if max_bytes is not None else 0
-        for _, _, raw in _reverse_records(self.path, end, floor=floor):
+        for _, _, raw in reverse_records(self.path, end, floor=floor):
             # Skip only the record still being appended; corrupt history raises.
             if raw.endswith(b"\n"):
                 yield NativeEntry.read(raw)
@@ -365,5 +365,5 @@ class NativeTranscript(TranscriptSource):
                 yield NativeRecord.read(start, stream.tell(), raw)
 
     def reverse(self, before: int):
-        for start, end, raw in _reverse_records(self.path, before):
+        for start, end, raw in reverse_records(self.path, before):
             yield NativeRecord.read(start, end, raw)

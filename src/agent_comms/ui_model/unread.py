@@ -1,4 +1,4 @@
-"""What a thread's or channel's unread state shows; only complete counts are numbers."""
+"""Exact counts and record-capped lower bounds, as supplied by their backend owners."""
 
 from __future__ import annotations
 
@@ -15,23 +15,22 @@ class UnreadPresentation(ABC):
     @classmethod
     def _for_count(
         cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int],
-        presentation: type[ExactUnread],
     ) -> UnreadPresentation:
         if name in snapshot.unread_pending:
             return IndexingUnread()
-        return presentation(counts.get(name, 0))
+        return ExactUnread(counts.get(name, 0))
 
     @classmethod
     def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.thread_unread, ReplyUnread)
+        return snapshot.thread_unread[name]
 
     @classmethod
     def for_bus(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.unread, ExactUnread)
+        return cls._for_count(snapshot, name, snapshot.unread)
 
     @classmethod
     def for_channel(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.channel_unread, ExactUnread)
+        return cls._for_count(snapshot, name, snapshot.channel_unread)
 
     @property
     @abstractmethod
@@ -60,12 +59,18 @@ class ExactUnread(UnreadPresentation):
 
 
 @dataclass(frozen=True)
-class ReplyUnread(ExactUnread):
+class ReplyUnread(UnreadPresentation):
+    count: int
+    lower_bound: bool
+
     @property
     def label(self) -> str:
-        from agent_comms.view_unread import ReplyIndex
-        return (f"({self.count})" if self.count < ReplyIndex.limit
-                else f"({ReplyIndex.limit - 1}+)")
+        suffix = "+" if self.lower_bound else ""
+        return f"({self.count}{suffix})"
+
+    @property
+    def highlighted(self) -> bool:
+        return bool(self.count)
 
 
 @dataclass(frozen=True)
