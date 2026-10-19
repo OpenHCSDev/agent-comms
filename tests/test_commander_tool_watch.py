@@ -27,6 +27,26 @@ def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
     assert turns["worker"] == ["edit a.py: -old text +new", "write b.py: body line", "bash ls -la"]
 
 
+def test_every_coding_family_uses_the_shared_storage_decision(commander):
+    from agent_comms.storage_rules import WriteStorageEffect
+
+    comms, _ = commander
+    thread = comms.registry.require('worker')
+    path = thread.storage_roots.scratch / 'checked.py'
+    calls = (
+        CodingCall.decode('bash', 'bash', {'command': 'ls -la'}),
+        CodingCall.decode('read', 'read', {'path': str(path)}),
+        CodingCall.decode('edit', 'edit', {'path': str(path), 'edits': [
+            {'oldText': 'old', 'newText': 'new'}]}),
+        CodingCall.decode('write', 'write', {'path': str(path), 'content': 'body'}),
+        CodingCall.decode('request', 'comms_threads', {}),
+        CodingCall.decode('invalid', 'write', {'path': str(path)}),
+    )
+    effects = tuple(call.decide_storage(comms.registry, thread.name) for call in calls)
+    write = (WriteStorageEffect(path),)
+    assert effects == ((), (), write, write, (), ())
+
+
 def test_coordination_call_digests_its_arguments():
     call = CodingCall.decode('coordination-1', 'comms_threads', {})
     assert call.digest() == 'comms_threads {}'
