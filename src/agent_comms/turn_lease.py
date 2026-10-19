@@ -75,9 +75,12 @@ class TurnDeclaration(SubclassUnion, affix=""):
     @abstractmethod
     def matches(self, turn_id: TurnId) -> bool: ...
 
+    @abstractmethod
+    def failed(self, lease: TurnLeaseFence, error: str) -> TurnDeclaration: ...
 
-@dataclass(frozen=True)
-class NoTurn(NullMember, TurnDeclaration):
+
+class IdleTurn(TurnDeclaration, declared_name=None):
+    """Idle behavior is shared by an empty owner and a recorded failure."""
     phase: ClassVar[TurnPhase] = IdlePhase()
     id = None
     started_at = None
@@ -102,7 +105,7 @@ class NoTurn(NullMember, TurnDeclaration):
     def require_turn(self, turn_id: TurnId) -> None:
         raise RelationViolationError("live owner does not hold the requested turn")
 
-    def without_claim(self) -> NoTurn:
+    def without_claim(self) -> IdleTurn:
         return self
 
     def observed_id(self, finished: str | None) -> str | None:
@@ -116,6 +119,31 @@ class NoTurn(NullMember, TurnDeclaration):
 
     def matches(self, turn_id: TurnId) -> bool:
         return False
+
+    def lease(self, incarnation, record):
+        return None
+
+    def held_by(self, lease: TurnLeaseFence) -> bool:
+        return False
+
+    def failed(self, lease: TurnLeaseFence, error: str) -> IdleTurn:
+        return self
+
+
+@dataclass(frozen=True)
+class NoTurn(NullMember, IdleTurn):
+    pass
+
+
+@dataclass(frozen=True)
+class FailedTurn(RecordMember, IdleTurn):
+    """The original turn witness and its error, with no executable authority."""
+    turn: ActiveTurn
+    error: str
+
+    @property
+    def id(self) -> str:
+        return self.turn.id
 
 
 @dataclass(frozen=True)
@@ -164,6 +192,9 @@ class ActiveTurn(RecordMember, TurnDeclaration):
 
     def without_claim(self) -> ActiveTurn:
         return replace(self, claimed_generation=None)
+
+    def failed(self, lease: TurnLeaseFence, error: str) -> TurnDeclaration:
+        return FailedTurn(self, error) if self.may_release(lease) else self
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return self.id == lease.turn_id and self.current(
@@ -294,13 +325,13 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_name=None):
+class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
     identity: TurnIdentity = field(metadata={"wire_transient": True})
     registry_path: Path = field(repr=False, compare=False, metadata={"wire_transient": True})
 
-    record_type = ActiveTurn
+    record_type = TurnDeclaration
 
     @property
     def path(self) -> Path:  # type: ignore[override]  # Derived from its registry.
@@ -313,7 +344,7 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
         return (self if (self.registry_path, self.identity) ==
                 (record.registry_path, record.identity) else record)
 
-    def empty(self) -> ActiveTurn:
+    def empty(self) -> TurnDeclaration:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
 
     @classmethod
@@ -337,6 +368,15 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
 
     def without_claim(self) -> None:
         self._publish_unlocked(self.read().without_claim())
+
+    def fail(self, lease: TurnLeaseFence, error: str) -> TurnDeclaration:
+        """End the exact original turn without depending on a readable registry."""
+        with _store_lock(self.registry_path):
+            before = self.read()
+            after = before.failed(lease, error)
+            if after != before:
+                self._publish_unlocked(after)
+            return after
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
