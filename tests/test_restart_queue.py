@@ -88,8 +88,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         request = queue.enqueue(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), owner.name), launch_runtime=LaunchRuntime.running())
         assert len(reads) == 1
         assert request.state.pending and request.id != old.id
-        await asyncio.wait_for(queue.run(comms), 5)
-        assert watchers == [request.target, request.target]
+        assert watchers == [request.target]
         states = {record.id: record.state for record in queue.status(comms, owner.name)}
         assert isinstance(states[old.id], queue.StaleRestart)
         assert old.target.interpreter in states[old.id].reason

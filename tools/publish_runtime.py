@@ -10,16 +10,17 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager, nullco
 from dataclasses import dataclass, field
 from abc import abstractmethod
 import hashlib
+from io import StringIO
 from importlib.metadata import distribution
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
-import time
 
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
 from agent_comms.comms import wire
+from agent_comms.cli_commands import StatusCliCommand
 from agent_comms.field_codec import FieldCodec, SubclassUnion, NullMember, RecordMember
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
@@ -149,20 +150,13 @@ class RuntimePublication:
     def publish_stopped(self, carries, comms, intent, hold, resources) -> None:
         root = comms.root
         snapshot = comms.registry.snapshot()
-        remaining = []
-        for original in intent.owners:
-            thread = snapshot.threads[original.name]
-            if thread.incarnation != original.identity.incarnation:
-                raise ValueError('Selected owner incarnation changed: ' + original.name)
-            if thread.process_identity == original.process and thread.process_alive:
-                remaining.append(original.name)
+        remaining = [original.name for original in OwnerRestartSelection.live(intent.owners, snapshot)]
         request = OwnerRestartRequest(names=tuple(remaining),
             source_interpreter=intent.previous + '/bin/python')
-        # Route custody always precedes wire custody, including rollback.
-        with self.selected_route(root), _store_lock(root / 'wire'):
-            if not carries.original():
-                if any(original.process.alive() for original in intent.owners):
-                    raise RuntimeError('Cannot restore data while an original worker is running')
+        if not carries.original():
+            if OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):
+                raise RuntimeError('Cannot restore data while an original worker is running')
+            with self.selected_route(root), _store_lock(root / 'wire'):
                 carries.restore_if_unpublished(self.published, nullcontext)
         with ExitStack() as publication:
             publication.enter_context(resources)
@@ -188,6 +182,7 @@ class RuntimePublication:
         descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             acquire_exclusive_route_lock(descriptor)
+            print('Acquired route lock before stopped wire lock', flush=True)
             route = read_active_route(path)
             if route is None or route.root != root.resolve():
                 raise ValueError('Active route changed during publication')
@@ -213,11 +208,11 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
     carries: PreparedCarries
     route_ownership: ExitStack = field(default_factory=ExitStack, compare=False)
 
-    def restart(self, lifecycle, request):
-        # Readers acquire route then wire. Never invert that order at cutover.
-        with self.route_ownership:
-            self.route_ownership.enter_context(self.selected_route(lifecycle.root))
-            return super().restart(lifecycle, request)
+    def stopped_resources(self, lifecycle):
+        # Agent observation children hold shared route locks until they stop.
+        # The restart owner calls this after stopping them and before its wire lock.
+        self.route_ownership.enter_context(self.selected_route(lifecycle.root))
+        return self.route_ownership
 
     def require_selection(self, snapshot, owners) -> None:
         expected = {original.name: original for original in self.selection}
@@ -233,8 +228,10 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
             # owner_restart.py:267 enters OwnerLifecycle.restart_wire(), retained
             # in stopped.ownership until this complete() returns or launches.
             carries.apply(root)
-            # Each carry verifies its own resulting declaration. A status CLI
-            # here would borrow route custody already held by this transaction.
+            output = StringIO()
+            if StatusCliCommand().run(wire(root), output):
+                raise RuntimeError('Converted bus status failed: ' + output.getvalue())
+            print('Converted bus status: ' + output.getvalue().strip(), flush=True)
             if not self.published():
                 self.publish_links()
         stopped.lifecycle.maintenance.clear_stopped(self.maintenance_hold, stopped.wire_descriptor)
