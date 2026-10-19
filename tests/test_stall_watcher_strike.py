@@ -8,8 +8,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
+from agent_comms.active_route import active_route_path
 from agent_comms.commander import standing
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.connector import Connector
@@ -154,7 +156,7 @@ def test_refused_reassignment_keeps_the_original_owner_and_strikes(commander, co
 
 
 async def test_three_connector_passes_allow_real_store_maintenance_between_passes(
-        commander, commander_script, tmp_path, monkeypatch):
+        commander, commander_script, tmp_path, monkeypatch, caplog):
     original, _ = commander
     before = create(commander, 'P1')
     original.registry.declare(original.registry.new_thread(
@@ -195,9 +197,11 @@ finally:
             done.set()
             await asyncio.Future()
 
+    active_route_path().parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(standing.asyncio, 'sleep', between)
-    async with connector.watch_orders(connector.application()):
+    async with TestClient(TestServer(connector.application())):
         await asyncio.wait_for(done.wait(), timeout=30)
+    assert 'Stall watcher pass failed' not in caplog.text
     after = Comms(copied).goals.todos.get('P1')
     assert after.holder == 'spare' and len(after.strikes) == len(after.released) == 1
     assert original.goals.todos.get('P1') == before
