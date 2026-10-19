@@ -73,7 +73,6 @@ from ..todos import (
     VerdictAudience,
     VoidStrikeTodo,
 )
-from ..tool_caller import ThreadCaller
 from ..tools import (
     CommsFireTool,
     CommsOrderCheckTool,
@@ -367,7 +366,7 @@ class Commander(CommanderContext):
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
-        ThreadCaller(self.commander).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence), self.comms)
+        self.call(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence))
         self.write_board()
         print(f'{pid} closed')
 
@@ -428,16 +427,24 @@ class Commander(CommanderContext):
         todo.state.require_open(todo)
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-        refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
-        recorded = self.call(CommsTodoTool(id=task, operation=kind(
-            todo.revision, self.comms.registry.require(self.commander).incarnation, todo.held(), f'{why} (caught by {caught})')))
-        if recorded.todo.revision == todo.revision:
-            return
-        n = struck(self.comms.goals.todos.get(task), unit)
-        line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
-                f'caught by {caught}): {why}')
+        self.recorded(unit, todo, kind(
+            todo.revision, self.comms.registry.require(self.commander).incarnation,
+            todo.held(), f'{why} (caught by {caught})'))
+
+    def recorded(self, unit: str, todo: Todo, strike: StrikeTodo) -> None:
+        """Record once, then post the resulting strike without recording it again."""
+        refuse(strike.reason, *OUTGOING)
+        if self.call(CommsTodoTool(id=todo.id, operation=strike)).todo.revision != todo.revision:
+            self.posted(unit, self.comms.goals.todos.get(todo.id), strike)
+
+    def posted(self, unit: str, todo: Todo, strike: StrikeTodo) -> None:
+        """Publish a strike already recorded by Core, including delivery lateness."""
+        n = struck(todo, unit)
+        line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {todo.id}'
+                f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
-        print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
+        print(f'{unit}: {n} strike(s) on {todo.id}'
+              + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
 
     def done(self, pid, sha, screenshot='', seen='', repo=''):
@@ -477,12 +484,10 @@ class Commander(CommanderContext):
                                       delivered_commit=delivered_commit, evidence=evidence)
             claim = MergedClaim(delivery.delivered)
         self.call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
-        lateness = self.comms.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
-        # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
-        if not operation and lateness.late():
-            self.strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered_commit}')
-            return
-        print(f'{unit}: order {todo.order.id} met as {sha}')
+        delivered_todo = self.comms.goals.todos.get(pid)
+        for late in delivered_todo.strikes[len(todo.strikes):]:
+            self.posted(unit, delivered_todo, late)
+        print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
 
 
     def first_calls(self, held, activity):

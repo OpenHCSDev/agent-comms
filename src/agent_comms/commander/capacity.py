@@ -14,6 +14,11 @@ import os
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .context import CommanderContext
 
 from ..comms import Comms
 
@@ -21,12 +26,12 @@ PER_COMMANDER = 6
 BEAT_AGE = 10 * 60
 
 
-def live_forks(forks) -> list[str]:
+def live_forks(forks: Path) -> list[str]:
     os.makedirs(forks, exist_ok=True)
     return [n[:-5] for n in os.listdir(forks) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{forks}/{n}') < BEAT_AGE]
 
 
-def beat(forks, name: str):
+def beat(forks: Path, name: str) -> None:
     os.makedirs(forks, exist_ok=True)
     with open(f'{forks}/{name}.beat', 'a'):
         os.utime(f'{forks}/{name}.beat')
@@ -41,7 +46,7 @@ class Load:
     forks: tuple[str, ...]
 
     @classmethod
-    def of(cls, comms: Comms, commander: str, forks) -> Load:
+    def of(cls, comms: Comms, commander: str, forks: Path) -> Load:
         from ..tools import CommsUnjudgedTool
         actor, now = comms.registry.require(commander).incarnation, time.time()
         owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
@@ -71,6 +76,6 @@ class Load:
             sys.exit(f'REFUSED, nothing recorded: overloaded: {self}.')
 
 
-def main(a, commander):
+def main(a: list[str], commander: CommanderContext) -> None:
     load = Load.of(commander.comms, commander.commander, commander.state / 'forks')
     print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')

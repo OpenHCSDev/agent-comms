@@ -5,6 +5,7 @@ from datetime import datetime
 from ..todos import Todo
 from ..tools import CommsStandingRulesTool, StandingRulesRead
 from . import judge, order
+from .context import CommanderContext
 
 
 def broken_rules(commander, after=0.0):
@@ -13,7 +14,7 @@ def broken_rules(commander, after=0.0):
     return read.broken
 
 
-def owed_orders(commander) -> dict[str, list[Todo]]:
+def owed_orders(commander: CommanderContext) -> dict[str, list[Todo]]:
     """Each unit's open orders."""
     owed: dict[str, list[Todo]] = {}
     for todo in commander.held_orders():

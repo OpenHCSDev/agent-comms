@@ -1796,7 +1796,7 @@ class ContextCliCommand(CliCommand):
         parser.add_argument("--imported", action="store_true")
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> ContextCliCommand:
+    def from_namespace(cls, args: argparse.Namespace, **context: object) -> ContextCliCommand:
         if args.imported:
             if "turn" in vars(args) or args.diff:
                 raise ValueError("--imported cannot be combined with --turn or --diff")

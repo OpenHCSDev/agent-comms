@@ -18,6 +18,7 @@ import random
 import re
 import sys
 from dataclasses import dataclass
+from typing import cast
 
 from ..cli_commands import option
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
@@ -25,6 +26,7 @@ from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
+from .context import CommanderContext
 from .order import CommanderVerb
 
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
@@ -39,8 +41,8 @@ def principles() -> list[str]:
     return [l[2:].strip() for l in text.splitlines() if l.startswith('- ') and len(l) > 40]
 
 
-def rules(commander) -> list[str]:
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(str(commander.skill)).read(), re.M)]
+def rules(commander: CommanderContext) -> list[str]:
+    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', CommanderConfig.packaged_skill().read_text(), re.M)]
     for path in [path for directory in commander.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
         text = open(path).read()
         if re.search(r'^\s*type: feedback', text, re.M):
@@ -49,12 +51,13 @@ def rules(commander) -> list[str]:
     return found
 
 
-def record(commander, who: str, entry: RuleReviewEntry) -> None:
-    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), commander.comms)
+def record(commander: CommanderContext, who: str, entry: RuleReviewEntry) -> None:
+    read = cast(StandingRulesRead, ThreadCaller(who).invoke(
+        CommsRuleReviewTool(entry=entry), commander.comms))
     print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
-def review(commander, who: str):
+def review(commander: CommanderContext, who: str) -> None:
     every = rules(commander)
     for i, r in enumerate(every, 1):
         print(f'{i:3}. {r}')
@@ -73,7 +76,7 @@ def review(commander, who: str):
         print(f'  {n}. {r}')
 
 
-def answer(commander, n: int, text: str, who: str):
+def answer(commander: CommanderContext, n: int, text: str, who: str) -> None:
     record(commander, who, AnsweredRuleReviewEntry(n, text))
 
 
@@ -105,7 +108,7 @@ class StaleVerb(RulesVerb):
         print('\n'.join(due.why for due in RulesDue.violations(self.context.comms, self.who)) or 'fresh')
 
 
-def main(a, commander):
+def main(a: list[str], commander: CommanderContext) -> None:
     try:
         RulesVerb.parse(a, __doc__, commander).apply()
     except ValueError as refused:  # Core owns what a review and an answer may say
