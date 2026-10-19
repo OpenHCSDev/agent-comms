@@ -114,7 +114,7 @@ def reserve_foreground_owner(
         comms.channels._require_available_new_tags(owner.tags)
         comms.registry.register(owner)
         with comms.channels.catalog.editing() as document:
-            document.remember_tags(owner.tags, owner.created_at)
+            document.remember_tags(owner.tags)
     return ForegroundOwner(root, wire_root_id, owner.name, native_package)
 
 
