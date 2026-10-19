@@ -18,6 +18,7 @@ from .agent_events import CompactionEvent
 from .pi_native_backend import PersistentPiSession
 from .comms import Comms
 from .coordination_errors import (
+    CoordinationError,
     IdentityConflict,
     PublicationActivationBlocked,
     RetryScheduled,
@@ -62,6 +63,7 @@ class SelectedExecution(NativeExecution):
     opt_in: bool = True
     after_seq: int = 0
     session_file: Path | None = None
+    session_directory: Path = field(init=False)
     selected_existing_file_write: SelectedAction | None = None
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
@@ -87,7 +89,21 @@ class SelectedExecution(NativeExecution):
         """Check execution authority; the process already owns its acquired package."""
         if not self.opt_in:
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
-        _private_session_dir(self.root)
+        try:
+            _private_session_dir(self.root)
+            owner = Comms(self.root).registry.require(self.owner_name)
+            if not Path(owner.worktree).is_dir():
+                raise ValueError("registered participant worktree is unavailable")
+            directory = self.root / "native-sessions" / owner.incarnation.lookup
+            directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+            _private_session_dir(directory)
+            paths = ((self.session_file,) if self.session_file is not None
+                     else owner.runtime.read_keys())
+            for path in paths:
+                _private_session_dir(Path(path).absolute().parent)
+        except (NativePiUnavailable, OSError) as error:
+            raise ValueError(f"Native session setup failed: {error}") from error
+        self.session_directory = directory
         if self.selected_tool_intent is not None:
             if type(self.selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("selected tool requires a nominal owner intent")
@@ -136,11 +152,15 @@ class SelectedExecution(NativeExecution):
                 ) as participant:
                     if participant is None:
                         return None
-                    session = await SelectedSession.prepare(
-                        participant,
-                        self.session_file,
-                        self,
-                    )
+                    try:
+                        session = await SelectedSession.prepare(
+                            participant,
+                            self.session_file,
+                            self,
+                        )
+                    except (NativePiUnavailable, CoordinationError, OSError, ValueError):
+                        await participant.fail_before_send(self.max_attempts)
+                        raise
                     try:
                         return await SelectedConsideration(participant).run(self, session)
                     except RetryScheduled:
