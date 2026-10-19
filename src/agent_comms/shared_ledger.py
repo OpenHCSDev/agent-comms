@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, cast
 
 from .cli_result import CliResult
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, SingleFieldValue
 from .locked_store import LockedStore, RootFile
 from .thread_owned_state import ThreadOwnedState
 
@@ -16,22 +16,10 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class LedgerDocument(CliResult, WireValue):
+class LedgerDocument(SingleFieldValue, CliResult):
     """The ledger's one free-form JSON document as read; its keys are its authors'."""
 
-    entries: Mapping[str, object]
-    external_json_shape = True
-
-    @classmethod
-    def from_wire(cls, data: object) -> LedgerDocument:
-        return cls(FieldCodec.decode(dict[str, object], data))
-
-    def encoded(self) -> object:
-        return self.to_wire()
-
-    def to_wire(self) -> dict[str, object]:
-        return dict(self.entries)
-
+    entries: dict[str, object]
 
 @dataclass(frozen=True, slots=True)
 class SharedLedger(RootFile, ThreadOwnedState, LockedStore[LedgerDocument]):
@@ -40,9 +28,7 @@ class SharedLedger(RootFile, ThreadOwnedState, LockedStore[LedgerDocument]):
     filename: ClassVar[str] = "ledger.json"
     json_indent = 2
 
-    @property
-    def record_type(self) -> type[LedgerDocument]:
-        return LedgerDocument
+    record_type = LedgerDocument
 
     def empty(self) -> LedgerDocument:
         return LedgerDocument({})

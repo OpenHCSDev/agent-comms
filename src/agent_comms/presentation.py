@@ -602,7 +602,7 @@ class ThreadRecord(CliResult):
             pending=pending[thread.name],
         ) for thread in threads)
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.project(self, "presence")
 
     @projected(view="presence")

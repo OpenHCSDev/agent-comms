@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
+from .field_codec import FieldCodec
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
@@ -19,6 +20,56 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
     from .threads import Thread
+
+
+class ChannelSelection(ABC):
+    """Decoded menu context; container shapes stop at this input boundary."""
+    needs_catalog: ClassVar[bool] = True
+
+    @staticmethod
+    def decode(raw: str | dict[str, tuple[str, ...]] | None) -> ChannelSelection:
+        if raw is None:
+            return NoChannel()
+        if isinstance(raw, str):
+            return OneChannel(FieldCodec.decode(str, raw))
+        if isinstance(raw, dict):
+            values = FieldCodec.decode(dict[str, tuple[str, ...]],
+                FieldCodec.encode(raw, dict[str, tuple[str, ...]]))
+            return PerTargetChannels(values)
+        raise ValueError('Select no channel, one channel, or channels per target')
+
+    @abstractmethod
+    def channels_for(self, target: str) -> tuple[str | None, ...]: ...
+
+    def require_unbound(self) -> None:
+        """Ordinary thread actions may ignore one surrounding channel."""
+
+
+@dataclass(frozen=True)
+class NoChannel(ChannelSelection):
+    needs_catalog: ClassVar[bool] = False
+
+    def channels_for(self, target: str) -> tuple[str | None, ...]:
+        return (None,)
+
+
+@dataclass(frozen=True)
+class OneChannel(ChannelSelection):
+    name: str
+
+    def channels_for(self, target: str) -> tuple[str | None, ...]:
+        return (self.name,)
+
+
+@dataclass(frozen=True)
+class PerTargetChannels(ChannelSelection):
+    mapping: dict[str, tuple[str, ...]]
+
+    def channels_for(self, target: str) -> tuple[str | None, ...]:
+        return self.mapping.get(target, (None,))
+
+    def require_unbound(self) -> None:
+        raise ValueError('This action does not accept per-target channels')
 
 
 @dataclass(frozen=True)

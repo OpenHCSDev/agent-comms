@@ -27,7 +27,7 @@ class TestToolCatalog:
         flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package")
         assert flag == "--comms-catalog"
         payload = json.loads(Path(path).read_text())
-        assert payload == ToolsCliCommand(name=thread.name).apply(comms).encoded()
+        assert payload == ToolsCliCommand(name=thread.name).apply(comms).to_wire()
         assert payload["service_tier"] == "standard"
         assert {tool["name"] for tool in payload["tools"]} == {
             tool["name"] for tool in NativeRequestTools.catalog()

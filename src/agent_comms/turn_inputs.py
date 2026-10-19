@@ -7,8 +7,7 @@ its Pi command when it writes it to the running child.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field, replace
-from uuid import uuid4
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from . import agent_events as events
@@ -82,7 +81,7 @@ class InputForwarding:
 
     async def write(self, session: TurnSession, *written: commands.PiCommand) -> None:
         for command in written:
-            session.stdin.write(session.native.reader.encode(replace(command, id=uuid4().hex)))
+            session.stdin.write(session.native.reader.encode(command.identified()))
         await session.stdin.drain()
 
     async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[str, ...]:

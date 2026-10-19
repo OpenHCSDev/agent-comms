@@ -313,7 +313,6 @@ class TrackedTurnSession(TurnSession):
         turn = cls(
             launch,
             partial(commands.Prompt,
-                id="native-prompt",
                 input_id=input_id,
                 message=prompt,
                 context_contributions=context_contributions,
@@ -466,19 +465,8 @@ class TrackedTurnSession(TurnSession):
     async def send_prompt(self) -> None:
         await self.prompt_send_boundary.send_prompt(self)
 
-    @handles(pi.Response)
-    async def response(self, event: pi.Response) -> None:
-        if event.id == self.command.id:
-            if self.native.reader.correlate(event) is not self.command:
-                raise NativePiUnavailable("Native Pi prompt acknowledgement differs")
-            if event.success is not True:
-                raise NativePiPromptRejected(event)
-            self.prompt_state = self.prompt_state.acknowledge(event)
-        elif issubclass(event.command, commands.MutatesSession):
-            raise NativePiUnavailable("Native Pi session identity changed during a turn")
-        else:
-            async for update in event.apply(self):
-                await self.observe_event(update)
+    def reject_prompt(self, response):
+        raise NativePiPromptRejected(response)
 
     @handles(pi.InputCommitted)
     async def committed_input(self, event: pi.InputCommitted) -> None:

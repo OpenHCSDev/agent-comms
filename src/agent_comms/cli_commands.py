@@ -29,7 +29,7 @@ from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .change_report import ChangeReport
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
-from .channel_targets import CommandTarget, ResolvedChannel
+from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel
 from .channels import ANY_CHANNEL
 from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -59,9 +59,9 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .field_codec import FieldCodec, PathText, compile_decoder
+from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .presentation import CountedRead, InboxRead, UncountedRead
+from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
@@ -292,6 +292,7 @@ class TargetAction:
     """A selection keeps the bound commands, not a separate permission list."""
     bound: tuple[CliCommand, ...]
     targets: tuple[str, ...]
+    channels: ChannelSelection = NoChannel()
 
     @property
     def declaration(self) -> type[CliCommand]:
@@ -350,7 +351,7 @@ class TargetOutcome:
 class TargetCompleted(TargetOutcome):
     target: str
     command: CliCommand
-    result: CliResult
+    result: Annotated[CliResult, WireForm]
     successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
@@ -392,9 +393,18 @@ class TargetSelection(ABC):
     """The targets one execution runs on; each kind owns how its result comes back."""
     targets: tuple[CommandTarget, ...]
 
+    @staticmethod
+    def decode(raw: CommandTarget | str | tuple[CommandTarget | str, ...], *, multiple: bool) -> TargetSelection:
+        if isinstance(raw, tuple):
+            if not raw:
+                raise ValueError('Select at least one target')
+            names = tuple(dict.fromkeys(CommandTarget.named(item) for item in raw))
+            return (OneTarget if len(names) == 1 and not multiple else TargetBatch)(names)
+        return OneTarget((CommandTarget.named(raw),))
+
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
-            *, confirmed: bool, channel: str | dict[str, tuple[str, ...]] | None, project: str,
+            *, confirmed: bool, channel: ChannelSelection, project: str,
             snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         """Bind, authorize and apply the declaration on this selection."""
 
@@ -402,7 +412,7 @@ class TargetSelection(ABC):
 class OneTarget(TargetSelection):
     """A single target: resolve errors raise and the bound command's own result returns."""
 
-    def run(self, declaration, comms, arguments, *, confirmed, channel, project, snapshot, catalog):
+    def run(self, declaration, comms, arguments, *, confirmed, channel: ChannelSelection, project, snapshot, catalog):
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -422,7 +432,7 @@ class OneTarget(TargetSelection):
 class TargetBatch(TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
 
-    def run(self, declaration, comms, arguments, *, confirmed, channel, project, snapshot, catalog):
+    def run(self, declaration, comms, arguments, *, confirmed, channel: ChannelSelection, project, snapshot, catalog):
         if not declaration.multiple_targets:
             raise ValueError('This action requires a single target')
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
@@ -475,10 +485,10 @@ class TargetBatch(TargetSelection):
 class TargetEdit(Command):
     """Accepted editor values use the declared field and current bound command."""
     declaration: type[CliCommand]
-    target: CommandTarget | str | tuple[CommandTarget | str, ...]
+    target: TargetSelection
     arguments: dict[str, str | None]
     confirmed: bool = False
-    channel: str | dict[str, tuple[str, ...]] | None = None
+    channel: ChannelSelection = NoChannel()
     project: str | None = None
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -538,7 +548,7 @@ class ThreadPinnedResult(CliResult):
 class TargetCatalogResult(CliResult):
     actions: tuple[TargetAction, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return {'actions': [action.encode() for action in self.actions]}
 
 
@@ -546,7 +556,7 @@ class TargetCatalogResult(CliResult):
 class MessageSentResult(CliResult):
     sent: SendResult
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         message_id = self.sent.message.message_id
         return {'id': message_id, 'message': f'Message {message_id} was sent',
                 'correction': FieldCodec.encode(self.sent.correction),
@@ -586,7 +596,7 @@ class ConstraintDroppedResult(CliResult):
 class InboxResult(CliResult):
     messages: tuple[Message, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return {"messages": [message.to_wire() for message in self.messages]}
 
 
@@ -597,7 +607,10 @@ class AcknowledgedResult(CliResult):
 
 @dataclass(frozen=True)
 class WhoResult(CliResult):
-    who: tuple[Mapping[str, object], ...]
+    who: tuple[ThreadView, ...]
+
+    def to_wire(self) -> object:
+        return FieldCodec.project(self, "presence")
 
 
 @dataclass(frozen=True)
@@ -620,7 +633,10 @@ class ChannelsResult(CliResult):
 
 @dataclass(frozen=True)
 class ThreadsResult(CliResult):
-    threads: tuple[Mapping[str, object], ...]
+    threads: tuple[ThreadRecord, ...]
+
+    def to_wire(self) -> object:
+        return FieldCodec.project(self, "presence")
 
 
 @dataclass(frozen=True)
@@ -680,7 +696,7 @@ class InstallResult(CliResult):
     config: str
     harnesses: Mapping[str, HarnessInstalled]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         # Each harness's installation sits beside the config path on the wire.
         return {"config": self.config,
                 **{name: FieldCodec.encode(installed)
@@ -806,19 +822,20 @@ class CliCommand(
         return cls
 
     @classmethod
-    def selected_targets(cls, target: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
-        selected = target if isinstance(target, tuple) else (target,)
-        if not selected:
-            raise ValueError('Select at least one target')
-        names = tuple(dict.fromkeys(CommandTarget.named(item) for item in selected))
-        one = not isinstance(target, tuple) or (len(names) == 1 and not cls.multiple_targets)
-        return (OneTarget if one else TargetBatch)(names)
+    def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
+        """Decode a CLI or menu target input once, before command execution."""
+        return TargetSelection.decode(raw, multiple=cls.multiple_targets)
 
     @classmethod
-    def selection_channels(cls, channel: str | dict[str, tuple[str, ...]] | None,
+    def channel_fields(cls) -> tuple[Field, ...]:
+        """The declared target-bound channel parameters own membership scope."""
+        return tuple(item for item, key in FieldCodec.record_fields(cls)
+                     if key == 'channel' and CommandOption.of(item).target_bound)
+
+    @classmethod
+    def selection_channels(cls, channel: ChannelSelection,
                            target: str) -> tuple[str | None, ...]:
-        """Thread-wide declarations have one binding, independent of view membership."""
-        return (None,)
+        return channel.channels_for(target)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None) -> tuple[Self, ...]:
@@ -840,10 +857,10 @@ class CliCommand(
             cls, comms, channel, resolved, snapshot=snapshot, catalog=catalog)
 
     @classmethod
-    def target_catalog(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...],
-                       channel: str | dict[str, tuple[str, ...]] | None = None,
+    def target_catalog(cls, comms: Comms, target: TargetSelection,
+                       channel: ChannelSelection = NoChannel(),
                        *, project: str) -> tuple[TargetAction, ...]:
-        selected = cls.selected_targets(target).targets
+        selected = target.targets
         # A catalog is one observation. Declarations borrow its original store
         # resources; execution still acquires and rebinds current state.
         snapshot = comms.registry.snapshot()
@@ -853,14 +870,15 @@ class CliCommand(
         # the acquired namespace rather than reserving a special actor spelling.
         available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
-                   if channel or any(item.needs_channel_state for item in selected) else None)
+                   if channel.needs_catalog or any(item.needs_channel_state for item in selected) else None)
         resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
         grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
                 continue
+            selected_channels = channel if member.channel_fields() else NoChannel()
             for name, resolved in resolved_targets:
-                for context in name.contexts(member, channel):
+                for context in name.contexts(member, selected_channels):
                     available = member.bindings(
                         comms, name, context, snapshot=snapshot, catalog=catalog, resolved=resolved)
                     if available:
@@ -868,7 +886,9 @@ class CliCommand(
                         grouped.setdefault(declaration, {}).update(dict.fromkeys(
                             command.for_editor(comms, name.name, project) for command in available))
         names = tuple(name for item in selected for name in item.names)
-        return tuple(TargetAction(tuple(commands), names) for commands in grouped.values())
+        return tuple(TargetAction(tuple(commands), names,
+                                  channel if declaration.channel_fields() else NoChannel())
+                     for declaration, commands in grouped.items())
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return self
@@ -887,17 +907,16 @@ class CliCommand(
     def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
         target = CommandTarget.named(target)
         bound = self.for_editor(comms, target.name, project)
-        return TargetAction((bound,), target.names)
+        channels = next((OneChannel(getattr(bound, item.name))
+                         for item in bound.channel_fields()), NoChannel())
+        return TargetAction((bound,), target.names, channels)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
         result: CliResult = self.apply(ctx)
-        json.dump(self.encode_result(result), output, indent=2)
+        json.dump(result.to_wire(), output, indent=2)
         output.write("\n")
         return result.exit_code()
-
-    def encode_result(self, result: CliResult) -> object:
-        return result.encoded()
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
@@ -935,15 +954,17 @@ class CliCommand(
                                        'kind': FieldCodec.encode(type(self)), **arguments})
 
     @classmethod
-    def execute_target(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...], arguments: dict[str, object],
+    def execute_target(cls, comms: Comms, target: TargetSelection, arguments: dict[str, object],
                        *, confirmed: bool = False,
-                       channel: str | dict[str, tuple[str, ...]] | None = None,
+                       channel: ChannelSelection = NoChannel(),
                        project: str | None = None) -> CliResult:
-        selection = cls.selected_targets(target)
+        if not cls.channel_fields():
+            channel.require_unbound()
+            channel = NoChannel()
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
-                   if channel or any(item.needs_channel_state for item in selection.targets) else None)
-        return selection.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
+                   if channel.needs_catalog or any(item.needs_channel_state for item in target.targets) else None)
+        return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
 
@@ -1263,7 +1284,7 @@ class WhoCliCommand(CliCommand):
     help = "Presence: who is in the chat"
 
     def apply(self, ctx: Comms) -> CliResult:
-        return WhoResult(tuple(ctx.views.who()))
+        return WhoResult(ctx.views.who())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1372,7 +1393,7 @@ class ThreadsCliCommand(CliCommand):
     active_only: bool = option("--active-only", default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ThreadsResult(tuple(ctx.views.list_threads(active_only=self.active_only)))
+        return ThreadsResult(ctx.views.list_threads(active_only=self.active_only))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1861,8 +1882,8 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
 
     def apply(self, ctx: Comms) -> TargetCatalogResult:
         return TargetCatalogResult(CliCommand.target_catalog(
-            ctx, CommandTarget.arguments(self.target, self.project), self.channel,
-            project=self.project))
+            ctx, CliCommand.selected_targets(CommandTarget.arguments(self.target, self.project)),
+            ChannelSelection.decode(self.channel), project=self.project))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1878,9 +1899,10 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
     confirmed: bool = option('--confirmed', default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return CliCommand.member_named(self.operation).execute_target(
-            ctx, CommandTarget.arguments(self.target, self.project), self.arguments,
-            confirmed=self.confirmed, channel=self.channel, project=self.project)
+        declaration = CliCommand.member_named(self.operation)
+        return declaration.execute_target(
+            ctx, declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
+            confirmed=self.confirmed, channel=ChannelSelection.decode(self.channel), project=self.project)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2048,9 +2070,10 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
     help = 'Execute a declared operation using its original CLI field parsers'
 
     def apply(self, ctx: Comms) -> CliResult:
-        return TargetEdit(CliCommand.member_named(self.operation),
-                          CommandTarget.arguments(self.target, self.project), self.arguments,
-                          self.confirmed, self.channel, self.project).apply(ctx)
+        declaration = CliCommand.member_named(self.operation)
+        return TargetEdit(declaration,
+                          declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
+                          self.confirmed, ChannelSelection.decode(self.channel), self.project).apply(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2083,12 +2106,6 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
     name: str = option('--name', target_bound=True)
     channel: str = option('--channel', target_bound=True)
     pinned: bool = option('--pinned', default=False, target_bound=True)
-
-    @classmethod
-    def selection_channels(cls, channel: str | dict[str, tuple[str, ...]] | None,
-                           target: str) -> tuple[str | None, ...]:
-        """Each selected membership owns its independent channel pin."""
-        return channel.get(target, (None,)) if isinstance(channel, dict) else (channel,)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog: CatalogDocument):

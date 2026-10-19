@@ -13,7 +13,7 @@ from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.presentation import ThreadView
+from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
@@ -63,8 +63,8 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     assert reopened.snapshot() == before
     assert reopened.status("owner") == status
     assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
-    assert comms.views.thread_detail("owner").encoded()["status"] == status.declared_name
-    assert comms.views.list_threads()[0]["status"] == status.declared_name
+    assert comms.views.thread_detail("owner", CountedRead()).to_wire()["status"] == status.declared_name
+    assert comms.views.list_threads()[0].status.declared_name == status.declared_name
     activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
     comms.agents.activity.emit(activity)
     visible = comms.views.thread_views()
