@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import signal
@@ -396,6 +397,20 @@ class OrderCheck:
         return checked.result
 
 
+class GitCommandFailed(ValueError):
+    """The actual Git result, so its caller can recognize a command's absent state."""
+
+    def __init__(self, run: subprocess.CompletedProcess[str]):
+        self.run = run
+        super().__init__(run.stderr.strip() or f"git failed with exit {run.returncode}")
+
+    def no_check_ran_on(self, sha: str) -> bool:
+        """Git's absent-note reply, not a corrupt repository or an invalid revision."""
+        return self.run.returncode == 1 and self.run.stderr in (
+            "", f"error: no note found for object {sha}.\n",
+        )
+
+
 @dataclass(frozen=True)
 class CheckedCommit:
     """What an order's check printed at a commit. A commit's result never changes, so the git
@@ -416,17 +431,20 @@ class CheckedCommit:
     @staticmethod
     def git(repository: str, *args: str) -> str:
         run = subprocess.run(("git", "-C", repository, *args), capture_output=True, text=True,
-                             timeout=60)
+                             timeout=60, env=os.environ | {"LC_ALL": "C"})
         if run.returncode:
-            raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
+            raise GitCommandFailed(run)
         return run.stdout
 
     @classmethod
     def stored(cls, repository: str, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
-        noted = {line.split()[1] for line in cls.git(repository, *cls.NOTES, "list").splitlines()}
-        if sha not in noted:
-            return ()
+        try:
+            cls.git(repository, *cls.NOTES, "list", sha)
+        except GitCommandFailed as failure:
+            if failure.no_check_ran_on(sha):
+                return ()  # No check ran on this commit.
+            raise
         return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
                      cls.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
 
