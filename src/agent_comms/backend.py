@@ -145,7 +145,7 @@ async def stream_agent_events(
                     environment=env_extra,
                     session_file=session_file,
                 ))
-            except (OSError, ValueError, NativePiUnavailable) as error:
+            except NativePiUnavailable as error:
                 yield events.Error(text=str(error), reason_code="native_launch_invalid")
                 yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
                 return
@@ -280,7 +280,8 @@ class NativeSession(MroDispatch, ABC):
         self.request_observer(progress, self.native.proc.identity)
 
     async def apply_native_event(self, event) -> tuple[events.AgentEvent, ...]:
-        await self.dispatch(event)
+        if await self.dispatch(event) is None:
+            return ()
         return tuple([update async for update in event.apply(self)])
 
     @property
@@ -333,7 +334,7 @@ class NativeSession(MroDispatch, ABC):
                         and abort_payload.command is commands.Abort
                     ):
                         break
-            except (TimeoutError, OSError):
+            except TimeoutError:
                 pass
         await self.native.shutdown()
 
@@ -351,12 +352,6 @@ class NativeSession(MroDispatch, ABC):
         """The original acquisition failures preserve their source disposition."""
         try:
             yield
-        except (OSError, TimeoutError, SelectedToolDenied) as error:
-            failure = NativePiUnavailable(
-                f"Native resource acquisition failed: {type(error).__name__}: {error}"
-            )
-            failure.__cause__ = error
-            self.prompt_state.raise_native_failure(failure, self.launch.session.attestation())
         except NativePiUnavailable as error:
             self.prompt_state.raise_native_failure(error, self.launch.session.attestation())
 
@@ -557,7 +552,7 @@ class TurnSession(NativeSession):
 
     async def open_transport(self, resources: AsyncExitStack) -> None:
         self.tool_socket = await self.tool_mode.open_transport(self, resources)
-        self.command = self.make_command(owner_tools=self.tool_socket.connection).identified()
+        self.command = self.make_command(owner_tools=self.tool_socket.connection)
         del self.make_command
         self.output.sensitive = bool(self.command.images)
 
@@ -574,10 +569,6 @@ class TurnSession(NativeSession):
     async def tool_finished(self, event):
         self.tool_socket.tool_finished(event, self.command.input_id)
 
-    @property
-    def input_id(self):
-        return self.command.input_id
-
     def reject_prompt(self, response):
         error = self.output.error(str(response.error or "Prompt was rejected"))
         yield self.watchdog.state(
@@ -588,13 +579,13 @@ class TurnSession(NativeSession):
 
     def matches_original_input(self, message):
         return self.inputs.permits_interaction and message.matches_input(
-            self.command.message, self.input_id
+            self.command.message, self.command.input_id
         )
 
     async def accept_user_message(self, message, event):
         """Own the original/follow-up input effect across all decoded user messages."""
         if self.prompt_state.awaiting_start and self.matches_original_input(message):
-            if not self.notify_input_started(None, self.input_id, self.command.message):
+            if not self.notify_input_started(None, self.command.input_id, self.command.message):
                 self.inputs.uncertain = True
                 self.output.record_failure(
                     failures.InputMissing("Pi input start did not match the durable attempt.")

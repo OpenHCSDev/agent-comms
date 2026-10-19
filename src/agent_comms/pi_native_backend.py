@@ -296,7 +296,7 @@ class PiNativeBackend(
 
         try:
             data = await self.inspect(thread, Compact(custom_instructions=instructions))
-        except (NativePiUnavailable, ValueError) as error:
+        except NativePiUnavailable as error:
             return FailedCompaction(str(error))
         if data.summary is None:
             return NothingToCompaction()

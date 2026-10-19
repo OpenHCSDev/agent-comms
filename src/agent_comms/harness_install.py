@@ -110,7 +110,13 @@ class ClaudeCodeHarness(Harness):
 
     executable: ClassVar[str] = 'claude'
     skills_dir: ClassVar[str] = '.claude/skills'
-    guard: ClassVar[str] = 'agent-comms-commander send-guard'
+    # (hook event, matcher entry, command): send-guard refuses unsafe commander
+    # sends; watch-guard tells the session when its bridge watch lapsed.
+    guards: ClassVar[tuple[tuple[str, dict[str, str], str], ...]] = (
+        ('PreToolUse', {'matcher': 'Bash'}, 'agent-comms-commander send-guard'),
+        ('UserPromptSubmit', {}, 'agent-comms-watch-guard'),
+        ('PostToolUse', {}, 'agent-comms-watch-guard'),
+    )
 
     def bus_threads(self, commander: str) -> tuple[str, ...]:
         return (commander,)
@@ -118,11 +124,12 @@ class ClaudeCodeHarness(Harness):
     def configure(self) -> tuple[Path, ...]:
         settings = self.home / '.claude/settings.json'
 
-        def add_guard(document: dict) -> None:
-            hooks = document.setdefault('hooks', {}).setdefault('PreToolUse', [])
-            if not any(hook.get('command') == self.guard for entry in hooks for hook in entry.get('hooks', ())):
-                hooks.append({'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': self.guard}]})
-        merge_json(settings, add_guard)
+        def add_guards(document: dict) -> None:
+            for event, matcher, command in self.guards:
+                hooks = document.setdefault('hooks', {}).setdefault(event, [])
+                if not any(hook.get('command') == command for entry in hooks for hook in entry.get('hooks', ())):
+                    hooks.append({**matcher, 'hooks': [{'type': 'command', 'command': command}]})
+        merge_json(settings, add_guards)
         return (settings,)
 
 

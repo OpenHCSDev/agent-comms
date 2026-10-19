@@ -339,7 +339,7 @@ class ToolUse(AssistantBlock):
             try:
                 arguments = arguments_type.model_validate(self.input)
                 tool = arguments.record(call_id=self.id)
-            except ValueError:  # pydantic's ValidationError, or a Core record refusing the values
+            except ValidationError:  # Invalid external arguments remain an untyped external tool.
                 pass
             else:
                 return ToolCall(self.id, FieldCodec.encode(type(tool)),

@@ -512,7 +512,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
-    with pytest.raises(SystemExit, match='does not pass undelivered work'):
+    with pytest.raises(ValueError, match='The order check is 1 away'):
         script.correct_check('P1', corrected, why)  # main still holds 0
     with pytest.raises(TodoConflict):
         CommsOrderCheckTool(problem='P1', check=OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)),
@@ -546,7 +546,7 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
                     "Works when: the installed app shows the counter at one after restart\n"
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
+    with pytest.raises(ValueError, match='Jargon'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
     assert script.held_orders() == () and 'Problem: NEW' in body.read_text()
 
