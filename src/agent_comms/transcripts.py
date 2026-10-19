@@ -145,12 +145,6 @@ class TranscriptPage:
     # The read owns this witness; no page exists without its source snapshot.
     snapshot: TranscriptReadIdentity
 
-    def resolve_sent_messages(self, reports):
-        """Prove bounded full reports without replacing their input objects."""
-        reports = tuple(reports)
-        resolved = self.after.wire.resolve_sent(reports)
-        return dict(zip(map(id, reports), resolved))
-
     def metadata(self) -> dict[str, object]:
         return {
             field.name: FieldCodec.encode(getattr(self, field.name))
