@@ -2294,7 +2294,14 @@
                  return success(id, "new_session", result);
              }
              // =================================================================
-@@ -480,16 +489,10 @@
+@@ -472,5 +481,4 @@
+             case "get_session_stats": {
+-                const stats = session.getSessionStats();
+-                return success(id, "get_session_stats", stats);
++                return success(id, "get_session_stats", { contextUsage: session.getContextUsage() });
+             }
+             case "export_html": {
+@@ -480,16 +488,10 @@
              }
              case "switch_session": {
                  const result = await runtimeHost.switchSession(command.sessionPath);
@@ -2311,7 +2318,7 @@
                  return success(id, "fork", { text: result.selectedText, cancelled: result.cancelled });
              }
              case "clone": {
-@@ -498,9 +501,6 @@
+@@ -498,9 +500,6 @@
                      return error(id, "clone", "Cannot clone session: no current entry selected");
                  }
                  const result = await runtimeHost.fork(leafId, { position: "at" });
@@ -2321,7 +2328,7 @@
                  return success(id, "clone", { cancelled: result.cancelled });
              }
              case "get_fork_messages": {
-@@ -509,15 +509,15 @@
+@@ -509,15 +508,15 @@
              }
              case "get_entries": {
                  const sessionManager = session.sessionManager;
@@ -2342,7 +2349,7 @@
              }
              case "get_tree": {
                  const sessionManager = session.sessionManager;
-@@ -539,7 +539,7 @@
+@@ -539,7 +538,7 @@
              // Messages
              // =================================================================
              case "get_messages": {
@@ -2365,7 +2372,7 @@
 -                throw new Error("Invalid or duplicate native input in persisted Pi session");
 -            }
 -        }
-+        // Core's attempt ledger owns historical admission; recover only committed evidence.
++        // Core's input ledger owns whether an input was sent; recover committed journal records.
          if (!this.sessionManager.isPersisted()) return;
 @@ -261,4 +252,3 @@
          const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
@@ -2384,3 +2391,15 @@
 -                this._nativeInputClaims.delete(inputId);
 +            this._nativeInputClaims.delete(inputId);
          }
+--- a/dist/modes/rpc/rpc-types.d.ts
++++ b/dist/modes/rpc/rpc-types.d.ts
+@@ -321,3 +321,3 @@
+     success: true;
+-    data: SessionStats;
++    data: Pick<SessionStats, "contextUsage">;
+ } | {
+--- a/dist/modes/rpc/rpc-client.d.ts
++++ b/dist/modes/rpc/rpc-client.d.ts
+@@ -170 +170 @@
+-    getSessionStats(): Promise<SessionStats>;
++    getSessionStats(): Promise<Pick<SessionStats, "contextUsage">>;

@@ -1,0 +1,44 @@
+# P584 unfinished handoff — 2026-10-18 22:45 EDT
+
+Work stopped after claude-code message33616 took P584 away. Message33620 then corrected the duplicate strike and kept P584 with core-runtime-location, with a pushed commit due22:54. This file records the interrupted work and unfinished source; it is not a transfer of ownership.
+
+## Published and prepared version
+
+PR: https://github.com/OpenHCSDev/agent-comms/pull/1670
+Branch: fix/p584-backward-journal
+Last fully prepared head: feaf42acbae0b481fe9e9e70deb39bc65f83532f.
+Codex confirmed full stack/bin/prepare-pi-native success in33323. Log: /home/ts/.cache/agent-scratch/codex/p584-private/prepare-native-fixed.log. Generated pin changes: the sibling generated-pin.patch. No private runtime or after-change input started.
+
+The failed hunk used ?.digest before patch-native-turn-context.py adds that member. feaf42acb matches the earlier preparation step. The original source update to Codex returned maintenance without a receipt; the later replacement-head message33310 was published and Codex answered33323.
+
+## Additional source in this checkpoint — not behavior-verified
+
+- EntryStore.entries/children use chronologicalMetadata instead of collecting and reversing the entire metadata iterator. MemoryEntryStore uses its existing ordered map; DiskEntryStore finishes its backward index reader and streams SQLite rows in sequence order. No additional selector store or absence cache.
+- RPC get_session_stats calls getContextUsage directly, avoiding the lifetime walk discarded by Core at every turn settle. RPC response/client declarations describe only contextUsage. AgentSession.getSessionStats remains for the explicit interactive session-information command.
+- The code comment now says byte offsets. The new input comment says Core's input ledger owns whether an input was sent.
+
+Node syntax and unified-patch format pass. Updated source-only store checks pass, including chronological export and sibling order, compacted context, UTF8/64KiB boundaries, append and lazy corruption. Before/after AST evidence is under p584/consumer-additions-{before,after}.json. Full native preparation, profile and UI checks have not run on these additions. The PR body records that gap.
+
+## Consumer findings for successor
+
+Pinned inspected package: /home/ts/.cache/agent-comms/native/d493cb818c67ffaf/.pi-native-5cb663d0ffa36f1a/node_modules/@earendil-works/pi-coding-agent. Coordinates below refer to that package before P584.
+
+- label(): SessionManager.getLabel:824; getTree:888-889; createBranchedSession:1010-1011. No direct normal managed launch/turn caller found. getTree explicitly requests the whole tree; branching copies labels for the requested branch. Missing labels can still require all older journal records.
+- trackedInputMetadata(): EntryStore.trackedInput:177; NativeProofJournal.recover:91; AgentSession startup/claim historical calls:245,262 are removed by P584. SessionManager.getTrackedInput:606 reaches trackedInput; callers left are AgentSession._commitNativeContext:295,302 and message-start durability:597 (present input IDs). Historical absent checks in appendMessage:675, release:272 and clearQueue:1567 are removed.
+- entries(): EntryStore.fileEntries:95; SessionManager.getTree:887,893; SessionManager.forkFrom:1089; AgentSession.getUserMessagesForForking:3003; export-html/index.js:212,216,253; interactive-mode.js handleSessionCommand:5197,5202; RPC get_entries:525. These are full export/tree/fork/history requests, not normal managed prompt setup. The latest source deletes the metadata arrays without changing chronological output.
+- children(): SessionManager.getChildren:817. No internal managed launch/turn consumer found.
+- Other history requirements remain: getSessionName searches to the last session_info (or end); saved model/thinking restoration may reach older ancestors. They must not be described as bounded without an actual measurement.
+
+## Core prevents resend after restart
+
+private_send_claim.py:249-256 reads the reservation and records the send in the same transaction before the raw writer. private_send_stage.py:174-190 rereads NativeRuntimeInput by input_id and runs NativeReservationCheck. private_send_rules.py:203-204 rejects an already recorded send; native_claim_epoch.py:87-88 returns true for RecordedNativeClaim. Its update/record at:58-66 only changes an unrecorded row. This is durable state, not the ephemeral _once lock, so a restarted native child does not authorize sending that input again.
+
+## Measurement and preserved data
+
+Baseline: entry-store2373.498ms; prompt-write to first request4444.395ms. No after-change figures exist; neither target is proved. Exactly one fresh P584 DM was authorized, but none has been sent. Never replay P561 input9a8fa8a043a54c1aa7798d4fe09adbe5.
+
+Existing evidence remains under /home/ts/.cache/agent-scratch/core-runtime-location/{p561,p584,latency}. Before consumer-addition AST: p584/consumer-additions-before.json, generated by the existing Acorn inventory, with parser omissions recorded in its log. Source-only store check: p584/source-check.mjs; it imports an unchanged prepared dependency and is not runtime acceptance. Profiling driver p561/profile-run.py supports supplied output/runtime/source arguments and uses the launch owner's PATH, not import hooks. It has not run a P584 input.
+
+Both preparation launches were traced through runtime_requests.py:408 -> turn_runner.py:158,168 -> pi_native_backend.py:246 -> native_child.py:182 -> native_session_prepare.py:95-105. The post-reply inspection was not deleted because the previous model-request manifest is stale for next-input context.
+
+Implementation paused on Codex's33336 installation instruction and ended in33340. It resumed only when Claude's33592 told the fleet to work during builds, then stopped when33616 removed P584. The attempted pause notice to Claude returned maintenance without a receipt and was not repeated.

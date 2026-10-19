@@ -67,6 +67,7 @@ export class EntryStore {
     metadata(id) { throw new Error('EntryStore.metadata must be implemented'); }
     get(id) { throw new Error('EntryStore.get must be implemented'); }
     *metadataEntries() { throw new Error('EntryStore.metadataEntries must be implemented'); }
+    *chronologicalMetadata() { throw new Error('EntryStore.chronologicalMetadata must be implemented'); }
     *branchMetadata(leafId = this.lastId) { yield* [...this.ancestors(leafId)].reverse(); }
     append(entry) { throw new Error('EntryStore.append must be implemented'); }
     committedAppend(entry, file) { throw new Error('EntryStore.committedAppend must be implemented'); }
@@ -91,7 +92,7 @@ export class EntryStore {
             throw new Error('Strict native v3 session header required');
         return header;
     }
-    *entries() { for (const meta of [...this.metadataEntries()].reverse()) yield this.get(meta.id); }
+    *entries() { for (const meta of this.chronologicalMetadata()) yield this.get(meta.id); }
     *fileEntries() { yield this.header; yield* this.entries(); }
     *branch(leafId = this.lastId) { for (const meta of this.branchMetadata(leafId)) yield this.get(meta.id); }
     *ancestors(leafId = this.lastId) {
@@ -178,7 +179,7 @@ export class EntryStore {
         return meta ? this.get(meta.id) : undefined;
     }
     *children(parentId) {
-        for (const meta of [...this.metadataEntries()].reverse())
+        for (const meta of this.chronologicalMetadata())
             if (meta.parentId === parentId) yield this.get(meta.id);
     }
     label(id) {
@@ -225,6 +226,7 @@ export class MemoryEntryStore extends EntryStore {
     metadata(id) { this.assertUsable(); return this.#metadata.get(id); }
     assertCurrent() { this.assertUsable(); }
     *metadataEntries() { this.assertUsable(); yield* [...this.#metadata.values()].reverse(); }
+    *chronologicalMetadata() { this.assertUsable(); yield* this.#metadata.values(); }
     append(entry) {
         this.validate(entry);
         if (this.#entries.has(entry.id) || entry.parentId !== null && !this.has(entry.parentId))
@@ -320,6 +322,14 @@ export class DiskEntryStore extends EntryStore {
             }
         } finally { this.assertCurrent(); }
     }
+    *chronologicalMetadata() {
+        this.assertCurrent();
+        try {
+            while (this.#readPrevious()) {}
+            for (const row of this.#db.prepare('SELECT selectors FROM entries ORDER BY sequence').iterate())
+                yield EntryMetadata.fromIndex(row);
+        } finally { this.assertCurrent(); }
+    }
     trackedInputMetadata(inputId) { return this.#find(this.#input, inputId); }
     label(id) {
         const label = this.#find(this.#label, id)?.label;
@@ -357,7 +367,7 @@ export class DiskEntryStore extends EntryStore {
     }
     #index(entry, offset, length) {
         this.validate(entry);
-        // Original byte offsets supply ordering; no lifetime row counter is needed.
+        // Byte offsets supply ordering; no lifetime row counter is needed.
         const meta = new EntryMetadata(entry, offset, offset, length);
         this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, offset, length, meta.inputId, JSON.stringify(meta));
         return meta;
