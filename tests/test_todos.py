@@ -18,7 +18,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    Assignment, BoardOrder, ChangeTodoState, MergedProblemOrder, clock, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
+    Assignment, ChangeTodoState, MergedProblemOrder, clock, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
     BlockedTodoState, OperationDelivery, Todo, TodoConflict, TodoError, TodoState, TodoStore,
 )
 
@@ -188,7 +188,6 @@ def test_merged_order_boards_its_owner_and_waits_on_install(tmp_path: Path) -> N
         "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path))
     merged = replace(todo, order=todo.order.copy_as(MergedProblemOrder, commit="2b9c1f1ab"))
-    assert merged.order.board_order(merged) == BoardOrder(
-        f"{__file__}:1", "lead", "checked-order", clock(1000.0))
+    assert merged.order.board_cells(merged) == f"{__file__}:1 | lead | checked-order | {clock(1000.0)}"
     assert merged.order.line == "Merged, delivery check unverified"
     assert merged.order.waiting_on_install(merged, {}) == (merged,)

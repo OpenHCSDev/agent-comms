@@ -1060,14 +1060,6 @@ class LocatedProblemFinding(ProblemFinding):
         return self.where.to_wire()
 
 
-@dataclass(frozen=True)
-class BoardOrder:
-    owner_file: str
-    owner: str
-    order: str
-    due: str
-
-
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
@@ -1082,8 +1074,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
-    def board_order(self, todo: Todo) -> BoardOrder:
-        return BoardOrder(self.finding.place(), "unassigned", "-", "-")
+    def board_cells(self, todo: Todo) -> str:
+        return f"{self.finding.place()} | unassigned | - | -"
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
@@ -1162,12 +1154,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
-    def board_order(self, todo: Todo) -> BoardOrder:
+    def board_cells(self, todo: Todo) -> str:
         last = todo.released[-1:]
-        owner = todo.holder or (f"unassigned: released from {last[0].previous.owner}: "
-                                f"{last[0].reason.text}")
-        return BoardOrder(self.owner.to_wire(), owner, self.id,
-                          clock(todo.deadline.recorded_at("An order deadline")))
+        owner = todo.holder or f"unassigned: released from {last[0].previous.owner}: {last[0].reason.text}"
+        return f"{self.owner.to_wire()} | {owner} | {self.id} | {clock(todo.deadline.recorded_at('An order deadline'))}"
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -2070,10 +2060,6 @@ class Todo(TypedTable):
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
-
-    def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
-        if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
-            raise TodoConflict(self)
 
     def sent_in(self, message_id: str) -> bool:
         """Only the latest recorded send names this order, not an earlier replacement."""
