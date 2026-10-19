@@ -784,7 +784,7 @@
      }
      /**
       * Set or clear a label on an entry.
-@@ -1028,90 +829,70 @@
+@@ -1028,91 +829,71 @@
       * Pass undefined or empty string to clear the label.
       */
      appendLabelChange(targetId, label) {
@@ -895,6 +895,7 @@
 +            const entry = node.entry;
              if (entry.parentId === null || entry.parentId === entry.id) {
                  roots.push(node);
+             }
 @@ -1147,10 +926,12 @@
       * are not modified or deleted.
       */
