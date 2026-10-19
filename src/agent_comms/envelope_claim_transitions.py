@@ -219,8 +219,7 @@ class ClaimTransition:
         elif self.generation is not None:
             raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
         if self.claim_scope is not None and (
-            not self.claims or self.releases
-        ):
+                not self.claims or self.releases):
             raise ClaimTransitionError("Wake claim_scope requires a claim-only transition.")
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
