@@ -88,6 +88,13 @@ class BusPageMetrics(TypedRow):
     human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
 
 
+@dataclass(frozen=True)
+class LatestConversation(TypedRow):
+    target: str
+    sender: str
+    seq: int
+
+
 class BusPageIndex(TypedStore):
     filename = "bus_page_index.sqlite3"
     rows = tuple(TypedTable.members_with(PageIndexTable))
@@ -273,10 +280,14 @@ class BusPageIndex(TypedStore):
                                  descending=True, limit=1)
         return rows[0] if rows else None
 
-    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int) -> list[BusPageRow]:
+    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
         predicate, parameters = scope.index_predicate
-        return BusPageRow.select(self.connection, where=f"offset<? AND ({predicate})",
-                                 parameters=(before_offset, *parameters), order_by=("seq",))
+        sender_key = "CASE WHEN target LIKE '#%' THEN '' ELSE sender END"
+        return LatestConversation.read(self.connection.execute(
+            f'SELECT target, {sender_key} AS sender, MAX(seq) AS seq '
+            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND ({predicate}) '
+            f'GROUP BY target, {sender_key}', (before_offset, *parameters),
+        ))
 
     def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,
                            sequences: tuple[int, ...], before_offset: int) -> int:
@@ -320,7 +331,7 @@ class EmptyBusPageIndex(BusPageIndex):
     def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
         return None
 
-    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int) -> list[BusPageRow]:
+    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
         return []
 
     def display_snapshot(self, scopes, boundary):

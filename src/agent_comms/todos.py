@@ -273,6 +273,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        """Linked merges this progress incorrectly reports as no commit."""
+        return ()
+
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -309,6 +313,9 @@ class Moving(Stalling):
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        return tuple(MergedProgress.found(source))
+
     @property
     def line(self) -> str:
         return "no commit since the order"
@@ -1595,6 +1602,18 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def board_disagreements(
+        self, commander: ThreadIncarnation, storage: StorageRule,
+    ) -> Iterator[tuple[Todo, MergedProgress]]:
+        """Open orders whose progress misses a linked merge, sharing one PR read cache."""
+        todos = self.held_for_commander(commander)
+        pulls = PullRequests(todos)
+        for todo in todos:
+            progress = OrderProgress.read(todo, storage, pulls)
+            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            for merged in progress.missing_merges(source):
+                yield todo, merged
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""

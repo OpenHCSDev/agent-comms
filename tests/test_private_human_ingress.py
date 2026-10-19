@@ -39,7 +39,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     comms = Comms(root)
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
-        comms.registry.register(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=created_at))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=created_at))
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     store = Coordination(str(root / "coordination.sqlite"), clock_ms=lambda: 9999)
     install_private_cohort_schema(store)
