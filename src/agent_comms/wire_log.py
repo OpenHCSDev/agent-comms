@@ -116,6 +116,10 @@ class WireSnapshot(ObservedPath):
     @abstractmethod
     def records(self) -> Iterator[WireRecord]: ...
 
+    def ensure_page_index(self, index: BusPageIndex, mode: IndexLockMode) -> None:
+        """The captured prefix owns whether page-index work exists."""
+        self.complete_prefix.ensure_page_index(self, index, mode)
+
     @abstractmethod
     def query_page_index[T](self, read: Callable[[BusPageIndex], T]) -> T: ...
 
@@ -308,6 +312,12 @@ class OpenedWireSnapshot(WireSnapshot):
             return EmptyWirePrefix()
         finally:
             stream.seek(position)
+
+    def ensure_indexed_prefix(self, index: BusPageIndex, mode: IndexLockMode) -> None:
+        """Prepare this opened complete source, under the admitted writer mode."""
+        if not index.covers(self):
+            mode.require_writer()
+            index.sync(self)
 
     def query_page_index[T](
         self, read: Callable[[BusPageIndex], T]
@@ -894,16 +904,10 @@ class WireLog(StoreLockOwner):
 
     def _sync_page_index_unlocked(self, mode: LockMode) -> None:
         """Lend readers only indexed cuts; missing or stale coverage needs a writer."""
-        if ObservedPath.at(self.path).shows_no_bus():
-            return
         with ExitStack() as resources:
-            opened = self._open_snapshot_unlocked(resources, self.private_marker_unlocked(), 0)
-            if not opened.complete_prefix.boundary:
-                return
+            opened = self._open_snapshot_unlocked(resources, self.read_metadata_unlocked(), 0)
             with self.page_index_type(self.path) as index:
-                if not index.covers(opened):
-                    mode.require_writer()
-                    index.sync(opened)
+                opened.ensure_page_index(index, mode)
 
     @property
     def metadata_path(self) -> Path:
