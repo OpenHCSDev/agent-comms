@@ -447,6 +447,8 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLeaseFence | None:
         active = self.read()
+        if not active.executing:
+            return None
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)
 
@@ -465,7 +467,7 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
     ) -> tuple[TurnState, ...]:
         with _store_lock(self.registry_path):
             active = self.read()
-            if not active.held_by(lease):
+            if not active.executing or not active.held_by(lease):
                 return ()
             effects = tuple(observe(TurnState(active)))
             for state in effects:
