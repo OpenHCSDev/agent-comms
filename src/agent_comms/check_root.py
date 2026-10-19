@@ -67,9 +67,8 @@ class CheckRoot:
                 self._populate(copied)
                 yield copied
             finally:
-                for thread in copied.registry.snapshot().threads.values():
-                    if thread.process_alive:
-                        copied.owners.stop(thread.name)
+                for name in copied.registry.snapshot().threads:
+                    copied.owners.stop(name)
         finally:
             RecoveryMonitorCapability.retire_check_root(root)
 
@@ -91,15 +90,16 @@ class CheckRoot:
         declarations = {}
         for name in names:
             original = snapshot.require(name)
-            project = copied.root / "projects" / name
+            slot = original.incarnation.require_recorded().lookup
+            project = copied.root / "projects" / slot
             project.mkdir(parents=True, mode=0o700)
-            session = self._session(original.session_file, copied, name, project)
+            session = self._session(original.session_file, copied, copied.root / "native-sessions" / slot, project)
             declarations[name] = replace(
                 original.without_turn(), worktree=str(project),
                 parent=original.parent if original.parent in selected else None,
                 task=None, goal=NoGoal(), process_identity=NoProcess(), session_file=session,
                 earlier_projects=(), project_resume_due=False,
-                storage_roots=StorageRoots(copied.root / "scratch" / name),
+                storage_roots=StorageRoots(copied.root / "scratch" / slot),
                 turn_generation=0, last_finished_turn_id=None,
             )
         with copied.registry.store.editing() as edit:
@@ -116,8 +116,7 @@ class CheckRoot:
             for name in names:
                 copied.messaging.acknowledge_through(name, messages[-1].seq)
 
-    def _session(self, original: str | None, copied: Comms, name: str, project: Path) -> str:
-        directory = copied.root / "native-sessions" / name
+    def _session(self, original: str | None, copied: Comms, directory: Path, project: Path) -> str:
         session = create_fresh_private_session(directory, worktree=project)
         if original is None:
             return session.session_file
