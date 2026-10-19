@@ -53,7 +53,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
@@ -265,6 +265,9 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         copy_bus(root, copy)
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
         stack.prepare_native()
+        # Hold the copy before reading it, exactly as the live run holds the bus.
+        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copy / "registry.json").begin(
+            MaintenanceOperator("upgrade-bus")).nonce
         with transcripts_held(copy):
             before = bus_files(copy)
         stopping = before_stop(copy, pending, stack, revisions)
@@ -374,6 +377,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
+    os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     lock = installed.lock
     try:
         installed.owners(root, "stop", running)
