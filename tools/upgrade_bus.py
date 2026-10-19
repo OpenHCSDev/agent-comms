@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade a retained bus and the checkout that runs it, in one command.
 
-    python tools/upgrade_bus.py [--checkout DIR] [--root ~/.agent-comms] [--to origin/main] [--rehearse]
+    python tools/upgrade_bus.py --installer UNIT [--checkout DIR] [--root ~/.agent-comms] [--to origin/main] [--rehearse]
 
 ``--checkout`` is the installation to upgrade (by default, the one holding
 this file); run the command from the target revision so its steps are known.
@@ -37,8 +37,9 @@ import sys
 import tarfile
 import tempfile
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -46,7 +47,7 @@ from pathlib import Path
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cutover.carry import Carried, CarryChain, CarryLedger, RetainedBus, Step, TodoColumnCarry
+from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
@@ -57,6 +58,7 @@ from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
 from agent_comms.store_files import _store_lock
+from agent_comms.todos import PlannedInstallDeadline
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -149,11 +151,29 @@ class Stack:
     def python(self) -> Path:
         return self.checkout / "stack/.venv/bin/python"
 
+    @property
+    def lock(self) -> Path:
+        return self.checkout / "stack/uv.lock"
+
+    @property
+    def uv(self) -> Path:
+        """The uv the installer runs, kept in the installer's own state."""
+        return self.home / ".local/state/agent-comms/upgrade-bus/uv"
+
+    def require_uv(self) -> None:
+        if not os.access(self.uv, os.X_OK):
+            raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
+
     def relock(self) -> None:
         """OpenHCSDev packages track their mains; the lock only records this resolution."""
-        run("uv", "lock", "--project", "stack", "--upgrade", "--python", "3.14", cwd=self.checkout)
-        run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=self.checkout)
+        run(self.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
+            cwd=self.checkout)
+        self.sync()
         self.imports()
+
+    def sync(self) -> None:
+        run(self.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
+            cwd=self.checkout)
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
@@ -265,7 +285,6 @@ def carry_all(
             CarryLedger(root).record(step.name)
             result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
         results.append(result.report(step.name, True))
-        RetainedBus.record(revisions.repo, root)
     return results
 
 
@@ -307,8 +326,9 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
             read = stack.verify(copy)
-            round_trip = stack.round_trip(copy)
-        return {"steps": steps, "files": files, "read": read, "round_trip": round_trip}
+        # No round trip here: the copy's maintenance witness names the live root, and only the
+        # live bus has the connector service the round trip proves.
+        return {"steps": steps, "files": files, "read": read}
 
 
 @dataclass
@@ -375,7 +395,7 @@ def route_readers(patience: int = 120) -> None:
         os.close(descriptor)
 
 
-def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dict:
+def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool) -> dict:
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     run("git", "-C", checkout, "fetch", "-q", "origin")
     target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
@@ -389,6 +409,7 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
     except ValueError as error:
         raise UpgradeRefused(str(error)) from None
     installed = Stack(checkout)
+    installed.require_uv()
     if not rehearse_only and not installed.python.exists():
         raise UpgradeRefused(f"No installed stack at {installed.python}")
     with tempfile.TemporaryDirectory(prefix="upgrade-bus.") as scratch:
@@ -396,18 +417,69 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
         try:
             staged = Stack(revisions.tree(target))
             staged.relock()
+            install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
+                                 installer)
             report = {"from": current, "to": target, "pending": [step.name for step in pending],
-                      "rehearsal": rehearse(root, pending, staged, revisions)}
+                      "rehearsal": install.rehearsal()}
             if rehearse_only:
                 return report
-            report["live"] = live(checkout, root, current, target, pending, installed, staged, revisions)
+            report["live"] = install.live()
             return report
         finally:
             revisions.close()
 
 
+@dataclass(frozen=True)
+class Install(ABC):
+    """One run once the target's stack is relocked: what it changes on the bus."""
+
+    checkout: Path
+    root: Path
+    current: str
+    target: str
+    pending: tuple[Step, ...]
+    installed: Stack
+    staged: Stack
+    revisions: Revisions
+    installer: str
+
+    @classmethod
+    def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
+           installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> Install:
+        unchanged = current == target and staged.lock.read_bytes() == installed.lock.read_bytes()
+        member = (ChangedInstall, UnchangedInstall)[unchanged]
+        return member(checkout, root, current, target, pending, installed, staged, revisions, installer)
+
+    @abstractmethod
+    def rehearsal(self) -> dict: ...
+
+    @abstractmethod
+    def live(self) -> dict: ...
+
+
+class ChangedInstall(Install):
+    def rehearsal(self) -> dict:
+        return rehearse(self.root, self.pending, self.staged, self.revisions)
+
+    def live(self) -> dict:
+        return live(self.checkout, self.root, self.current, self.target, self.pending,
+                    self.installed, self.staged, self.revisions, self.installer)
+
+
+class UnchangedInstall(Install):
+    """The checkout already sits at the target and the relocked lock is the installed one:
+    nothing to rehearse, hold or restart. It only plans the next install."""
+
+    def rehearsal(self) -> dict:
+        return {"unchanged": self.target}
+
+    def live(self) -> dict:
+        PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
+        return {"unchanged": self.target}
+
+
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
-         installed: Stack, staged: Stack, revisions: Revisions) -> dict:
+         installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
     running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
@@ -415,7 +487,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(root / "registry.json")
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
-    lock = checkout / "stack/uv.lock"
+    lock = installed.lock
     transcripts = ExitStack()
     try:
         for name in running:
@@ -440,6 +512,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         read = installed.verify(root)
         maintenance.clear(held)
         round_trip = installed.round_trip(root)
+        PlannedInstallDeadline.after(installer, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
         if maintenance.read().phase is ReadyPhase:  # the round trip failed on the opened bus
@@ -448,11 +521,10 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         # The failed bus keeps its hold until restore has swapped it out.
         backup.restore()
         transcripts.close()
-        RetainedBus.restore(checkout, target)
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
-        run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=checkout)
+        installed.sync()
         installed.prepare_native()
         maintenance.clear(held)
         start(installed, root, running)
@@ -482,12 +554,14 @@ def main() -> None:
     parser.add_argument("--root", type=lambda value: Path(value).expanduser().resolve(),
                         default=Path.home() / ".agent-comms")
     parser.add_argument("--to", default="origin/main")
+    parser.add_argument("--installer", required=True,
+                        help="The unit running this install; the plan names it")
     parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
     args = parser.parse_args()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, stopped)
     try:
-        print(json.dumps(upgrade(args.checkout, args.root, args.to, args.rehearse), indent=2))
+        print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse), indent=2))
     except UpgradeRefused as error:
         raise SystemExit(f"upgrade-bus: {error}")
 
