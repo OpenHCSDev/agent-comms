@@ -28,7 +28,7 @@ from .private_send_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputExecution, NativeInputRecord
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
-from .native_pi import read_tracked_input_digest
+from .native_pi import read_tracked_input_commitment
 from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
@@ -232,5 +232,5 @@ def expected_prompt_matches_journal(
     A mismatch or an uncommitted input is NOT equality. An unreadable or
     malformed journal is a defect, not inequality, and raises.
     """
-    observed = read_tracked_input_digest(session_file, binding.input_id, evidence=evidence)
-    return observed == binding.expected_prompt_digest
+    observed = read_tracked_input_commitment(session_file, binding.input_id, evidence=evidence)
+    return observed.matches(binding.expected_prompt_digest)

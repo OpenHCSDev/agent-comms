@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.native_entries import MessageEntry, NativeEntry, NativeEvidenceRead, NativeEvidenceScope
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead, read_tracked_input_digest
+from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead, CommittedInput, read_tracked_input_commitment
 from native_proof_cases import write_proof_rows
 from test_native_pi import INPUT_ID, _evidence
 
@@ -352,7 +352,7 @@ def test_an_input_check_costs_the_same_on_a_long_session_as_on_a_short_one(tmp_p
                 output.write(user(history + 1))
             decoded.clear()
             visited.clear()
-            assert read_tracked_input_digest(session, f"{history + 1:032x}", evidence=evidence) == "b" * 64
+            assert read_tracked_input_commitment(session, f"{history + 1:032x}", evidence=evidence) == CommittedInput("b" * 64)
             evidence.stopped_input(f"{history + 1:032x}")
             return len(decoded), len(visited)
 

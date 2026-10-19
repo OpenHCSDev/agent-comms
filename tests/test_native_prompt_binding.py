@@ -39,7 +39,8 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import (
     NativePiRpcLaunch,
     NativePiUnavailable,
-    read_tracked_input_digest,
+    CommittedInput,
+    read_tracked_input_commitment,
 )
 from agent_comms.native_prompt_binding import binding_store_path, install_prompt_binding_schema, native_request_digest
 from agent_comms.native_source_cursor import NativeSourceCursor
@@ -319,7 +320,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         # prompt bytes sent to Pi (not the bare text hash).
         assert binding.expected_prompt_digest == native_request_digest(calls[0][1])
         session_file = evidence[0].context.session_file
-        assert read_tracked_input_digest(session_file, evidence[0].input_id) == (
+        assert read_tracked_input_commitment(session_file, evidence[0].input_id) == CommittedInput(
             binding.expected_prompt_digest
         )
         assert evidence[0].expected_prompt_digest == binding.expected_prompt_digest
