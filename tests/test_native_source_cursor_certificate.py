@@ -1,4 +1,4 @@
-"""Certified source pages still require sealed and native owner-epoch proof."""
+"""checked source pages still require sealed and native owner-epoch proof."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from test_native_prompt_binding import _fake_model
 def tmp_path():
     if os.name != "posix" or not Path("/var/tmp").is_dir() or Path("/var").is_symlink():
         pytest.skip("private sealed runtime needs a disposable /var/tmp")
-    with tempfile.TemporaryDirectory(prefix="ac-certified-cursor-", dir="/var/tmp") as path:
+    with tempfile.TemporaryDirectory(prefix="ac-checked-cursor-", dir="/var/tmp") as path:
         yield Path(path)
 
 
@@ -85,7 +85,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
         cursor_delivery=cursor_delivery,
     ).run()
     assert one is not None and one.cursor_status == "proven"
-    # The certificate filters 1,001 committed initials for another owner.
+    # The prefix record filters 1,001 committed initials for another owner.
     # Do not accept, inject, acknowledge, or replay those unrelated sources.
     for n in range(1001):
         publish_initial(comms, "sender", "other001", f"unrelated-{n}:" + "x" * 8400)
@@ -176,12 +176,12 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     # The passive reply advances coverage, not the source injected into Pi.
     assert current.covered_seq == comms.views.history_page(ANY_CHANNEL).messages[-1].seq
     print(
-        f"certified frozen N={recipients}: fake full runner {delivery_ms:.3f} ms, "
+        f"checked frozen N={recipients}: fake full runner {delivery_ms:.3f} ms, "
         f"reconnect {reconnect_ms:.3f} ms"
     )
 
 
-async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
+async def test_checked_cursor_rejects_changed_sidecar_without_replay(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms = _fresh(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)

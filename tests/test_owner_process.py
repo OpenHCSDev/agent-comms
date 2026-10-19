@@ -234,7 +234,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             )
             bus = lifecycle.bus.log
             # This fixture's original writer already understands its original
-            # certificate. Live old-schema ownership remains a separate cutover.
+            # prefix record. Live old-schema ownership remains a separate cutover.
             with bus.locked():
                 marker = bus.read_metadata_unlocked()
                 before = replace(marker, checkpoint_version=None, checkpoint_seal=None)

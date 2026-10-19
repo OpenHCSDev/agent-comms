@@ -100,7 +100,7 @@ class SourceCoverage:
         )
 
     def witness(self) -> PrefixWitness:
-        with self.bus.log.certified_read(
+        with self.bus.log.checked_read(
             blocking=False, contention=self.contention
         ) as source:
             return source.witness
@@ -171,7 +171,7 @@ class SourceCoverage:
     def _page(self, request: CoveragePage) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
         deadline = time.monotonic() + _MAX_SCAN_SECONDS
         remaining_before = self.contention.remaining if self.contention is not None else 0.0
-        with self.bus.log.certified_read(blocking=False, contention=self.contention) as source:
+        with self.bus.log.checked_read(blocking=False, contention=self.contention) as source:
             waited = remaining_before - self.contention.remaining if self.contention is not None else 0.0
             if time.monotonic() > deadline + waited:
                 raise IdentityConflict("source coverage exceeded its scan deadline")
@@ -179,7 +179,7 @@ class SourceCoverage:
                 raise IdentityConflict("source coverage private wire root changed")
             witness, initials, more = source.addressed_page(self.bus.log, request)
             if request.after_seq > max(witness.latest_source_seq, source.marker.claimed_after_seq):
-                raise IdentityConflict("source coverage prefix exceeds certified initials")
+                raise IdentityConflict("source coverage prefix exceeds checked initials")
             request.require_exhausted(more)
         return witness, tuple(initials), more
 
@@ -227,7 +227,7 @@ class SourceCoverage:
                source_reads: NativeEvidenceScope) -> ProvenSourceCoverage:
         """Rescan the whole activation prefix; no persisted high-water is trusted."""
         with source_reads.borrow():
-            with self.bus.log.certified_read(
+            with self.bus.log.checked_read(
                 blocking=False, contention=self.contention
             ) as source:
                 marker = source.marker
@@ -242,7 +242,7 @@ class SourceCoverage:
                 if page.covered_seq < covered:
                     raise IdentityConflict("canonical source coverage regressed between pages")
                 if witness is not None and page.source_witness != witness:
-                    raise IdentityConflict("certified source changed between coverage pages")
+                    raise IdentityConflict("checked source changed between coverage pages")
                 witness, covered = page.source_witness, page.covered_seq
                 inputs.extend(page.inputs)
                 no_wake.extend(page.no_wake_seqs)

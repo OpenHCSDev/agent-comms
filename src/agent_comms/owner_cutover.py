@@ -55,7 +55,7 @@ class OwnerCutover(ABC):
         """No recovery without this operation's unchanged-original proof."""
         from .errors import RelationViolationError
 
-        raise RelationViolationError('This operation has not certified original-unchanged recovery')
+        raise RelationViolationError('This operation has not checked original-unchanged recovery')
 
     def failed(self, failure: StoppedOwnerFailure) -> NoReturn:
         """Release the operation's resources before reporting its failure.
