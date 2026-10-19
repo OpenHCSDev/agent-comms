@@ -7,14 +7,14 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import re
-import subprocess
 import sqlite3
+import subprocess
 import sys
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -32,18 +32,18 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion,
+    WireValue, boundary_decoder,
 )
-from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .threads import Thread
-from .typed_table import Column, Index, JsonStorage, TextStorage, TypedStore, TypedTable
 from .repository_name import RepositoryName
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .threads import Thread
+from .typed_table import Column, Index, JsonStorage, TextStorage, TypedStore, TypedTable
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -379,14 +379,18 @@ class PullRequests:
                 for order in todo.order.pull_queries():
                     self._orders.setdefault(todo.repo, {})[order.id] = order
 
-    def listed(self, repo: RepositoryName, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+    def listed(
+        self, repo: RepositoryName, state: str, order: ProblemOrder,
+    ) -> tuple[PullRequest, ...]:
         checked = order.checked()
         key = (repo, state, checked.id)
         if key not in self._read:
             self._read[key] = self.read(repo, state, checked)
         return tuple(request for request in self._read[key] if checked.id in request.orders)
 
-    def read(self, repo: RepositoryName, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+    def read(
+        self, repo: RepositoryName, state: str, order: ProblemOrder,
+    ) -> tuple[PullRequest, ...]:
         checked = order.checked()
         orders = self._orders.setdefault(repo, {})
         orders[checked.id] = checked

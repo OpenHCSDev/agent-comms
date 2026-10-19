@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from typing import ClassVar
 
 from .field_codec import MalformedRecord, WireValue
 
@@ -11,11 +13,11 @@ from .field_codec import MalformedRecord, WireValue
 class RepositoryName(WireValue):
     owner: str
     name: str
+    _part: ClassVar[re.Pattern[str]] = re.compile(r"(?!\.{1,2}$)[\w.-]+\Z")
 
     def __post_init__(self) -> None:
-        if len(f"{self.owner}/{self.name}") > 200 or any(
-            part in ("", ".", "..") or not all(char.isalnum() or char in "-_." for char in part)
-            for part in (self.owner, self.name)
+        if len(f"{self.owner}/{self.name}") > 200 or not all(
+            self._part.fullmatch(part) for part in (self.owner, self.name)
         ):
             raise ValueError("Repo ID must have the exact owner/repo form.")
 
