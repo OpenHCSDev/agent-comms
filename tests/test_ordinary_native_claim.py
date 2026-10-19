@@ -6,6 +6,8 @@ import json
 from acp.schema import TextContentBlock
 
 from agent_comms.message_page import MessagePageRequest
+from agent_comms.envelope_claim_transitions import NativeClaim, ReleasedClaims, UnclaimedResource
+from agent_comms.messages import ClaimMessage
 from agent_comms.read_basis import AllChannelDisplayScope
 
 
@@ -42,15 +44,16 @@ async def test_ordinary_native_write_releases_its_exact_claim(native_backend):
         assert len(claims) == 1
         with agent._comms.bus.log.checked_read() as source:
             committed = source.claim(str(target.resolve()))
-        assert committed is None
+        assert isinstance(committed, UnclaimedResource)
         acquired = claims[0]
         assert acquired.owner == session
-        assert acquired.claim_scope is None, "This must exercise ordinary, not selected, input"
+        assert isinstance(acquired.claim_scope, NativeClaim), "This must exercise ordinary input"
         assert acquired.seq > 0
         assert native.provider.posts == 2
         releases = [release for message in agent._comms.bus.log.read_page(
             MessagePageRequest(AllChannelDisplayScope("#any")),
-        ).messages if message.claim_transition is not None
+        ).messages if isinstance(message, ClaimMessage)
+                    and isinstance(message.claim_transition, ReleasedClaims)
                     for release in message.claim_transition.releases]
         assert any((release.resource, release.generation) == (acquired.resource, acquired.generation)
                    for release in releases)
