@@ -286,7 +286,7 @@ class OptionalAwarenessProjection:
         _require_no_private_owner_rename(self.index.log.path.parent)
         registry = self.registry
         with _store_lock(registry.store.path, blocking=False):
-            snapshot = registry.store._read_unlocked().snapshot()
+            snapshot = registry.store.read_snapshot_unlocked()
             RegistryOwner(
                 thread=owner,
                 claimed_generation=self.expected_claimed_generation,

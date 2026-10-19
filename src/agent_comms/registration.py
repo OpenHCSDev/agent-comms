@@ -243,9 +243,8 @@ class Registration:
 
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
-        with self.store.locked(mode=SharedLock()):
-            owner = RegistryOwner.capture_local(self.store.read_revision_unlocked().snapshot, name)
-            return owner.thread, owner.claimed_generation
+        owner = RegistryOwner.capture_local(self.snapshot(), name)
+        return owner.thread, owner.claimed_generation
 
     def lease_live_turn_with_claim(
         self, expected: Thread, turn_id: str, *, expected_generation: int
@@ -348,8 +347,8 @@ class Registration:
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""
-        with self.store.locked(mode=SharedLock()):
-            return self.store.read_revision_unlocked().snapshot
+        with self.store.reading_snapshot() as snapshot:
+            return snapshot
 
     def active_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:

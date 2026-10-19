@@ -9,6 +9,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
@@ -27,7 +28,7 @@ from .threads import Thread
 from .turn_lease import ActiveTurn, StoredTurnRecord
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RegistryRevision:
     """A registry file revision: its document and the raw rows it was decoded from.
 
@@ -37,10 +38,10 @@ class RegistryRevision:
     revision: FileRevision | None
     document: RegistryDocument
     raw: dict
-    snapshot: RegistrySnapshot = field(init=False)
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "snapshot", RegistrySnapshot.capture(self.document))
+    @cached_property
+    def snapshot(self) -> RegistrySnapshot:
+        return RegistrySnapshot.capture(self.document)
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +166,19 @@ class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
             entry = RegistryRevision(revision, document, raw)
             self.cache.entry = entry
             return entry
+
+    def read_snapshot_unlocked(self) -> RegistrySnapshot:
+        revision = self.read_revision_unlocked()
+        # Shared readers may be the first to ask for this revision's snapshot.
+        # Use the existing decode mutex for that one construction, not the
+        # whole caller's read lifetime.
+        with self.cache.decoding:
+            return revision.snapshot
+
+    @contextmanager
+    def reading_snapshot(self) -> Iterator[RegistrySnapshot]:
+        with self.locked(mode=SharedLock()):
+            yield self.read_snapshot_unlocked()
 
     @property
     def guard_path(self) -> Path:
