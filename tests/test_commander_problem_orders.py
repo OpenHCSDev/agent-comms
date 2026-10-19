@@ -871,6 +871,31 @@ def todo_row(comms, problem):
         return db.execute('SELECT * FROM todo WHERE id=?', (problem,)).fetchone()
 
 
+def test_claude_ai_permission_seeking_to_the_user_is_refused_and_product_questions_pass(commander, tmp_path):
+    """claude-ai asking the user whether to take an act it is authorized for is refused before
+    anything is sent; a question about product meaning still reaches the user, and the same
+    permission question to a unit is a message to that unit."""
+    from agent_comms.connector import CALLER
+    from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
+    from agent_comms.thread_identity import UserThreadRole
+    comms, _ = commander
+    comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
+    comms.registry.declare(comms.registry.new_thread(
+        'user', frozenset(), str(tmp_path), role=UserThreadRole, created_at=4.0))
+    RuleReviews(comms.root).write('claude-ai', DrawnRuleReviewEntry(('Declare each fact once',), 1))
+    RuleReviews(comms.root).write('claude-ai', AnsweredRuleReviewEntry(
+        1, 'This tick moves rules.py:47 into one typed Core record that Core owns.'))
+    def direct(target, body):
+        CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
+        return comms.bus.log.latest_sequence()
+    sent = comms.bus.log.latest_sequence()
+    with pytest.raises(ValueError, match=r"authorized; act: \['send'\] is yours to do"):
+        direct('user', 'Want me to send the order?')
+    assert comms.bus.log.latest_sequence() == sent
+    assert direct('user', 'Should P174 keep the old ledger format?') == sent + 1
+    assert direct('worker', 'Want me to send the order?') == sent + 2
+
+
 def test_goal_stays_open_while_problems_pend(commander):
     """Delivering a problem never completes the Goal while another assigned problem pends, even one
     stored under a stale generation; a revised order for one keeps the other's order and deadline."""

@@ -62,8 +62,12 @@ class DirectorCaller(ThreadCaller):
         human user, and needs this caller's rules review, drawn, answered and under 20 minutes
         old."""
         readers = (comms.registry.require(target),) if target in comms.registry else ()
-        also = tuple(family for thread in readers for families in thread.role.human(DirectiveText.TO_USER)
-                     for family in families)
+        also = tuple(
+            family
+            for thread in readers
+            for families in thread.role.human(DirectiveText.TO_USER)
+            for family in families
+        )
         due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
         if refused := (*DirectiveText.refused(body, *also), *due):
             raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
