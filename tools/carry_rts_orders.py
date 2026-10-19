@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
+import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -144,10 +144,9 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     todo.require_commander(actor)
                     todo.state.require_open(todo)
                 else:
-                    try:
-                        repo = Repo.of(Path(order.owner.file).parent)
-                    except subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError:
-                        repo = Repo.of(Path(order.check.directory))
+                    print(f"{pid} order {row.msg}: Owner repository {order.owner.file}",
+                          file=sys.stderr, flush=True)
+                    repo = Repo.of(Path(order.owner.file).parent)
                     text = problems[pid].text
                     todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
                 todo = todos.AssignTodo(todo.revision, proposed, due, order, todo.goal).apply(todo)
