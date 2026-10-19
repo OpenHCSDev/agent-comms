@@ -319,13 +319,10 @@ class InitialWrites(PrivateWrites):
             previous_sequence = source.committed_sequence()
             if metadata.last_seq >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Private bus sequence is exhausted.")
-            source_paths = (
-                self._registry.store.path,
-                self._channels.path,
-            )
-            before_revisions = tuple(FileRevision.capture(path) for path in source_paths)
+            # The registry and catalog writers' own locks hold one revision
+            # from this decision through its append.
+            catalog = resources.enter_context(self._channels.reading(self._registry.store))
             snapshot = self._registry.snapshot()
-            catalog = self._channels.read()
             sender, target, require_channel = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
             sender_thread = snapshot.threads.get(sender)
@@ -389,9 +386,6 @@ class InitialWrites(PrivateWrites):
                     )
                 ),
             }
-            # One coherent source revision before any append; the append attests the row.
-            if before_revisions != tuple(FileRevision.capture(path) for path in source_paths):
-                raise RelationViolationError("Send-time registry/catalog revision changed.")
             # Every frozen subscriber needs an identity, including stopped
             # observers. Register from this authoritative registry snapshot,
             # before publishing; an inbox must never invent owners from a row.
