@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class WorkDispatch:
-    """One checked native order: allocate its unit, publish custody, then start it."""
+    """One checked native order: allocate its unit, record its claim, then start it."""
 
     action: ProblemOrderGoalAction
     revision: int
@@ -62,7 +62,7 @@ class WorkDispatch:
             replace(candidate, session_file=location.read_key), StoppedThreadStatus(),
         )
         # A failed publication leaves a stopped unit and its checkout, not an
-        # untracked running task. A failed/uncertain start never releases custody.
+        # untracked running task. A failed/uncertain start never releases the claim.
         comms.goals.update_goal(child.name, self.action)
         comms.owners.start(child.name)
         return comms.registry.require(child.name)
