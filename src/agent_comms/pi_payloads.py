@@ -87,11 +87,7 @@ class PiPayload:
         if issubclass(cls, DeclaredFamily):
             member = cls.wire_member(value)
             data["kind"] = member.declared_name
-        # An opaque member keeps the whole record and still decodes the fields it declares.
-        declared = [(f, key) for f, key in FieldCodec.record_fields(member)
-                    if not (member.opaque and key == "payload")]
-        if member.opaque:
-            data["payload"] = value
+        declared = FieldCodec.record_fields(member)
         names = {key for _, key in declared}
         if member.strict_fields and set(value) - names - {member.wire_tag}:
             raise MalformedRecord(f"Unexpected {member.__name__} fields")
@@ -100,6 +96,9 @@ class PiPayload:
             # Native null means omitted where the declaration names its not-reported member.
             if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
                 data[key] = member.normalize_field(hints[f.name], key, value[key], value)
+        if member.opaque:
+            # An opaque member keeps the whole record beside the fields it declares.
+            data.update(payload=value)
         return data
 
     @classmethod
@@ -125,7 +124,6 @@ class PiPayload:
 
 @dataclass(frozen=True)
 class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
-
     @classmethod
     def wire_member(cls, value):
         try:
@@ -617,7 +615,6 @@ class AbsentMessage(PiMessage):
 
 @dataclass(frozen=True)
 class AssistantMessage(PiMessage):
-
     def annotation_disclosure(self):
         from .working_memory_disclosure import PublicInstructionDisclosure
 

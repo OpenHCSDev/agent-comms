@@ -134,7 +134,6 @@ class NativePiEvent(PiEvent, declared_name=None):
 
 
 class DurablePiEvent(PiEvent, declared_name=None):
-
     @staticmethod
     def unowned_event(event):
         raise RuntimeError('Pi event arrived with no open turn')

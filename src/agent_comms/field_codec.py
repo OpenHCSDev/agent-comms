@@ -484,7 +484,8 @@ class TimestampText(TextRepresentation[RecordedTimestamp]):
     @classmethod
     def from_text(cls, value: str) -> RecordedTimestamp:
         recorded = RecordedTimestamp(value)
-        recorded.at.timestamp()
+        if recorded.at.utcoffset() is None:
+            raise ValueError("A recorded time must name its UTC offset")
         return recorded
 
 
