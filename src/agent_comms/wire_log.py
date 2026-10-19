@@ -502,7 +502,6 @@ class WireStoreLock(StoreLock):
 
 
 class WireLog(StoreLockOwner):
-    lock_rank = 1
     lock_type = WireStoreLock
     page_index_type = BusPageIndex
 
