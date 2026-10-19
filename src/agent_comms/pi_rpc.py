@@ -38,10 +38,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     async def _read(self):
         try:
             while (event := await self.receive(strict=True)) is not None:
-                if isinstance(event, Response):
-                    self.correlate(event)
-                else:
-                    await self.deliver_event(event)
+                await event.deliver_to(self)
         finally:
             self._events.shutdown()
 

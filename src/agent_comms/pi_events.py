@@ -57,6 +57,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def unowned_event(event):
         """Idle native queries may interleave unsolicited Pi notifications."""
 
+    async def deliver_to(self, channel) -> None:
+        await channel.deliver_event(self)
+
     @classmethod
     def known_kinds(cls):
         return (cls.wire_kind(),)
@@ -749,6 +752,9 @@ class Response(NativePiEvent, DurablePiEvent):
     error: str | None = field(default=None, metadata={"wire_name": "error"})
     id: str | None = field(default=None, metadata={"wire_name": "id"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
+
+    async def deliver_to(self, channel) -> None:
+        channel.correlate(self)
 
     def responds_to(self, request: PiCommand) -> bool:
         return self.id == request.id and self.command is type(request)
