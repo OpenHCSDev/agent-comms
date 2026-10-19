@@ -127,12 +127,12 @@ class StorageRule:
     def memory(self) -> MemoryUse:
         """Available memory, the largest idle pytest temp dirs and the largest test processes."""
         lines = (self.proc / 'meminfo').read_text().splitlines()
-        meminfo = dict(line.split(':', 1) for line in lines)
+        available = next(int(line.split()[1]) for line in lines if line.startswith('MemAvailable:'))
         idle = time.time() - self.idle_minutes * 60
         dirs = (MemoryHolder(str(path), self.tree_gib(path))
                 for path in self.temp_root.glob('pytest-of-*/*')
                 if path.is_dir() and path.stat().st_mtime < idle)
-        return MemoryUse(int(meminfo['MemAvailable'].split()[0]) / 2**20, self.largest(dirs),
+        return MemoryUse(available / 2**20, self.largest(dirs),
                          self.largest(self.test_processes()))
 
     def largest(self, holders: Iterator[MemoryHolder]) -> tuple[MemoryHolder, ...]:
