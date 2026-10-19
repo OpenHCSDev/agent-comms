@@ -13,6 +13,7 @@ from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 
 def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypatch):
     comms = wire(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     replacement = []
 

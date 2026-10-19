@@ -259,7 +259,9 @@ class AgentActivity:
             lease = leased.turn_lease
             assert lease is not None
         try:
-            self.transition_turn(lease, PreparingPhase(detail))
+            phase = PreparingPhase(detail)
+            lease.record.transition(lease, phase)
+            self._record_turn_activity(leased.name, (phase,))
         except BaseException as error:
             self.finish_turn(lease, TurnEnding.from_exception(error))
             raise

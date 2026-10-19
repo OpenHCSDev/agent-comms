@@ -379,23 +379,26 @@ class OwnedTurn:
         """Join source acquisition before exposing this turn's loop capabilities."""
         self.owner_task = asyncio.current_task()
         assert self.owner_task is not None
+        stream_resources = AsyncExitStack()
+        resources.push_async_exit(stream_resources)
+        resources.push_async_exit(self.lease_cleanup)
         permits = ExitStack()
         permit_cleanup.push_async_callback(Coordination.run_worker, permits.close)
         if not await Coordination.run_worker(self.authorize):
             return False
         self.runner.sessions.bindings[self.session_id] = self.thread_name
-        if not await Coordination.run_worker(partial(self.begin, resources, permits)):
+        if not await Coordination.run_worker(partial(self.begin, stream_resources, permits)):
             return False
-        self.open_stream(resources, permits)
-        # Early failures close claims before inbox/lease retirement. Once all
-        # stream capabilities exist, goal settlement belongs above those resources.
-        resources.push_async_callback(permit_cleanup.pop_all().aclose)
-        resources.push_async_callback(self.backend.abort, self.owner_task)
+        self.open_stream(stream_resources, permits)
+        # The caller's exit stack ends this lease before stream cleanup, including
+        # acquisition failures and consumers that acquire without calling run().
+        stream_resources.push_async_callback(permit_cleanup.pop_all().aclose)
+        stream_resources.push_async_callback(self.backend.abort, self.owner_task)
         return True
 
     async def run(self) -> None:
         async with AsyncExitStack() as resources:
-            async with AsyncExitStack() as permit_cleanup, self.lease_cleanup:
+            async with AsyncExitStack() as permit_cleanup:
                 if not await self.acquire(resources, permit_cleanup):
                     return
                 await self.run_native()
