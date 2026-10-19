@@ -152,8 +152,8 @@ def carry(rts: Path, root: Path, apply: bool) -> int:
         'archived_strikes': archived_strikes,
         'carried': {'orders': 0, 'problems': 0, 'strikes': 0},
         'core_rows': len(existing), 'prepared_identified_orders': sorted(prepared),
-        'blockers': dict(failures), 'examples': dict(examples),
-        'todo_writes': 0,
+        'blockers': dict(failures), 'blocker_count': sum(failures.values()),
+        'examples': dict(examples), 'carried_rows': 0, 'todo_writes': 0,
     }
     if failures:
         report['result'] = 'REFUSED: no Todo writes; source facts need owner model support'
@@ -169,6 +169,7 @@ def carry(rts: Path, root: Path, apply: bool) -> int:
                 store._current(db, pid).require_result(row)
         report['todo_writes'] = len(prepared)
         report['carried'] = dict(report['source'])
+        report['carried_rows'] = len(problems)
     report['result'] = 'carried' if apply else 'ready'
     print(json.dumps(report, indent=2))
     return 0
