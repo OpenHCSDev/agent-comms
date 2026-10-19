@@ -13,13 +13,16 @@ Every fork reviews for itself (forks must know correct maintenance, not carry do
 actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
 """
 import glob, os, random, re, sys
+from dataclasses import dataclass
+
+from ..cli_commands import option
 
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
-from .order import COMMS
+from .order import COMMS, CommanderVerb
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
@@ -74,18 +77,32 @@ def answer(n: int, text: str, who: str = ME):
     record(who, AnsweredRuleReviewEntry(n, text))
 
 
+@dataclass(frozen=True, kw_only=True)
+class RulesVerb(CommanderVerb):
+    fork: str | None = option("--as", default=None, help="the acting commander")
+
+
+class ReviewVerb(RulesVerb):
+    def run(self) -> None:
+        review(self.who)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AnswerVerb(RulesVerb):
+    n: int = option()
+    text: str = option()
+
+    def run(self) -> None:
+        answer(self.n, self.text, self.who)
+
+
+class StaleVerb(RulesVerb):
+    def run(self) -> None:
+        print('\n'.join(due.why for due in RulesDue.violations(COMMS, self.who)) or 'fresh')
+
+
 def main(a):
-    who = ME
-    if '--as' in a:
-        i = a.index('--as'); who = a[i + 1]; del a[i:i + 2]
     try:
-        if a == ['review']:
-            review(who)
-        elif a[:1] == ['answer'] and len(a) == 3 and a[1].isdigit():
-            answer(int(a[1]), a[2], who)
-        elif a == ['stale']:
-            print('\n'.join(due.why for due in RulesDue.violations(COMMS, who)) or 'fresh')
-        else:
-            sys.exit(__doc__)
+        RulesVerb.parse(a, __doc__).apply()
     except ValueError as refused:  # Core owns what a review and an answer may say
         sys.exit(f'REFUSED: {refused}')

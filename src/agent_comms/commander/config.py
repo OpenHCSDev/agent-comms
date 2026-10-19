@@ -12,6 +12,22 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from ..comms import Comms
+from ..errors import RelationViolationError
+from ..native_arguments import SelectedModel
+from ..threads import Thread
+
+
+class CommanderRole:
+    """The shared eligibility check for registration and every commander verb."""
+
+    @staticmethod
+    def require_commander(thread: Thread) -> None:
+        if thread.model is not None and not SelectedModel.decode(thread.model).provider_type.may_command:
+            raise RelationViolationError(
+                f"Thread {thread.name!r} with declared model {thread.model!r} cannot command: no Codex commander."
+            )
+
 
 class Repo(BaseModel):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
@@ -31,7 +47,7 @@ class Repo(BaseModel):
         return cls(checkout=checkout.resolve(), github='/'.join(github))
 
 
-class CommanderConfig(BaseModel):
+class CommanderConfig(CommanderRole, BaseModel):
     model_config = ConfigDict(frozen=True)
 
     commander: str
@@ -63,6 +79,7 @@ class CommanderConfig(BaseModel):
 
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
+        self.require_commander(Comms(self.root).registry.require(self.commander))
         path = self.path(home)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.write_text(self.model_dump_json(indent=1) + '\n')

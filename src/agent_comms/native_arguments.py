@@ -97,6 +97,20 @@ class ExtensionArgument(NamedOption, ValueArgument):
     short = "-e"
 
 
+class ModelProvider(DeclaredFamily, affix="Provider"):
+    """External provider names are open; declarations own provider-specific capabilities."""
+
+    may_command: ClassVar[bool] = True
+
+    @classmethod
+    def named(cls, name: str) -> type[ModelProvider]:
+        return cls.__registry__.get(name, cls)
+
+
+class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
+    may_command = False
+
+
 @dataclass(frozen=True)
 class SelectedModel:
     provider: str
@@ -116,6 +130,10 @@ class SelectedModel:
             raise IdentityConflict("Selected owner has no configured provider/model")
         provider, model = selection.split("/", 1)
         return cls(provider, model)
+
+    @property
+    def provider_type(self) -> type[ModelProvider]:
+        return ModelProvider.named(self.provider)
 
     @property
     def qualified(self) -> str:
