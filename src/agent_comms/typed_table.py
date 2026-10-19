@@ -107,7 +107,7 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
 
     @classmethod
     def to_sql(cls, value: object) -> object:
-        return FieldCodec.encode(value)
+        return value
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -162,8 +162,8 @@ class BooleanStorage(SqlStorage):
         return (*super().constraints(column, annotation), f"{_identifier(column)} IN (0, 1)")
 
     @classmethod
-    def to_sql(cls, value: object) -> int:
-        return int(value)
+    def to_sql(cls, value: object) -> int | None:
+        return None if value is None else int(value)
 
     @classmethod
     def from_sql(cls, value: object) -> bool:
@@ -228,8 +228,8 @@ class JsonStorage(SqlStorage):
         )
 
     @classmethod
-    def to_sql(cls, value: object) -> str:
-        return json.dumps(FieldCodec.encode(value), separators=(",", ":"), allow_nan=False)
+    def to_sql(cls, value: object) -> str | None:
+        return None if value is None else json.dumps(value, separators=(",", ":"), allow_nan=False)
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -322,11 +322,7 @@ class SqlValue:
             cursor.close()
 
     def encode(self, value: object) -> object:
-        # SQL parameters may already be wire data. Convert that input shape,
-        # then validate its declared column before SQLite can coerce it.
-        encoded = FieldCodec.encode(value)
-        self.value.decode(encoded)
-        return None if encoded is None else self.storage.to_sql(encoded)
+        return self.storage.to_sql(self.value.encode(value))
 
     def decode(self, value: object) -> object:
         return self.value.decode(None if value is None else self.storage.from_sql(value))

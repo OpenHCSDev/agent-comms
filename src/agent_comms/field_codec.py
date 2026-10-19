@@ -656,6 +656,8 @@ class FieldCodec(Sealed):
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
         if annotation is None:
             return None, None
+        if annotation is object:
+            return Any, _JsonValueRepresentation
         if isinstance(annotation, type):
             # A class has no Annotated metadata. Its live capability still
             # determines representation, including inherited/virtual members.
@@ -1222,28 +1224,19 @@ class _JsonValueRepresentation(FieldRepresentation):
 class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[Any]):
     """Only an undeclared value needs runtime representation selection."""
 
-    annotations = (Any, object, None)
+    annotations = (Any, None)
 
     def accepts_value(self, value: object) -> bool:
         return True
 
     def encode(self, value: object) -> object:
-        if isinstance(value, WireValue):
-            return compile_decoder(type(value)).encode(value)
-        kind = type(value)
-        if value is None or kind in (str, int, bool, float):
-            return compile_decoder(kind).encode(value)
-        if is_dataclass(value) and not isinstance(value, type):
-            return compile_decoder(kind).encode(value)
         if isinstance(value, type) and issubclass(value, DeclaredFamily):
             return value.declared_name
-        if isinstance(value, (Enum, list, tuple, frozenset)):
-            return compile_decoder(kind).encode(value)
-        if isinstance(value, dict):
+        if type(value) is dict:
             if all(type(key) is str for key in value):
                 return {key: self.encode(item) for key, item in value.items()}
             return [[self.encode(key), self.encode(item)] for key, item in value.items()]
-        raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+        return compile_decoder(type(value)).encode(value)
 
 
 def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
@@ -1590,16 +1583,15 @@ class _RecordDecoder(ValueDecoder[Any]):
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(_ChoiceDecoder[Any]):
     target: type[Enum]
-    value_plans: Mapping[Enum, ValueDecoder[object]]
+    value_plan: ValueDecoder[object]
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(target, types.MappingProxyType({
-            member: compile_decoder(type(member.value)) for member in target
-        }))
+        value_types = tuple(dict.fromkeys(type(member.value) for member in target))
+        return cls(target, ValueDecoder.for_members(value_types))
 
     def encode(self, value: Enum) -> object:
-        return self.value_plans[value].encode(value.value)
+        return self.value_plan.encode(value.value)
 
     def editor_choices(self):
         return tuple((str(member.value), member.value) for member in self.target)
@@ -1616,10 +1608,19 @@ def compile_decoder(annotation: object) -> ValueDecoder[object]: ...
 def compile_decoder(annotation: object) -> ValueDecoder[object]:
     """Compile one annotation's decoder. Declarations are finite and
     immutable for this process, so every decoder is built once."""
-    target, representation = FieldCodec._representation(annotation)
-    structural = _structural_decoder(target)
+    declared, representation = FieldCodec._representation(annotation)
     if representation is None:
-        return structural
+        return _structural_decoder(declared)
+    # The capability applies to every member of its declared nullable type,
+    # including non-JSON Python classes such as Path.
+    if get_origin(declared) in (Union, types.UnionType):
+        structural = UnionDecoder(declared, tuple(
+            compile_decoder(Annotated[member, representation]) for member in get_args(declared)
+        ))
+    else:
+        structural = (_ScalarDecoder(declared)
+                      if isinstance(declared, type) and declared not in ValueDecoder._by_annotation
+                      else _structural_decoder(declared))
     return _RepresentedDecoder(annotation, representation, structural)
 
 def _structural_decoder(annotation: object) -> ValueDecoder[object]:
@@ -1644,4 +1645,4 @@ def _member_decoder(target: object) -> ValueDecoder[object]:
         return _RecordDecoder(target)
     if isinstance(target, type) and issubclass(target, Enum):
         return _EnumDecoder.from_annotation(target, ())
-    return _ScalarDecoder(target)
+    raise TypeError(f"Unsupported JSON type: {target}")
