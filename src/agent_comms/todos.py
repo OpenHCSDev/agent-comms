@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 import sqlite3
+import sys
 import time
 import asyncio
 from abc import abstractmethod
@@ -758,7 +759,8 @@ class OrderWords(WireValue):
     # for long ordinary words with no slash or filename suffix.
     CITED: ClassVar[re.Pattern] = re.compile(
         r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|'
-        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)')
+        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)|'
+        r'\b\w+_\w+\b|\b[A-Z][a-z0-9]+[A-Z]\w*\b')  # identifiers are code, not prose
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
     least_words: ClassVar[int] = 1
@@ -803,6 +805,13 @@ class PlainText(OrderWords):
 
     REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
     refusal = "Jargon {1} hides what happened; say it plainly."
+
+    @staticmethod
+    def refuses(found: list[str]) -> bool:
+        """Flags, never blocks: a wording slip costs a note, not a resend."""
+        if found:
+            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
+        return False
 
 
 class StrikeReason(PlainText):
