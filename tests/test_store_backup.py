@@ -2,6 +2,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from cutover.backup import StoreBackup
 from cutover.carry import CarryChain, CarryLedger, NoConversion, PendingConversion, PreparedCarries
 
@@ -36,7 +38,7 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
     assert archived.exists()
 
 
-def test_current_conversion_plan_only_selects_declared_transcript_store(tmp_path):
+def test_conversion_plan_refuses_a_skipped_predecessor(tmp_path):
     checkout = Path(__file__).resolve().parents[1]
     chain = CarryChain.at(checkout, 'HEAD')
     applied = tuple(step.name for step in chain.steps if step.name != 'carry_external_positions')
@@ -44,11 +46,8 @@ def test_current_conversion_plan_only_selects_declared_transcript_store(tmp_path
     for name in applied:
         ledger.record(name)
     destination = StoreBackup(tmp_path, tmp_path / 'route.json', tmp_path / 'backup')
-    plan = PreparedCarries.at(checkout, tmp_path, destination, False)
-    assert isinstance(plan, PendingConversion)
-    assert [step.name for step, _ in plan.conversions] == ['carry_external_positions']
-    from agent_comms.external_transcript import ExternalTranscript
-    assert plan.files == (tmp_path / CarryLedger.name, ExternalTranscript.path_in(tmp_path))
+    with pytest.raises(ValueError, match='Bus ledger skips a step'):
+        PreparedCarries.at(checkout, tmp_path, destination, False)
 
 
 def test_no_conversion_has_no_snapshot_or_recovery_work(tmp_path):
