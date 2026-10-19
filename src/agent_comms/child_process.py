@@ -263,6 +263,20 @@ class ProcessIdentity(RecordMember, ProcessState):
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
 
+    def require_ancestor_of(self, pid: int) -> None:
+        """A supplied process is authority only for its actual descendant."""
+        platform = Platform.current()
+        platform.require(self)
+        current = platform.identity(pid)
+        while current.pid > 1:
+            if current == self:
+                return
+            current = platform.parent_identity(current.pid)
+        raise IdentityMismatchError('The declared process is not an ancestor of this hook')
+
+    async def wait_exited(self) -> None:
+        await Platform.current().wait_exited(self)
+
     def require_release_by(self, process: ProcessIdentity) -> None:
         if self != process:
             raise RelationViolationError("Only the registered owner may release itself.")
@@ -428,6 +442,12 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def identity(self, pid: int) -> ProcessIdentity: ...
 
+    def parent_identity(self, pid: int) -> ProcessIdentity:
+        raise NotImplementedError('This platform does not expose exact parent identities')
+
+    async def wait_exited(self, identity: ProcessIdentity) -> None:
+        raise NotImplementedError('This platform does not expose process exit observation')
+
     def matches(self, identity: ProcessIdentity) -> bool:
         try:
             return self.identity(identity.pid) == identity
@@ -494,9 +514,16 @@ class PosixPlatform(Platform):
         os.kill(identity.pid, signum)
 
 
+@dataclass(frozen=True)
+class LinuxProcessRecord:
+    identity: ProcessIdentity
+    group: int
+    parent: int
+
+
 class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
     @staticmethod
-    def _stat(pid: int) -> tuple[ProcessIdentity, int]:
+    def _stat(pid: int) -> LinuxProcessRecord:
         try:
             # comm can contain whitespace and ')'; fields after its final ')'
             # start at field 3. Kernel starttime is field 22, pgrp is field 5.
@@ -506,19 +533,45 @@ class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
         if fields[0] in {"Z", "X"}:
             raise ProcessLookupError(pid)
         group = int(fields[2])
-        return ProcessIdentity.in_group(pid, int(fields[19]), group), group
+        return LinuxProcessRecord(
+            ProcessIdentity.in_group(pid, int(fields[19]), group), group, int(fields[1]))
 
     def identity(self, pid: int) -> ProcessIdentity:
-        return self._stat(pid)[0]
+        return self._stat(pid).identity
+
+    def parent_identity(self, pid: int) -> ProcessIdentity:
+        return self.identity(self._stat(pid).parent)
+
+    async def wait_exited(self, identity: ProcessIdentity) -> None:
+        try:
+            descriptor = self.open_pidfd(identity.pid)
+        except ProcessLookupError:
+            return
+        try:
+            self.require(identity)
+            loop = asyncio.get_running_loop()
+            exited = loop.create_future()
+            def observe() -> None:
+                if not exited.done():
+                    exited.set_result(None)
+            loop.add_reader(descriptor, observe)
+            try:
+                await exited
+            finally:
+                loop.remove_reader(descriptor)
+        except ProcessLookupError:
+            return
+        finally:
+            os.close(descriptor)
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         members = []
         for entry in Path("/proc").iterdir():
             if entry.name.isdecimal():
                 with suppress(ProcessLookupError):
-                    identity, group = self._stat(int(entry.name))
-                    if group == pgid:
-                        members.append(identity)
+                    record = self._stat(int(entry.name))
+                    if record.group == pgid:
+                        members.append(record.identity)
         return tuple(members)
 
     def send(self, identity: ProcessIdentity, signum: int) -> None:

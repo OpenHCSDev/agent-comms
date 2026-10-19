@@ -43,8 +43,8 @@ from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 from .shared import (
     MONITOR_FRAME,
     ForeignMonitorFrame,
-    IncomingFrame,
     MonitorFrame,
+    MonitorIncomingFrame,
     MonitorObservation,
     MonitorPart,
     MonitorProbe,
@@ -52,7 +52,7 @@ from .shared import (
 )
 
 
-class ClaudeMonitorFrame(IncomingFrame):
+class ClaudeMonitorFrame(MonitorIncomingFrame):
     """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units."""
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
