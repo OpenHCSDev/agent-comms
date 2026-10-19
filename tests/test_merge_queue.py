@@ -97,3 +97,5 @@ class MergeQueueTests(unittest.TestCase):
                          error.output)
         secret = "PRIVATE_PAYLOAD_DO_NOT_LEAK"
         self.assertNotIn(secret, UpgradeRefused.public_message(secret))
+        private_failure = f"upgrade-bus: aborted before the backup (RuntimeError: {secret})"
+        self.assertNotIn(secret, UpgradeRefused.public_message(private_failure))
