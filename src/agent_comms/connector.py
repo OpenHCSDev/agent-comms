@@ -32,7 +32,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, Self, get_args
+from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from aiohttp import web
@@ -52,9 +52,11 @@ from .connector_store import (
 )
 from .messages import Message
 from .commander.standing import UnownedWheelSpin
-from .todos import DirectiveText
+from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_caller import ThreadCaller
-from .tools import CommsChannelsTool, ReadTool, ToolRequest
+from .tools import (
+    CommsChannelsTool, CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+)
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -64,9 +66,6 @@ PORT = 18766
 class DirectorCaller(ThreadCaller):
     """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
     request when that thread holds owner requests."""
-
-    def judged(self, comms, problem, verdict):
-        return verdict.reviewed(comms.goals, problem, comms.registry.require(self.name).incarnation)
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText. claude-ai directs the commanders, so the
@@ -79,6 +78,24 @@ class DirectorCaller(ThreadCaller):
                 message.target,
                 DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
             )
+
+
+class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
+    """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declared_name):
+    label = "Review PR head"
+    description = "Record the connector reviewer's acceptance of the exact PR commit it reviewed."
+    id: str = tool_field("Problem ID")
+    operation: ReviewedHeadVerdict = tool_field("Accepted PR-head verdict")
+
+    def apply(self, comms: Comms, caller: DirectorCaller) -> TodoChanged:
+        todo = self.operation.reviewed(
+            comms.goals, self.id, comms.registry.require(caller.name).incarnation
+        )
+        return TodoChanged(todo, todo.strike_count)
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
@@ -346,8 +363,11 @@ class Connector:
         return f"{self.issuer}/.well-known/oauth-protected-resource"
 
     @staticmethod
-    def exposed() -> dict[str, type[ToolRequest]]:
-        return {tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)}
+    def exposed() -> dict[str, type[ToolRequest[Any]]]:
+        tools: tuple[type[ToolRequest[Any]], ...] = (
+            *ToolRequest.members_with(ToolRequest), *ConnectorTool.members_with(ConnectorTool)
+        )
+        return {tool.declared_name: tool for tool in tools}
 
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:

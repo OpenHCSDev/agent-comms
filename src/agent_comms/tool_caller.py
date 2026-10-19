@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .messages import Message
     from .tools import ToolRequest
-    from .todos import OrderVerdict, Todo
 
 
 @dataclass(frozen=True)
@@ -86,9 +85,6 @@ class NoThreadCaller(ToolCaller):
 @dataclass(frozen=True)
 class ThreadCaller(ToolCaller):
     name: str
-
-    def judged(self, comms: Comms, problem: str, verdict: OrderVerdict) -> Todo:
-        return comms.goals.change_problem(problem, verdict, self.name)
 
     def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
         return request.apply(comms, self)
