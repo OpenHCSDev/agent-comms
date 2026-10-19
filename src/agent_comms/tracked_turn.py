@@ -219,7 +219,7 @@ class AmbiguousTrackedTerminal(PendingTrackedTerminal):
         return self
 
 
-class TrackedTurnSession(TurnSession, MroDispatch):
+class TrackedTurnSession(TurnSession):
     """Own one strict input/proof exchange; never grant publication or retry authority."""
 
     def __init__(
@@ -242,20 +242,20 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         # input is reused when its launch and source still match.
         super().__init__(
             launch,
-            command.message,
+            command,
+            tool_mode=selected_tool_mode,
             model_wait=model_wait,
             startup=startup,
             request_observer=request_observer,
             native_session=pi_session,
         )
         self.retainable = False
-        self.command = command
         self.following = following
         self.rejected_commands: list[InputRefused] = []
         self.model = model
         self.prompt_send_boundary = prompt_send_boundary
         self.ingress = ingress
-        self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
+        self.observe_event = observe_event
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
@@ -339,7 +339,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     self.native = await self.acquire_native(transport, reuse=True)
                     ownership.push_async_callback(self.retain_or_close)
                     await ownership.enter_async_context(self.native.failures())
-                    self.tool_socket.bind_process(self.native.proc.pid)
                     self.watchdog.reading()
                     try:
                         try:
@@ -375,13 +374,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             return
         await self.native_session.close()
 
-    async def open_transport(self, ownership: AsyncExitStack) -> None:
-        self.tool_socket = await self.selected_tool_mode.open_transport(self, ownership)
-        self.command = replace(self.command, owner_tools=self.tool_socket.connection)
 
-    @property
-    def active_tools(self):
-        return self.tool_socket.active_tools
 
     async def apply_native_event(self, event):
         await self.dispatch(event)
@@ -526,7 +519,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         event.message.tracked_end(self)
 
     def accept_tool_round(self, message):
-        return self.tool_socket.accept_round(self, message.content)
+        super().accept_tool_round(message)
+        self.text_parts.clear()
+        self.terminal = self.terminal.tool_round()
+        return True
 
     def accept_final_message(self, message):
         self.tool_socket.assert_complete()
@@ -550,14 +546,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             evidence=self.evidence,
         ))
 
-    @handles(pi.ToolExecutionStart)
-    async def tool_started(self, event: pi.ToolExecutionStart) -> None:
-        await self.context_proof()
-        self.tool_socket.tool_started(event)
 
-    @handles(pi.ToolExecutionEnd)
-    async def tool_finished(self, event: pi.ToolExecutionEnd) -> None:
-        self.tool_socket.tool_finished(event, self.command.input_id)
 
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:

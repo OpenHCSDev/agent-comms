@@ -844,7 +844,6 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPha
         name = self.tool_name or "tool"
         is_ok = self.is_error is not True
         tool_id = self.tool_call_id or name
-        session.active_tools.discard(tool_id)
         session.watchdog.tick()
         session.watchdog.progress()
         yield events.ToolEnd(
@@ -874,7 +873,6 @@ class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunnin
 
     async def act(self, session: TurnSession) -> None:
         session.watchdog.prompt_accepted = True
-        session.active_tools.add(self.tool_id)
 
     @property
     def retry_progress(self) -> bool:

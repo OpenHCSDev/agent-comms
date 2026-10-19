@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
+    from .selected_tool_broker import ToolTransport
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -269,36 +270,6 @@ class OwnerToolConnection:
     token: str = field(repr=False)
 
 
-class ToolTransport:
-    @property
-    def connection(self) -> OwnerToolConnection | None:
-        return None
-
-    @property
-    def retainable(self) -> bool:
-        return True
-
-    @property
-    def active_tools(self) -> set[str]:
-        return set()
-
-    def accept_round(self, turn, content) -> bool:
-        return False
-
-    def tool_started(self, event: ToolExecutionStart) -> None:
-        raise SelectedToolDenied("Native Pi tool preceded tracked context proof")
-
-    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
-        raise SelectedToolDenied("Native Pi tool has no owner policy")
-
-    def assert_complete(self) -> None:
-        pass
-
-
-    def bind_process(self, pid: int) -> None:
-        """Transports without a socket need no peer identity."""
-
-
 class NativeToolMode(ABC):
     """Owner-bound native tool policy shared by selected and normal coding turns."""
 
@@ -319,7 +290,9 @@ class NoNativeTools(NativeToolMode):
         return ("--no-tools",)
 
     async def open_transport(self, turn, ownership) -> ToolTransport:
-        return ToolTransport()
+        from .selected_tool_broker import ToolTransport
+
+        return await ToolTransport.open(turn, ownership)
 
     def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
         return factory()

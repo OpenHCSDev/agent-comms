@@ -42,7 +42,6 @@ from .native_tool_call import (
     NativeToolCall,
     NativeToolMode,
     OwnerToolConnection,
-    ToolTransport,
     SelectedToolDenied,
 )
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
@@ -472,10 +471,10 @@ class NativeToolCallTable(Generic[Call]):
 
 
 
-class OwnerToolSocket(ToolTransport, Generic[Call]):
+class ToolTransport(Generic[Call]):
     """Authenticated native child transport; the policy decides which requests may run."""
 
-    max_request = _MAX_REQUEST
+    max_request = 1024 * 1024
 
     @property
     def connection(self) -> OwnerToolConnection:
@@ -486,20 +485,15 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
         return True
 
     @classmethod
-    async def open(cls, turn, ownership, policy):
-        transport = cls(turn.launch.session.directory, os.urandom(32).hex(), policy)
+    async def open(cls, turn, ownership, *policy):
+        transport = cls(turn.launch.session.directory, os.urandom(32).hex(), *policy)
+        transport.turn = turn
         ownership.push_async_callback(transport.close)
         await transport.start()
         return transport
 
     def bind_process(self, pid: int) -> None:
         self.expected_pid = pid
-
-    def accept_round(self, turn, content) -> bool:
-        self.announce(content)
-        turn.text_parts.clear()
-        turn.terminal = turn.terminal.tool_round()
-        return True
 
     def __init__(self, directory: Path, token: str) -> None:
         try:
@@ -517,14 +511,14 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
         self.calls: NativeToolCallTable[Call] = NativeToolCallTable()
         self._handlers: set[asyncio.Task] = set()
 
-    @abstractmethod
-    def decode_call(self, call_id: object, name: object, arguments: object) -> Call: ...
+    def decode_call(self, call_id: object, name: object, arguments: object) -> Call:
+        raise SelectedToolDenied("Native tools are disabled for this input")
 
-    @abstractmethod
-    def decode_request(self, raw: bytes) -> Call: ...
+    def decode_request(self, raw: bytes) -> Call:
+        raise SelectedToolDenied("Native tools are disabled for this input")
 
-    @abstractmethod
-    async def allow(self, round_number: int, call: Call) -> None: ...
+    async def allow(self, round_number: int, call: Call) -> None:
+        raise SelectedToolDenied("Native tools are disabled for this input")
 
     def validate_round(self, round: NativeToolRound[Call]) -> None:
         """Apply policy-specific limits after full decode and before any state transition."""
@@ -651,7 +645,8 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
                 self._handlers.discard(task)
 
 
-class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
+class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
+    max_request = _MAX_REQUEST
     """One selected replacement, preserving the existing one-slot authority."""
 
     def __init__(
