@@ -395,12 +395,12 @@ class TargetSelection(ABC):
 
     @staticmethod
     def decode(raw: CommandTarget | str | tuple[CommandTarget | str, ...], *, multiple: bool) -> TargetSelection:
-        batch = isinstance(raw, tuple)
-        selected = raw if batch else (raw,)
-        if not selected:
-            raise ValueError('Select at least one target')
-        names = tuple(dict.fromkeys(CommandTarget.named(item) for item in selected))
-        return (TargetBatch if batch and (len(names) > 1 or multiple) else OneTarget)(names)
+        if isinstance(raw, tuple):
+            if not raw:
+                raise ValueError('Select at least one target')
+            names = tuple(dict.fromkeys(CommandTarget.named(item) for item in raw))
+            return (OneTarget if len(names) == 1 and not multiple else TargetBatch)(names)
+        return OneTarget((CommandTarget.named(raw),))
 
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
