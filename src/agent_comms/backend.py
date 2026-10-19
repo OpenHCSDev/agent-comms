@@ -54,7 +54,7 @@ from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
 from .native_tool_call import NativeToolMode
-from .native_tool_transport import ToolTransport
+from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .mro_dispatch import MroDispatch, handles
 from .selected_tool_broker import SelectedToolDenied
 from .send_outcome import SendBoundary
@@ -382,8 +382,8 @@ class NativeSession(MroDispatch, ABC):
             context_size=self.usage.size,
         )
 
-    async def open_transport(self, resources: AsyncExitStack) -> None:
-        self.tool_socket = await ToolTransport.open(self, resources)
+    async def open_transport(self, resources: AsyncExitStack) -> UnboundToolTransport:
+        return await ToolTransport.open(self, resources)
 
     @contextmanager
     def native_acquisition(self):
@@ -398,9 +398,9 @@ class NativeSession(MroDispatch, ABC):
         with self.native_acquisition():
             async with AsyncExitStack() as transport:
                 with self.startup.measurements.operation("open_transport"):
-                    await self.open_transport(transport)
+                    unbound = await self.open_transport(transport)
                 native = await self.open_native(reuse=reuse)
-                self.tool_socket.bind_process(native.proc.pid)
+                self.tool_socket = await unbound.bind_process(native.proc.pid)
                 native.transport = transport.pop_all()
         self.owner = asyncio.current_task()
         if self.owner is not None:
@@ -587,11 +587,12 @@ class TurnSession(NativeSession):
         self.tool_mode = tool_mode
         self.make_command = make_command
 
-    async def open_transport(self, resources: AsyncExitStack) -> None:
-        self.tool_socket = await self.tool_mode.open_transport(self, resources)
-        self.command = self.make_command(owner_tools=self.tool_socket.connection)
+    async def open_transport(self, resources: AsyncExitStack) -> UnboundToolTransport:
+        unbound = await self.tool_mode.open_transport(self, resources)
+        self.command = self.make_command(owner_tools=unbound.listener.connection)
         del self.make_command
         self.output.sensitive = bool(self.command.images)
+        return unbound
 
     async def context_proof(self):
         if not self.started_input or not self.accepts_output:

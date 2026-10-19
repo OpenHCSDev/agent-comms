@@ -8,6 +8,7 @@ import math
 import os
 import sqlite3
 import stat
+import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
@@ -772,13 +773,17 @@ class WireLog(StoreLockOwner):
         metadata: WireMetadata,
         *,
         on_row: Callable[[int, bytes, WireRecord], None] | None = None,
+        offset: int = 0,
+        previous_sequence: int = 0,
+        end: int = sys.maxsize,
     ) -> Iterator[WireRecord]:
-        """Read the whole file strictly; reject corruption even after the requested append."""
-        scan = WireScan(metadata)
+        """Decode the selected range, continuing its already proved sequence."""
+        scan = WireScan(metadata, previous_sequence=previous_sequence)
         if not self.path.exists():
             return
         with self.path.open("rb") as stream:
-            for offset, line in WireRecord.rows(stream):
+            stream.seek(offset)
+            for offset, line in WireRecord.rows(stream, end, end):
                 try:
                     record = scan.read(line)
                 except StoredHistoryUnreadable as error:
