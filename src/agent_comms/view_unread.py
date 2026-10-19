@@ -614,15 +614,20 @@ class TranscriptReadState(ThreadOwnedState):
         # cancellation, never this connection, the observer pipe or the owner's locks.
         self._preparation = self._preparation.started(self, needed)
 
-    def _refresh_keys(self, visibility: RosterVisibility) -> None:
+    def _refresh_keys(self, visibility: RosterVisibility) -> frozenset[str]:
         changed = self._source_watch.changed_paths()
         invalid = self._source_watch.invalid
-        threads = {thread.name: thread for thread in self.registry.snapshot().visible_threads(visibility)}
-        rebuild = self._thread_keys.keys() != threads.keys() or invalid
+        snapshot = self.registry.snapshot()
+        visible = frozenset(thread.name for thread in snapshot.visible_threads(visibility))
+        threads = {executor.name: executor for thread in snapshot.threads.values()
+                   for executor in thread.role.executor(thread)}
+        rebuild = bool(self._thread_keys.keys() - threads.keys()) or invalid
         for name in self._thread_keys.keys() - threads.keys():
             del self._thread_keys[name]
         for name, thread in threads.items():
             prior = self._thread_keys.get(name)
+            if prior is None and name not in visible:
+                continue
             if prior is None or not prior.matches(thread):
                 current = TranscriptReadKeys.capture(thread, {})
             elif invalid or any(Path(key).absolute() in changed for key in prior.revisions):
@@ -651,6 +656,7 @@ class TranscriptReadState(ThreadOwnedState):
                 observed = {key: FileRevision.capture(Path(key)) for key in keys.revisions}
                 if observed != keys.revisions:
                     self._thread_keys[name] = TranscriptReadKeys.capture(threads[name], observed)
+        return visible
 
     def counts(self, viewer: str, *, document: ReadDocument,
                visibility: RosterVisibility) -> TranscriptUnread:
@@ -660,14 +666,18 @@ class TranscriptReadState(ThreadOwnedState):
         try:
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
+            visible = self._refresh_keys(visibility)
             try:
-                self._refresh_keys(visibility)
-                return self._preparation.read_counts(self, viewer, document)
+                result = self._preparation.read_counts(self, viewer, document)
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
                     CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
-                return self._preparation.read_counts(self, viewer, document)
+                result = self._preparation.read_counts(self, viewer, document)
+            return TranscriptUnread(
+                {name: count for name, count in result.counts.items() if name in visible},
+                result.pending & visible,
+            )
         finally:
             self._lock.release()
 

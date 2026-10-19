@@ -2,6 +2,7 @@
 from unittest.mock import patch
 
 from agent_comms.agent_backend import RuntimeLocation
+from agent_comms.registry_document import RosterVisibility
 from native_unread_fixture import completed_snapshot
 from test_thread_unread import append, setup_thread
 
@@ -25,6 +26,14 @@ def test_idle_sidebar_does_not_read_keys_and_append_only_reads_changed_thread(tm
         calls.clear()
         for _ in range(10):
             comms.views.viewer_snapshot(str(tmp_path))
+        assert calls == []
+        # Two viewers with different roster settings share the same source keys.
+        # Hiding an archived row must not discard its unchanged transcript read.
+        comms.registry.archive('other')
+        for number in range(10):
+            snapshot = comms.views.viewer_snapshot(
+                str(tmp_path), RosterVisibility(archived=number % 2 == 0))
+            assert snapshot.thread_unread == ({'worker': 1, 'other': 1} if number % 2 == 0 else {'worker': 1})
         assert calls == []
         append(source, content="Only the worker changed")
         comms.views.viewer_snapshot(str(tmp_path))
