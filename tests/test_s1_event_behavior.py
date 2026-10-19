@@ -1,12 +1,9 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
 
-from agent_comms.pi_counts import PiCount
-from agent_comms.messages import NoticeRole
-
 import asyncio
 import os
-from contextlib import AsyncExitStack
 from abc import abstractmethod
+from contextlib import AsyncExitStack
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,20 +12,20 @@ from acp import RequestError
 
 import agent_comms.agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
-from agent_comms.messages import InfoKind, Message
+from agent_comms.goal_waits import NoGoalWait, RecordedGoalWait
+from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.owned_send import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from stored_inputs import stored_inputs
-from agent_comms.goal_waits import NoGoalWait
-from agent_comms.goal_waits import RecordedGoalWait
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 

@@ -8,11 +8,11 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .context_reading import ContextReading, UnmeasuredContext
-from .pi_counts import PiCount, UnreportedCount
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore, RootFile
+from .pi_counts import PiCount, UnreportedCount
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -67,6 +67,7 @@ class AgentRuntimeInfo(RuntimeInfo):
         FieldCodec.decode(float, self.timestamp)
         if not self.thread:
             raise RelationViolationError("Runtime-info thread cannot be empty.")
+
     def context_reading(self) -> ContextReading:
         return self.context_size.reading(self.context_used)
 
@@ -104,6 +105,7 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRu
 
     def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
         """Apply only this observation's fields in the original store transaction."""
+
         def apply(values: dict[str, AgentRuntimeInfo]) -> dict[str, AgentRuntimeInfo]:
             current = values.get(thread)
             if current is None:

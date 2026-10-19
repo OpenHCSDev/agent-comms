@@ -4,17 +4,26 @@ import json
 
 import pytest
 
-from agent_comms.agent_backend import FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
-from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
-from agent_comms.pi_durable_backend import (
-    CompactDurable, DurableDatabase,
-    DurablePiEvent, Inspect, PiDurableBackend, Settle,
+from agent_comms.agent_backend import (
+    FailedCompaction,
+    NothingToCompaction,
+    PlacedCompaction,
+    StaleCompaction,
 )
-from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.agent_events import Chunk, Error, Thinking, ToolStart
 from agent_comms.pi_commands import GetSessionStats
-from agent_comms.pi_payloads import PiContextUsage
 from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_durable_backend import (
+    CompactDurable,
+    DurableDatabase,
+    DurablePiEvent,
+    Inspect,
+    PiDurableBackend,
+    Settle,
+)
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
+from agent_comms.pi_payloads import PiContextUsage
+from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.threads import Thread
 
 

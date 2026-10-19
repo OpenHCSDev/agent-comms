@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.pi_counts import PiCount
-
 import asyncio
 import json
 import os
@@ -13,18 +11,17 @@ from types import MappingProxyType
 
 import pytest
 
-
 import agent_comms.agent_backend as ab
 import agent_comms.agent_events as ae
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
-from agent_comms.pi_durable_backend import PiDurableBackend, DurableDatabase
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
-
 
 # -- registry ---------------------------------------------------------------
 
@@ -335,10 +332,9 @@ for line in sys.stdin:
 @pytest.mark.usefixtures("native_rpc_fixture")
 @pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
 async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_path, comms, monkeypatch):
-    from agent_comms.native_session_reopen import NativeSessionIdentity
-
     # The stub is not a verified Pi package; its saved header is the session's identity.
     from agent_comms.native_pi import NativePiRpcLaunch
+    from agent_comms.native_session_reopen import NativeSessionIdentity
 
     # The stub is not a verified Pi package: its saved header is the session's
     # identity, and its acquired launch is the one a retained child is reused under.

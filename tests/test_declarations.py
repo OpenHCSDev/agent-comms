@@ -1,5 +1,4 @@
 
-from agent_comms.pi_counts import PiCount
 import json
 import os
 import subprocess
@@ -9,25 +8,26 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.registration import Registration
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
-from agent_comms.field_codec import FieldCodec
-from agent_comms.registry_document import RegistryDocument
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.launch_runtime import CallingThreadUnavailable
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
+from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.message_bus import MessageBus
-from agent_comms.publisher import InitialWrites
-from agent_comms.messages import Message, HandoffKind, InfoKind
+from agent_comms.message_page import PageBounds
+from agent_comms.messages import HandoffKind, InfoKind, Message
 from agent_comms.native_input_owner import RegistryOwner
+from agent_comms.page_traversal import OlderTraversal
+from agent_comms.pi_counts import PiCount
+from agent_comms.publisher import InitialWrites
+from agent_comms.registration import Registration
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread, current_thread
-from agent_comms.message_page import PageBounds
-from agent_comms.page_traversal import OlderTraversal
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -70,9 +70,10 @@ class TestAgentRuntimeInfo:
     def test_unknown_context_stays_unknown(self):
         assert AgentRuntimeInfo(thread="a", context_size=PiCount.from_wire(100), timestamp=1.0).context_percent is None
 
-    def test_negative_context_is_rejected(self):
-        with pytest.raises(ValueError, match="negative"):
-            AgentRuntimeInfo(thread="a", context_used=-1, timestamp=1.0)
+    def test_nonpositive_context_is_unreported(self):
+        info = AgentRuntimeInfo(thread="a", context_used=PiCount.from_wire(-1), timestamp=1.0)
+        assert info.context_used == PiCount.from_wire(None)
+        assert info.context_percent is None
 
 
 class TestGoalRevision:

@@ -1,23 +1,34 @@
 """Typed Pi boundaries exercised through the actual JSON-line codec and stream."""
 
 import json
-from types import SimpleNamespace
 from collections.abc import Mapping
+from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.native_arguments import SelectedModel
-
-from agent_comms.pi_commands import GetSessionStats, GetState, PiCommand, Prompt
-from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
-from agent_comms.pi_payloads import AssistantMessage, MissingData, MissingToolResult, ProvidedToolResult, ReportedModel, StateData, TextContent, ToolCallContent, UnknownData, UnreportedModel, UnreportedUsage
-from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
-from agent_comms.turn_usage import UsageAccount
 from agent_comms.agent_events import ContextInfo
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
-from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_arguments import SelectedModel
+from agent_comms.pi_commands import GetSessionStats, GetState, PiCommand, Prompt
+from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
+from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
+from agent_comms.pi_payloads import (
+    AssistantMessage,
+    MissingData,
+    MissingToolResult,
+    ProvidedToolResult,
+    ReportedModel,
+    StateData,
+    TextContent,
+    ToolCallContent,
+    UnknownData,
+    UnreportedModel,
+    UnreportedUsage,
+)
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.runtime_info import AgentRuntimeInfo
+from agent_comms.turn_usage import UsageAccount
 
 
 def decode(record):
@@ -104,13 +115,13 @@ def test_pi_counts_share_reported_members_and_reader_outputs(observation):
         active_session_file=None, persistent_session=object(),
         context_info=lambda: ContextInfo(context_used=account.used, context_size=account.size))
     info, = GetState.on_response(response, session)
-    assert info.context_size == account.size == (1000 if observation in ("reported", "zero") else None)
+    assert info.context_size == account.size == expected
     painted = info.project_runtime_info(AgentRuntimeInfo(thread="unit", context_used=PiCount.from_wire(7), timestamp=1.0))
     assert painted.context_reading() == (
         ContextUsage(7, 1000) if observation == "reported" else UnmeasuredContext())
     context_wire = {"tokens": 7}
     if observation != "omitted":
-        context_wire["contextWindow"] = 2000 if observation in ("reported", "zero") else None
+        context_wire["contextWindow"] = 2000 if observation == "reported" else 0 if observation == "zero" else None
     stats = decode({"type": "response", "command": "get_session_stats", "success": True,
                     "data": {"contextUsage": context_wire}})
     account.size = PiCount.from_wire(4096)
@@ -182,8 +193,8 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
         "type": "message_end",
         "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
     })
-    from agent_comms.turn_output import TurnOutput
     from agent_comms.turn_failure import ModelRequestFailed
+    from agent_comms.turn_output import TurnOutput
 
     session = SimpleNamespace(output=TurnOutput())
     event.message.tracked_end(session)
@@ -207,10 +218,15 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
 
 def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
     from pathlib import Path
-    from agent_comms.native_pi import NativeContextProof, NativePiTerminalFailure, NativePiUnavailable
+
+    from agent_comms.native_pi import (
+        NativeContextProof,
+        NativePiTerminalFailure,
+        NativePiUnavailable,
+    )
     from agent_comms.tracked_turn import AmbiguousTrackedTerminal, PendingTrackedTerminal
+    from agent_comms.turn_failure import IdentityUncertain, ModelRequestFailed
     from agent_comms.turn_output import TurnOutput
-    from agent_comms.turn_failure import ModelRequestFailed, IdentityUncertain
 
     pending = PendingTrackedTerminal()
     with pytest.raises(NativePiUnavailable, match="unique authoritative"):

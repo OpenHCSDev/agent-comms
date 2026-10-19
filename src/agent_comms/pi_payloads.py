@@ -15,10 +15,10 @@ from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
-from .pi_counts import PiCount, UnreportedCount, NonnegativeCountWire
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
+from .pi_counts import NonnegativeCountWire, PiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
     PiStopReason,

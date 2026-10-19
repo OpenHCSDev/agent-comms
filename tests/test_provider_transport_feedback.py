@@ -1,7 +1,5 @@
 """The observed empty native1011 response retains typed stage without send inference."""
 
-from agent_comms.pi_counts import PiCount
-
 import copy
 import json
 from pathlib import Path
@@ -12,6 +10,7 @@ from acp import RequestError
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
 from agent_comms.acp_failure import ACPFailure, ProviderConnectionFailure, RequestACPFailure
 from agent_comms.input_attempt import StartedInput
+from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
 from agent_comms.pi_payloads import AfterMessageStreamStartStage, UnrecognizedTransportStage
 from agent_comms.pi_rpc import PiRpcChannel

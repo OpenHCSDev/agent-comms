@@ -1,5 +1,4 @@
 
-from agent_comms.pi_counts import PiCount
 import asyncio
 import sys
 
@@ -7,6 +6,7 @@ import pytest
 
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
+from agent_comms.pi_counts import PiCount
 from agent_comms.threads import Thread
 
 

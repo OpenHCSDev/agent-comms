@@ -1,7 +1,5 @@
 """Native streaming: external RPC parsing and failure handling."""
 
-from agent_comms.pi_counts import PiCount
-
 import asyncio
 import json
 import os
@@ -15,12 +13,16 @@ import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.turn_watchdog import ModelWait
 from agent_comms.acp_failure import ProviderRetryResult
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
-from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.image_inputs import ImageInput
+from agent_comms.native_pi import CAPABILITY
+from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import AutoRetryStart
+from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_vocabulary import ThresholdCompactionReason
+from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend, RefusedSend
 from agent_comms.turn_phase import (
     ModelWaitPhase,
     SettlingStatsPhase,
@@ -28,10 +30,7 @@ from agent_comms.turn_phase import (
     SummarizationRetryPhase,
     ToolRunningPhase,
 )
-from agent_comms.native_pi import CAPABILITY
-from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend, RefusedSend
-from agent_comms.pi_vocabulary import ThresholdCompactionReason
+from agent_comms.turn_watchdog import ModelWait
 from pi_session_turn import one_turn_events
 
 
@@ -1965,7 +1964,7 @@ for line in sys.stdin:
 # Native per-input proof tests retained from the PR#1 parent.
 class TestNativeInputBinding:
     def test_only_original_response_can_promote_pending_attestation(self):
-        from agent_comms.native_attestation import PendingAttestation, AttestationError
+        from agent_comms.native_attestation import AttestationError, PendingAttestation
         from agent_comms.pi_rpc import PiRpcChannel
 
         pending = PendingAttestation()

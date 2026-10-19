@@ -2,29 +2,26 @@
 
 from __future__ import annotations
 
-from agent_comms.pi_counts import PiCount
-
 import multiprocessing
 import os
 import sqlite3
 import tempfile
-from agent_comms.goal_attempts import ProviderUsageTotal
 from collections.abc import Iterator
 from pathlib import Path
 from queue import Empty
 
 import pytest
 
+from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_attempts import (
     GoalAttemptSchema,
     GoalAttemptStore,
+    ProviderUsageTotal,
     ReservationConflictError,
     StaleAttemptError,
     StorageUncertainError,
     UnresolvedAttemptError,
 )
-from agent_comms.diagnostics import FailureReason
-from agent_comms.typed_table import StringEnumStorage
 from agent_comms.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -32,6 +29,8 @@ from agent_comms.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
+from agent_comms.pi_counts import PiCount
+from agent_comms.typed_table import StringEnumStorage
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."

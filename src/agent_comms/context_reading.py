@@ -1,9 +1,10 @@
 """Native context observations own their presentation without nullable readings."""
 
 from abc import abstractmethod
-from acp.schema import UsageUpdate
-from acp.interfaces import Client
 from dataclasses import dataclass
+
+from acp.interfaces import Client
+from acp.schema import UsageUpdate
 
 from .declared_family import DeclaredFamily
 
@@ -33,8 +34,10 @@ class ContextUsage(ContextReading):
         return self.used / self.size * 100
 
     async def publish_usage(self, client: Client, session_id: str) -> None:
-        await client.session_update(session_id=session_id,
-            update=UsageUpdate(session_update="usage_update", used=self.used, size=self.size))
+        await client.session_update(
+            session_id=session_id,
+            update=UsageUpdate(session_update="usage_update", used=self.used, size=self.size),
+        )
 
     @property
     def label(self) -> str:

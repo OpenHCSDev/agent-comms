@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .pi_counts import PiCount
-
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -14,39 +12,42 @@ from itertools import zip_longest
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
-from .cli_result import CliResult
-from .field_codec import FieldCodec, projected
-from .tool_result import ToolResult
-from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
+from .cli_result import CliResult
+from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .display_order import ChannelSort, NameChannelSort
-from .goal_presentation import ThreadGoalExecution
-from . import relationships
-from .goal_waits import GoalWaits
+from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
-from .notification_assignment import NotificationAssignment
+from .field_codec import FieldCodec, projected
+from .goal_presentation import ThreadGoalExecution
+from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import (
-    NEWEST_PAGE, ConversationMessagePageRequest, MessagePage, MessagePageRequest, PageBounds,
+    NEWEST_PAGE,
+    ConversationMessagePageRequest,
+    MessagePage,
+    MessagePageRequest,
+    PageBounds,
 )
 from .message_reference import MessageReference
-from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
+from .notification_assignment import NotificationAssignment
+from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
+from .pi_counts import PiCount
 from .private_path import FileRevision
-from .recorded_bus import RecordedBusIdentity
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
+from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
-from .wire_log import WireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
-from .display_references import DisplayReferences
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -54,15 +55,16 @@ from .thread_presentation import (
 )
 from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
+from .tool_result import ToolResult
+from .wire_log import WireLog, WireSnapshot
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
-    from .comms import Comms
-    from .ui_model.observation import ThreadsObserved
     from .bus_publication import CommittedDelivery
-    from .goal_waits import RecordedGoalWait
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
+    from .comms import Comms
+    from .goal_waits import RecordedGoalWait
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
@@ -71,6 +73,7 @@ if TYPE_CHECKING:
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
+    from .ui_model.observation import ThreadsObserved
 
 
 class OutcomeViewer(ABC):

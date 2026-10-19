@@ -1,26 +1,26 @@
 
-from agent_comms.pi_counts import PiCount
-from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.read_basis import NamedViewer
 import json
 import os
 import subprocess
-from dataclasses import replace
 import sys
+from dataclasses import replace
 
 import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
-from agent_comms.comms import wire
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.messages import QuestionKind
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.message_page import PageBounds
+from agent_comms.messages import QuestionKind
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec, NewThreadSpec
 from agent_comms.threads import Thread
-from agent_comms.message_page import PageBounds
+from agent_comms.tool_caller import ThreadCaller
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():

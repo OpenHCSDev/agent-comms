@@ -1,4 +1,5 @@
 """Pi's reported counts and their wire domains, decoded once by FieldCodec."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -133,4 +134,3 @@ class ReportedCount(PiCount):
             return
         session.usage.confirm(self)
         yield session.context_info()
-

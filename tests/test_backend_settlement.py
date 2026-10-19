@@ -1,16 +1,15 @@
 """A late native settlement cannot terminate a started dependency reply."""
 
-from agent_comms.pi_counts import PiCount
-
-from pathlib import Path
 import asyncio
 import sys
+from pathlib import Path
 
 import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.pi_counts import PiCount
 from agent_comms.pi_native_backend import PersistentPiSession
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
