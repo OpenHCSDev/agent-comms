@@ -12,7 +12,7 @@ DOCUMENTED = [
     ("order", "strike worker --why 'P1 late' --caught 'lead at install'",
      {"unit": "worker", "why": "P1 late", "caught": "lead at install", "fork": None}),
     ("order", "strike worker --why 'P1 late'",
-     {"unit": "worker", "why": "P1 late", "caught": "lead at review"}),
+     {"unit": "worker", "why": "P1 late", "caught": "review"}),
     ("order", "done worker m1 --sha abc123 --seen proof.txt", {"unit": "worker", "message": "m1", "sha": "abc123", "seen": "proof.txt"}),
     ("order", "withdraw P68 --why 'duplicate of P67' --superseded-by P67",
      {"pid": "P68", "why": "duplicate of P67", "superseded_by": "P67"}),
@@ -53,7 +53,7 @@ DOCUMENTED = [
 
 @pytest.mark.parametrize("tool,line,fields", DOCUMENTED)
 def test_every_verb_parses_its_documented_command_line(commander_script, tool, line, fields):
-    order, _ = commander_script
+    order = importlib.import_module("agent_comms.commander.order")
     module = (order if tool == "order"
               else importlib.reload(importlib.import_module(f"agent_comms.commander.{tool}")))
     family = getattr(module, f"{tool.capitalize()}Verb")
@@ -63,7 +63,7 @@ def test_every_verb_parses_its_documented_command_line(commander_script, tool, l
 
 
 def test_the_hunt_prompt_prints_a_command_line_the_hunt_parser_accepts(commander_script):
-    order, _ = commander_script
+    order = importlib.import_module("agent_comms.commander.order")
     printed = order.HuntVerb.due("a.py").split("then ", 1)[1]
     tool, verb, *usage = re.sub(r"\[[^]]*\]", "", printed).split()
     assert (tool, verb) == ("order", "hunt")

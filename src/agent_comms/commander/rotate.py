@@ -5,7 +5,6 @@ from datetime import datetime
 from . import judge, order
 from ..tools import CommsStandingRulesTool, StandingRulesRead
 from ..todos import Todo
-from .config import CommanderConfig
 
 
 def broken_rules(commander, after=0.0):

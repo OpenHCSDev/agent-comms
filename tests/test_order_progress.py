@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.commander import order as commander_order
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
@@ -124,7 +125,7 @@ def test_unread_github_is_explicit(checkout):
 def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
     # worker's P1 checkout, on the branch its merged PR came from.
-    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    monkeypatch.setattr(script.comms.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
     unit = tmp_path / 'wt' / 'worker--P1'
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')
@@ -132,7 +133,7 @@ def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander
     merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     assert "awaiting record" in deadline_lines(script)[0]
-    script.board()
+    script.write_board()
     assert '| merged as ddddddddd, awaiting record |' in (tmp_path / 'board.md').read_text()
 
 
@@ -140,12 +141,12 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
     comms, _ = commander
     script, _ = commander_script
     before = create(commander, 'P1', deadline=1)
-    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: None)
     with pytest.raises(SystemExit, match='8\\+ words'):
         script.due('P1', '23:59', 'too short')
     script.due('P1', '23:59', 'the owner widened the order to the rotation line too')
     moved = comms.goals.todos.get('P1')
-    assert script.hhmm(moved.deadline) == '23:59' and moved.revision == before.revision + 1
+    assert commander_order.hhmm(moved.deadline) == '23:59' and moved.revision == before.revision + 1
     assert 'P1 order order-P1 due ' in (tmp_path / 'narrative.md').read_text()
 
 
@@ -266,7 +267,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     installed order does not. Nobody is struck, and a late install is named, not the orders."""
     comms, caller = commander
     script, _ = commander_script
-    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    monkeypatch.setattr(script.comms.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
     unit = tmp_path / 'wt' / 'worker--P1'
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')
@@ -299,7 +300,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     script, _ = commander_script
     todo = create(commander, pid, deadline=1)
     storage = StorageRule(checkout_base=tmp_path / "wt")
-    monkeypatch.setattr(script.COMMS.registry, "storage_rule", storage)
+    monkeypatch.setattr(script.comms.registry, "storage_rule", storage)
     body_file = tmp_path / "pr-body.md"
     body_file.write_text(subject)
     bodies = []
@@ -312,7 +313,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
         return original(command, **arguments)
 
     monkeypatch.setattr(subprocess, "run", forge)
-    script.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).run()
+    commander_order.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).apply(script)
     assert todo.order.pull_request_ids(bodies[0]) == (todo.order.id,)
     stamp = "1970-01-01T00:08:20Z"
     merged = PullRequest.listed(number, branch, "b" * 40, "d" * 40, stamp, stamp, bodies[0])
@@ -322,7 +323,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     assert not storage.order_checkout("worker", pid).exists()
     work = OrderProgress.read(todo, storage, PullRequests())
     assert work == MergedProgress("d" * 9)
-    script.board()
+    script.write_board()
     assert "merged as ddddddddd, awaiting record" in (tmp_path / "board.md").read_text()
     for state in (work, PushedProgress("b" * 9, at=500.0), NoCommitProgress()):
         alarms = script.deadline_lines([todo], {pid: state}, time.time() + 100)

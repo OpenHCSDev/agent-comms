@@ -1,7 +1,7 @@
 """Follow live native sessions and print turn digests for commander judgment."""
 import os, time, glob, collections
+from pathlib import Path
 
-from . import order
 from ..native_tool_call import CodingCall, SelectedToolDenied
 from ..native_entries import NativeEntry
 from ..pi_payloads import PiMessage, TextContent
@@ -15,12 +15,14 @@ def thread_names(registry: Registration) -> dict[str, str]:
             if thread.session_file}
 
 
-def enforce_storage(commander, registry: Registration, thread: str, call: CodingCall) -> None:
+def enforce_storage(commander, thread: str, call: CodingCall) -> None:
     """Core judges its units and records each storage violation once."""
+    registry = commander.comms.registry
     if thread not in commander.units() or thread not in registry:
         return
     try:
-        call.decide_storage(registry, thread)
+        if effects := call.storage_effects(Path(registry.require(thread).worktree)):
+            registry.decide_storage(thread, effects)
     except SelectedToolDenied as violation:
         print(f'VIOLATION storage {thread}: {violation}', flush=True)
         for todo in commander.held_by(thread)[:1]:
@@ -41,21 +43,21 @@ def emit(turns, thread, final=''):
     print('\n'.join(lines)[:3000], flush=True)
 
 
-def follow(commander, registry: Registration, turns: dict[str, list[str]], thread: str, data: bytes) -> None:
+def follow(commander, turns: dict[str, list[str]], thread: str, data: bytes) -> None:
     for line in data.splitlines(keepends=True):
         entry = NativeEntry.read(line)
         for message in entry.messages:
             if message.assistant:
-                walk(commander, registry, turns, thread, message)
+                walk(commander, turns, thread, message)
 
 
-def walk(commander, registry: Registration, turns: dict[str, list[str]], thread: str,
+def walk(commander, turns: dict[str, list[str]], thread: str,
          message: PiMessage) -> None:
     for pi_call in message.tool_calls:
         coding_call = CodingCall.decode(pi_call.id, pi_call.name, pi_call.arguments)
         digest = coding_call.digest()
         turns[thread].append(digest)
-        enforce_storage(commander, registry, thread, coding_call)
+        enforce_storage(commander, thread, coding_call)
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.successful:
@@ -89,5 +91,5 @@ def main(a, commander):
             if path not in names and time.time() - last_names > 10:
                 names.update(thread_names(registry)); last_names = time.time()
             thread = names.get(path, path.split('/')[-2][:8])
-            follow(commander, registry, turns, thread, data[:cut])
+            follow(commander, turns, thread, data[:cut])
         time.sleep(2)
