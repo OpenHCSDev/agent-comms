@@ -22,7 +22,27 @@ from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, Todo
 from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from ..work_dispatch import WorkDispatch
 from .config import CommanderConfig
+
+
+@dataclass(frozen=True)
+class UnownedWork(UndatedStandingRule):
+    """An unowned checked row starts a unit, even when the idle fleet is empty."""
+
+    todo: Todo
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWork, ...]:
+        return tuple(cls(todo) for todo in comms.goals.todos.for_commander(
+            comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        WorkDispatch.reissue(comms, comms.registry.require(commander), self.todo)
+
+    def line(self) -> str:
+        return (f"UNOWNED WORK: {self.todo.id} has a checked order and no unit"
+                " -> Core starts its unit in an isolated checkout")
 
 
 @dataclass(frozen=True)

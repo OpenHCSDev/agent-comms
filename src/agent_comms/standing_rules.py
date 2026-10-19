@@ -228,27 +228,6 @@ class PlanIdle(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnownedWork(UndatedStandingRule):
-    """An unowned checked row starts a unit, even when the idle fleet is empty."""
-
-    todo: Todo
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(cls(todo) for todo in comms.goals.todos.for_commander(
-            comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
-
-    def enforce(self, comms: Comms, commander: str) -> None:
-        from .work_dispatch import WorkDispatch
-
-        WorkDispatch.reissue(comms, comms.registry.require(commander), self.todo)
-
-    def line(self) -> str:
-        return (f"UNOWNED WORK: {self.todo.id} has a checked order and no unit"
-                " -> Core starts its unit in an isolated checkout")
-
-
-@dataclass(frozen=True)
 class MemoryLow(UndatedStandingRule):
     """Under the memory threshold a cleanup owner is due, told what holds the memory."""
 

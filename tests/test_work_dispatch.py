@@ -8,7 +8,8 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import DoneTodoState, OperationDelivery, StrikeReason
-from agent_comms.work_dispatch import CheckedPhaseTask, UnspecifiedPhaseTask, WorkDispatch
+from agent_comms.phase_tasks import UnspecifiedPhaseTask
+from agent_comms.work_dispatch import CheckedPhaseTask, WorkDispatch
 
 from test_commander_problem_orders import create, order
 

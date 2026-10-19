@@ -20,7 +20,7 @@ from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, Unplanne
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
 from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, HuntDue, MemoryLow, PlanIdle,
-    RulesDue, StandingRule, UnownedWork)
+    RulesDue, StandingRule)
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
@@ -242,7 +242,7 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     taken = StrikeReason("The unit was taken off P2 so the test leaves it unowned.")
     comms.goals.fire("worker", taken, "lead")
     assert comms.goals.todos.get("P2").holder is None
-    [unowned] = UnownedWork.violations(comms, "lead")
+    [unowned] = module.UnownedWork.violations(comms, "lead")
     assert unowned.todo.id == "P2"
     assert unowned.line() == (
         "UNOWNED WORK: P2 has a checked order and no unit"
