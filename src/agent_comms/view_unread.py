@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from .agent_backend import RuntimeLocation
     from .thread_identity import ThreadIncarnation
 
-_INDEX_VERSION = 6
+_INDEX_VERSION = 7
 
 
 class ReplyIndexTable:
@@ -50,7 +50,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
     records: int = 0
     source: str = field(default="", metadata={"sql": Column(primary_key=True, check="source<>''")})
     start: int = 0
-    limit: ClassVar[int] = 100
+    limit: ClassVar[int] = 32
 
     @classmethod
     def for_sources(
