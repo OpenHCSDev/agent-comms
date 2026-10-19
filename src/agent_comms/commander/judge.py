@@ -214,7 +214,8 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         for i, todo in selected.items():
             result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
             current[todo.id] = result.todo
-        print(f'{self.declared_name}: {len(ids)} edits; {len(Edit.unjudged(order.COMMS, ME))} still unjudged')
+        left = len(Edit.unjudged(order.COMMS, ME))
+        print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
         self.report(tuple(current.values()))
 
 

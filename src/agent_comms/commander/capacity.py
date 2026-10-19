@@ -13,6 +13,7 @@ import math, os, sys, time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from . import order
 from .config import CommanderConfig
 
 if TYPE_CHECKING:
@@ -69,6 +70,5 @@ class Load:
 
 
 def main(a):
-    from . import order
     load = Load.of(order.COMMS, order.ME)
     print(load.short() or f'covered: load {load.total:.0f}, forks {live_forks()}')
