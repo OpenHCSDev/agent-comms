@@ -65,7 +65,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
         binding = Binding(str(comms.root), 'cli', 'thread')
         with Binding.open(tmp_path / 'bridge') as db:
             bridge = CodexBridge(CodexOptions(Watch(), binding, tmp_path / 'bridge', str(socket_path)), binding, db)
-            output = ThreadOutput(transcript, comms.agents, 'cli')
+            output = ThreadOutput(transcript, comms.agents)
             output.publish_batch([update async for update in bridge.history()])
             assert seen == [None]
             newest = comms.transcripts.thread_transcript_page('cli', max_messages=1)
@@ -117,7 +117,7 @@ async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
     comms = wire(tmp_path / 'root')
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external('cli')
-    output = ThreadOutput(transcript, comms.agents, 'cli')
+    output = ThreadOutput(transcript, comms.agents)
     page = ItemsPage.model_validate({'data': [entry('new', 2000)], 'nextCursor': 'p1'}).publication()
     page.publish(output)
     frames = asyncio.Queue()

@@ -316,7 +316,6 @@ class ThreadOutput:
     """Where a CLI's output lands in Core: finished items and current activity."""
     transcript: ExternalTranscript
     agents: AgentActivity
-    thread: str
     drafts: dict[tuple[str, str], DraftAccumulator] = field(default_factory=dict)
 
     def publish_batch(self, updates: list[TranscriptUpdate]) -> None:
@@ -356,7 +355,7 @@ class ThreadOutput:
 
     def status(self, state: ActivityState, detail: str = '') -> None:
         detail = ' '.join(detail.split())
-        self.agents.set_activity(self.thread, state, detail)
+        self.agents.set_activity(self.transcript.incarnation.name, state, detail)
 
 
 @dataclass(frozen=True)
@@ -926,8 +925,7 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
     async def publish_transcript(self) -> None:
         comms = self.comms
         output = ThreadOutput(
-            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents,
-            self.binding.bus)
+            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
         await comms.bus.when_open(output.transcript.end_turn)

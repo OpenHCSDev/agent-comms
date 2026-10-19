@@ -150,7 +150,7 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
             page = ItemsPage.model_validate(await codex.call(ItemsList(
                 threadId=self.thread, cursor=request.request.cursor))).publication()
         await asyncio.to_thread(EarlierPublishedPage(page.items, page.earlier, request).publish,
-                                ThreadOutput(transcript, self.comms.agents, self.binding.bus))
+                                ThreadOutput(transcript, self.comms.agents))
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with CodexConnection.open(self.socket) as codex:
