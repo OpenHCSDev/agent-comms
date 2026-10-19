@@ -65,7 +65,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
         binding = Binding(str(comms.root), 'cli', 'thread')
         with Binding.open(tmp_path / 'bridge') as db:
             bridge = CodexBridge(CodexOptions(Watch(), binding, tmp_path / 'bridge', str(socket_path)), binding, db)
-            output = ThreadOutput(transcript, comms.agents)
+            output = ThreadOutput(transcript, comms.agents, 'cli')
             output.publish_batch([update async for update in bridge.history()])
             assert seen == [None]
             newest = comms.transcripts.thread_transcript_page('cli', max_messages=1)
@@ -117,7 +117,7 @@ async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
     comms = wire(tmp_path / 'root')
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external('cli')
-    output = ThreadOutput(transcript, comms.agents)
+    output = ThreadOutput(transcript, comms.agents, 'cli')
     page = ItemsPage.model_validate({'data': [entry('new', 2000)], 'nextCursor': 'p1'}).publication()
     page.publish(output)
     frames = asyncio.Queue()
@@ -158,24 +158,29 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
 
 
 def test_stopped_carry_preserves_external_items(tmp_path):
-    import importlib.util
-    from pathlib import Path
+    import json
+    from contextlib import closing
     from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.external_transcript import NoEarlierPage
+    from agent_comms.external_transcript import ExternalTranscript, NoEarlierPage
+    from agent_comms.field_codec import FieldCodec
     from agent_comms.transcript_events import AssistantTranscript
-    module_path = Path(__file__).parents[1] / 'tools/cutover/carry_external_pages.py'
-    spec = importlib.util.spec_from_file_location('carry_external_pages', module_path)
-    carry = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(carry)
-    comms = wire(tmp_path / 'root')
-    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
-    transcript = comms.transcripts.external('cli')
-    transcript.finish(turn_id='t', item_id='i', events=(AssistantTranscript('preserved'),))
-    with CoordinationStore.writer(transcript.path) as connection:
-        connection.execute(f'ALTER TABLE "{ExternalItemRow.declared_name}" DROP COLUMN earlier')
-    assert carry.carry(comms.root) == 1
-    assert carry.carry(comms.root) == 0
-    with transcript.snapshot() as connection:
-        row, = ExternalItemRow.select(connection)
-    assert row.seq == 1 and row.events[0].text == 'preserved'
-    assert row.earlier == NoEarlierPage()
+    from tools.cutover.carry_external_pages import ExternalPages
+
+    root = tmp_path / 'root'
+    root.mkdir()
+    path = ExternalTranscript.path_in(root)
+    saved = json.dumps(FieldCodec.encode((AssistantTranscript('preserved', position='i'),)))
+    # This historical conversion predates the separate event table.
+    with closing(CoordinationStore.writer(path)) as connection:
+        connection.execute('CREATE TABLE external_item (thread TEXT NOT NULL, turn_id TEXT NOT NULL, '
+                           'item_id TEXT NOT NULL, seq INTEGER NOT NULL, events TEXT NOT NULL, '
+                           'PRIMARY KEY(thread,turn_id,item_id), UNIQUE(thread,seq)) STRICT')
+        connection.execute('INSERT INTO external_item VALUES (?,?,?,?,?)', ('cli', 't', 'i', 1, saved))
+        connection.commit()
+    assert ExternalPages.carry(root, apply=False).changed == 1
+    assert ExternalPages.carry(root, apply=True).changed == 1
+    assert ExternalPages.carry(root, apply=True).changed == 0
+    with closing(CoordinationStore.writer(path)) as connection:
+        row, = connection.execute('SELECT thread,turn_id,item_id,seq,events,earlier FROM external_item')
+    assert row[:5] == ('cli', 't', 'i', 1, saved)
+    assert FieldCodec.decode(NoEarlierPage, json.loads(row[5])) == NoEarlierPage()
