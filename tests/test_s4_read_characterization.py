@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
-from agent_comms.view_unread import TranscriptReadState
+from native_unread_fixture import native_reader, reader_counts
 from native_unread_fixture import completed_counts, completed_snapshot
 from test_thread_unread import append
 
@@ -52,18 +52,18 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     index_owner = comms.views.transcript_reads
     index_owner.close()
     index_owner.index_path.unlink()
-    rebuilt = TranscriptReadState(comms.bus.reads.path)
+    rebuilt = native_reader(comms.bus.reads.path)
     try:
-        assert completed_counts(rebuilt, viewer, {"worker": str(source)}).counts == {"worker": 1}
+        assert completed_counts(rebuilt, viewer, {"worker": (str(source),)}).counts == {"worker": 1}
         assert comms.bus.reads.read() == document
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         comms.views.mark_page_read(page, worktree=str(tmp_path))
-        assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
+        assert reader_counts(rebuilt, viewer, {'worker': (str(source),)}).counts == {"worker": 1}
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         assert comms.bus.reads.read().transcripts == document.transcripts
         references = tuple(message.reference for message in comms.bus.inbox("receiver"))
         comms.messaging.acknowledge("receiver", references)
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 0
-        assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
+        assert reader_counts(rebuilt, viewer, {'worker': (str(source),)}).counts == {"worker": 1}
     finally:
         rebuilt.close()

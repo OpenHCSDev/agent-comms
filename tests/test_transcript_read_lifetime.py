@@ -10,7 +10,9 @@ import weakref
 
 import pytest
 
-from agent_comms.view_unread import TranscriptReadState, transcript_read_state
+from agent_comms.view_unread import transcript_read_state
+from agent_comms.comms import wire
+from native_unread_fixture import native_reader, reader_counts
 
 
 def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_path):
@@ -18,8 +20,8 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
     source.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "one reply"}],
     }}) + "\n")
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
-    assert state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read()).pending == {"worker"}
+    state = native_reader(tmp_path / 'read_ledger.json')
+    assert reader_counts(state, 'viewer', {'worker': (str(source),)}, document=state.reads.read()).pending == {"worker"}
     state.preparation.future.result(timeout=10)
     workers = tuple(state._pool._processes.values())
     database, cancelled = state._connection, state._cancelled
@@ -34,7 +36,7 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
 
 
 def test_database_without_worker_is_closed_when_reader_dies(tmp_path):
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = native_reader(tmp_path / 'read_ledger.json')
     database = state._database()
     idle = state.preparation
     assert idle is state._idle
@@ -54,12 +56,12 @@ def test_database_without_worker_is_closed_when_reader_dies(tmp_path):
 
 def test_explicit_close_is_idempotent_and_factory_replaces_closed_unused_reader(tmp_path):
     path = tmp_path / "read_ledger.json"
-    state = transcript_read_state(path)
+    state = transcript_read_state(path, wire(tmp_path).registry)
     state.close()
     state.close()
     with pytest.raises(RuntimeError, match="closed"):
-        state.counts("viewer", {}, document=state.reads.read())
-    fresh = transcript_read_state(path)
+        reader_counts(state, 'viewer', {}, document=state.reads.read())
+    fresh = transcript_read_state(path, wire(tmp_path).registry)
     assert fresh is not state
     fresh.close()
 

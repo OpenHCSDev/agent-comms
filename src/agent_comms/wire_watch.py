@@ -16,7 +16,7 @@ import os
 import struct
 import sys
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from .goal_waits import GoalWaits
 from .private_path import FileRevision
@@ -179,7 +179,7 @@ class NativeFileWatch(FileWatch):
         self.invalid = False
 
     @classmethod
-    def open(cls, *sources: WatchSource) -> FileWatch:
+    def open(cls, *sources: WatchSource) -> Self | PollingWireWatch:
         return _open_file_watcher(cls, sources)
 
     def changed_paths(self) -> frozenset[Path]:
@@ -259,7 +259,9 @@ def open_wire_watcher(*sources: WatchSource) -> WireWatch:
     return WireChangeWatch.open(*sources)
 
 
-def _open_file_watcher(watcher_type: type[NativeFileWatch], sources: tuple[WatchSource, ...]) -> FileWatch:
+def _open_file_watcher[WatchT: NativeFileWatch](
+    watcher_type: type[WatchT], sources: tuple[WatchSource, ...],
+) -> WatchT | PollingWireWatch:
     """Use Linux notifications for every declared physical change source.
 
     A healthy native watcher reports queue loss and watched-directory removal,
@@ -311,6 +313,6 @@ def _open_file_watcher(watcher_type: type[NativeFileWatch], sources: tuple[Watch
         directories[watch] = watched
     try:
         return watcher_type(fd, sources, directories)
-    except (NotImplementedError, OSError):
+    except BaseException:
         os.close(fd)
         raise

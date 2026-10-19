@@ -25,6 +25,7 @@ from .native_entries import NativeEntry
 from .native_transcript import SessionCut
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
+from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
@@ -344,6 +345,9 @@ class ReplyPreparation:
     def retire(self, sources: Collection[str]) -> None:
         pass
 
+    def retain(self, sources: Collection[str]) -> None:
+        pass
+
     def finished(
         self, state: TranscriptReadState, database: sqlite3.Connection,
         wanted: Collection[str],
@@ -404,6 +408,9 @@ class NativeReplyPreparation(ReplyPreparation):
 
     def cancel(self) -> None:
         self.future.cancel()
+
+    def retain(self, sources: Collection[str]) -> None:
+        self.retire(self.reads.keys() - set(sources))
 
     def retire(self, sources: Collection[str]) -> None:
         for source in sources:
@@ -607,10 +614,10 @@ class TranscriptReadState(ThreadOwnedState):
         # cancellation, never this connection, the observer pipe or the owner's locks.
         self._preparation = self._preparation.started(self, needed)
 
-    def _refresh_keys(self) -> None:
+    def _refresh_keys(self, visibility: RosterVisibility) -> None:
         changed = self._source_watch.changed_paths() if self._source_watch is not None else frozenset()
         invalid = self._source_watch is not None and self._source_watch.invalid
-        threads = self.registry.snapshot().threads
+        threads = {thread.name: thread for thread in self.registry.snapshot().visible_threads(visibility)}
         rebuild = self._thread_keys.keys() != threads.keys() or invalid
         for name in self._thread_keys.keys() - threads.keys():
             del self._thread_keys[name]
@@ -631,6 +638,11 @@ class TranscriptReadState(ThreadOwnedState):
             self._source_resources.close()
             sources = tuple(WatchSource.modified_file(Path(key).absolute())
                             for keys in self._thread_keys.values() for key in keys.revisions)
+            wanted = {key for keys in self._thread_keys.values() for key in keys.revisions}
+            self._preparation.retain(wanted)
+            if not sources:
+                self._preparation.cancel()
+                self._preparation = self._idle
             self._source_watch = (self._source_resources.enter_context(closing(NativeFileWatch.open(*sources)))
                                   if sources else None)
             # Cover a write between the first capture and installing its watch.
@@ -639,7 +651,8 @@ class TranscriptReadState(ThreadOwnedState):
                 if observed != keys.revisions:
                     self._thread_keys[name] = TranscriptReadKeys.capture(threads[name], observed)
 
-    def counts(self, viewer: str, *, document: ReadDocument) -> TranscriptUnread:
+    def counts(self, viewer: str, *, document: ReadDocument,
+               visibility: RosterVisibility = DEFAULT_ROSTER) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if not self._lock.acquire(blocking=False):
             raise CoordinationReadUnavailable("Transcript counts are being read")
@@ -647,7 +660,7 @@ class TranscriptReadState(ThreadOwnedState):
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
             try:
-                self._refresh_keys()
+                self._refresh_keys(visibility)
                 return self._preparation.read_counts(self, viewer, document)
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
