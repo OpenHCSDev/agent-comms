@@ -559,7 +559,7 @@ def first_calls():
 HUNT_ROOTS = [(str(repo.checkout), repo.source) for repo in CONFIG.repos]
 
 
-def hunt(where, why, sent=''):
+def hunt(where, why, sent):
     """Record the commander's source read, whether or not it became an order."""
     path, _, line = where.rpartition(':')
     if not os.path.exists(path) or not line.isdigit() or int(line) > sum(1 for _ in open(path)):
@@ -1015,13 +1015,11 @@ class CloseVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class HuntVerb(OrderVerb, LoadedVerb):
-    help = "a hot-path read with a verdict: file:line, what scales or repeats, and the order it became"
+    help = "a hot-path read: clean unless --sent names the order it became"
     where: str = option("where", metavar="FILE:LINE")
     why: str = option("--why")
-    sent: str = option("--sent", default="", group="outcome", metavar="ORDER",
-                              help="the open order the hunt became")
-    clean: bool = option("--clean", default=False, group="outcome",
-                         help="the inspected code needs no order")
+    sent: str = option("--sent", default="", metavar="ORDER",
+                       help="the open order the hunt became; omitted means clean")
 
     @classmethod
     def due(cls, where: str | None) -> str:
