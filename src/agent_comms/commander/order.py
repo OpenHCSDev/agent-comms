@@ -41,7 +41,7 @@ from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+from ..todos import (clock, ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
@@ -111,7 +111,7 @@ def struck(todo, unit):
 
 
 def hhmm(event):
-    return time.strftime('%H:%M', time.localtime(event.at))
+    return clock(event.at)
 
 
 def deadline(due):
@@ -397,7 +397,9 @@ def board():
     activity = {unit: last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
         unit = t.holder
-        lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_order(t)} | '
+        row = t.order.board_order(t)
+        lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {row.owner_file} | {row.owner} | '
+                     f'{row.order} | {row.due} | '
                      f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
                      f'{activity[unit].clock() if unit else "-"} |')
     history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)

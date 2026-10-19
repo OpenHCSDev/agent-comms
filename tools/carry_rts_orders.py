@@ -11,7 +11,9 @@ import argparse
 import hashlib
 import json
 import re
+import sqlite3
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -26,7 +28,7 @@ from agent_comms.todos import (ApplicationOrderRun, Assignment, AwaitingFirstCal
     MechanicalOrderRun, NoGoalReference, ObservedFirstCall, OrderMessage,
     PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, TodoStore, WithdrawTodo,
     Todo, OpenTodoState, UnorderedProblemOrder, LocatedProblemFinding, MergedProblemOrder,
-    HuntRecord, CleanHunt, OrderedHunt)
+    HuntRecord, Hunt)
 
 
 @dataclass(frozen=True)
@@ -52,8 +54,8 @@ class RtsOrder:
     def order(self, body: str) -> PendingProblemOrder:
         place = re.search(r'^Owner:\s*(\S+):(\d+)\s*$', body, re.M)
         report = re.search(r'\bReport:\s*([^\n]+)', body)
-        if place is None or report is None:
-            raise ValueError(f'{self.msg}: original order needs Owner and Report lines')
+        if place is None or report is None or not re.search(r'^Banned:', body, re.M):
+            raise ValueError(f'{self.facts} {self.msg}: original order needs Owner, Banned and Report lines')
         return PendingProblemOrder(
             id=self.msg, owner=FileLine(place[1], int(place[2])),
             check=OrderCheck.parse(f'{self.check[0]} :: {self.check[1]} -> {self.check[2]}'),
@@ -92,16 +94,28 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
     if missing:
         print(json.dumps({'orders_missing_problem_rows': missing}, indent=2))
         raise ValueError('The commander must restore the missing problem rows before transfer')
-    finding_repos = {}
+    finding_repos: dict[str, str] = {}
+    gone: list[str] = []
     for pid in sorted(problems.keys() - selected.keys()):
         location = FileLine.from_wire(problems[pid]['where'])
         try:
             finding_repos[pid] = Repo.of(Path(location.file).parent).github
-        except subprocess.CalledProcessError as error:
-            raise ValueError(f'{pid}: cannot read repository from recorded path {location.file}') from error
+        except (subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError):
+            gone.append(f'{pid} {location.file}')
+    if gone:
+        raise ValueError('Findings whose checkout is gone; the commander must re-locate or drop them:\n'
+                         + '\n'.join(gone))
     comms = Comms(root)
     actor = comms.registry.require('claude-code')
-    store = TodoStore(root)
+    destination = TodoStore(root)
+    # Every write goes through Core's own store primitives on a staged copy; the
+    # destination changes once, in one SQLite backup, after the RTS check.
+    staging = Path(tempfile.mkdtemp(prefix='p707-carry-', dir=root))
+    store = TodoStore(staging)
+    if destination.path_in(root).exists():
+        with sqlite3.connect(destination.path_in(root)) as live, \
+                sqlite3.connect(store.path_in(staging)) as staged:
+            live.backup(staged)
     rows = []
     for pid, (unit, old, order) in selected.items():
         owner = comms.registry.require(unit)
@@ -177,19 +191,29 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
         with store.writing() as db:
             finding.upsert(db)
     hunts = [json.loads(line) for line in source['hunts.jsonl'].splitlines() if line]
-    for index, raw in enumerate(hunts):
-        fields = dict(where=FileLine.from_wire(raw['where']), why=raw['why'],
-                      at=RecordedEventTime(raw['at']))
-        hunt = OrderedHunt(**fields, sent=raw['sent']) if raw['sent'] else CleanHunt(**fields)
-        # Restore historical records; do not rerun a historical source-file
-        # existence check or pretend that an old order is still current.
-        with store.writing() as db:
-            HuntRecord(id=f'rts-hunt:{index}', commander=actor.incarnation, hunt=hunt).upsert(db)
+    # RTS spells the Hunt member as a nullable "sent"; this is its one decode.
+    hunt_records = [HuntRecord(id=f'rts-hunt:{index}', commander=actor.incarnation,
+                               hunt=FieldCodec.decode(Hunt, {
+                                   'kind': 'clean' if raw['sent'] is None else 'ordered',
+                                   **{key: value for key, value in raw.items() if value is not None},
+                                   'at': FieldCodec.encode(RecordedEventTime(raw['at']))}))
+                    for index, raw in enumerate(hunts)]
+    # Restore historical records; do not rerun a historical source-file
+    # existence check or pretend that an old order is still current.
+    with store.writing() as db:
+        for record in hunt_records:
+            record.upsert(db)
     report['finding_repositories'] = finding_repos
     report['hunts'] = len(hunts)
     report['merged_without_delivery_claim'] = len(merged)
     if any((rts / name).read_bytes() != data for name, data in source.items()):
-        raise ValueError('RTS changed during transfer; destination is not ready for installation')
+        raise ValueError(f'RTS changed during transfer; {root} is unchanged, staged copy kept at {staging}')
+    with sqlite3.connect(store.path_in(staging)) as staged, \
+            sqlite3.connect(destination.path_in(root)) as live:
+        staged.backup(live)
+    for path in staging.iterdir():
+        path.unlink()
+    staging.rmdir()
     if retire:
         for name in ('order.py', 'judge.py', 'rotate.py', 'tool_watch.py', 'shift_after_window.py',
                      'deadlines.json', 'problems.json', 'strikes.jsonl', 'hunts.jsonl', 'sent.jsonl'):

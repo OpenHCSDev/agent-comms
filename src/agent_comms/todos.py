@@ -251,7 +251,8 @@ class PullRequests:
         return self._read[repo, state, order.id]
 
 
-def _clock(at: float) -> str:
+def clock(at: float) -> str:
+    """Local HH:MM, the one clock format for orders, installs and boards."""
     return time.strftime("%H:%M", time.localtime(at))
 
 
@@ -295,7 +296,7 @@ class MovingTrend(DistanceTrend):
 
     @property
     def projection(self) -> str:
-        return f"; distance {self.distance}, projected done {_clock(self.done)}"
+        return f"; distance {self.distance}, projected done {clock(self.done)}"
 
 
 @dataclass(frozen=True)
@@ -496,7 +497,7 @@ class CommittedProgress(Moving, FoundProgress):
 
     @property
     def state(self) -> str:
-        return f"committed {self.sha} at {_clock(self.at)}, not pushed"
+        return f"committed {self.sha} at {clock(self.at)}, not pushed"
 
 
 @dataclass(frozen=True)
@@ -511,7 +512,7 @@ class PushedProgress(CommittedProgress):
 
     @property
     def state(self) -> str:
-        return f"pushed {self.sha} at {_clock(self.at)}, no PR"
+        return f"pushed {self.sha} at {clock(self.at)}, no PR"
 
 
 @dataclass(frozen=True)
@@ -609,8 +610,7 @@ class PlannedInstallDeadline(InstallDeadline):
         return cls(RecordedEventTime(now + cls.cadence), installer)
 
     def overdue(self, now: float) -> tuple[str, ...]:
-        due = time.strftime("%H:%M", time.localtime(self.at.at))
-        return (f"due {due}, installer {self.installer}",) * (now >= self.at.at)
+        return (f"due {clock(self.at.at)}, installer {self.installer}",) * (now >= self.at.at)
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
@@ -626,7 +626,7 @@ class PlannedInstallDeadline(InstallDeadline):
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         if not waiting:
             return []
-        due = time.strftime("%H:%M", time.localtime(self.at.at))
+        due = clock(self.at.at)
         if now > self.at.at:
             return [f"INSTALL LATE (due {due}), not the orders; waiting: {', '.join(waiting)}"]
         return [f"INSTALL due {due}; waiting: {', '.join(waiting)}"]
@@ -1041,6 +1041,9 @@ class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
     def instructions(self) -> tuple[str, ...]:
         return ()
 
+    def place(self) -> str:
+        return "-"
+
 
 @dataclass(frozen=True)
 class UnlocatedProblemFinding(ProblemFinding):
@@ -1052,7 +1055,19 @@ class LocatedProblemFinding(ProblemFinding):
     where: FileLine
 
     def instructions(self) -> tuple[str, ...]:
-        return (f"Where: {self.where.to_wire()}",)
+        return (f"Where: {self.place()}",)
+
+    def place(self) -> str:
+        return self.where.to_wire()
+
+
+@dataclass(frozen=True)
+class BoardOrder:
+    """The order columns of one board row."""
+    owner_file: str
+    owner: str
+    order: str
+    due: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1069,8 +1084,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
-    def board_order(self, todo: Todo) -> str:
-        return f'{" ".join(self.finding.instructions())} | unassigned | - | -'
+    def board_order(self, todo: Todo) -> BoardOrder:
+        return BoardOrder(self.finding.place(), "unassigned", "-", "-")
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
@@ -1149,12 +1164,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
-    def board_order(self, todo: Todo) -> str:
+    def board_order(self, todo: Todo) -> BoardOrder:
         last = todo.released[-1:]
-        owner = todo.holder or (f'unassigned: released from {last[0].previous.owner}: '
-                                f'{last[0].reason.text}')
-        due = time.localtime(todo.deadline.recorded_at("An order deadline"))
-        return f'{self.owner.to_wire()} | {owner} | {self.id} | {time.strftime("%H:%M", due)}'
+        owner = todo.holder or (f"unassigned: released from {last[0].previous.owner}: "
+                                f"{last[0].reason.text}")
+        return BoardOrder(self.owner.to_wire(), owner, self.id,
+                          clock(todo.deadline.recorded_at("An order deadline")))
 
     def __post_init__(self):
         if not self.edits or not self.banned:
