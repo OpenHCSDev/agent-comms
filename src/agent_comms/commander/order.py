@@ -19,7 +19,7 @@ and refuses to let a deadline lapse silently.
 """
 import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -177,6 +177,17 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
+def read_check(line: str) -> OrderCheck | None:
+    """Resolve the commander's check boundary once; stored checks only carry directories."""
+    check = OrderCheck.parse(line)
+    if check:
+        directory = CONFIG.repo_directory(check.directory)
+        if not directory.is_dir():
+            sys.exit(f'Refused: Check repo {check.directory} is not a directory')
+        check = replace(check, directory=str(directory))
+    return check
+
+
 def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
          traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
@@ -209,7 +220,7 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
     fact = re.search(r'(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\b', body)
     group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
     owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
-    check = (line := re.search(r'(?m)^Check:(.*)$', body)) and OrderCheck.parse(line[1])
+    check = (line := re.search(r'(?m)^Check:(.*)$', body)) and read_check(line[1])
     listed = {t.id: t for t in todos()}
     if not group:
         problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
@@ -221,12 +232,10 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
         problems.append(f'Owner {owner[1]}:{owner[2]} does not exist; read the code and name the real owner')
     if not check:
         problems.append('no Check: <repo> :: <command> -> N; done runs it, so make it the real acceptance count')
-    elif not os.path.isdir(check.directory):
-        problems.append(f'Check repo {check.directory} is not a directory')
     # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
     # An order's check must fail now (or it proves nothing), and every absolute
     # path:line it cites must exist.
-    if check and os.path.isdir(check.directory) and not problems:
+    if check and not problems:
         try:
             ran = subprocess.run(['bash', '-c', check.command], cwd=check.directory, capture_output=True, timeout=90)
             printed = CheckPrinted.decoded(ran.stdout)
@@ -328,10 +337,8 @@ def correct_check(pid: str, line: str, why: str) -> None:
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
-    if not (check := OrderCheck.parse(line)):
+    if not (check := read_check(line)):
         sys.exit('Refused: --check reads "<repo> :: <shell command> -> <integer>"')
-    if not os.path.isdir(check.directory):
-        sys.exit(f'Refused: check repo {check.directory} is not a directory')
     if len(why.split()) < 8:
         sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
     def git(*args: str) -> str:
