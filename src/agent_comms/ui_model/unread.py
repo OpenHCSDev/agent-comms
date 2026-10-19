@@ -1,4 +1,4 @@
-"""What a thread's or channel's unread state shows; only complete counts are numbers."""
+"""Exact counts and record-capped lower bounds, as supplied by their backend owners."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class UnreadPresentation(ABC):
     @classmethod
     def _for_count(
-        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int]
+        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int],
     ) -> UnreadPresentation:
         if name in snapshot.unread_pending:
             return IndexingUnread()
@@ -22,7 +22,7 @@ class UnreadPresentation(ABC):
 
     @classmethod
     def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.thread_unread)
+        return snapshot.thread_unread[name]
 
     @classmethod
     def for_bus(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
@@ -52,6 +52,21 @@ class ExactUnread(UnreadPresentation):
     @property
     def label(self) -> str:
         return f"({self.count})" if self.count else ""
+
+    @property
+    def highlighted(self) -> bool:
+        return bool(self.count)
+
+
+@dataclass(frozen=True)
+class ReplyUnread(UnreadPresentation):
+    count: int
+    lower_bound: bool
+
+    @property
+    def label(self) -> str:
+        suffix = "+" if self.lower_bound else ""
+        return f"({self.count}{suffix})"
 
     @property
     def highlighted(self) -> bool:

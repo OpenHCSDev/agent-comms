@@ -602,7 +602,7 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
     unit = comms.registry.declare(comms.registry.new_thread(
         "drain-unit", frozenset({"drain"}), str(comms.root), execution=ExternalThreadExecution))
     transcript = ExternalTranscript(comms.root, unit.incarnation.lookup)
-    output = ThreadOutput(transcript, comms.agents)
+    output = ThreadOutput(transcript, comms.agents, unit.name)
     output.status(ActivityState.WORKING, "before the drain")
     with transcript.writing():
         pass
