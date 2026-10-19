@@ -781,12 +781,8 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     session_dir.mkdir(parents=True, mode=0o700)
     saved = session_dir / "saved.jsonl"
     moved = session_dir / "moved.jsonl"
-    saved.write_text(json.dumps({"type": "session", "id": "isolated-session", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n")
+    saved.write_text(json.dumps({"type": "session", "id": "isolated-session", "version": 3, "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n")
     saved.chmod(0o600)
-    monkeypatch.setattr(
-        "agent_comms.native_session_reopen.SessionIdentityHelper.locate",
-        lambda _package, session_file: NativeSessionIdentity("isolated-session", session_file),
-    )
     _base, calls = _fake_model(fail_on=1)
 
     async def renamed(*args, **kwargs):

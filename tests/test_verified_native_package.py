@@ -8,7 +8,7 @@ from agent_comms import native_package
 from agent_comms.native_arguments import NativeArguments, SelectedModel
 from agent_comms.native_package import NativePackageError, VerifiedNativePackage
 from agent_comms.native_pi import NativePiRpcLaunch
-from agent_comms.native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.selected_session import SelectedSession
 
 
@@ -37,17 +37,12 @@ def test_one_digest_for_managed_catalog_tracked_and_saved_header(declared_native
     work = tmp_path / 'work'
     work.mkdir(mode=0o700)
     saved = work / 'saved.jsonl'
-    saved.write_text('{}\n')
+    saved.write_text('{"type":"session","id":"original","version":3,"timestamp":"2026-10-01T00:00:00.000Z"}\n')
     saved.chmod(0o600)
     identity = NativeSessionIdentity('original', str(saved))
 
-    async def locate(cls, request, *, cwd):
-        assert request.package == str(package.path)
-        return identity
-
-    monkeypatch.setattr(SessionIdentityHelper, 'run', classmethod(locate))
     for _ in range(2):
-        session = SelectedSession.for_launch(work, saved, package)
+        session = SelectedSession.for_launch(work, saved)
         assert session.identity == identity
         managed = NativePiRpcLaunch.managed('pi', (), package=package,
             worktree=work, root=tmp_path, session_file=str(saved))

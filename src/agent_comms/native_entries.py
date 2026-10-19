@@ -327,7 +327,7 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
 
 
 class NativeEvidenceScope(ExitStack):
-    """One acquired input-proof source for a bounded corroboration operation.
+    """One recipient-owned input-proof source across its corroboration lifetime.
 
     Only the current descriptor and its decoded bytes are held. Switching
     journals closes the previous reader; no proof, acknowledgement or disposition is

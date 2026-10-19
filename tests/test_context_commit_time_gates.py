@@ -41,7 +41,7 @@ def _callers(name: str) -> set[str]:
     # Proof, recovery and transcript owners corroborate native evidence; no
     # notification, presentation or observation module opens it.
     ("open_evidence", {"attempt_recovery.py", "native_entries.py", "native_pi.py", "native_transcript.py"}),
-    ("open_input_evidence", {"private_send_stage.py", "tracked_turn.py"}),
+    ("open_input_evidence", set()),
     ("read_evidence", {"attempt_recovery.py", "historical_native_inputs.py", "native_pi.py"}),
 ])
 def test_native_evidence_has_fixed_readers(name, owners):

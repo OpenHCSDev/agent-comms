@@ -406,7 +406,6 @@ def native_rpc_fixture(monkeypatch):
             SelectedSession.for_launch(
                 Path(worktree),
                 Path(session_file) if session_file is not None else None,
-                package,
             ),
             package,
             root=Path(root), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),

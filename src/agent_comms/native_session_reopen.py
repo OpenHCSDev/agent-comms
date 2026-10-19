@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-import os
-import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .native_package import VerifiedNativePackage
-from .pi_helper import PiHelper, SessionHelperRequest
+from .field_codec import MalformedRecord
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
@@ -75,64 +71,24 @@ class NativeSessionIdentity:
         """Derive selected identity from its recipient's already verified source."""
         from .native_pi import NativePiUnavailable
 
+        file = evidence.source.path
+        if file != file.resolve(strict=True):
+            raise NativeReopenError("Saved native session path is not canonical")
         try:
-            file = evidence.source.path
-            if file != file.resolve(strict=True):
-                raise NativeReopenError("Saved native session path is not canonical")
             header, _entries = evidence.observe()
             header.require_reopen()
-            return cls(header.require_entry_id(), str(file))
-        except (OSError, ValueError, NativePiUnavailable) as error:
-            if isinstance(error, NativeReopenError):
-                raise
+        except (MalformedRecord, NativePiUnavailable) as error:
             raise NativeReopenError("Saved native session identity cannot be read") from error
-
-    @staticmethod
-    def locate(package: VerifiedNativePackage, session_file: str) -> NativeSessionIdentity:
-        """Read a saved header through the process's acquired package."""
-        try:
-            return SessionIdentityHelper.locate(package, session_file)
-        except (OSError, ValueError) as error:
-            if isinstance(error, NativeReopenError):
-                raise
-            raise NativeReopenError("Saved native session identity cannot be read") from error
-
-
-class SessionIdentityHelper(PiHelper):
-    script = Path(__file__).with_name("_pi_helpers") / "session_identity.mjs"
-    request = SessionHelperRequest
-    result = NativeSessionIdentity
+        return cls(header.require_entry_id(), str(file))
 
     @classmethod
-    def locate(cls, package: VerifiedNativePackage, session_file: str) -> NativeSessionIdentity:
-        """Locate the original header without constructing another history index.
+    def locate(cls, session_file: str) -> NativeSessionIdentity:
+        """One-shot callers own a bounded scope; selected callers borrow theirs."""
+        from .native_entries import NativeEvidenceScope
+        from .native_pi import NativePiUnavailable
 
-        A located identity is not history readiness. The actual native loader
-        validates the whole journal before get_state; the child's owner compares
-        that reported identity with this one before accepting any input.
-        """
         try:
-            file = Path(session_file).absolute()
-            if file != file.resolve(strict=True):
-                raise NativeReopenError("Saved native session path is not canonical")
-            before = file.stat()
-            if (
-                not stat.S_ISREG(before.st_mode)
-                or before.st_nlink != 1
-                or before.st_uid not in (0, os.getuid())
-                or before.st_size <= 0
-            ):
-                raise NativeReopenError("Saved native session is not a regular file")
-            identity = asyncio.run(
-                cls.run(
-                    SessionHelperRequest(str(package.path), str(file)), cwd=file.parent
-                )
-            )
-            if FileRevision.from_stat(before) != FileRevision.from_stat(file.stat()):
-                raise NativeReopenError("Saved native session identity changed during read")
-            identity.require_session(str(file))
-            return identity
-        except (OSError, ValueError) as error:
-            if isinstance(error, NativeReopenError):
-                raise
-            raise NativeReopenError("Saved native session identity cannot be read") from error
+            with NativeEvidenceScope() as scope:
+                return cls.from_evidence(scope.for_source(Path(session_file).absolute()))
+        except NativePiUnavailable as error:
+            raise NativeReopenError("Saved native session source cannot be opened") from error
