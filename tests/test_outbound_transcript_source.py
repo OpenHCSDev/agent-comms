@@ -17,7 +17,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
 from agent_comms.revision_views import StoresView
 from agent_comms.pi_payloads import PublishedMessageToolDetails
-from agent_comms.wire_log import WireLog
+from agent_comms.wire_log import WireLog, WireStoreLock
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -308,15 +308,15 @@ def test_open_source_rejects_replaced_wire_inode(tmp_path):  # noqa: F811
 
 def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, monkeypatch):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
-    verify = WireLog.verify_before_read_unlocked
+    verify = WireStoreLock.open_source
     barriers = []
 
-    def observed(log, **mode):
-        if log.path == comms.bus.log.path:
+    def observed(cls, path, mode):
+        if path == comms.bus.log.path:
             barriers.append(True)
-        return verify(log, **mode)
+        return verify(path, mode)
 
-    monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
+    monkeypatch.setattr(WireStoreLock, "open_source", classmethod(observed))
     view = comms.views.thread_presentations(("beta",)).require("beta")
     assert len(barriers) == 1
     assert view.read_identity.wire_frontier.sequence == initial.message.seq
@@ -349,15 +349,15 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
 def test_original_page_reuses_captured_frontier_between_claim_fences(tmp_path, monkeypatch):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     read = comms.transcripts.capture_page_read("beta")
-    verify = WireLog.verify_before_read_unlocked
+    verify = WireStoreLock.open_source
     barriers = []
 
-    def observed(log, **mode):
-        if log.path == comms.bus.log.path:
+    def observed(cls, path, mode):
+        if path == comms.bus.log.path:
             barriers.append(True)
-        return verify(log, **mode)
+        return verify(path, mode)
 
-    monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
+    monkeypatch.setattr(WireStoreLock, "open_source", classmethod(observed))
     page = read.read()
     # One bounded page query and one final freshness check. The retained source
     # removes the former pre-read identity reconstruction.
