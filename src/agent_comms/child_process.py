@@ -35,6 +35,7 @@ from .errors import RelationViolationError
 from .sealed import Sealed
 
 if TYPE_CHECKING:
+    from .runtime_info import RuntimeInfoStore
     from .registration_change import RegistrationChange, UpdatedRegistration
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
@@ -809,7 +810,25 @@ class Win32Platform(Platform):
         return WindowsLaunch(command, self)
 
 
+class ChildRegistration(ABC):
+    """The durable owner notified after a launched group has finished."""
+
+    @abstractmethod
+    def finished(self, identity: ProcessIdentity) -> None: ...
+
+
+class NoChildRegistration(ChildRegistration):
+    """An observed process has no launch registration to remove."""
+
+    def finished(self, identity: ProcessIdentity) -> None:
+        pass
+
+
 class ChildLaunch(ABC):
+    # Bound once by the package composition root: runtime info depends on the
+    # process identity and group implementation declared in this module.
+    runtime_info: ClassVar[type[RuntimeInfoStore]]
+
     @property
     @abstractmethod
     def argv(self) -> tuple[str, ...]: ...
@@ -828,16 +847,38 @@ class ChildLaunch(ABC):
         stderr=subprocess.DEVNULL,
     ) -> ParentedProcess:
         """Record the parent's process handle before the platform allows exec."""
-        process = subprocess.Popen(
-            self.argv,
-            cwd=cwd,
-            env=env,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            **self.options,
-        )
-        return ParentedProcess(process, Platform.current().identity(process.pid))
+        with self.runtime_info.launching(env) as reservation:
+            process = subprocess.Popen(
+                self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
+                stderr=stderr, **self.options,
+            )
+            identity = Platform.current().identity(process.pid)
+            child = ParentedProcess(process, identity, reservation.store)
+            try:
+                reservation.record(identity)
+            except BaseException:
+                self.cancel_before_release(identity)
+                child.reap()
+                child.close_streams()
+                raise
+        return child
+
+    async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
+        with self.runtime_info.launching(env) as reservation:
+            process = await asyncio.create_subprocess_exec(
+                *self.argv, cwd=cwd, env=env, **stdio.options, **self.options,
+            )
+            identity = Platform.current().identity(process.pid)
+            child = AttachedChild(process, identity, reservation.store)
+            child._stderr_task = asyncio.create_task(child._drain_stderr())
+            try:
+                reservation.record(identity)
+            except BaseException:
+                self.cancel_before_release(identity)
+                await process.wait()
+                await child._stderr_task
+                raise
+        return child
 
     @abstractmethod
     def release(self, identity: ProcessIdentity) -> None: ...
@@ -1136,7 +1177,8 @@ async def join_retirement(task: asyncio.Future):
 class ChildProcess(Sealed, ABC):
     """The sole stop algorithm; cancellation retains the cleanup task."""
 
-    def __init__(self, identity: ProcessIdentity):
+    def __init__(self, identity: ProcessIdentity, registration: ChildRegistration = NoChildRegistration()):
+        self.registration = registration
         self.identity = identity
         self.platform = Platform.current()
         self._stop_task: asyncio.Task[ChildOutcome] | None = None
@@ -1160,13 +1202,13 @@ class ChildProcess(Sealed, ABC):
     @abstractmethod
     async def wait(self) -> ChildOutcome: ...
 
-    def _stop_plan(self, guard):
+    def _stop_plan(self, guard, deadline=math.inf):
         with guard():
             self.platform.terminate_group(self.identity)
-        deadline = time.monotonic() + STOP_GRACE_SECONDS
+        grace_deadline = min(time.monotonic() + STOP_GRACE_SECONDS, deadline)
         stage = GracefulStopOutcome
         while self.platform.group_members(self.identity):
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= grace_deadline:
                 stage = ForcedStopOutcome
                 with guard():
                     self.platform.force_group(self.identity)
@@ -1176,15 +1218,19 @@ class ChildProcess(Sealed, ABC):
         # pending disk IO), which has no deadline. Kill again each round so a
         # member forked during the first kill retires too.
         while self.platform.group_members(self.identity):
+            if time.monotonic() >= deadline:
+                survivors = self.platform.group_members(self.identity)
+                raise ChildRetirementFailed(f"Process group still alive: {survivors}")
             if stage is ForcedStopOutcome:
                 with guard():
                     self.platform.force_group(self.identity)
             yield 0.02
+        self.registration.finished(self.identity)
         return stage
 
-    def _retire_group(self, guard):
+    def _retire_group(self, guard, deadline=math.inf):
         """Use the same guarded stop plan for synchronous and asynchronous cleanup."""
-        plan = self._stop_plan(guard)
+        plan = self._stop_plan(guard, deadline)
         while True:
             try:
                 delay = next(plan)
@@ -1258,8 +1304,9 @@ class TerminalChildStdio(ChildStdio):
 class AttachedChild(ChildProcess):
     stderr_limit: ClassVar[int] = 16000
 
-    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity):
-        super().__init__(identity)
+    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity,
+                 registration: ChildRegistration = NoChildRegistration()):
+        super().__init__(identity, registration)
         self.process = process
         self.stdin = process.stdin
         self.stdout = process.stdout
@@ -1280,18 +1327,9 @@ class AttachedChild(ChildProcess):
             raise ValueError("A child command is required")
         platform = Platform.current()
         with platform.launch(command, pass_fds) as launch:
-            process = await asyncio.create_subprocess_exec(
-                *launch.argv,
-                cwd=cwd,
-                env=env,
-                **stdio.options,
-                **launch.options,
-            )
-            identity = platform.identity(process.pid)
-            child = cls(process, identity)
-            child._stderr_task = asyncio.create_task(child._drain_stderr())
+            child = await launch.spawn_async(cwd=cwd, env=env, stdio=stdio)
             try:
-                launch.release(identity)
+                launch.release(child.identity)
                 await launch.verify_async()
             except BaseException:
                 await child.stop()
@@ -1495,9 +1533,9 @@ class SynchronousProcess(ChildProcess):
     @abstractmethod
     def reap(self) -> ChildOutcome: ...
 
-    def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
+    def stop_sync(self, *, guard=nullcontext, deadline=math.inf) -> ChildOutcome:
         self.require_stop_authority()
-        stage = self._retire_group(guard)
+        stage = self._retire_group(guard, deadline)
         return stage(self.reap())
 
 
@@ -1516,11 +1554,19 @@ class ObservedProcess(SynchronousProcess):
         return self.reap()
 
 
+class RecordedRuntimeGroup(ObservedProcess):
+    """A recorded launch owns the group even after its original leader exits."""
+
+    def require_stop_authority(self) -> None:
+        self.platform.group_members(self.identity)
+
+
 class ParentedProcess(SynchronousProcess):
     """Owns the OS child handle, its reap result, and any captured pipe streams."""
 
-    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity):
-        super().__init__(identity)
+    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity,
+                 registration: ChildRegistration = NoChildRegistration()):
+        super().__init__(identity, registration)
         self.process = process
 
     @classmethod
