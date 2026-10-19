@@ -4,6 +4,7 @@
 Stdout is a zstd tar stream. No scratch files, lock creation, SQLite writes or
 imports of bus/runtime code. This same source is streamed over SSH.
 """
+
 from __future__ import annotations
 
 import io
@@ -13,9 +14,11 @@ import sqlite3
 import stat
 import sys
 import tarfile
-from contextlib import closing
-from pathlib import Path
 from compression import zstd
+from contextlib import closing
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import BinaryIO
 
 
 def add_bytes(archive: tarfile.TarFile, name: str, payload: bytes) -> None:
@@ -32,6 +35,7 @@ def sqlite_snapshot(path: Path) -> bytes:
     immutable is safe only with no journal/WAL at either cut and an unchanged
     main inode. A concurrent checkpoint or first writer makes this fail closed.
     """
+
     def read(uri: str) -> bytes:
         with closing(sqlite3.connect(uri, uri=True, timeout=10)) as db:
             db.execute("BEGIN")
@@ -42,7 +46,7 @@ def sqlite_snapshot(path: Path) -> bytes:
     try:
         return read(uri)
     except sqlite3.Error as error:
-        if error.sqlite_errorcode & 0xff not in (sqlite3.SQLITE_CANTOPEN, sqlite3.SQLITE_READONLY):
+        if error.sqlite_errorcode & 0xFF not in (sqlite3.SQLITE_CANTOPEN, sqlite3.SQLITE_READONLY):
             raise RuntimeError(f"Read-only SQLite snapshot failed for {path}: {error}") from error
         companions = [path.with_name(path.name + suffix) for suffix in ("-wal", "-journal")]
         if any(companion.exists() for companion in companions):
@@ -51,18 +55,30 @@ def sqlite_snapshot(path: Path) -> bytes:
     payload = read(uri + "&immutable=1")
     after = path.stat()
     if (before.st_ino, before.st_size, before.st_mtime_ns) != (
-        after.st_ino, after.st_size, after.st_mtime_ns
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
     ) or any(companion.exists() for companion in companions):
         # A writer may have opened WAL after the failed normal read. Discard
         # the immutable bytes; only a fresh SQLite transaction may now win.
         try:
             return read(uri)
         except sqlite3.Error as error:
-            raise RuntimeError(f"SQLite journal transition prevented a read-only snapshot: {path}: {error}") from error
+            raise RuntimeError(
+                f"SQLite journal transition prevented a read-only snapshot: {path}: {error}"
+            ) from error
     return payload
 
 
-def snapshot(root: Path, output) -> None:
+@dataclass(frozen=True)
+class SnapshotHome:
+    """The producer's home relationship; the gate decodes this frozen record."""
+
+    root: str
+    home: str
+
+
+def snapshot(root: Path, output: BinaryIO) -> None:
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Bus root is not a directory")
@@ -70,13 +86,14 @@ def snapshot(root: Path, output) -> None:
         raise RuntimeError("Snapshot producer requires a read-only source mount")
     home = Path.home()
     route = home / ".local/state/agent-comms/active-route.json"
-    pointer = home / ".local/share/agent-comms/current"
-    context = {"root": str(root), "home": str(home),
-               "route": json.loads(route.read_text()) if route.exists() else None,
-               "runtime": str(pointer.resolve()) if pointer.exists() else None}
-    with zstd.ZstdFile(output, "wb", level=1) as compressed, \
-         tarfile.open(fileobj=compressed, mode="w|") as archive:
-        add_bytes(archive, "context.json", json.dumps(context).encode())
+    context = SnapshotHome(str(root), str(home))
+    with (
+        zstd.ZstdFile(output, "wb", level=1) as compressed,
+        tarfile.open(fileobj=compressed, mode="w|") as archive,
+    ):
+        add_bytes(archive, "context.json", json.dumps(asdict(context)).encode())
+        if route.exists():
+            add_bytes(archive, "active-route.json", route.read_bytes())
         for directory, folders, names in os.walk(root, followlinks=False):
             for name in sorted([*folders, *names]):
                 path = Path(directory) / name
