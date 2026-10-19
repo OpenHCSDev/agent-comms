@@ -6,7 +6,7 @@ from .carry import Carried, Carry
 
 
 class RuntimeInfo(Carry):
-    after = "carry_starting_activity"
+    after = "carry_acp_roles"
 
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:

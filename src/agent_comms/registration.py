@@ -365,18 +365,13 @@ class Registration:
             return document.status(name)
 
     def session_thread(
-        self, project_path: Path, preferred: str | None = None, *, source_root: str | None = None,
+        self, project_path: Path, preferred: str | None = None,
     ) -> ProjectThreadSelection:
-        """Select the retained binding or the project's sole declared ACP thread.
+        """Select an unbound project's preferred name or sole declared ACP thread.
 
-        Explicit bindings retain their original wire and identity. An unbound
-        preferred name keeps its previous precedence, including non-ACP threads.
-        Only otherwise does ACP membership determine project discovery.
+        Preferred names keep their previous precedence, including non-ACP
+        threads. Bound sessions use strict lookup instead of project discovery.
         """
-        if source_root is not None:
-            if Path(source_root).expanduser().resolve() != self.store.path.parent.resolve():
-                raise ValueError("Comms route changed; this session retains its former wire")
-            return FoundProjectThread(self.require(preferred or ""))
         project = Path(project_path).expanduser().resolve()
         with self.store.reading() as document:
             located = tuple(t for t in document.threads.values() if t.project_path == project)
