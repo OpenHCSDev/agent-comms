@@ -226,6 +226,67 @@ def main() -> None:
                     break
                 time.sleep(1)
 
+        # Resume the completed scratch session. Kill only after its new answer
+        # finishes, so this crash check does not manufacture an uncertain input.
+        from agent_comms.cli_bridges.monitor import EndSession, VerifySession
+        while not replies.empty():
+            replies.get_nowait()
+        resumed = list(command)
+        resumed[resumed.index('--session-id')] = '--resume'
+        child = subprocess.Popen(resumed, env=env, cwd=run, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=errors, text=True, bufsize=1)
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
+        replacement = None
+        try:
+            send('Reply exactly RESUMED. Do not call tools or attach a Monitor.')
+            answered = False
+            start = time.monotonic()
+            for second in range(90):
+                due = start + second - time.monotonic()
+                if due > 0:
+                    time.sleep(due)
+                row = status(second, 'resume')
+                while not replies.empty():
+                    result = replies.get_nowait()
+                    event('resume-result', result=result)
+                    if result is None or result.get('is_error'):
+                        raise RuntimeError('Resume failed; no input replay')
+                    answered = True
+                if answered and row['status'] == 'connected':
+                    replacement = ProcessIdentity.capture(row['process_identity']['pid'])
+                    assert replacement != daemon
+                    owner = ProcessIdentity.capture(child.pid)
+                    VerifySession(owner=owner).exchange(claim)
+                    stale = ProcessIdentity(owner.pid, owner.start_time + 1)
+                    try:
+                        EndSession(owner=stale).exchange(claim)
+                    except ValueError:
+                        event('stale-session-end-refused', bridge=replacement.pid)
+                    else:
+                        raise AssertionError('Stale SessionEnd was accepted')
+                    event('resumed-session-ready', bridge=replacement.pid, owner=owner.pid)
+                    owner.signal(signal.SIGKILL)
+                    child.wait(timeout=10)
+                    reader.join(timeout=5)
+                    break
+            else:
+                raise TimeoutError('Resume unfinished; no input replay')
+            for second in range(10):
+                row = status(second, 'claude-killed')
+                if row['status'] == 'no_bridge' and not replacement.alive():
+                    event('claude-exit-released-registration', bridge=replacement.pid)
+                    break
+                time.sleep(1)
+            else:
+                raise AssertionError('Claude exited but its bridge remained registered')
+        finally:
+            child.stdin.close()
+            if child.poll() is None:
+                child.terminate()
+                child.wait(timeout=10)
+            reader.join(timeout=5)
+
 
 if __name__ == '__main__':
     main()
