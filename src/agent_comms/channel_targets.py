@@ -298,7 +298,11 @@ class ChannelTarget(NamedTarget):
                      and channel.matches(thread.tags))
 
     def mark_view_read(self, views, worktree):
-        views.mark_channel_view_read(self.name, worktree=worktree)
+        from .presentation import ReadAll
+
+        views.presentation.mark_channel_read(
+            self.name, viewer=views.messaging.user_identity(worktree).name, mark=ReadAll(),
+        )
 
 
 ANY_CHANNEL = ChannelTarget(BuiltinChannel.ANY.value)

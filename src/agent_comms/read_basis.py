@@ -107,6 +107,19 @@ class DisplaySelection(ABC):
 
     __slots__ = ()
 
+    @staticmethod
+    def from_page(page: MessagePage) -> DisplaySelection:
+        if page.historical_display is not None:
+            return page.historical_display.selection(page.history_revision)
+        if page.display_basis is not None:
+            return page.display_basis.selection(page.history_revision)
+        if page.display_scope is not None:
+            return page.display_scope.selection(page.history_revision)
+        return NoDisplaySelection()
+
+    @abstractmethod
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None: ...
+
     @property
     @abstractmethod
     def has_evidence(self) -> bool: ...
@@ -133,6 +146,9 @@ class SelectedDisplay(DisplaySelection):
 
 @dataclass(frozen=True, slots=True)
 class NoDisplaySelection(DisplaySelection):
+    def acknowledge(self, views, page, *, worktree) -> None:
+        raise DMPaintedBoundChanged()
+
     def select_evidence(self, page, selected):
         return page
 
@@ -145,6 +161,14 @@ class NoDisplaySelection(DisplaySelection):
 class ChannelSelection(SelectedDisplay):
     bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        from .presentation import ReadThrough
+
+        views.presentation.mark_channel_read(
+            self.scope.channel, viewer=views.messaging.user_identity(worktree).name,
+            mark=ReadThrough(page.newest_seq, page.display_scope),
+        )
 
     def select_evidence(self, page, selected):
         return replace(page, display_scope=replace(self.scope,
@@ -160,6 +184,12 @@ class DMSelection(SelectedDisplay):
     peer: ThreadIncarnation
     scope: DMDisplayScope
 
+    def acknowledge(self, views, page, *, worktree) -> None:
+        page.display_basis.acknowledge(
+            views.bus, views.registry, views.root, self.requested_peer,
+            worktree=worktree, through=page.newest_seq,
+        )
+
     def select_evidence(self, page, selected):
         basis = page.display_basis
         return replace(page, display_basis=replace(basis, displayed=basis.displayed.select(selected)))
@@ -168,6 +198,9 @@ class DMSelection(SelectedDisplay):
 @dataclass(frozen=True, slots=True)
 class HistoricalSelection(SelectedDisplay):
     """The original viewer and attached-source revision select an archive page."""
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        page.historical_display.acknowledge(views.bus.history, views.registry)
 
     def select_evidence(self, page, selected):
         return replace(page, historical_display=page.historical_display.select(selected))
@@ -246,6 +279,7 @@ if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
     from .channels import TagChannel
     from .historical_views import HistoryArchive, HistorySource
+    from .history_views import HistoryViews
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .channels import Channels

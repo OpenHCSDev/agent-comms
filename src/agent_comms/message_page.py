@@ -14,7 +14,7 @@ from .page_traversal import NewerTraversal, OlderTraversal, PageCursor, PageTrav
 from .private_path import FileRevision
 from .read_basis import (
     ChannelDisplayScope, DisplayBasis, DisplaySelection, DMDisplayBasis,
-    MessageDisplayScope, NoDisplaySelection,
+    MessageDisplayScope,
 )
 from .wire_log import WireSnapshot
 
@@ -66,13 +66,7 @@ class MessagePage:
     @property
     def selection(self) -> DisplaySelection:
         """Derive the selected conversation from this page's original evidence."""
-        if self.historical_display is not None:
-            return self.historical_display.selection(self.history_revision)
-        if self.display_basis is not None:
-            return self.display_basis.selection(self.history_revision)
-        if self.display_scope is not None:
-            return self.display_scope.selection(self.history_revision)
-        return NoDisplaySelection()
+        return DisplaySelection.from_page(self)
 
     @property
     def oldest_cursor(self) -> PageCursor | None:

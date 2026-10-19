@@ -25,7 +25,6 @@ from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalThread, HistorySource
-    from .read_basis import HistoricalDisplay
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 from .agent_activity import AgentActivity
@@ -54,8 +53,6 @@ from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .presentation import (
-    ChannelReadMark,
-    ReadAll,
     ChannelView,
     CoordinationSnapshot,
     MessageNotification,
@@ -130,10 +127,7 @@ class ThreadViewRead(ConversationPreparation):
             bounds=PageBounds(OlderTraversal(self.through.wire.sequence + 1)),
         )
         if page.messages:
-            self.views.mark_dm_view_read(
-                self.thread.name, worktree=self.viewer.worktree,
-                through=page.messages[-1].seq, expected_display_basis=page.display_basis,
-            )
+            self.views.mark_page_read(page, worktree=self.viewer.worktree)
 
 
 @dataclass(frozen=True)
@@ -250,8 +244,9 @@ class HistoryViews:
         channel = self.channels.catalog.read().require_channel(target)
         return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
-    def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:
-        displayed.acknowledge(self.bus.history, self.registry)
+    def mark_page_read(self, page: MessagePage, *, worktree: str) -> None:
+        """Acknowledge the original read evidence of exactly the painted page."""
+        page.selection.acknowledge(self, page, worktree=worktree)
 
     def channel_history_page(self, target: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded channel history for any client adapter."""
@@ -407,31 +402,6 @@ class HistoryViews:
         thread.execution.prepare_conversation(ThreadViewRead(
             self, thread, self.messaging.user_identity(worktree), through,
         ))
-
-    def mark_channel_view_read(
-        self,
-        target: str,
-        *,
-        worktree: str,
-        mark: ChannelReadMark = ReadAll(),
-    ) -> None:
-        self.presentation.mark_channel_read(
-            target,
-            viewer=self.messaging.user_identity(worktree).name,
-            mark=mark,
-        )
-
-    def mark_dm_view_read(
-        self, peer: str, *, worktree: str, through: int, expected_display_basis: DMDisplayBasis
-    ) -> None:
-        expected_display_basis.acknowledge(
-            self.bus,
-            self.registry,
-            self.root,
-            peer,
-            worktree=worktree,
-            through=through,
-        )
 
     def mark_user_view_read(self, target: str, *, worktree: str) -> None:
         """Explicit human 'Mark inbox read' for a channel, DM, or native thread.
