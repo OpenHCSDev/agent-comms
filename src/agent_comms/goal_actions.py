@@ -25,7 +25,8 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal, GoalDeclaration, GoalOrder, NoGoal, ProblemGoalOrder, UnorderedGoalOrder
+from .goals import (Goal, GoalDeclaration, GoalOrder, NoGoal, ProblemGoalOrder, RequestDirective,
+                    RequestGoalOrder, UnorderedGoalOrder)
 from .recorded_time import EventTime
 from .threads import Thread
 from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
@@ -464,6 +465,29 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
         )
         ctx.goals.open_goal_store().create_goal(goal.id)
         return goal
+
+
+@dataclass(frozen=True, kw_only=True)
+class DirectiveGoalAction(GoalAction[GoalDeclaration], RuntimeInvocable):
+    """A claude-ai message to a thread that holds owner requests becomes one of its requests."""
+
+    text: str
+    seq: int
+    at: float
+
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return goal.order.directed(goal, self, ctx)
+
+    def create(self, ctx: GoalActionContext) -> GoalDeclaration:
+        return ctx.thread.goal
+
+    def directive(self, served: int) -> RequestDirective:
+        return RequestDirective(self.seq, self.at + RequestDirective.window, served)
+
+    def request(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        ReplacementGoalAction.retire(goal, ctx)
+        order = RequestGoalOrder((self.directive(0),))
+        return SetGoalAction(text=self.text, order=order).change(goal, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

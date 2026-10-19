@@ -1063,6 +1063,7 @@ class CommsSendTool(ToolRequest):
         result = comms.messaging.send(
             self.sender, self.target, self.body, self.type, report=self.report
         )
+        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 
 

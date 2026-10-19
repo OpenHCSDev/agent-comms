@@ -14,6 +14,7 @@ from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .messages import Message
     from .tools import ToolRequest
 
 
@@ -43,6 +44,9 @@ class ToolCaller(ABC):
 
     @abstractmethod
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
+
+    def sent(self, comms: Comms, message: Message) -> None:
+        """What a message this caller sent records beyond the bus; ordinarily nothing."""
 
 
 @dataclass(frozen=True)

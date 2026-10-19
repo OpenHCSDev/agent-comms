@@ -794,6 +794,47 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     assert stalled() == []
 
 
+def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_serves_it(
+        commander, tmp_path, monkeypatch):
+    """claude-ai's sends through the connector are directives: one to a thread holding owner requests
+    is recorded on its open request with a deadline, or opens a new request once that one is done;
+    a thread holding no request records nothing. Past its deadline it alarms until an order serves
+    the request."""
+    from agent_comms import standing_rules
+    from agent_comms.connector import CALLER
+    from agent_comms.goal_actions import CompletedGoalAction
+    from agent_comms.goals import RequestDirective
+    from agent_comms.tools import CommsSendTool
+    comms, caller = commander
+    comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
+    def direct(target, body):
+        CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
+        return comms.bus.log.latest_sequence()
+    def unacted(after):
+        monkeypatch.setattr(standing_rules.time, 'time', lambda: after)
+        return [rule.line() for rule in standing_rules.DirectiveUnacted.violations(comms, 'lead')]
+    worker = comms.registry.require('worker').goal
+    seq = direct('lead', 'Make the slowdowns impossible by mechanism.')
+    assert direct('worker', 'A note to a unit, not a request.') and comms.registry.require('worker').goal == worker
+    goal = comms.registry.require('lead').goal
+    (directive,) = goal.order.directives
+    assert (goal.id, directive.seq, directive.served) == ('request', seq, 0)
+    assert unacted(directive.deadline - 1) == []
+    due = time.strftime('%H:%M', time.localtime(directive.deadline))
+    assert unacted(directive.deadline + 1) == [
+        f'DIRECTIVE UNACTED: claude-ai {seq} on request request, due {due}'
+        ' -> order its next step or mark the request done']
+    create(commander, 'P1')
+    assert unacted(directive.deadline + 1) == []
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
+    seq = direct('lead', 'A second directive after the first request is done.')
+    goal = comms.registry.require('lead').goal
+    assert goal.id != 'request' and goal.state.active and goal.text == 'A second directive after the first request is done.'
+    assert goal.order.directives == (RequestDirective(seq, goal.order.directives[0].deadline, 0),)
+    assert unacted(goal.order.directives[0].deadline + 1) != []
+
+
 def stray(commander, problem, generation):
     """A pending problem stored the way pre-P48 joins and refused sends left them: under a Goal id that is
     not the unit's open Goal."""
