@@ -251,7 +251,7 @@ class AgentActivity:
         """A successful later backend turn disproves only an older drain failure."""
         snapshot = self.registry.snapshot()
         thread = snapshot.require(lease.identity.incarnation.name)
-        if thread.turn_lease != lease.renamed(thread.name) or thread.backend != backend:
+        if not thread.holds_turn(lease.renamed(thread.name)) or thread.backend != backend:
             return False
         owner = snapshot.owner_identity(thread.name)
         readiness = self.activity_of(thread.name, snapshot=snapshot).readiness
@@ -265,8 +265,7 @@ class AgentActivity:
         """Return the exact owner installed by this atomic begin, including its lease."""
         with _store_lock(self._wire_lock_path):
             leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
-            lease = leased.turn_lease
-            assert lease is not None
+            lease = leased.require_turn_lease()
         try:
             self.transition_turn(lease, PreparingPhase(detail))
         except BaseException as error:
@@ -300,8 +299,7 @@ class AgentActivity:
         self, lease: TurnLeaseFence, ending: TurnEnding = FINISHED_ENDING,
     ) -> TurnCompletion:
         """End the original record before any registry-dependent cleanup or notice."""
-        for terminal in lease.record.end(lease, ending):
-            terminal.notify_failure(self.messaging, lease.identity.incarnation.name)
+        lease.record.end(lease, ending).notify(self.messaging, lease.identity.incarnation.name)
         with _store_lock(self._wire_lock_path):
             released, fence = self.registry.release_turn(lease)
             if not released:

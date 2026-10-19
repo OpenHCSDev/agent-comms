@@ -212,7 +212,7 @@ class TranscriptRoutes(RootFile):
         initial = registry.snapshot()
         incarnation = lease.identity.incarnation.resolved(initial)
         thread = RegistryOwner.capture_local(initial, incarnation.name).thread
-        if thread.turn_lease != lease.renamed(incarnation.name):
+        if not thread.holds_turn(lease.renamed(incarnation.name)):
             raise RelationViolationError("Native publication has no current original turn")
         path = Path(thread.runtime.path)
         revision = FileRevision.capture(path)
@@ -230,7 +230,7 @@ class TranscriptRoutes(RootFile):
         with log.checked_read() as source, registry.store.reading_snapshot() as snapshot:
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
-            if current.turn_lease != lease.renamed(incarnation.name):
+            if not current.holds_turn(lease.renamed(incarnation.name)):
                 raise RelationViolationError("Native publication turn lease changed")
             if current.runtime.read_key != thread.runtime.read_key or FileRevision.capture(path) != revision:
                 raise RelationViolationError("Native publication session changed")

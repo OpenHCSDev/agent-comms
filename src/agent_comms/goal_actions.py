@@ -309,29 +309,15 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         )
         # Commit scheduling authority first. A crash before the registry
         # progress update must leave this same goal waiting, not runnable.
-        reporting_lease = thread.turn_lease
         ctx.goals.waits.record(
-            RecordedGoalWait(
+            RecordedGoalWait.capture(
                 goal.id,
                 uuid4().hex,
                 goal.revision,
                 ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
-                owner=thread.incarnation.require_recorded(),
-                report_turn_id=reporting_lease.turn_id if reporting_lease is not None else None,
-                report_turn_generation=(
-                    reporting_lease.identity.generation if reporting_lease is not None else None
-                ),
-                target_turn_generations=tuple(
-                    (
-                        lease.identity.generation
-                        if (lease := snapshot.threads[
-                            snapshot.canonical_name(target.incarnation.name)
-                        ].turn_lease) is not None
-                        else None
-                    )
-                    for target in wait_targets
-                ),
+                owner=thread,
+                snapshot=snapshot,
             )
         )
 

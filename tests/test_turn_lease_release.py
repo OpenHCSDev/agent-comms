@@ -19,16 +19,16 @@ def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypa
 
     def fail_after_replacement(_activity):
         original = comms.registry.require("owner")
-        assert comms.registry.release_turn(original.turn_lease)[0]
+        assert comms.registry.release_turn(original.require_turn_lease())[0]
         successor, _ = comms.registry.lease_local_turn("owner", "same-id")
-        replacement.append(successor.turn_lease)
+        replacement.append(successor.require_turn_lease())
         raise OSError("activity publication failed")
 
     monkeypatch.setattr(comms.agents, "_emit_activity", fail_after_replacement)
     with pytest.raises(OSError, match="activity publication failed"):
         # Publication follows a real phase change, not an unchanged default phase.
         comms.agents.begin_turn("owner", "same-id", "changed preparation detail")
-    assert comms.registry.require("owner").turn_lease == replacement[0]
+    assert comms.registry.require("owner").holds_turn(replacement[0])
 
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
@@ -43,7 +43,7 @@ def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
     saved = comms.registry.store.path.read_bytes()
     assert comms.registry.release_turn(original) == (False, NoFinishedTurn())
     assert comms.registry.store.path.read_bytes() == saved
-    assert comms.registry.require("owner").turn_lease == successor
+    assert comms.registry.require("owner").holds_turn(successor)
     assert isinstance(comms.agents.finish_turn(successor), FinishedTurnFence)
 
 
@@ -67,4 +67,4 @@ def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_
         FieldCodec.decode(Thread, FieldCodec.encode(retained))
     )
     assert restored.turn_record.read() == expected
-    assert restored.turn_lease is None
+    assert not restored.has_turn_lease()

@@ -6,6 +6,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field, fields, replace
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -51,11 +52,14 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
 
+
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
 
+
 def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
+
 
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance):
@@ -75,19 +79,27 @@ class Thread(ThreadProvenance):
         default=NoThinkingOverride, metadata={"registration_inheritance": InheritThinkingLevel}
     )
     service_tier: ServiceTier = field(
-        default=ServiceTier.PRIORITY, kw_only=True,
+        default=ServiceTier.PRIORITY,
+        kw_only=True,
         metadata={"registration_inheritance": InheritPrevious},
     )
-    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": GoalDeclaration})
-    created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
-                              metadata={"wire_required": True})
+    goal: GoalDeclaration = field(
+        default_factory=NoGoal, metadata={"registration_inheritance": GoalDeclaration}
+    )
+    created_at: float = field(
+        default_factory=_thread_creation_time, kw_only=True, metadata={"wire_required": True}
+    )
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
-    storage_roots: StorageRoots = field(kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious})
+    storage_roots: StorageRoots = field(
+        kw_only=True, metadata={"registration_inheritance": InheritPrevious}
+    )
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.
-    earlier_projects: tuple[StoragePath, ...] = field(default=(), kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True})
+    earlier_projects: tuple[StoragePath, ...] = field(
+        default=(),
+        kw_only=True,
+        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
+    )
     auto_title_pending: bool = field(
         default=False, metadata={"registration_inheritance": InheritPrevious}
     )
@@ -97,15 +109,18 @@ class Thread(ThreadProvenance):
         default=False,
         metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
     )
-    title: str | None = field(default=None, kw_only=True,
-                             metadata={"registration_inheritance": InheritMissing})
+    title: str | None = field(
+        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
+    )
     role: type[ThreadRole] = field(
         default=AgentThreadRole, metadata={"registration_inheritance": InheritPrevious}
     )
-    execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
-                                            metadata={"wire_omit_default": True})
+    execution: type[ThreadExecution] = field(
+        default=NativeThreadExecution, kw_only=True, metadata={"wire_omit_default": True}
+    )
     backend: type[AgentBackend] = field(
-        default_factory=AgentBackend.for_new_threads, kw_only=True,
+        default_factory=AgentBackend.for_new_threads,
+        kw_only=True,
         metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
     )
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
@@ -124,7 +139,9 @@ class Thread(ThreadProvenance):
 
     def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
-        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
+        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(
+            self
+        )
 
     @property
     def project_path(self) -> Path:
@@ -141,17 +158,22 @@ class Thread(ThreadProvenance):
         earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
-            self, worktree=project,
-            earlier_projects=tuple(dict.fromkeys(
-                path for path in (*self.earlier_projects, earlier) if path != current
-            )),
+            self,
+            worktree=project,
+            earlier_projects=tuple(
+                dict.fromkeys(path for path in (*self.earlier_projects, earlier) if path != current)
+            ),
             project_resume_due=self.project_resume_due or self.executing,
         )
 
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
-        return self.project_resume_due and not self.executing and not self.goal.accepts_following_handoff()
+        return (
+            self.project_resume_due
+            and not self.executing
+            and not self.goal.accepts_following_handoff()
+        )
 
     @property
     def turn_state(self) -> TurnState:
@@ -220,18 +242,22 @@ class Thread(ThreadProvenance):
             raise ValueError("Thread model cannot be empty.")
 
     def require_original_model_configuration(self, original: Thread) -> None:
-        changed = any((
-            self.incarnation != original.incarnation,
-            self.worktree != original.worktree,
-            self.model != original.model,
-            self.thinking_level != original.thinking_level,
-            self.service_tier != original.service_tier,
-        ))
+        changed = any(
+            (
+                self.incarnation != original.incarnation,
+                self.worktree != original.worktree,
+                self.model != original.model,
+                self.thinking_level != original.thinking_level,
+                self.service_tier != original.service_tier,
+            )
+        )
         if changed:
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None,
+        self,
+        *,
+        model: str | None = None,
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
@@ -247,7 +273,10 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: type[ThinkingChoice],
+        self,
+        *,
+        model: str | None,
+        thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
@@ -297,7 +326,9 @@ class Thread(ThreadProvenance):
 
     def wake_context(self, goals: Goals) -> dict[str, object]:
         return {
-            "name": self.name, "title": self.title, "tags": sorted(self.tags),
+            "name": self.name,
+            "title": self.title,
+            "tags": sorted(self.tags),
             "original_assignment": self.task,
             "current_goal": self.goal.wake_context(goals, self.incarnation),
         }
@@ -314,9 +345,19 @@ class Thread(ThreadProvenance):
         Something read from the running agent under one record still describes the
         other only when this holds. Titles, tags, goals and turns do not change it.
         """
+
         def launch(thread: Thread):
-            return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
-                    thread.worktree, thread.execution, thread.model, thread.thinking_level)
+            return (
+                thread.incarnation,
+                thread.process_identity,
+                thread.role,
+                thread.runtime,
+                thread.worktree,
+                thread.execution,
+                thread.model,
+                thread.thinking_level,
+            )
+
         return launch(self) == launch(other)
 
     def without_turn(self) -> Thread:
@@ -333,17 +374,23 @@ class Thread(ThreadProvenance):
         result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
         if self.turn_generation != previous.turn_generation:
             result = replace(
-                result, turn_generation=previous.turn_generation,
+                result,
+                turn_generation=previous.turn_generation,
                 last_finished_turn_id=(
                     previous.last_finished_turn_id
-                    if self.turn_record == previous.turn_record else None
+                    if self.turn_record == previous.turn_record
+                    else None
                 ),
             )
         return result
 
     def for_claim(self, name: str) -> Thread:
         """Assign an allocated name without turning a generated clock into caller identity."""
-        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
+        created = (
+            _GeneratedCreationTime(self.created_at)
+            if self._generated_created_at
+            else self.created_at
+        )
         return replace(self, name=name, created_at=created)
 
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
@@ -365,20 +412,30 @@ class Thread(ThreadProvenance):
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
 
-    @property
-    def turn_lease(self) -> TurnLeaseFence | None:
-        """Read the record's public optional projection, without deciding its state."""
-        return self.turn_record.lease(self.incarnation, self.process_identity, self.turn_generation)
+    def turn_leases(self) -> Iterator[TurnLeaseFence]:
+        """The declaration supplies its live witnesses, after owner validation."""
+        return self.turn_record.leases(
+            self.incarnation, self.process_identity, self.turn_generation
+        )
+
+    def has_turn_lease(self) -> bool:
+        return any(self.turn_leases())
+
+    def holds_turn(self, lease: TurnLeaseFence) -> bool:
+        return any(current == lease for current in self.turn_leases())
 
     def require_turn_lease(self) -> TurnLeaseFence:
         return self.turn_record.require_lease(
-            self.incarnation, self.process_identity, self.turn_generation,
+            self.incarnation,
+            self.process_identity,
+            self.turn_generation,
         )
 
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
-        return any((lease.identity, lease.turn_id) == (identity, turn.value)
-                   for lease in self.turn_record.leases(
-                       self.incarnation, self.process_identity, self.turn_generation))
+        return any(
+            (lease.identity, lease.turn_id) == (identity, turn.value)
+            for lease in self.turn_leases()
+        )
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.
@@ -418,6 +475,7 @@ class Thread(ThreadProvenance):
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
+
 
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
