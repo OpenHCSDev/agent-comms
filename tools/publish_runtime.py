@@ -6,10 +6,11 @@ The frontend supplies a context owning its readers; it enters only after drain.
 from __future__ import annotations
 
 import argparse
-from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext, redirect_stdout
 from dataclasses import dataclass, field
 from abc import abstractmethod
 import hashlib
+import fcntl
 from io import StringIO
 from importlib.metadata import distribution
 import json
@@ -17,19 +18,20 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import Annotated
 
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
 from agent_comms.comms import wire
 from agent_comms.cli_commands import StatusCliCommand
-from agent_comms.field_codec import FieldCodec, SubclassUnion, NullMember, RecordMember
+from agent_comms.field_codec import FieldCodec, PathText, SubclassUnion, NullMember, RecordMember
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.owner_cutover import StoppedOwnerInstallation, MaintainedOwnerCutover
-from agent_comms.owner_lifecycle import OwnerRestartSelection
-from agent_comms.owner_restart import OwnerRestartRequest, StoppedOwnerBatch
+from agent_comms.owner_lifecycle import OwnerRestartSelection, OwnerRestartResult
+from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.store_files import _atomic_write_text, _store_lock
-from .cutover.carry import PreparedCarries
+from .cutover.carry import PendingConversion, PreparedCarries
 from .cutover.backup import StoreBackup
 
 
@@ -83,8 +85,8 @@ class SavedPublicationIntent(RecordMember, PublicationIntent):
 
 @dataclass(frozen=True)
 class RuntimePublication:
-    runtime: Path
-    links: dict[Path, Path]
+    runtime: Annotated[Path, PathText]
+    links: dict[Annotated[Path, PathText], Annotated[Path, PathText]]
 
     @classmethod
     def installed(cls) -> RuntimePublication:
@@ -120,6 +122,9 @@ class RuntimePublication:
         input is resubmitted. Unrelated maintenance and changed incarnations
         are refused rather than guessed.
         """
+        installed = StoppedOwnerInstallation.current_pointer().resolve(strict=True)
+        if Path(sys.executable).parent.resolve().parent != installed:
+            raise RuntimeError('Drain and stop must run with the installed source interpreter')
         carries = PreparedCarries.at(checkout, root, self.backup(root), self.published())
         self.require_cli(root)
         path = active_route_path()
@@ -186,7 +191,7 @@ class RuntimePublication:
             route = read_active_route(path)
             if route is None or route.root != root.resolve():
                 raise ValueError('Active route changed during publication')
-            yield
+            yield descriptor
         finally:
             os.close(descriptor)
 
@@ -205,13 +210,15 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
     """Existing cutover behavior owns fencing, stopped writer proof and launches."""
     maintenance_hold: MaintenanceState
     selection: tuple[OwnerRestartSelection, ...]
-    carries: PreparedCarries
+    carries: PendingConversion
     route_ownership: ExitStack = field(default_factory=ExitStack, compare=False)
+    route_descriptor: int = field(init=False)
 
     def stopped_resources(self, lifecycle):
         # Agent observation children hold shared route locks until they stop.
         # The restart owner calls this after stopping them and before its wire lock.
-        self.route_ownership.enter_context(self.selected_route(lifecycle.root))
+        descriptor = self.route_ownership.enter_context(self.selected_route(lifecycle.root))
+        object.__setattr__(self, 'route_descriptor', descriptor)
         return self.route_ownership
 
     def require_selection(self, snapshot, owners) -> None:
@@ -220,31 +227,63 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
             original = expected[thread.name]
             snapshot.require_owner_process(original.identity, original.process)
 
-    def complete(self, stopped: StoppedOwnerBatch):
-        root = stopped.lifecycle.root
+    def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
+        request = StoppedPublication(RuntimePublication(self.runtime, self.links),
+                                     stopped.handoff, self.maintenance_hold,
+                                     self.carries.checkout)
+        result = subprocess.run([
+            self.runtime / 'bin/python', '-I', '-B', '-c',
+            'import sys; sys.path.insert(0, sys.argv.pop(1)); '
+            'from tools.publish_runtime import main; main()',
+            str(request.checkout), '--complete-stopped',
+            str(stopped.wire_descriptor), str(self.route_descriptor),
+        ], input=json.dumps(FieldCodec.encode(request)), text=True, stdout=subprocess.PIPE,
+            pass_fds=(stopped.wire_descriptor, self.route_descriptor), check=True)
+        return FieldCodec.decode(tuple[OwnerRestartResult, ...], FieldCodec.parse(result.stdout))
+
+
+@dataclass(frozen=True)
+class StoppedPublication:
+    """The original stopped handoff crosses into the selected target interpreter."""
+
+    publication: RuntimePublication
+    handoff: OwnerRestartHandoff
+    maintenance_hold: MaintenanceState
+    checkout: Annotated[Path, PathText]
+
+    def complete(self, wire_descriptor: int, route_descriptor: int) -> tuple[OwnerRestartResult, ...]:
+        root = Path(self.handoff.root)
+        publication = self.publication
+        carries = PreparedCarries.at(self.checkout, root, publication.backup(root),
+                                    publication.published()).capture()
         with ExitStack() as conversion:
-            carries = self.carries.capture()
-            conversion.callback(carries.restore_if_unpublished, self.published, nullcontext)
-            # owner_restart.py:267 enters OwnerLifecycle.restart_wire(), retained
-            # in stopped.ownership until this complete() returns or launches.
+            conversion.callback(carries.restore_if_unpublished, publication.published, nullcontext)
             carries.apply(root)
+            comms = wire(root)
             output = StringIO()
-            if StatusCliCommand().run(wire(root), output):
+            if StatusCliCommand().run(comms, output):
                 raise RuntimeError('Converted bus status failed: ' + output.getvalue())
             print('Converted bus status: ' + output.getvalue().strip(), flush=True)
-            if not self.published():
-                self.publish_links()
-        stopped.lifecycle.maintenance.clear_stopped(self.maintenance_hold, stopped.wire_descriptor)
-        self.route_ownership.close()
-        return stopped.launch(LaunchRuntime(self.runtime / 'bin/python'))
+            if not publication.published():
+                publication.publish_links()
+        stopped = StoppedOwnerBatch.accept(comms.owners, wire_descriptor, self.handoff)
+        comms.owners.maintenance.clear_stopped(self.maintenance_hold, wire_descriptor)
+        fcntl.flock(route_descriptor, fcntl.LOCK_UN)
+        return stopped.launch(LaunchRuntime(publication.runtime / 'bin/python'))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--check', action='store_true')
+    actions = parser.add_mutually_exclusive_group(required=True)
+    actions.add_argument('--check', action='store_true')
+    actions.add_argument('--complete-stopped', type=int, nargs=2, metavar=('WIRE_FD', 'ROUTE_FD'))
     options = parser.parse_args()
-    if not options.check:
-        parser.error('Publish through the qualified tools/build_runtime.py --publish-runtime entrypoint')
+    if options.complete_stopped is not None:
+        request = FieldCodec.decode(StoppedPublication, FieldCodec.parse(sys.stdin.read()))
+        with redirect_stdout(sys.stderr):
+            result = request.complete(*options.complete_stopped)
+        print(json.dumps(FieldCodec.encode(result)))
+        return
     publication = RuntimePublication.installed()
     route = read_active_route()
     if route is None:
