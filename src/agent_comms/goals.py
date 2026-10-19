@@ -508,7 +508,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
     @abstractmethod
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> dict[str, object] | None: ...
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> object: ...
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
