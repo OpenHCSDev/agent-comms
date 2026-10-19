@@ -7,6 +7,7 @@ from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .activity import Activity, ActivityState, ObservedActivity
+from .pi_payloads import ProviderDiagnosticError
 if TYPE_CHECKING:
     from . import pi_events as pi
 
@@ -121,6 +122,12 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
 
+    def failed(self, error: ProviderDiagnosticError) -> TurnPhase:
+        return FailedPhase(error=error)
+
+    def phase_effects(self, agents, lease) -> None:
+        pass
+
 
 class Excursion(TurnPhase, declared_name=None):
     pauses_input_clock = True
@@ -145,6 +152,18 @@ class IdlePhase(ActivityWord, TurnPhase):
     can_cancel = False
     activity_state = ActivityState.IDLE
     label = "Ready"
+
+    def phase_effects(self, agents, lease) -> None:
+        agents.finish_turn(lease)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FailedPhase(IdlePhase):
+    error: ProviderDiagnosticError
+
+    @property
+    def activity_detail(self) -> str:
+        return self.error.message
 
 
 class CancellingPhase(TurnPhase):

@@ -490,6 +490,9 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     def refine_model_request_failure(self, failure):
         return failure
 
+    def turn_phase(self, phase):
+        return phase
+
     @property
     def description(self) -> str:
         return ""
@@ -501,6 +504,9 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     error: ProviderDiagnosticError
     details: ProviderTransportDetails
     timestamp: int | None = None
+
+    def turn_phase(self, phase):
+        return phase.failed(self.error)
 
     def refine_model_request_failure(self, failure):
         from .turn_failure import ProviderTransportFailed
