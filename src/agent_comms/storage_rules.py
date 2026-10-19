@@ -351,15 +351,16 @@ class ShellSource(shlex.shlex):
 
     def document_marker(self) -> str:
         """Non-POSIX shlex retains quotes but splits adjacent quoted word parts."""
-        marker = self.get_token()
+        parts = []
         source = self.source_stream.getvalue()
-        cursor = self.source_stream.tell()
-        while (cursor and source[cursor - 1] in self.quotes
-               and source[cursor:cursor + 1]
-               and source[cursor] not in self.whitespace + self.newline):
-            marker += self.get_token()
+        while marker := self.get_token():
+            parts.append(marker)
             cursor = self.source_stream.tell()
-        return marker
+            if source[cursor - 1] not in self.quotes:
+                break
+            if not source[cursor:cursor + 1] or source[cursor] in self.whitespace + self.newline:
+                break
+        return ''.join(parts)
 
     @classmethod
     def without_bodies(cls, command: str) -> str:
