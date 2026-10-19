@@ -147,7 +147,8 @@ async def journey(app, pilot, output: Path, units: tuple[str, ...], momentum: bo
             await pilot.pause(0.2)
     await pilot.pause(1)
     assert units[0] in str(card.title)
-    assert screen.rows[next(unit for unit in screen.rows if unit.name == units[1])].collapsed
+    if len(units) > 1:
+        assert screen.rows[next(unit for unit in screen.rows if unit.name == units[1])].collapsed
     capture("level-1")
 
     def deliver():
@@ -182,7 +183,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prepare", action="store_true")
-    parser.add_argument("--units", nargs=2, default=UNITS)
+    parser.add_argument("--units", nargs="+", default=UNITS)
     parser.add_argument("--ordered-at", type=float)
     parser.add_argument("--momentum", action="store_true")
     args = parser.parse_args()
