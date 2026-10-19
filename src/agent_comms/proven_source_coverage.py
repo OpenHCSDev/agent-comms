@@ -240,7 +240,7 @@ class SourceCoverage:
                     raise IdentityConflict("current source claim_scope root changed")
                 floor = marker.claimed_after_seq
                 witness = source.witness
-                if covered_seq and not floor <= covered_seq <= witness.latest_source_seq:
+                if covered_seq and not floor <= covered_seq <= witness.through_seq:
                     raise IdentityConflict("current source coverage regressed or exceeds the bus")
             if through_seq is not None and 0 < through_seq <= floor:
                 raise IdentityConflict("current source proof precedes this activation")

@@ -266,7 +266,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
     ).run()
     assert result is not None and result.cursor_status == "proven"
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
-    original = SourceCoverage.prefix
+    original = SourceCoverage.since
 
     def advance_generation(*args, **kwargs):
         coverage = original(*args, **kwargs)
@@ -275,7 +275,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
         args[0].store.participants.advance_generation(lookup, "alpha", expected_generation=1)
         return coverage
 
-    monkeypatch.setattr(SourceCoverage, "prefix", advance_generation)
+    monkeypatch.setattr(SourceCoverage, "since", advance_generation)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(StaleFence, match="participant generation changed"):
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
@@ -286,7 +286,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
             f"SELECT owner_generation,input_id FROM {CurrentNativeCursor.declared_name}"
         ).fetchall()
         assert [tuple(row) for row in retained] == [(1, result.input_id)]
-    monkeypatch.setattr(SourceCoverage, "prefix", original)
+    monkeypatch.setattr(SourceCoverage, "since", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         assert (
             NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
@@ -301,7 +301,7 @@ async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, m
     root, root_id, comms, _first, _people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    original = SourceCoverage.prefix
+    original = SourceCoverage.since
 
     def replace_source(*args, **kwargs):
         result = original(*args, **kwargs)
@@ -311,7 +311,7 @@ async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, m
         os.replace(replacement, comms.bus.log.path)
         return result
 
-    monkeypatch.setattr(SourceCoverage, "prefix", replace_source)
+    monkeypatch.setattr(SourceCoverage, "since", replace_source)
     result = await runtime.SelectedExecution(
         root=root,
         wire_root_id=root_id,
