@@ -27,7 +27,7 @@ from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
-from ..comms import Comms
+from ..external_transcript import ExternalTranscript
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
@@ -46,11 +46,12 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
-from .config import CommanderConfig, Repo
+from .config import Commander, CommanderConfig, CommanderRole, Repo
 
 CONFIG = CommanderConfig.installed()
-ME = CONFIG.commander
-COMMS = Comms(CONFIG.root)  # the bus whose Todo store owns problems, orders, deadlines and strikes
+COMMANDER = Commander.of(CONFIG)
+ME = COMMANDER.name
+COMMS = COMMANDER.comms
 RTS = str(CONFIG.state)
 BOARD = str(CONFIG.board)
 NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain words
@@ -95,9 +96,7 @@ def held_by(unit: str) -> tuple[Todo, ...]:
 
 
 def units() -> frozenset[str]:
-    """The threads this commander gives orders to; the owner, claude-ai and peer commanders
-    are not among them."""
-    return COMMS.goals.todos.units(COMMS.registry.require(ME).incarnation)
+    return COMMANDER.units()
 
 
 def progress() -> dict[str, OrderProgress]:
@@ -389,9 +388,7 @@ def close(pid, works, artifact=''):
 
 
 def last_activity(unit):
-    lines = open(ACTIVITY).read().splitlines()[-6000:]
-    stamps = [l[:8] for l in lines if l[9:].startswith(unit + ' ')]
-    return stamps[-1] if stamps else None
+    return ExternalTranscript(COMMS.root, COMMS.registry.require(unit).incarnation).last_tool_call()
 
 
 def board():
@@ -402,13 +399,14 @@ def board():
              '| Owner last acted |',
              '|---|---|---|---|---|---|---|---|']
     listed, read = todos(), progress()
+    activity = {unit: last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
         unit, last = t.holder, t.released[-1:]
         owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
         lines.append(f'| {t.id}: {t.text} | {t.order.owner.to_wire()} | {owner} | {t.order.id} | '
                      f'{hhmm(t.deadline)} | {read[t.id].line if t.id in read else "-"} | '
                      f'{"no" if t.pending else "yes, install pending"} | '
-                     f'{unit and last_activity(unit) or "-"} |')
+                     f'{activity[unit].clock() if unit else "-"} |')
     history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
     lines += ['', '## Withdrawn orders', '',
               *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
@@ -514,20 +512,13 @@ def done(pid, sha, screenshot='', seen='', repo=''):
     print(f'{unit}: order {todo.order.id} met as {sha}')
 
 
-ACTIVITY = f'{RTS}/activity.log'
-
-
-def first_calls():
-    """Each order starts a first-tool-call clock: 2 minutes, separate from its commit deadline. Core records each mark."""
-    lines = open(ACTIVITY).read().splitlines()[-4000:]
-    watched = {line[9:].split(' ', 1)[0] for line in lines}
+def first_calls(held, activity):
     missing = []
-    for todo in held_orders():
+    for todo in held:
         unit, order = todo.assignment.owner, todo.order
-        if not todo.pending or unit not in watched:
-            continue  # tool_watch cannot see this unit's harness; its clock is the commit deadline
-        since = time.strftime('%H:%M:%S', time.localtime(order.at.at))
-        acted = any(line[9:].startswith(unit + ' ') and line[:8] >= since for line in lines)
+        if not todo.pending:
+            continue
+        acted = activity[unit].since(order.at.recorded_at("An order"))
         if not acted and time.time() < order.first_call_deadline.at:
             continue
         event = ObservedFirstCallEvent if acted else NotifiedFirstCallEvent
@@ -622,12 +613,13 @@ def overdue():
     installs: list[str] = []
     while True:
         now = time.time()
-        if missing := first_calls():
+        held = held_orders()
+        activity = {unit: last_activity(unit) for unit in {t.assignment.owner for t in held}}
+        if missing := first_calls(held, activity):
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
-        held = held_orders()
-        stale = [f'{t.id} {t.assignment.owner} (last {seen})' for t in held
-                 if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
+        stale = [f'{t.id} {t.assignment.owner} (last {activity[t.assignment.owner].clock()})' for t in held
+                 if activity[t.assignment.owner].before(now - 1200)]
         if stale:
             print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
         pending = [t for t in held if t.pending]
@@ -651,7 +643,7 @@ def overdue():
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
     fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
 
@@ -664,6 +656,7 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         self.run()
 
     def gate(self) -> None:
+        self.require_commander(COMMS.registry.require(self.who))
         if self.fork:
             capacity.beat(self.fork)
 
@@ -699,7 +692,7 @@ class RuledVerb(CommanderVerb):
     def gate(self) -> None:
         super().gate()
         for due in RulesDue.violations(COMMS, self.who):
-            flag = '' if self.who == ME else f' --as {self.who}'
+            flag = '' if self.who == ME else f' --fork {self.who}'
             sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
                      f' rules review{flag}, then answer each drawn rule{flag}.')
 
@@ -769,9 +762,9 @@ class LoadedVerb(RuledVerb):
     """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
 
     def gate(self) -> None:
+        super().gate()
         if not self.fork:
             capacity.Load.of(COMMS, ME).require()
-        super().gate()
 
 
 class OrderVerb(CommanderVerb):

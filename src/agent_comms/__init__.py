@@ -3,4 +3,8 @@
 __version__ = "0.1.0"
 
 # Every public entrypoint, including standalone stores, validates the full family.
-from . import comms, store_order
+from . import store_order
+from .child_process import ChildLaunch
+from .runtime_children import RuntimeChildrenStore
+
+ChildLaunch.children_store = RuntimeChildrenStore

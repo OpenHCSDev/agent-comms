@@ -66,17 +66,23 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
 
     @classmethod
-    def tracked(cls, session, message):
-        session.output.record_failure(cls.declared_failure(message))
-
-    @classmethod
     def require_failed_terminal(cls):
         # A saved tool round cannot establish whether the live owner accepted it.
         if cls.successful or cls.tool_round:
             raise ValueError("Saved assistant message did not end its turn as a failure")
 
 
-class PendingStopReason(PiStopReason):
+class UnfinishedPiStop:
+    """A message that ended without a terminal its session can take as the answer."""
+
+    @classmethod
+    async def apply(cls, session, message):
+        session.accept_unfinished_message(cls.declared_failure(message))
+        async for event in super().apply(session, message):
+            yield event
+
+
+class PendingStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
@@ -94,8 +100,10 @@ class StopStopReason(FinishedPiStop, PiStopReason):
     successful = True
 
     @classmethod
-    def tracked(cls, session, message):
+    async def apply(cls, session, message):
         session.accept_final_message(message)
+        async for event in super().apply(session, message):
+            yield event
 
 
 class FailedPiStop(FinishedPiStop):
@@ -128,11 +136,6 @@ class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
         async for event in super().apply(session, message):
             yield event
 
-    @classmethod
-    def tracked(cls, session, message):
-        if not session.accept_tool_round(message):
-            return super().tracked(session, message)
-
 
 class ErrorStopReason(FailedPiStop, PiStopReason):
     @classmethod
@@ -161,11 +164,11 @@ class AbortedStopReason(ErrorStopReason):
     explicit_abort = True
 
 
-class DeferredStopReason(PiStopReason):
+class DeferredStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
-class UnreportedStopReason(PiStopReason):
+class UnreportedStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 

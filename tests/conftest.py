@@ -192,7 +192,7 @@ def delayed_launch(monkeypatch: pytest.MonkeyPatch):
 
     from agent_comms.child_process import Platform
 
-    with Platform.current().launch((sys.executable, "-c", "pass"), ()) as launch:
+    with Platform.current().launch((sys.executable, "-c", "pass"), (), LaunchRuntime.running()) as launch:
         launch_type = type(launch)
     original_verify = launch_type.verify_async
     original_release = launch_type.release

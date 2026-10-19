@@ -287,6 +287,7 @@ def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
     return ParentedProcess.launch(
         (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
         env=target.runtime.encode(),
+        runtime=target.launch_runtime,
     )
 
 
