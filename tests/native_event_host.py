@@ -37,8 +37,8 @@ def install_event_host(
             S1_PYTHON=sys.executable,
         )
         if native_settings is not None:
-            # Exercise Pi's own excursions explicitly; managed owners disable
-            # automatic retry/compaction and remain covered by CLI acceptance.
+            # Exercise SDK excursions with their explicit SettingsManager;
+            # tracked CLI recovery remains covered by CLI acceptance.
             env["PI_CODING_AGENT_DIR"] = env.pop("AGENT_COMMS_NATIVE_CONFIG_DIR")
             env["S1_NATIVE_SETTINGS"] = json.dumps(native_settings)
         if delay_settlement is not None:
