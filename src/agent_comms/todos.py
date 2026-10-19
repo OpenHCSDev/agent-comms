@@ -508,7 +508,7 @@ class ProgressSource:
 
     @property
     def since(self) -> float:
-        return self.todo.order.at.recorded_at("An order")
+        return self.todo.order.ordered_at
 
     def progress(self) -> OrderProgress:
         """One selection algorithm for measured tools and read-only status views."""
@@ -1241,6 +1241,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
+    @property
+    def ordered_at(self) -> float:
+        raise ValueError("This problem has no checked order time.")
+
     def instructions(self, todo: Todo) -> str:
         return "\n".join((f"Problem: {todo.id}: {todo.text}",
                           *self.finding.instructions(), self.line))
@@ -1317,6 +1321,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     deletes: OrderDeletion = field(
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
+
+    @property
+    def ordered_at(self) -> float:
+        return self.at.recorded_at("An order")
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -1427,7 +1435,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 class PendingProblemOrder(CheckedProblemOrder):
     def reissued(self, at: float) -> PendingProblemOrder:
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
-                  - self.at.recorded_at("An order"))
+                  - self.ordered_at)
         return replace(self, id=uuid4().hex[:12], at=RecordedEventTime(at),
                        first_call_deadline=RecordedEventTime(at + window),
                        first_call=AwaitingFirstCall())
@@ -2177,7 +2185,7 @@ class Todo(TypedTable):
     def struck_on_order(self, unit: str) -> bool:
         """A live strike on ``unit`` recorded since the current order was sent; a send-back that
         replaces this order is that same miss, so it counts no second strike."""
-        sent = self.order.at.recorded_at("An order")
+        sent = self.order.ordered_at
         return any(recorded.at.recorded_at("A strike") >= sent
                    for recorded in self.live_strikes(unit))
 
@@ -2343,7 +2351,7 @@ class TodoStore(TypedStore):
     def drop(self, commander: ThreadIncarnation, unit: str, message: str, by: str) -> Todo:
         old = self.resolve_order(commander, unit, message)
         newer = self.resolve_order(commander, unit, by)
-        if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
+        if not old.pending or not newer.pending or newer.order.ordered_at <= old.order.ordered_at:
             raise ValueError('Only a live newer order to the same unit replaces an old one.')
         with self.writing() as db:
             current = self._current(db, old.id)

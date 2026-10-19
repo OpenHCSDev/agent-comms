@@ -755,7 +755,7 @@ class CommsUnjudgedTool(ThreadReadTool):
                 raise ToolRefusedError(
                     f"Order {todo.id} holder incarnation no longer exists"
                 )
-            yield read_type(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")), todo)
+            yield read_type(comms.root, holder, TurnsSince(todo.order.ordered_at), todo)
 
     @classmethod
     def count(cls, comms: Comms, commander: str) -> int:
@@ -955,7 +955,7 @@ class CommsOrderWorkTool(ReadTool, ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
         todo = comms.goals.todos.get(self.problem)
-        since = todo.order.at.recorded_at("An order")
+        since = todo.order.ordered_at
         turns = comms.transcripts.turns(todo.held().owner, TurnsSince(since))
         return OrderWork.read(self.problem, turns.thread, since, turns.turns)
 

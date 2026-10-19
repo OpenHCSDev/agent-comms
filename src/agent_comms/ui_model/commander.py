@@ -156,8 +156,7 @@ class StalledOrderAlarmSource(CommanderAlarmSource):
                 f"STALLED {order.todo.held().owner} {order.todo.id}: {order.progress.state}"
             )
             for order in orders
-            if order.todo.pending
-            and order.progress.stalled(order.todo.order.at.recorded_at("An order"), now)
+            if order.todo.pending and order.progress.stalled(order.todo.order.ordered_at, now)
         )
 
 

@@ -519,7 +519,7 @@ def first_calls(held, activity):
         unit, order = todo.assignment.owner, todo.order
         if not todo.pending:
             continue
-        acted = activity[unit].since(order.at.recorded_at("An order"))
+        acted = activity[unit].since(order.ordered_at)
         if not acted and time.time() < order.first_call_deadline.at:
             continue
         event = ObservedFirstCallEvent if acted else NotifiedFirstCallEvent
@@ -590,7 +590,7 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
     now = time.time()
     late, stalled = [], []
     for t in pending:
-        ordered, work = t.order.at.recorded_at('An order'), read[t.id]
+        ordered, work = t.order.ordered_at, read[t.id]
         if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
         if not t.overdue(now):

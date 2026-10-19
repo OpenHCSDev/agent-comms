@@ -113,8 +113,9 @@ def prepare(output: Path, units: tuple[str, ...], ordered_at: float) -> None:
     (output / "sources.txt").write_text("\n".join(source_notes) + "\n")
 
 
-async def journey(app: ToadApp, pilot: Pilot, output: Path,
-                  units: tuple[str, ...], momentum: bool) -> None:
+async def journey(
+    app: ToadApp, pilot: Pilot, output: Path, units: tuple[str, ...], momentum: bool
+) -> None:
     await pilot.pause(2)
     # Open a real bus conversation and submit through its actual local-command boundary.
     await app.selected_session.open_sidebar_target(FeedTarget())

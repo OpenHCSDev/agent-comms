@@ -211,7 +211,7 @@ class ExternalEventRow(TypedTable):
         tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
         judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
         placeholders = lambda values: ",".join("?" for _ in values)
-        since = todo.order.at.recorded_at("An order")
+        since = todo.order.ordered_at
         # SQL NULL is the original undated fact, decoded through FieldCodec
         # as UnrecordedEventTime when a row is read. No time is substituted.
         table = cls.declared_name
@@ -382,7 +382,7 @@ class StoreRead(TranscriptSource):
             for encoded, in rows:
                 event = FieldCodec.decode(TranscriptEvent, FieldCodec.parse(encoded))
                 yield from event.edit_calls(todo.held().owner, todo.id,
-                                            todo.order.at.recorded_at("An order"))
+                                            todo.order.ordered_at)
 
     def unjudged_count(self, todo) -> int:
         where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)

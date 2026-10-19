@@ -119,7 +119,7 @@ class OrderRead[Result](TranscriptRead[Result]):
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         judged = {verdict.tool_call_id for verdict in self.todo.verdicts}
-        since = self.todo.order.at.recorded_at("An order")
+        since = self.todo.order.ordered_at
         edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, self.todo.id, since)
