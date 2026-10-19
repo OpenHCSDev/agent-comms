@@ -212,12 +212,12 @@ class ClaudeSession:
     def started(self, call: ToolCall) -> None:
         self.tools[call.id] = call
 
-    def tool_result(self, tool_id: str, text: str, ok: bool) -> tuple[TranscriptUpdate, ...]:
+    def tool_result(self, tool_id: str, text: str, ok: bool, position: int) -> tuple[TranscriptUpdate, ...]:
         try:
             call = self.tools.pop(tool_id)
         except KeyError:
             return self.phase.missing_tool(tool_id)
-        return (*self.finished(tool_id, call.finished(text, ok)),
+        return (*self.finished(tool_id, call.finished(text, ok, position)),
                 *self.turn.active(tool_id, self.phase, ActivityState.WORKING, ''))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[TranscriptUpdate, ...]:
@@ -225,6 +225,7 @@ class ClaudeSession:
 
 
 class TimedRecord(WireModel):
+    position: int = Field(exclude=True)
     uuid: str
     timestamp: float
 
@@ -296,7 +297,7 @@ class AssistantText(AssistantBlock, TextContent):
     wire_tag = 'text'
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=-1),))
+        return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
 
 
 class RedactedThinking(AssistantBlock):
@@ -315,7 +316,7 @@ class ThinkingBlock(RedactedThinking):
         if not self.thinking:
             return activity
         return (*activity, *session.finished(
-            record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp, position=-1),)))
+            record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)))
 
 
 class ToolUse(AssistantBlock):
@@ -413,7 +414,7 @@ class AgentPrompt(Prompting):
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=-1),)),)
+        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
 
 
 class HumanPrompt(Prompting):
@@ -422,7 +423,7 @@ class HumanPrompt(Prompting):
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return (TurnStarted(), *session.finished(
-            record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=-1),)))
+            record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
 
 
 class TaskNotification(PromptOrigin):
@@ -450,7 +451,7 @@ class ToolSupplied(Prompting):
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=-1),)))
+        return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
 
 
 class UserBlock(TaggedWire, ABC):
@@ -553,7 +554,7 @@ class ToolResult(UserBlock, ContentBlocks):
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error)
+        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record.position)
 
 
 class UserMessage(ContentBlocks):
@@ -626,7 +627,7 @@ class CompactBoundary(SystemEvent, TimedRecord):
     wire_tag = 'compact_boundary'
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp, position=-1),))
+        return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp, position=self.position),))
 
     def begins_history(self) -> bool:
         return True

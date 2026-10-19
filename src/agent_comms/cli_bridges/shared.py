@@ -176,10 +176,10 @@ class ToolCall:
     def title(self) -> str:
         return ToolDeclaration.caption(self.name, self.tool)
 
-    def finished(self, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return (ToolStartTranscript(position=-2, tool_call_id=self.id, tool_name=self.name,
+    def finished(self, text: str, ok: bool, position: int | str) -> tuple[TranscriptEvent, ...]:
+        return (ToolStartTranscript(position=position, tool_call_id=self.id, tool_name=self.name,
                                     raw_input=self.arguments, tool=self.tool),
-                ToolEndTranscript(position=-1, tool_call_id=self.id, tool_name=self.name,
+                ToolEndTranscript(position=position, tool_call_id=self.id, tool_name=self.name,
                                   text=text, ok=ok, diff=self.diff))
 
 
@@ -274,11 +274,12 @@ NO_PREFIX = NoPrefixDraft()
 class TextDraft(DraftAccumulator):
     event_type: type[TextTranscript]
     sections: dict[int, list[str]]
+    position: int | str
     separator: ClassVar[str] = ''
 
     @classmethod
-    def from_parts(cls, event_type: type[TextTranscript], parts: Iterable[str], started_at: EventTime) -> Self:
-        return cls(started_at, event_type, {index: [text] for index, text in enumerate(parts)})
+    def from_parts(cls, event_type: type[TextTranscript], parts: Iterable[str], started_at: EventTime, position: int | str) -> Self:
+        return cls(started_at, event_type, {index: [text] for index, text in enumerate(parts)}, position)
 
     def append(self, text: str, section: int) -> None:
         self.sections.setdefault(section, []).append(text)
@@ -287,7 +288,7 @@ class TextDraft(DraftAccumulator):
     def events(self) -> tuple[TranscriptEvent, ...]:
         text = self.separator.join(text for index in sorted(self.sections)
                                    if (text := ''.join(self.sections[index])))
-        return (self.started_at.stamp(self.event_type(text)),) if text else ()
+        return (self.started_at.stamp(self.event_type(text, position=self.position)),) if text else ()
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
         return (DraftItem(turn_id, item_id, self),)

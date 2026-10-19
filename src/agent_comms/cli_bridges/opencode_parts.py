@@ -130,7 +130,7 @@ class TextualPart(Part, ABC):
 
     def accumulator(self, message: MessageInfo) -> TextDraft:
         started_at = RecordedEventTime((self.time.start if self.time is not None else message.time.created) / 1000)
-        return TextDraft.from_parts(self.event_type, (self.text,), started_at)
+        return TextDraft.from_parts(self.event_type, (self.text,), started_at, self.id)
 
     def finished(self, message: MessageInfo) -> bool:
         return super().finished(message) or (self.time is not None and self.time.end is not None)
@@ -152,7 +152,7 @@ class TextPart(TextualPart):
         return self.sessionID == session and self.text == text
 
     def prompted(self) -> tuple[TranscriptUpdate, ...]:
-        return (HiddenItem((UserTranscript(self.text, position=-1),)),)
+        return (HiddenItem((UserTranscript(self.text, position=self.id),)),)
 
     def summarized(self) -> tuple[TranscriptUpdate, ...]:
         return (Summarized(self.text),)
@@ -214,7 +214,7 @@ class EndedTool(ToolState, ABC):
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
         event_time = RecordedEventTime(self.time.start / 1000)
-        events = tuple(event_time.stamp(event) for event in self.call(part).finished(self.result, self.ok))
+        events = tuple(event_time.stamp(event) for event in self.call(part).finished(self.result, self.ok, part.id))
         return (CompletedItem(message.id, part.id, events),)
 
 
@@ -264,7 +264,7 @@ class FilePart(StructuralPart):
 
     def prompted(self) -> tuple[TranscriptUpdate, ...]:
         return (HistoryNotice('Attachment contents are not imported; source references are retained.'),
-                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]', position=-1),)))
+                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]', position=self.id),)))
 
 
 class AgentPart(StructuralPart):

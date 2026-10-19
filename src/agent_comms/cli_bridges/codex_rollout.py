@@ -48,7 +48,7 @@ class RolloutItem(OpenWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = RolloutItemHeader
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
         return ()
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
@@ -80,8 +80,8 @@ class MessageItem(RolloutItem, ABC):
 class UserMessageItem(MessageItem):
     wire_tag = 'message/user'
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
-        return (FinishedItem('', self.id, (UserTranscript(self.text, position=-1),)),)
+    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+        return (FinishedItem('', self.id, (UserTranscript(self.text, position=position),)),)
 
     def request(self) -> str:
         return self.text
@@ -90,8 +90,8 @@ class UserMessageItem(MessageItem):
 class AssistantMessageItem(MessageItem):
     wire_tag = 'message/assistant'
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
-        return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=-1),)),)
+    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+        return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=position),)),)
 
 
 class InstructionMessage(MessageItem, ABC):
@@ -124,10 +124,10 @@ class FunctionCallItem(RolloutItem):
             decoded = None
         return decoded if isinstance(decoded, dict) else {'input': self.arguments}
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
         state.tools[self.call_id] = self.name
         return (FinishedItem('', self.call_id, (ToolStartTranscript(
-            position=-1, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
+            position=position, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
             tool=ToolDeclaration.record(self.name, self.raw_input)),)),)
 
 
@@ -142,10 +142,10 @@ class FunctionCallOutputItem(RolloutItem):
     call_id: str = ''
     output: JsonValue = ''
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
         text = self.output if isinstance(self.output, str) else json.dumps(self.output, ensure_ascii=False)
         return (FinishedItem('', self.call_id + ':result', (ToolEndTranscript(
-            position=-1, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
+            position=position, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
 
 
 class CustomToolCallOutputItem(FunctionCallOutputItem):
@@ -164,8 +164,8 @@ class RolloutRecord(OpenWire, ABC):
     def own_updates(self) -> tuple[TranscriptUpdate, ...]:
         return ()
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
-        return (*self.own_updates(), *(update for item in self.entries() for update in item.updates(state)))
+    def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
+        return (*self.own_updates(), *(update for item in self.entries() for update in item.updates(state, position)))
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
         return tuple(instruction for item in self.entries() for instruction in item.instructions())
@@ -272,17 +272,17 @@ class CodexRollout(JsonLinesFile, CodexHistory, OfflineHistory):
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
         """The first record names the session; the selected history may start long after it."""
-        for _, raw in self.complete_lines(stream, 0, boundary):
-            record = self.decode_line(raw)
+        for offset, raw in self.complete_lines(stream, 0, boundary):
+            record = self.decode_line(raw, offset)
             if self.session_id not in (None, record.session.id):
                 raise ValueError('The rollout belongs to a different Codex session.')
-            yield from record.updates(self.start_state())
+            yield from record.updates(self.start_state(), offset)
             return
         raise ValueError('A Codex rollout starts with its session metadata.')
 
     def record_updates(self, record: RolloutRecord, state: RolloutState, offset: int,
                        raw: bytes) -> Iterator[TranscriptUpdate]:
-        yield from record.updates(state)
+        yield from record.updates(state, offset)
         digest = hashlib.sha256(raw).hexdigest()
         for index, _ in enumerate(record.instructions()):
             yield HistoricalInstruction(CodexRolloutProvenance(

@@ -71,7 +71,7 @@ class ImportedReply(ImportedMessage):
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
-    position: int
+    position: int | str
     routing = None
     source = None
     timestamp = None
@@ -251,6 +251,20 @@ class NoticeTranscript(AgentTextTranscript):
     def as_context(self) -> NoticeTranscript:
         # Native failures remain visible notices, including bounded triage.
         return self
+
+
+@dataclass(frozen=True)
+class ForkOriginTranscript(NoticeTranscript):
+    """The declared first row before a fork's recorded history."""
+
+    position: ClassVar[int] = -2
+
+
+@dataclass(frozen=True)
+class ForkTaskTranscript(UserTranscript):
+    """The declared task row following a fork's origin."""
+
+    position: ClassVar[int] = -1
 
 
 class SentTranscript(OutgoingRoute, WireTextTranscript):

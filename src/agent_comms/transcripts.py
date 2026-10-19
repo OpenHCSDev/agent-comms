@@ -31,7 +31,7 @@ from .routing import TurnRouting
 from .threads import Thread
 from .turn_lease import TurnLeaseFence
 from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
-from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
+from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_sources import (
     AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
@@ -563,8 +563,8 @@ class Transcripts:
         if not thread.parent:
             return ()
         return (
-            NoticeTranscript(f"Forked from @{thread.parent}. This thread started with:", position=-2),
-            *((UserTranscript(thread.task, position=-1),) if thread.task else ()),
+            ForkOriginTranscript(f"Forked from @{thread.parent}. This thread started with:"),
+            *((ForkTaskTranscript(thread.task),) if thread.task else ()),
         )
 
     def thread_transcript_page(
