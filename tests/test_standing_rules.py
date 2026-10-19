@@ -3,7 +3,9 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -21,7 +23,7 @@ from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, MergedProgress, NoCommitProgress, OpenPrProgress,
-    OrderProgress, PullRequest, PullRequests, RecordHuntTodo, Todo, UnreadProgress)
+    OrderProgress, PullRequest, PullRequests, RecordHuntTodo, StrikeReason, Todo, UnreadProgress)
 from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
@@ -123,14 +125,94 @@ def test_bridge_down_while_the_commander_endpoint_receives_nothing(commander, tm
         assert lines(comms, BridgeDown, "watching") == []
 
 
-def test_idle_units_lists_active_units_without_an_order(commander, standing):
+def working(comms, name, created):
+    """A unit whose native session records a turn now."""
+    from datetime import UTC, datetime
+    stamp = datetime.now(UTC).isoformat()
+    path = comms.root / f"{name}-session.jsonl"
+    rows = [dict(type="session", id=f"{name}-session", version=3, timestamp=stamp),
+            dict(type="message", id=f"{name}-input", timestamp=stamp,
+                 message=dict(role="user", content="Repair the owner",
+                              timestamp=time.time() * 1000))]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    path.chmod(0o600)
+    if name in comms.registry.all_threads():
+        comms.registry.register(replace(comms.registry.require(name), session_file=str(path)))
+    else:
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(comms.root), session_file=str(path), created_at=created))
+
+
+def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
+        commander, standing, tmp_path, monkeypatch):
+    from agent_comms.storage_rules import StorageRule
+    from agent_comms.todos import MovingTrend, OrderProgress, PullRequests
+    from agent_comms.tool_caller import ThreadCaller
     comms, state, module = standing
-    native_judge_edits(commander, module.judge, [dict(id='recent', at=time.time(), path='a.py',
-        hunks=[dict(old='before', new='after')])])
-    assert lines(comms, module.IdleUnits) == [
-        "IDLE UNITS with no order: worker -> give each the top unowned row now"]
-    create(commander, "P1")
-    assert lines(comms, module.IdleUnits) == []
+    storage = StorageRule(checkout_base=tmp_path / "wt")
+    monkeypatch.setattr(comms.registry, "storage_rule", storage)
+    origin, unit = tmp_path / "origin.git", storage.order_checkout("worker", "P1")
+    unit.mkdir(parents=True)
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(unit), "-c", "user.name=t", "-c", "user.email=t@t",
+                               *args],
+                              check=True, capture_output=True, text=True).stdout
+
+    def commit(left):
+        (unit / "left").write_text(f"{left}\n")
+        (unit / "work").write_text(f"{time.time()}\n")
+        git("add", "-A")
+        git("commit", "-q", "-m", f"{left} left")
+
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    git("init", "-q", "-b", "main")
+    git("remote", "add", "origin", str(origin))
+    commit(3)
+    git("push", "-q", "origin", "main")
+    git("fetch", "-q", "origin")
+    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    git("switch", "-q", "-c", "fix/p1")
+    runs = tmp_path / "runs"
+    check = f"echo run >> {runs}; cat left"
+    todo = create(commander, "P1", command=check, expected=0, deadline=time.time() + 3600)
+
+    def progress():
+        return OrderProgress.read(comms.goals.todos.get("P1"), storage, PullRequests())
+
+    commit(2)
+    assert "; distance 2, projected done " in progress().line
+    assert isinstance(progress().distance_readings().trend, MovingTrend)
+    commit(2)
+    assert progress().line.endswith("; distance 2, not falling")
+    assert runs.read_text().count("run") == 3  # once per commit: base, then each branch commit
+
+    reader = ("import sys; from agent_comms.goals import CountCheckResult, OrderCheck; "
+              "check = OrderCheck(sys.argv[1], sys.argv[2], CountCheckResult(0)); "
+              "print(check.at(sys.argv[3], sys.argv[1]).stdout.decode(), end='')")
+    second = subprocess.run([sys.executable, "-c", reader, str(unit), check,
+                             git("rev-parse", "HEAD").strip()],
+                            check=True, capture_output=True, text=True)
+    assert second.stdout == "2\n" and runs.read_text().count("run") == 3
+    working(comms, "worker", 2.0)
+    working(comms, "spare", 9.0)
+
+    read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
+    assert ("WHEEL SPIN: worker kept working on P1 while its distance to done did not fall across"
+            " two readings -> Core strikes it and gives the order to an idle unit") in read.broken
+    moved = comms.goals.todos.get("P1")
+    assert [strike.previous.owner for strike in moved.live_strikes()] == ["worker"]
+    assert moved.holder == "spare" and moved.deadline == todo.deadline
+    assert moved.order.id != todo.order.id and moved.order.check == todo.order.check
+
+    create(commander, "P2", owner="worker", deadline=time.time() + 3600)
+    taken = StrikeReason("The unit was taken off P2 so the test leaves it unowned.")
+    comms.goals.fire("worker", taken, "lead")
+    assert comms.goals.todos.get("P2").holder is None
+    read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
+    assert ("WHEEL SPIN: worker holds no order while P2 is unowned -> Core gives it to worker"
+            in read.broken)
+    assert comms.goals.todos.get("P2").holder == "worker"
 
 
 def test_fork_now_and_unjudged_follow_the_unjudged_edits(commander, standing):
