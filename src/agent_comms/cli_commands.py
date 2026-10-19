@@ -607,10 +607,7 @@ class AcknowledgedResult(CliResult):
 
 @dataclass(frozen=True)
 class WhoResult(CliResult):
-    who: tuple[ThreadView, ...]
-
-    def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+    who: tuple[Annotated[ThreadView, WireForm], ...]
 
 
 @dataclass(frozen=True)
@@ -633,10 +630,7 @@ class ChannelsResult(CliResult):
 
 @dataclass(frozen=True)
 class ThreadsResult(CliResult):
-    threads: tuple[ThreadRecord, ...]
-
-    def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+    threads: tuple[Annotated[ThreadRecord, WireForm], ...]
 
 
 @dataclass(frozen=True)
