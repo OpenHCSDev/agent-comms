@@ -1535,6 +1535,10 @@ class Assignment:
     previous_owners: tuple[ThreadIncarnation, ...] = field(
         default=(), metadata={"wire_omit_default": True})
 
+    @classmethod
+    def of(cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: str) -> Assignment:
+        return cls(owner.name, owner.wire_birth, parent.name, parent.wire_birth, generation)
+
     def __post_init__(self) -> None:
         _text(self.owner, "Thread name", 128)
         _text(self.parent, "Thread name", 128)
@@ -1663,8 +1667,8 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
 class AssignTodo(TodoOperation):
     proposed: Assignment
     deadline: EventTime
-    order: PendingProblemOrder
-    goal: GoalRef
+    order: PendingProblemOrder | MergedProblemOrder
+    goal: GoalReference
     traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
 
     def apply(self, current: Todo) -> Todo:
@@ -2039,6 +2043,17 @@ class Todo(TypedTable):
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
 
+    @classmethod
+    def ordered(cls, todo_id: str, repo: str, text: str, creator: ThreadIncarnation,
+                assignment: Assignment, deadline: EventTime, order: CheckedProblemOrder,
+                goal: GoalReference = NoGoalReference()) -> Todo:
+        _text(todo_id, "Todo ID", 128)
+        _text(text, "Todo text", 2000)
+        deadline.require_deadline()
+        goal.require_reference()
+        return cls(todo_id, _repo(repo), text, creator.name, creator.wire_birth, OpenTodoState,
+                   1, goal, assignment, order, deadline)
+
     @property
     def pending(self):
         return self.order.pending
@@ -2369,26 +2384,9 @@ class TodoStore(TypedStore):
         order: PendingProblemOrder,
         goal: GoalRef,
     ) -> Todo:
-        _text(todo_id, "Todo ID", 128)
-        _text(text, "Todo text", 2000)
-        repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
-        deadline.require_deadline()
-        goal.require_reference()
-        proposed = Todo(
-            id=todo_id,
-            repo=repo_id,
-            text=text,
-            creator=identity.name,
-            creator_created=identity.created_at,
-            state=OpenTodoState,
-            revision=1,
-            goal=goal,
-            assignment=Assignment(assignee.name, assignee.created_at,
-                                  identity.name, identity.created_at, generation),
-            deadline=deadline,
-            order=order,
-        )
+        proposed = Todo.ordered(todo_id, repo, text, identity,
+                                Assignment.of(assignee, identity, generation), deadline, order, goal)
         with self.writing() as db:
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -2447,12 +2445,5 @@ class TodoStore(TypedStore):
         order: PendingProblemOrder,
         traced: FileLine | None = None,
     ) -> Todo:
-        identity, parent_identity = _thread(owner), _thread(parent)
-        proposed = Assignment(
-            identity.name,
-            identity.created_at,
-            parent_identity.name,
-            parent_identity.created_at,
-            generation,
-        )
+        proposed = Assignment.of(_thread(owner), _thread(parent), generation)
         return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))

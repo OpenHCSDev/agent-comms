@@ -110,15 +110,6 @@ def struck(todo, unit):
     return len(todo.live_strikes(unit))
 
 
-def deadline(due):
-    """HH:MM local time: the first such minute at or after now."""
-    hour, minute = map(int, due.split(':'))
-    now = time.time()
-    day = time.localtime(now)
-    at = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, hour, minute, 0, 0, 0, -1))
-    return RecordedEventTime(at + 86400 if at < now - 60 else at)
-
-
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
 # A forwarder restates an implementation pair (paper 1 Fig 3: fields + forwarding leave routes to maintain), so
 # nothing the commander approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
@@ -287,7 +278,7 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
         deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
             rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
         at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
-    common = dict(order=order, request=order.request(COMMS.registry.require(ME), tuple(group)), deadline=deadline(due), commander=ME)
+    common = dict(order=order, request=order.request(COMMS.registry.require(ME), tuple(group)), deadline=RecordedEventTime(time.time()).at_clock(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
@@ -721,7 +712,7 @@ def due(pid: str, at: str, why: str) -> None:
     if len(why.split()) < 8:
         sys.exit('Refused: --why says why the deadline moves (8+ words)')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
-    moved = deadline(at)
+    moved = RecordedEventTime(time.time()).at_clock(at)
     call(CommsTodoTool(id=pid, operation=AssignTodo(
         todo.revision, todo.assignment, moved, todo.order, todo.goal)))
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
@@ -834,7 +825,7 @@ class InstallVerb(RuledVerb):
     installer: str = option("installer", help="the unit that runs the install")
 
     def run(self) -> None:
-        PlannedInstallDeadline(deadline(self.at), self.installer).plan(COMMS.root)
+        PlannedInstallDeadline(RecordedEventTime(time.time()).at_clock(self.at), self.installer).plan(COMMS.root)
         print(f'install due {self.at}, run by {self.installer}')
 
 

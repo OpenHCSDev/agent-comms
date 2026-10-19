@@ -1,35 +1,24 @@
-"""One-time import of open RTS orders, their strikes and hunts into Core's todo store.
-
-Run once on a quiesced root during the install, then delete this file. Every write goes
-through TodoStore on a staged copy that replaces the store in one SQLite backup. Nothing
-here publishes goals, sends messages or launches a provider.
-"""
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import sqlite3
 import subprocess
-import tempfile
-import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from agent_comms import todos
 from agent_comms.change_report import FileLine
 from agent_comms.commander.config import Repo
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec, boundary_decoder
+from agent_comms.field_codec import FieldCodec, NullMember, boundary_decoder
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import (ApplicationOrderRun, Assignment, AwaitingFirstCall,
-    CheckedProblemOrder, Hunt, HuntRecord, MechanicalOrderRun,
-    MergedProblemOrder, NoGoalReference, ObservedFirstCall, OrderMessage,
-    PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, TodoStore, WithdrawTodo)
+from agent_comms.thread_identity import ThreadIncarnation
 
-RETIRED = ('deadlines.json', 'strikes.jsonl', 'sent.jsonl', 'hunts.jsonl')
-SOURCES = ('problems.json', *RETIRED)
-TOOLS = ('order.py', 'judge.py', 'rotate.py', 'tool_watch.py', 'shift_after_window.py')
+RETIRED = ("deadlines.json", "strikes.jsonl", "sent.jsonl", "hunts.jsonl")
+SOURCES = ("problems.json", *RETIRED)
+TOOLS = ("order.py", "judge.py", "rotate.py", "tool_watch.py", "shift_after_window.py")
 
 
 @dataclass(frozen=True)
@@ -37,7 +26,7 @@ class RtsProblem:
     at: float
     text: str
     where: FileLine
-    held_by: str = ''
+    held_by: str = ""
 
 
 @dataclass(frozen=True)
@@ -51,59 +40,74 @@ class RtsSent:
 @dataclass(frozen=True)
 class RtsStrike:
     at: float
-    task: str | None
+    task: str | NullMember
     unit: str
     why: str
-    caught: str = ''
+    caught: str = ""
+
+    def recorded(self, actor: ThreadIncarnation, owner: ThreadIncarnation) -> todos.StrikeTodo:
+        previous = todos.Assignment.of(owner, actor, f"rts-strike:{self.task}:{self.at}")
+        return todos.StrikeTodo(1, actor, previous, self.why, RecordedEventTime(self.at))
 
 
 @dataclass(frozen=True)
 class RtsOrder:
-    unit: str
     due: str
     msg: str
     at: float
+    fact: str
     facts: tuple[str, ...]
-    order: CheckedProblemOrder
+    check: tuple[str, str, int]
+    disk: bool
+    works: str | NullMember
+    started: bool = False
+    merged: str | NullMember = NullMember()
+    no_first_call: bool = False
 
-    def deadline(self) -> RecordedEventTime:
-        hour, minute = map(int, self.due.split(':'))
-        sent = time.localtime(self.at)
-        at = time.mktime((sent.tm_year, sent.tm_mon, sent.tm_mday, hour, minute, 0, 0, 0, -1))
-        return RecordedEventTime(at + 86400 if at < self.at - 60 else at)
+    @boundary_decoder
+    def declared(self, body: str) -> todos.PendingProblemOrder | todos.MergedProblemOrder:
+        place = re.search(r"^Owner:\s*(\S+):(\d+)\s*$", body, re.M)
+        report = re.search(r"\bReport:\s*([^\n]+)", body)
+        if place is None or report is None or not re.search(r"^Banned:", body, re.M):
+            raise ValueError(f"{self.facts} {self.msg}: the order needs Owner, Banned and Report")
+        directory, command, expected = self.check
+        check = OrderCheck.parse(f"{directory} :: {command} -> {expected}")
+        if check is None:
+            raise ValueError(f"{self.facts}: the order needs a check")
+        run: todos.OrderRun = todos.MechanicalOrderRun()
+        if isinstance(self.works, str):
+            run = todos.ApplicationOrderRun(self.works)
+        order = todos.PendingProblemOrder(
+            id=self.msg,
+            owner=FileLine(place[1], int(place[2])),
+            check=check,
+            edits=tuple(re.findall(r"^\s*\d+[.)] (.+?)\s*$", body, re.M)),
+            banned=tuple(
+                part.strip()
+                for line in re.findall(r"^Banned:(.*)$", body, re.M)
+                for part in line.split(";")
+                if part.strip()
+            ),
+            report=report[1],
+            at=RecordedEventTime(self.at),
+            first_call_deadline=RecordedEventTime(self.at + 120),
+            first_call=todos.ObservedFirstCall() if self.started else todos.AwaitingFirstCall(),
+            run=run,
+        )
+        if isinstance(self.merged, str):
+            return order.copy_as(todos.MergedProblemOrder, commit=self.merged)
+        return order
 
 
 @boundary_decoder
-def rts_order(unit: str, raw: dict[str, object], bodies: dict[str, str]) -> RtsOrder:
-    """The RTS row spells a mechanical order as null works and a merge as an optional sha."""
-    msg, at, works, merged = raw['msg'], raw['at'], raw['works'], raw.get('merged')
-    body = bodies[msg]
-    place = re.search(r'^Owner:\s*(\S+):(\d+)\s*$', body, re.M)
-    report = re.search(r'\bReport:\s*([^\n]+)', body)
-    if place is None or report is None or not re.search(r'^Banned:', body, re.M):
-        raise ValueError(f'{raw["facts"]} {msg}: the order needs Owner, Banned and Report lines')
-    directory, command, expected = raw['check']
-    order = PendingProblemOrder(
-        id=msg, owner=FileLine(place[1], int(place[2])),
-        check=OrderCheck.parse(f'{directory} :: {command} -> {expected}'),
-        edits=tuple(re.findall(r'^\s*\d+[.)] (.+?)\s*$', body, re.M)),
-        banned=tuple(part.strip() for line in re.findall(r'^Banned:(.*)$', body, re.M)
-                     for part in line.split(';') if part.strip()),
-        report=report[1], at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120),
-        first_call=ObservedFirstCall() if raw.get('started') else AwaitingFirstCall(),
-        run=MechanicalOrderRun() if works is None else ApplicationOrderRun(works))
-    recorded = order if merged is None else order.copy_as(MergedProblemOrder, commit=merged)
-    return RtsOrder(unit, raw['due'], msg, at, tuple(raw['facts']), recorded)
-
-
-@boundary_decoder
-def rts_hunt(line: bytes) -> Hunt:
-    """RTS spells a clean hunt as a null "sent"; this is its one decode."""
+def rts_hunt(line: bytes) -> todos.Hunt:
     values = json.loads(line)
-    sent = values.pop('sent')
-    values.update(at=FieldCodec.encode(RecordedEventTime(values.pop('at'))),
-                  kind='clean' if sent is None else 'ordered')
-    return FieldCodec.decode(Hunt, values if sent is None else {**values, 'sent': sent})
+    sent = values.pop("sent")
+    values.update(
+        at=FieldCodec.encode(RecordedEventTime(values.pop("at"))),
+        kind="clean" if sent is None else "ordered",
+    )
+    return FieldCodec.decode(todos.Hunt, values if sent is None else {**values, "sent": sent})
 
 
 def lines[T](data: bytes, kind: type[T]) -> list[T]:
@@ -111,93 +115,65 @@ def lines[T](data: bytes, kind: type[T]) -> list[T]:
 
 
 def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
-    source = {name: (rts / name).read_bytes() for name in SOURCES}
-    bodies = {sent.id: sent.text for sent in lines(source['sent.jsonl'], RtsSent)}
-    orders = [rts_order(unit, raw, bodies) for unit, rows in
-              json.loads(source['deadlines.json']).items() for raw in rows]
-    selected = {pid: old for old in orders for pid in old.facts}
-    if len(selected) != sum(len(old.facts) for old in orders):
-        raise ValueError('A problem has two open RTS orders; split it first')
-    problems = {pid: FieldCodec.decode(RtsProblem, raw)
-                for pid, raw in json.loads(source['problems.json']).items()}
-    if missing := sorted(selected.keys() - problems.keys()):
-        raise ValueError(f'Restore the missing problem rows first: {missing}')
-    strikes = lines(source['strikes.jsonl'], RtsStrike)
-    report = {'orders': len(selected), 'strikes': len(strikes)}
-    if not apply:
-        print(json.dumps(report, indent=2))
-        return
-    comms = Comms(root)
-    actor = comms.registry.require('claude-code')
-    destination = TodoStore(root)
-    staging = Path(tempfile.mkdtemp(prefix='p707-carry-', dir=root))
-    store = TodoStore(staging)
-    with sqlite3.connect(destination.path_in(root)) as live, sqlite3.connect(store.path_in(staging)) as staged:
-        live.backup(staged)
-    existing = {todo.id: todo for todo in store.history_for_commander(actor.incarnation)}
-    for pid, current in existing.items():
-        if current.assignment is not None and pid not in selected:
-            reason = 'This old order is absent from the current open RTS orders.'
-            store.apply(pid, ReleaseTodo(current.revision, actor.incarnation, current.held(),
-                                         StrikeReason(reason)) if pid in problems else
-                        WithdrawTodo(current.revision, actor.incarnation, current.held(), reason))
-    for pid, old in selected.items():
-        owner = comms.registry.require(old.unit)
-        # RTS strikes name a task and unit, not an order; keep that event identity.
-        history = tuple(StrikeTodo(1, actor.incarnation, Assignment(
-            strike.unit, comms.registry.require(strike.unit).incarnation.created_at, actor.name,
-            actor.incarnation.created_at, f'rts-strike:{pid}:{strike.at}'),
-            strike.why, RecordedEventTime(strike.at)) for strike in strikes if strike.task == pid)
-        generation = 'rts-order:' + old.msg
-        if pid not in existing:
-            try:
-                repo = Repo.of(Path(old.order.owner.file).parent)
-            except (subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError):
-                repo = Repo.of(Path(old.order.check.directory))
-            current = store.create(pid, repo.github,
-                                   problems[pid].text, creator=actor, owner=owner,
-                                   generation=generation, deadline=old.deadline(),
-                                   order=old.order, goal=NoGoalReference())
-        elif existing[pid].order.id != old.msg:
-            current = store.assign(pid, expected_revision=existing[pid].revision, owner=owner,
-                                   parent=actor, generation=generation, goal=existing[pid].goal,
-                                   deadline=old.deadline(), order=old.order)
-        else:
-            current = store.get(pid)
-        if not current.sent_in(old.msg):
-            current = store.apply(pid, OrderMessage(current.revision, actor.incarnation, old.msg))
-        # Former holders' strikes cannot replay through StrikeTodo; restore the records.
-        with store.writing() as db:
-            replace(current, order=old.order, strikes=history, revision=current.revision + 1).upsert(db)
-        recorded = store.get(pid)
-        if (recorded.holder, recorded.deadline, recorded.order, recorded.strikes) != (
-                owner.name, old.deadline(), old.order, history):
-            raise ValueError(f'{pid}: the imported Core row differs from its RTS order')
-    with store.writing() as db:
-        for index, line in enumerate(source['hunts.jsonl'].splitlines()):
-            HuntRecord(id=f'rts-hunt:{index}', commander=actor.incarnation, hunt=rts_hunt(line)).upsert(db)
-    if any((rts / name).read_bytes() != data for name, data in source.items()):
-        raise ValueError(f'RTS changed during the import; {root} is unchanged, staged copy at {staging}')
-    with sqlite3.connect(store.path_in(staging)) as staged, sqlite3.connect(destination.path_in(root)) as live:
-        staged.backup(live)
-    for path in staging.iterdir():
-        path.unlink()
-    staging.rmdir()
-    if retire:
-        for name in TOOLS + RETIRED:
-            (rts / name).rename(rts / f'{name}.retired-p707')
-    print(json.dumps(report, indent=2))
+    source = {rts / name: (rts / name).read_bytes() for name in SOURCES}
+    bodies = {sent.id: sent.text for sent in lines(source[rts / "sent.jsonl"], RtsSent)}
+    orders = [
+        (unit, row, row.declared(bodies[row.msg]))
+        for unit, rows in FieldCodec.decode(
+            dict[str, tuple[RtsOrder, ...]], json.loads(source[rts / "deadlines.json"])
+        ).items()
+        for row in rows
+    ]
+    selected = {pid: (unit, row, order) for unit, row, order in orders for pid in row.facts}
+    if len(selected) != sum(len(row.facts) for _, row, _ in orders):
+        raise ValueError("A problem has two open RTS orders; split it first")
+    problems = FieldCodec.decode(dict[str, RtsProblem], json.loads(source[rts / "problems.json"]))
+    problems = {pid: problems[pid] for pid in selected}
+    strikes = lines(source[rts / "strikes.jsonl"], RtsStrike)
+    if apply:
+        comms = Comms(root)
+        actor = comms.registry.require("claude-code").incarnation
+        with todos.TodoStore(root).writing() as db:
+            existing = {todo.id: todo for todo in todos.Todo.stream(db)}
+            for pid, (unit, row, order) in selected.items():
+                owner = comms.registry.require(unit).incarnation
+                proposed = todos.Assignment.of(owner, actor, "rts-order:" + row.msg)
+                due = RecordedEventTime(row.at).at_clock(row.due)
+                if pid in existing:
+                    todo = existing[pid]
+                    todo.require_commander(actor)
+                    todo.state.require_open(todo)
+                else:
+                    try:
+                        repo = Repo.of(Path(order.owner.file).parent)
+                    except subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError:
+                        repo = Repo.of(Path(order.check.directory))
+                    text = problems[pid].text
+                    todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
+                todo = todos.AssignTodo(todo.revision, proposed, due, order, todo.goal).apply(todo)
+                history = tuple(
+                    strike.recorded(actor, comms.registry.require(strike.unit).incarnation)
+                    for strike in strikes
+                    if strike.task == pid
+                )
+                todo = replace(todo, strikes=history, revision=todo.revision + 1)
+                if not todo.sent_in(row.msg):
+                    todo = todos.OrderMessage(todo.revision, actor, row.msg).apply(todo)
+                todo.upsert(db)
+            for index, line in enumerate(source[rts / "hunts.jsonl"].splitlines()):
+                todos.HuntRecord(f"rts-hunt:{index}", actor, rts_hunt(line)).upsert(db)
+            if any(path.read_bytes() != data for path, data in source.items()):
+                raise ValueError(f"RTS changed during the import; {root} is unchanged")
+        if retire:
+            for name in TOOLS + RETIRED:
+                (rts / name).rename(rts / f"{name}.retired-p707")
+    print(json.dumps({"orders": len(selected), "strikes": len(strikes)}, indent=2))
 
 
-def main() -> None:
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--rts-dir', required=True, type=Path)
-    parser.add_argument('--root', required=True, type=Path)
-    parser.add_argument('--apply', action='store_true')
-    parser.add_argument('--retire-rts', action='store_true')
-    args = parser.parse_args()
-    carry(args.rts_dir, args.root, args.apply, args.retire_rts)
-
-
-if __name__ == '__main__':
-    main()
+    parser.add_argument("--rts-dir", dest="rts", required=True, type=Path)
+    parser.add_argument("--root", required=True, type=Path)
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--retire-rts", dest="retire", action="store_true")
+    carry(**vars(parser.parse_args()))
