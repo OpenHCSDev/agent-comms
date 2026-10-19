@@ -233,7 +233,7 @@ class Operation(ABC, Generic[OperationBridge]):
         return FieldCodec.decode_record(cls, {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)})
 
     @abstractmethod
-    async def run(self, bridge: OperationBridge) -> None: ...
+    async def execute(self, bridge: OperationBridge) -> None: ...
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -262,7 +262,7 @@ class Inbox(Operation[OperationBridge]):
     def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup) -> None:
         tasks.create_task(bridge.watch())
 
-    async def run(self, bridge: OperationBridge) -> None:
+    async def execute(self, bridge: OperationBridge) -> None:
         # The claim records how this watch was started, so the session's hook can
         # name the re-arm command once the lease lapses.
         record = WatchRecord(bridge.binding.bus, bridge.binding.root,
@@ -372,7 +372,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         assert current is not None
         asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, current.cancel)
         try:
-            await self.options.operation.run(self)
+            await self.options.operation.execute(self)
         except* BlockingIOError:
             raise
         except* (OSError, ValueError, CoordinationError) as group:

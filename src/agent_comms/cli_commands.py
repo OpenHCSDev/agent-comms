@@ -36,7 +36,7 @@ from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
-from .cli_bridges.shared import Operation
+from .cli_bridges.shared import CliBridge, Operation
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .history_result import HistoryPageResult
@@ -1084,7 +1084,7 @@ class SendCliCommand(CliCommand):
 class Send(SendCliCommand, Operation, declared_name=None):
     sender: str = option("--from", default="")
 
-    async def run(self, bridge) -> None:
+    async def execute(self, bridge: CliBridge) -> None:
         await bridge.show_sent((await asyncio.to_thread(
             replace(self, sender=bridge.binding.bus).apply, bridge.comms)).sent)
 
