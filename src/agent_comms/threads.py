@@ -15,7 +15,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .cli_result import ThreadToolCatalogResult
 from .launch_runtime import RestartEnvironment
-from .native_arguments import NativeArguments
+from .native_arguments import ModelProvider, NativeArguments, SelectedModel
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
 from .goals import (
@@ -125,6 +125,11 @@ class Thread(ThreadProvenance):
     def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
         return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
+
+    @property
+    def model_provider(self) -> type[ModelProvider]:
+        """The declared provider, or the open provider family when no model was selected."""
+        return ModelProvider if self.model is None else SelectedModel.decode(self.model).provider_type
 
     @property
     def project_path(self) -> Path:
