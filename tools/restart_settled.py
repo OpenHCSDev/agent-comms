@@ -18,8 +18,11 @@ from agent_comms.wire_watch import DirectoryWatchSource, WireWatch
 def record(queue: RestartQueue, id: str) -> QueuedRestart:
     with queue.locked():
         settled = (queue.directory / "settled").glob(f"*/{id}.json")
-        return next(record for record in (*queue.active_records(), *map(queue.read, settled))
-                    if record.id == id)
+        return next(
+            record
+            for record in (*queue.active_records(), *map(queue.read, settled))
+            if record.id == id
+        )
 
 
 async def settled(queue: RestartQueue, id: str) -> QueuedRestart:
