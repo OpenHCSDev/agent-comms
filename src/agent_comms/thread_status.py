@@ -169,7 +169,7 @@ class CliInboxPresence:
 
     def restored(self) -> ThreadStatus:
         """Restoration preserves the inbox declaration, never a liveness answer."""
-        return self.declaration()
+        return CliInboxThreadStatus()
 
     def after_heartbeat(self, name: str) -> ThreadStatus:
         """A CLI command is not a bridge; a heartbeat keeps the inbox as it is."""

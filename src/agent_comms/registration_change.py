@@ -53,7 +53,7 @@ class RegistrationChange(ABC):
         """Caller holds registry/publication authority and records goal history."""
         thread = self.thread
         document.install_thread(thread)
-        document.statuses[thread.name] = self.status.declaration()
+        document.set_status(thread.name, self.status)
         document.last_seen[thread.name] = time.time()
         if self.changes_owner:
             document.advance_claim(thread.name)

@@ -133,9 +133,9 @@ class RegistryNeedsConversion(RelationViolationError):
 
 
 class RegistryGoalConversion(DocumentConversion):
-    """The sole unversioned-to-current registry transformation."""
+    """The sole previous-to-current registry transformation."""
 
-    source_version = 0
+    source_version = 1
     source_fingerprints = frozenset({
         "3bef5bd6411c7028a599e2a9bd66cb8662ca2a8e24a4ff4f265cb171bd2d5bbd"})
 
@@ -164,7 +164,13 @@ class RegistryGoalConversion(DocumentConversion):
         for thread in threads.values():
             if thread.get("goal") == {}:
                 thread["goal"] = None
-        return {**raw, "version": cls.target_version(), "threads": threads}
+        statuses = dict(raw["statuses"])
+        for name, thread in threads.items():
+            if thread.get("execution") == "external" and statuses[name]["kind"] in (
+                "connected", "no_bridge"
+            ):
+                statuses[name] = {"kind": "cli_inbox"}
+        return {**raw, "version": cls.target_version(), "threads": threads, "statuses": statuses}
 
 
 @dataclass(frozen=True, slots=True)
