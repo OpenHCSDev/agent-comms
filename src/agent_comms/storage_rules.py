@@ -178,8 +178,7 @@ class StorageRule(RoomAllocation):
         return free_gib < self.cleanup_gib
 
     def require_quota(self, thread: Thread, *proposed: Path):
-        if UnitStorage.read(self, thread, *proposed).over_checkouts:
-            self.deny(f'at most {self.max_checkouts} checkouts besides the home checkout')
+        UnitStorage.read(self, thread, *proposed).require_quota()
 
     def require_allocation(self, thread: Thread, *proposed: Path):
         if self.below_floor(self.free_gib()):
@@ -219,7 +218,7 @@ class StorageRule(RoomAllocation):
 
 @dataclass(frozen=True)
 class UnitStorage(UndatedStandingRule):
-    """One unit's checkouts, derived on read from its registered worktrees; its rule judges them."""
+    """The home storage slot (possibly non-Git) followed by extra Git checkouts."""
 
     rule: StorageRule
     unit: str
@@ -238,11 +237,19 @@ class UnitStorage(UndatedStandingRule):
         return tuple(storage for storage in read if storage.over_checkouts)
 
     @property
+    def extra_checkouts(self) -> tuple[Path, ...]:
+        return self.checkouts[1:]
+
+    @property
     def over_checkouts(self) -> bool:
-        return len(self.checkouts) > self.rule.max_checkouts + 1
+        return len(self.extra_checkouts) > self.rule.max_checkouts
+
+    def require_quota(self) -> None:
+        if self.over_checkouts:
+            self.rule.deny(f'at most {self.rule.max_checkouts} checkouts besides the home checkout')
 
     def line(self) -> str:
-        return (f'VIOLATION storage quota: {self.unit} holds {len(self.checkouts) - 1} checkouts besides home, '
+        return (f'VIOLATION storage quota: {self.unit} holds {len(self.extra_checkouts)} checkouts besides home, '
                 f'limit {self.rule.max_checkouts} -> order the cleanup')
 
 
@@ -324,7 +331,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
     def check(self, rule, thread):
-        if self.path not in rule.checkouts_of(thread)[1:]:
+        if self.path not in UnitStorage.read(rule, thread).extra_checkouts:
             rule.deny('only a current extra checkout can be removed')
 
 
