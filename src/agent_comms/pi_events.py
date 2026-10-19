@@ -887,4 +887,3 @@ class ToolExecutionUpdate(NativePiEvent, DurablePiEvent):
             name=self.tool_name or "tool",
             output=self.partial_result.text(),
         )
-
