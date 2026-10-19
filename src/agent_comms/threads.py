@@ -280,8 +280,7 @@ class Thread(ThreadProvenance):
         return self.process_identity.require(f"Thread {self.name!r} has no owner process")
 
     def require_idle(self) -> None:
-        if self.executing:
-            raise RelationViolationError("live owner already has an active turn")
+        self.turn_record.read().require_idle()
 
     def require_current_turn(self, claim_scope: int) -> None:
         self.turn_record.read().require_current(claim_scope, self.turn_generation)
