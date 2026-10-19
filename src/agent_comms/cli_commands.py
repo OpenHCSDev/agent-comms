@@ -60,6 +60,7 @@ from .exporting import (
 )
 from .field_codec import FieldCodec, PathText, compile_decoder
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
+from .presentation import CountedRead, InboxRead, UncountedRead
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
@@ -782,7 +783,9 @@ class DeclaredOptions(Command):
                 owner = groups[group]
             annotation = hints[declared.name]
             decoder = compile_decoder(annotation)
-            options = {**decoder.argument_options(), **option.parser_options}
+            # An option that declares its own argparse action owns its argument's shape.
+            options = {**({} if "action" in option.parser_options else decoder.argument_options()),
+                       **option.parser_options}
             if option.parser_default is not MISSING:
                 options["default"] = option.parser_default
             elif option.parser_default_factory is not MISSING:
@@ -1412,12 +1415,12 @@ class ThreadsCliCommand(CliCommand):
 class ThreadCliCommand(CliCommand):
     help = "Detail for one thread"
     name: str = option("--name")
-    no_pending: bool = option(
-        "--no-pending", help="Skip the inbox count for fast metadata reads", default=False
-    )
+    read: InboxRead = option(
+        "--no-pending", help="Skip the inbox count for fast metadata reads", default_factory=CountedRead,
+        parser_default=CountedRead.declared_name, action="store_const", const=UncountedRead.declared_name)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ctx.views.thread_detail(self.name, include_pending=not self.no_pending)
+        return ctx.views.thread_detail(self.name, self.read)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1754,8 +1757,10 @@ class LedgerCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class PollCliCommand(CliCommand):
     help = "Status snapshot: thread, inbox, ledger, peers"
-    thread: PollTarget = option("--thread", default_factory=CallingThreadTarget,
-        parser_default=FieldCodec.encode(CallingThreadTarget()), type=NamedThreadTarget.argument)
+    # --thread names a thread; without it the poll is the calling thread's. Both parse to records.
+    thread: PollTarget = option("--thread", default_factory=CallingThreadTarget, action="store",
+        parser_default=FieldCodec.encode(CallingThreadTarget()), type=NamedThreadTarget.argument,
+        normalize=dict)
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.views.poll(self.thread)

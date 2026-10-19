@@ -8,6 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
+from agent_comms.presentation import CountedRead, UncountedRead
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
@@ -271,7 +272,7 @@ class TestThreadOps:
         """list_threads, thread_detail and who/presence write one thread's record from one parent."""
         views = wired.views
         rows = {
-            "detail": views.thread_detail("fixer", include_pending=counted).encoded(),
+            "detail": views.thread_detail("fixer", CountedRead() if counted else UncountedRead()).encoded(),
             "roster": next(row for row in (views.who() if counted else views.presence())
                            if row["name"] == "fixer"),
             **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
@@ -285,7 +286,7 @@ class TestThreadOps:
 
     def test_thread_detail_fail_closed(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.views.thread_detail("ghost")
+            wired.views.thread_detail("ghost", CountedRead())
 
     def test_heartbeat_marks_running(self, wired):
         wired.owners.stop("fixer")

@@ -24,7 +24,8 @@ from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
-from .field_codec import FieldCodec, projected
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, projected
 from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
@@ -540,6 +541,42 @@ class ChannelView(ToolResult):
 
 
 
+@dataclass(frozen=True)
+class InboxCount(DeclaredFamily, JsonShapeFamily, affix="Inbox"):
+    """A thread's unread count as its reader took it: counted, or not counted at all."""
+
+
+@dataclass(frozen=True)
+class CountedInbox(InboxCount, JsonShapeMember):
+    value: int
+
+
+@dataclass(frozen=True)
+class UncountedInbox(InboxCount, JsonShapeMember):
+    value: None = None
+
+
+@dataclass(frozen=True)
+class InboxRead(DeclaredFamily, affix="Read"):
+    """Whether a thread read counts each thread's unread messages."""
+
+    @abstractmethod
+    def counts(self, bus, names: Sequence[str]) -> Mapping[str, InboxCount]: ...
+
+
+@dataclass(frozen=True)
+class CountedRead(InboxRead):
+    def counts(self, bus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+        # One bus snapshot for every thread, not one per thread.
+        return {name: CountedInbox(count) for name, count in bus.pending_counts_all(names).items()}
+
+
+@dataclass(frozen=True)
+class UncountedRead(InboxRead):
+    def counts(self, bus, names: Sequence[str]) -> Mapping[str, InboxCount]:
+        return {name: UncountedInbox() for name in names}
+
+
 @dataclass(frozen=True, slots=True)
 class ThreadRecord(CliResult):
     """A thread's wire record; every reader of one thread writes these fields from here."""
@@ -547,13 +584,13 @@ class ThreadRecord(CliResult):
     status: Annotated[ThreadStatus, ThreadStatusName]
     activity: ActivityData = field(metadata={"presence_exclude": True})
     goal_execution: ThreadGoalExecution
-    pending: int | None = field(  # None when the reader did not count it
-        default=None, kw_only=True, metadata={"wire_omit_default": True})
+    pending: InboxCount = field(
+        default=UncountedInbox(), kw_only=True, metadata={"wire_omit_default": True})
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
              waits: dict[str, RecordedGoalWait], threads: Iterable[Thread],
-             pending: Mapping[str, int] | None = None) -> tuple[ThreadRecord, ...]:
+             pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
         observed = agents.all_activity(
@@ -563,7 +600,7 @@ class ThreadRecord(CliResult):
             thread, snapshot.statuses[thread.name],
             observed.get(thread.name, Activity.absent(thread.name)),
             GoalWaits.execution(thread.goal, waits, snapshot, agents),
-            pending=None if pending is None else pending[thread.name],
+            pending=pending[thread.name],
         ) for thread in threads)
 
     def encoded(self) -> object:

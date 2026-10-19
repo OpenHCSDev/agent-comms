@@ -37,6 +37,22 @@ def cli(capsys):
 
 
 class TestCliSuccess:
+    def test_thread_and_poll_requests_choose_their_member_from_the_command(self, cli, tmp_path, monkeypatch):
+        """thread counts unread unless --no-pending; poll reads the calling thread unless --thread names one."""
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+        monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
+        for name in ("a", "b"):
+            assert cli(tmp_path, "register", "--name", name, "--worktree", "/wt")[0] == 0
+        assert cli(tmp_path, "send", "--from", "b", "--to", "a", "--body", "hello")[0] == 0
+        _, counted = cli(tmp_path, "thread", "--name", "a")
+        _, uncounted = cli(tmp_path, "thread", "--name", "a", "--no-pending")
+        assert counted["pending"] == 1 and "pending" not in uncounted
+        assert counted.keys() - {"pending"} == uncounted.keys()
+        _, mine = cli(tmp_path, "poll")
+        _, named = cli(tmp_path, "poll", "--thread", "b")
+        assert (mine["thread"]["name"], mine["thread"]["pending"], len(mine["inbox"])) == ("a", 1, 1)
+        assert (named["thread"]["name"], named["thread"]["pending"], named["inbox"]) == ("b", 0, [])
+
     def test_tool_catalog_and_generic_invocation(self, cli, tmp_path, monkeypatch):
         from agent_comms.comms import Comms
         from agent_comms.pi_vocabulary import ServiceTier
