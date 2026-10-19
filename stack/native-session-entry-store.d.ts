@@ -1,4 +1,4 @@
-import type { FileEntry, SessionEntry, SessionHeader } from './session-manager.js';
+import type { FileEntry, SessionEntry, SessionHeader, SessionTreeNode } from './session-manager.js';
 
 export declare abstract class StoreAvailability {
     abstract requireOpen(): void;
@@ -29,6 +29,8 @@ export declare class EntryMetadata {
     model: {provider: string; modelId: string} | null;
     thinkingLevel: string | null;
     label: {targetId: string; label: string | null; timestamp: string} | null;
+    static labelFor(entry: SessionEntry): EntryMetadata['label'];
+    static liveLabel(label: EntryMetadata['label']): EntryMetadata['liveLabel'];
     get liveLabel(): (NonNullable<EntryMetadata['label']> & {label: string}) | undefined;
 }
 
@@ -51,6 +53,7 @@ export declare abstract class EntryStore {
     validate(entry: SessionEntry): void;
     static validateHeader(header: SessionHeader): SessionHeader;
     entries(): IterableIterator<SessionEntry>;
+    tree(): SessionTreeNode[];
     fileEntries(): IterableIterator<FileEntry>;
     branch(leafId?: string | null): IterableIterator<SessionEntry>;
     ancestors(leafId?: string | null): IterableIterator<EntryMetadata>;

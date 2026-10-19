@@ -28,9 +28,13 @@ export class EntryMetadata {
             ? { provider: entry.provider, modelId: entry.modelId }
             : this.role === 'assistant' ? { provider: entry.message.provider, modelId: entry.message.model } : null;
         this.thinkingLevel = entry.type === 'thinking_level_change' ? entry.thinkingLevel : null;
-        this.label = entry.type === 'label' ? { targetId: entry.targetId, label: entry.label ?? null, timestamp: entry.timestamp } : null;
+        this.label = EntryMetadata.labelFor(entry);
     }
-    get liveLabel() { return this.label?.label ? this.label : undefined; }
+    static labelFor(entry) {
+        return entry.type === 'label' ? { targetId: entry.targetId, label: entry.label ?? null, timestamp: entry.timestamp } : null;
+    }
+    static liveLabel(label) { return label?.label ? label : undefined; }
+    get liveLabel() { return EntryMetadata.liveLabel(this.label); }
     static fromIndex(row) {
         if (!row) return undefined;
         return Object.assign(Object.create(EntryMetadata.prototype), JSON.parse(row.selectors));
@@ -98,6 +102,29 @@ export class EntryStore {
         return header;
     }
     *entries() { for (const meta of this.chronologicalMetadata()) yield this.get(meta.id); }
+    tree() {
+        const nodes = new Map(), labels = new Map(), roots = [];
+        for (const entry of this.entries()) {
+            nodes.set(entry.id, {entry, children: [], label: undefined, labelTimestamp: undefined});
+            const label = EntryMetadata.labelFor(entry);
+            if (label) labels.set(label.targetId, label);
+        }
+        for (const node of nodes.values()) {
+            const label = EntryMetadata.liveLabel(labels.get(node.entry.id));
+            node.label = label?.label;
+            node.labelTimestamp = label?.timestamp;
+            const parent = nodes.get(node.entry.parentId);
+            if (node.entry.parentId === null || parent === node || !parent) roots.push(node);
+            else parent.children.push(node);
+        }
+        const pending = [...roots];
+        while (pending.length) {
+            const node = pending.pop();
+            node.children.sort((a, b) => new Date(a.entry.timestamp).getTime() - new Date(b.entry.timestamp).getTime());
+            pending.push(...node.children);
+        }
+        return roots;
+    }
     *fileEntries() { yield this.header; yield* this.entries(); }
     *branch(leafId = this.lastId) { for (const meta of this.branchMetadata(leafId)) yield this.get(meta.id); }
     *ancestors(leafId = this.lastId) {
@@ -283,6 +310,7 @@ export class DiskEntryStore extends EntryStore {
     #insert;
     #lines;
     #headerEnd;
+    #decoder = new TextDecoder('utf-8', {fatal: true});
     constructor(file, { indexDirectory = join(homedir(), '.cache', 'agent-comms', 'session-indexes') } = {}) {
         super();
         this.file = resolve(file);
@@ -394,7 +422,7 @@ export class DiskEntryStore extends EntryStore {
         // available heap, not a limit on the lifetime size of the session.
         if (raw.length * Uint16Array.BYTES_PER_ELEMENT > getHeapStatistics().total_available_size)
             throw new Error('Native entry decode exceeds currently available VM heap');
-        return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw));
+        return JSON.parse(this.#decoder.decode(raw));
     }
     get(id) {
         const meta = this.metadata(id);
@@ -412,6 +440,47 @@ export class DiskEntryStore extends EntryStore {
         const entry = this.#decode(data);
         this.assertCurrent();
         return entry;
+    }
+    *entries() {
+        this.assertCurrent();
+        try {
+            const seen = new Set(), forwardParents = new Set();
+            for (const entry of this.#forwardEntries()) {
+                this.validate(entry);
+                if (seen.has(entry.id)) throw new Error('Duplicate native entry identity');
+                if (forwardParents.has(entry.id)) throw new Error('Invalid native entry ancestry');
+                if (entry.parentId !== null && entry.parentId !== entry.id && !seen.has(entry.parentId))
+                    forwardParents.add(entry.parentId);
+                seen.add(entry.id);
+                yield entry;
+            }
+        } finally { this.assertCurrent(); }
+    }
+    *#forwardEntries() {
+        // Whole-history consumers need every payload, not a selector-index build
+        // followed by one random read and another metadata decode per payload.
+        const buffer = Buffer.allocUnsafe(1024 * 1024);
+        let position = this.#headerEnd, parts = [], size = 0;
+        while (position < this.#extent) {
+            const count = readSync(this.#fd, buffer, 0, Math.min(buffer.length, this.#extent - position), position);
+            if (!count) throw new Error('Incomplete native entry');
+            const chunk = buffer.subarray(0, count);
+            let start = 0, newline;
+            while ((newline = chunk.indexOf(10, start)) !== -1) {
+                const part = chunk.subarray(start, newline);
+                const raw = parts.length ? Buffer.concat([...parts, part], size + part.length) : part;
+                yield this.#decode(raw);
+                start = newline + 1; parts = []; size = 0;
+            }
+            if (start < count) {
+                const part = Buffer.from(chunk.subarray(start));
+                parts.push(part); size += part.length;
+                if (size * Uint16Array.BYTES_PER_ELEMENT > getHeapStatistics().total_available_size)
+                    throw new Error('Native entry exceeds currently available VM heap');
+            }
+            position += count;
+        }
+        if (size) throw new Error('Incomplete native entry');
     }
     #index(entry, offset, length) {
         this.validate(entry);

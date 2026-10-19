@@ -2381,3 +2381,50 @@
 @@ -5203,1 +5203,1 @@
 -        let info = `${theme.bold("Session Info")}\n\n`;
 +        let info = `${theme.bold("Session Info — Current Context")}\n\n`;
+--- a/dist/core/session-manager.js
++++ b/dist/core/session-manager.js
+@@ -871,43 +871,7 @@
+      */
+     getTree() {
+         this.#acAssertUsable();
+-        const labels = new Map();
+-        for (const label of this.entryStore.labels()) labels.set(label.targetId, label);
+-        const nodeMap = new Map();
+-        const roots = [];
+-        // Create nodes with resolved labels
+-        for (const entry of this.entryStore.entries()) {
+-            const observed = labels.get(entry.id);
+-            const label = observed?.label;
+-            const labelTimestamp = observed?.timestamp;
+-            nodeMap.set(entry.id, { entry, children: [], label, labelTimestamp });
+-        }
+-        // Build tree
+-        for (const node of nodeMap.values()) {
+-            const entry = node.entry;
+-            if (entry.parentId === null || entry.parentId === entry.id) {
+-                roots.push(node);
+-            }
+-            else {
+-                const parent = nodeMap.get(entry.parentId);
+-                if (parent) {
+-                    parent.children.push(node);
+-                }
+-                else {
+-                    // Orphan - treat as root
+-                    roots.push(node);
+-                }
+-            }
+-        }
+-        // Sort children by timestamp (oldest first, newest at bottom)
+-        // Use iterative approach to avoid stack overflow on deep trees
+-        const stack = [...roots];
+-        while (stack.length > 0) {
+-            const node = stack.pop();
+-            node.children.sort((a, b) => new Date(a.entry.timestamp).getTime() - new Date(b.entry.timestamp).getTime());
+-            stack.push(...node.children);
+-        }
+-        return roots;
++        return this.entryStore.tree();
+     }
+     // =========================================================================
+     // Branching
