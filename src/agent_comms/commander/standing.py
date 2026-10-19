@@ -21,7 +21,7 @@ from ..standing_rules import (
 from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
-from . import capacity, judge
+from . import judge
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -152,21 +152,6 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         self.assign(comms, commander, comms.registry.require(self.unit))
-
-
-@dataclass(frozen=True)
-class ForkNow(UndatedStandingRule):
-    """The load on the asked Comms needs more live forks than there are."""
-
-    load: capacity.Load
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[ForkNow, ...]:
-        load = capacity.Load.of(comms, commander)
-        return (cls(load),) * load.short
-
-    def line(self) -> str:
-        return f"FORK NOW: {self.load}"
 
 
 @dataclass(frozen=True)
