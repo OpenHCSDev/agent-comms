@@ -36,9 +36,9 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
     program = """
 import sys
 from pathlib import Path
-from agent_comms.registration import Registration
+from agent_comms.comms import wire
 from agent_comms.goal_states import GoalState
-registry = Registration(Path(sys.argv[1]))
+registry = wire(Path(sys.argv[1]).parent).registry
 for name in GoalState.names():
     goal = registry.require(name).goal
     assert goal.state.declared_name == name
@@ -59,7 +59,7 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     registry = Registration(path)
     registry.register(registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     raw = json.loads(path.read_text())
-    for field in ("owners", "claims"):
+    for field in ("owners", "admissions"):
         incomplete = dict(raw)
         incomplete.pop(field)
         path.write_text(json.dumps(incomplete))

@@ -8,6 +8,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
+from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, AuthoredObservationWireRecord, RecordedContextManifestWireObservation
 from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
@@ -88,9 +89,9 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert recent == (first, second) and not limited
     assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
     recorded = TurnContextCliCommand(thread='Alice',turn=1)
-    assert len(recorded.encode_result(recorded.apply(reopened))['manifests'])==1
+    assert len(recorded.apply(reopened).to_wire()['manifests'])==1
     difference = DiffContextCliCommand(thread='Alice')
-    assert difference.encode_result(difference.apply(reopened))['turn']['occurrence']['generation']==2
+    assert difference.apply(reopened).to_wire()['turn']['occurrence']['generation']==2
 
 
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
@@ -117,7 +118,8 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     assert sum(source.length for source in rendered.contributions) == len(raw)
     assert next(source for source in rendered.contributions if source.kind is UserInputSegment).images == (0,)
     command = Prompt(input_id='a'*32, message=rendered.text, images=images,
-                     context_contributions=rendered.contributions)
+                     context_contributions=rendered.contributions,
+                     owner_tools=OwnerToolConnection('/unused', 'a' * 64))
     decoded = Prompt.from_wire(command.to_rpc())
     assert decoded == command
     assert decoded.message.encode() == raw and decoded.images == images

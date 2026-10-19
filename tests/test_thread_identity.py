@@ -3,6 +3,7 @@
 import json
 import os
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -28,6 +29,7 @@ from agent_comms.thread_identity import (
     UserThreadRole,
 )
 from agent_comms.thread_status import IdleThreadStatus
+from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 
 
 def registry_with_owner(tmp_path):
@@ -108,11 +110,11 @@ def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     first = comms.agents.begin_turn("owner", "reused").turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
-    assert comms.agents.finish_turn(first) is not None
+    assert isinstance(comms.agents.finish_turn(first), FinishedTurnFence)
     second = comms.agents.begin_turn("renamed", "reused").turn_lease
     assert second.identity.generation == first.identity.generation + 1
-    assert comms.agents.finish_turn(first) is None
-    assert comms.agents.finish_turn(second) is not None
+    assert isinstance(comms.agents.finish_turn(first), NoFinishedTurn)
+    assert isinstance(comms.agents.finish_turn(second), FinishedTurnFence)
 
 
 @pytest.mark.parametrize("revocation", ["finish", "stop"])
@@ -131,7 +133,7 @@ def test_restored_active_turn_has_no_claim_authority(tmp_path, revocation):
 def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path, *, thread_registration):
     registry = registry_with_owner(tmp_path)
     owner = registry.require("owner")
-    original = {"target": "", "participants": [FieldCodec.encode(owner.incarnation)]}
+    original = {"kind": "dm", "participants": [FieldCodec.encode(owner.incarnation)]}
     conversation = FieldCodec.decode(Conversation, original)
     assert conversation.participants == (owner.incarnation,)
     assert FieldCodec.decode(Conversation, FieldCodec.encode(conversation)) == conversation
@@ -220,15 +222,17 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     document = FieldCodec.decode(ReadDocument, json.loads(path.read_text()))
     viewer_identity = comms.registry.require(viewer).incarnation
     assert tuple(document.messages) == (viewer_identity,)
-    assert {participant for conversation in document.messages[viewer_identity]
+    assert {participant for conversation in document.messages[viewer_identity].conversations
             for participant in conversation.participants} == {
                 viewer_identity, comms.registry.require("owner").incarnation}
     reopened = Comms(tmp_path)
-    assert message.seq in reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
+    snapshot = reopened.registry.snapshot()
+    conversation = reopened.bus.reads.conversation(message, snapshot)
+    assert message.seq in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(conversation)
     next_message = reopened.messaging.send("owner", viewer, "new paint").message
     page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
     reopened.views.mark_page_read(page, worktree=str(tmp_path))
-    seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
+    seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()).for_conversation(conversation)
     assert all(sequence in seen for sequence in (message.seq, next_message.seq))
 
 
@@ -309,10 +313,11 @@ def test_each_thread_role_member_owns_its_role_behaviour(
         role.require_maintenance_open(barrier, True)
 
     class Reads:
-        def _displayed_recipient(self, *shown, document):
+        def displayed_incarnation(self, *shown, document):
             return (shown, document)
 
-    shown = role.displayed_recipient_effect(Reads(), message, "thread", "snapshot", "document")
+    shown = role.displayed_recipient_effect(
+        Reads(), message, SimpleNamespace(incarnation="thread"), "snapshot", "document")
     assert shown == (((message, "thread", "snapshot"), "document") if human else ())
     assert role.channel_policy() is policy.instance()
     assert role.reply_target(message) == reply

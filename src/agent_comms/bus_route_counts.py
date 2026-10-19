@@ -21,7 +21,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileRevision
-from .read_basis import ReadCursor
+from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
 from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
@@ -492,7 +492,7 @@ class OpenedRouteCounts(BusRouteCounts):
             target, {direct} if direct in self.deliveries else set()
         )
 
-    def unseen_counts(self, seen: Mapping[str, ReadCursor]) -> dict[str, dict[str, int]]:
+    def unseen_counts(self, seen: Mapping[str, ReadCursor], *, after: int = 0) -> dict[str, dict[str, int]]:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in self.deliveries}
 
         def add(actor: str, sender: str, target: str, count: int):
@@ -500,104 +500,129 @@ class OpenedRouteCounts(BusRouteCounts):
                 conversation = self.deliveries[actor].conversation(sender, target)
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
-        for row in self._read_counts(seen):
+        for row in self._read_counts(seen, after=after):
             add(row.actor, row.sender, row.target, row.count(self.connection))
         for item in self._appended:
             message = item.message
             for actor in self._recipients(message.target):
-                if self.deliveries[actor].unread(item, self.registry, seen[actor]):
+                if message.seq > after and self.deliveries[actor].unread(item, self.registry, seen[actor]):
                     add(actor, message.sender, message.target, 1)
         return counts
 
-    def unseen_deliveries(self, actor: str, seen: ReadCursor, *, after: int = 0) -> tuple[UnseenDelivery, ...]:
+    def unseen_deliveries(
+        self, actor: str, seen: ReadCursor, *, after: int = 0,
+        scope: MessageDisplayScope | None = None, limit: int = 100,
+    ) -> tuple[UnseenDelivery, ...]:
+        """Select only the oldest requested unread rows, before decoding messages."""
+        if limit <= 0:
+            raise ValueError("Unread delivery limit must be positive.")
         delivery = self.deliveries[actor]
-        return (*self._read_deliveries(actor, seen, after), *(
-            UnseenDelivery(item.message.seq, item.message.target)
-            for item in self._appended
-            if item.message.seq > after and delivery.unread(item, self.registry, seen)
-        ))
+        scope = delivery if scope is None else scope
+        rows = self._read_deliveries(actor, seen, after, scope, limit)
+        for item in self._appended:
+            if len(rows) == limit:
+                break
+            message = item.message
+            if (message.seq > after and scope.includes(message)
+                    and delivery.unread(item, self.registry, seen)):
+                rows.append(UnseenDelivery(message.seq, message.target))
+        return tuple(rows)
 
-    _requests = f"""request_targets AS MATERIALIZED (
+    _requests = f"""arguments AS MATERIALIZED (
+                SELECT ? AS targets,? AS senders,? AS unrecorded,? AS through,? AS after
+            ), request_targets AS MATERIALIZED (
                 SELECT DISTINCT target.value AS target
-                FROM json_each(:targets) AS owner,json_each(owner.value) AS target
+                FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
             ), unrecorded AS MATERIALIZED (
                 SELECT target.target,source.value AS sender,
                     (SELECT sender_lookup FROM "{RouteIdentityRow.declared_name}" AS route
                      WHERE route.target=target.target AND route.sender=source.value
-                         AND route.first_seq<=:through AND route.sender_lookup<>''
+                         AND route.first_seq<=(SELECT through FROM arguments) AND route.sender_lookup<>''
                      ORDER BY route.first_seq LIMIT 1) AS sender_lookup
-                FROM request_targets AS target,json_each(:unrecorded) AS source
+                FROM request_targets AS target,arguments,json_each(arguments.unrecorded) AS source
             ), route_keys AS (
                 SELECT target.target,sender.key AS sender,lookup.value AS sender_lookup
-                FROM request_targets AS target,json_each(:senders) AS sender,
+                FROM request_targets AS target,arguments,json_each(arguments.senders) AS sender,
                     json_each(sender.value) AS lookup
                 UNION ALL
                 SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
             ), roots AS MATERIALIZED (
-                SELECT row.target,row.sender,row.sender_lookup,row.time_root AS root
+                SELECT row.target,row.sender,row.sender_lookup,row.time_root AS root,row.seq AS latest_seq
                 FROM route_keys AS route
                 JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=(
                     SELECT latest.seq FROM "{RouteEntryRow.declared_name}" AS latest
                     WHERE latest.target=route.target AND latest.sender=route.sender
-                        AND latest.sender_lookup=route.sender_lookup AND latest.seq<=:through
+                        AND latest.sender_lookup=route.sender_lookup
+                        AND latest.seq<=(SELECT through FROM arguments)
                     ORDER BY latest.seq DESC LIMIT 1)
             ), candidates AS MATERIALIZED (
                 SELECT owner.key AS actor,roots.*,
                     delivery_since(
                         owner.key,roots.sender,roots.target,roots.sender_lookup
                     ) AS since
-                FROM json_each(:targets) AS owner,json_each(owner.value) AS target
+                FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
                 JOIN roots ON roots.target=target.value
             ), requests AS MATERIALIZED (
                 SELECT * FROM candidates WHERE since IS NOT NULL
             )"""
 
-    def _request_bindings(self, actors):
-        return {
-            "targets": json.dumps({
-                actor: sorted(self.deliveries[actor].index_targets) for actor in actors
-            }),
-            **self.registry.sender_bindings,
-            "through": self.source.through,
-        }
+    def _request_bindings(self, actors, after: int) -> tuple:
+        senders = self.registry.sender_bindings
+        return (
+            json.dumps({actor: sorted(self.deliveries[actor].index_targets) for actor in actors}),
+            senders["senders"], senders["unrecorded"], self.source.through, after,
+        )
 
-    def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
+    def _read_counts(self, seen: Mapping[str, ReadCursor], *, after: int) -> list[RouteUnread]:
         return RouteUnread.read(self.connection.execute(
-                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")},
+                f'''WITH {self._requests}, {ReadCursor.sql("?")},
                 {ReadCursor.joined_sql}, painted AS (
                     SELECT request.actor,request.root,count(*) AS count
-                    FROM cursors AS request,json_each(request.exceptions) AS seen
-                    JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
+                    FROM cursors AS request CROSS JOIN json_each(request.exceptions) AS seen
+                    CROSS JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
                         AND request.target=row.target AND request.sender=row.sender
                         AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
-                    WHERE row.seq<=:through GROUP BY request.actor,request.root
+                    WHERE row.seq>(SELECT after FROM arguments)
+                        AND row.seq<=(SELECT through FROM arguments)
+                    GROUP BY request.actor,request.root
                 ) SELECT request.actor,request.target,request.sender,request.since,full.node AS full,
                     prefix.node AS prefix,coalesce(painted.count,0) AS painted
                 FROM cursors AS request
-                JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
+                CROSS JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
                 LEFT JOIN "{RouteTimeRow.declared_name}" AS prefix ON prefix.id=(
                     SELECT time_root FROM "{RouteEntryRow.declared_name}"
                     WHERE target=request.target AND sender=request.sender AND sender_lookup=request.sender_lookup
-                        AND seq<=min(request.high_water,:through)
+                        AND seq<=min(max(request.high_water,(SELECT after FROM arguments)),
+                                     (SELECT through FROM arguments))
                     ORDER BY seq DESC LIMIT 1)
-                LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
-                self._request_bindings(self.deliveries) | ReadCursor.sql_bindings(self.registry,
+                LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root
+                WHERE max(request.high_water,(SELECT after FROM arguments))<request.latest_seq''',
+                (*self._request_bindings(self.deliveries, after),
+                 *ReadCursor.sql_bindings(self.registry,
                     {actor: cursor.counted(self.deliveries[actor], self.registry)
-                     for actor, cursor in seen.items()})))
+                     for actor, cursor in seen.items()}).values())))
 
-    def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
+    def _read_deliveries(
+        self, actor: str, seen: ReadCursor, after: int,
+        scope: MessageDisplayScope, limit: int,
+    ) -> list[UnseenDelivery]:
+        predicate, values = scope.index_predicate
         return UnseenDelivery.read(self.connection.execute(
-                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")},
-                {ReadCursor.joined_sql} SELECT row.seq,row.target
-                FROM cursors AS request JOIN "{RouteEntryRow.declared_name}" AS row
-                    ON row.target=request.target AND row.sender=request.sender
-                    AND row.sender_lookup=request.sender_lookup
-                WHERE request.actor=:actor AND row.timestamp>=request.since
-                    AND row.seq>:after AND row.seq<=:through
-                    AND {ReadCursor.unread_sql} ORDER BY row.seq''',
-                self._request_bindings((actor,)) | {"actor":actor,"after":after}
-                | ReadCursor.sql_bindings(self.registry,
-                    {actor: seen.counted(self.deliveries[actor], self.registry)})))
+                f'''WITH {self._requests}, {ReadCursor.sql("?")},
+                {ReadCursor.joined_sql}, unread AS (
+                    SELECT row.seq,row.target,row.sender
+                    FROM cursors AS request CROSS JOIN "{RouteEntryRow.declared_name}" AS row
+                        ON row.target=request.target AND row.sender=request.sender
+                        AND row.sender_lookup=request.sender_lookup
+                    WHERE request.actor=? AND row.timestamp>=request.since
+                        AND row.seq>(SELECT after FROM arguments)
+                        AND row.seq<=(SELECT through FROM arguments)
+                        AND {ReadCursor.unread_sql}
+                ) SELECT seq,target FROM unread WHERE ({predicate}) ORDER BY seq LIMIT ?''',
+                (*self._request_bindings((actor,), after),
+                 *ReadCursor.sql_bindings(self.registry,
+                    {actor: seen.counted(self.deliveries[actor], self.registry)}).values(),
+                 actor, *values, limit)))
 
 
 class CompletingRouteCounts(OpenedRouteCounts):

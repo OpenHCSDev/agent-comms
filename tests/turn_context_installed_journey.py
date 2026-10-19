@@ -408,12 +408,12 @@ def complete_goal_controls(root):
         durable = stored_inputs(dispositions.root)
         assert all(durable.lookup(item.key) == item for item in originals)
         compare = DiffContextCliCommand(thread=source.name)
-        difference = compare.encode_result(compare.apply(service))
+        difference = compare.apply(service).to_wire()
         manifests = tuple(reversed(tuple(ContextCliCommand(thread=source.name).manifests(service))))
         assert difference['turn'] != difference['previous_turn']
         command = TurnContextCliCommand(thread=source.name,
             turn=manifests[-1].turn.occurrence.generation)
-        recorded = command.encode_result(command.apply(service))
+        recorded = command.apply(service).to_wire()
         assert recorded['text_recorded'] is False
         assert recorded['manifests'] == FieldCodec.encode(tuple(item for item in manifests
             if item.turn.matches_generation(manifests[-1].turn.occurrence.generation)))

@@ -27,6 +27,7 @@ from .goal_states import (
 from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import (
     Goal,
+    ReportedTurn,
     GoalDeclaration,
     GoalOrder,
     NoGoal,
@@ -190,7 +191,7 @@ class TransitionGoalAction(GoalAction[Goal]):
             state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
-            reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
+            reported_turn=ReportedTurn(ctx.report_turn) if ctx.model_report else goal.reported_turn,
         )
         self.before_goal_publish(changed, ctx)
         return changed

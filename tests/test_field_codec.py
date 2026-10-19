@@ -4,15 +4,177 @@ from typing import Annotated, ClassVar
 
 import pytest
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
-    FieldCodec, InlineRecord, MalformedRecord, NullMember, PathText, SubclassUnion,
+    FieldCodec, InlineRecord, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember, PathText, SubclassUnion,
     RecordedTimestamp, TimestampText, TextRepresentation, WireValue,
 )
 from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
     MembershipNoticeRole, Message, MessageRole, NoticeRole,
 )
+
+
+def test_transient_plan_excludes_fields_before_decoder_or_value_access():
+    class Opaque:
+        pass
+
+    @dataclass
+    class Record:
+        value: str
+        local: Opaque = field(default_factory=Opaque, repr=False, compare=False,
+            metadata={"wire_transient": True, "wire_name": ""})
+
+        def __getattribute__(self, name):
+            if name == "local":
+                raise AssertionError("A wire operation read process-local state")
+            return object.__getattribute__(self, name)
+
+    record = Record("kept")
+    assert [key for _, key in FieldCodec.record_fields(Record)] == ["value"]
+    assert FieldCodec.encode(record) == {"value": "kept"}
+    assert FieldCodec.project(record, "status") == {"value": "kept"}
+    assert FieldCodec.decode(Record, {"value": "kept"}).value == "kept"
+    assert set(FieldCodec.value_schema(Record)["properties"]) == {"value"}
+    with pytest.raises(MalformedRecord, match="Unknown fields"):
+        FieldCodec.decode(Record, {"value": "kept", "local": {}})
+
+
+def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims():
+    @dataclass
+    class Record:
+        value: str = field(metadata={"wire_transient": True, "wire_context": True})
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.record_fields(Record)
+
+
+def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
+    from agent_comms.field_codec import DeclaredFieldPlan
+
+    class ProbePlan(DeclaredFieldPlan):
+        metadata_flag = "wire_registry_probe"
+
+        def omitted(self, value):
+            return value == "omit" or super().omitted(value)
+
+    @dataclass
+    class Record:
+        value: str = field(metadata={"wire_registry_probe": True})
+
+    assert isinstance(FieldCodec.field_plan(Record, "value"), ProbePlan)
+    assert FieldCodec.encode(Record("omit")) == {}
+    assert FieldCodec.encode(Record("kept")) == {"value": "kept"}
+    assert FieldCodec.decode(Record, {"value": "kept"}) == Record("kept")
+
+
+def test_field_plan_refuses_an_unclaimed_representation():
+    from agent_comms.field_codec import FieldPlan
+
+    class UnclaimedPath(PathText):
+        field_plan = FieldPlan  # The base has no registered field claim.
+
+    @dataclass
+    class Record:
+        value: Annotated[Path, UnclaimedPath]
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
+
+
+def test_field_plan_refuses_unrelated_claims_instead_of_ordering_flags():
+    @dataclass
+    class Record:
+        value: str | None = field(metadata={"wire_context": True, "wire_absent_none": True})
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
+
+
+def test_wire_absence_is_none_without_running_the_constructor_factory():
+    created = []
+
+    def fresh():
+        created.append("created")
+        return "constructed-id"
+
+    @dataclass
+    class Record:
+        id: str | None = field(default_factory=fresh, metadata={"wire_absent_none": True})
+
+    record = Record()
+    assert created == ["created"]
+    assert FieldCodec.encode(record) == {"id": "constructed-id"}
+    plan = FieldCodec.field_plan(Record, "id")
+    for raw in ({}, {"id": None}):
+        for decoded in (
+            FieldCodec.decode(Record, raw),
+            FieldCodec.decode_bound(Record, raw),
+            FieldCodec.decode_selected(Record, raw, {}, fields=("id",)),
+        ):
+            assert decoded.id is None
+            assert FieldCodec.encode(decoded) == {}
+            assert FieldCodec.project(decoded, "status") == {}
+        assert plan.read(raw) is None
+    assert created == ["created"]
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(Record, {"id": 3})
+    assert created == ["created"]
+
+
+def test_json_shape_schema_uses_the_same_member_annotations_as_decode():
+    class SchemaShape(DeclaredFamily, JsonShapeFamily, affix="SchemaShape"):
+        pass
+
+    assert FieldCodec.value_schema(SchemaShape) == {"not": {}}
+    with pytest.raises(MalformedRecord, match="Expected one SchemaShape owner"):
+        FieldCodec.decode(SchemaShape, None)
+
+    @dataclass(frozen=True)
+    class NullSchemaShape(SchemaShape, JsonShapeMember):
+        value: None = None
+
+    @dataclass(frozen=True)
+    class TextSchemaShape(SchemaShape, JsonShapeMember):
+        value: str
+
+    @dataclass(frozen=True)
+    class ArraySchemaShape(SchemaShape, JsonShapeMember):
+        value: tuple[int, ...]
+
+    assert FieldCodec.value_schema(SchemaShape) == {"anyOf": [
+        {"type": "null"}, {"type": "string"},
+        {"type": "array", "items": {"type": "integer"}},
+    ]}
+    for value in (NullSchemaShape(), TextSchemaShape("text"), ArraySchemaShape((1, 2))):
+        assert FieldCodec.decode(SchemaShape, FieldCodec.encode(value)) == value
+
+
+def test_compiled_plan_resolves_a_thousand_records_once(monkeypatch):
+    import agent_comms.field_codec as codec
+
+    @dataclass(frozen=True)
+    class Entry:
+        count: int
+        tags: tuple[str, ...]
+
+    annotation = list[Entry]
+    records = [Entry(i, ("alpha", "beta")) for i in range(1000)]
+    expected = [{"count": i, "tags": ["alpha", "beta"]} for i in range(1000)]
+    plan = codec.compile_decoder(annotation)
+    before = FieldCodec._record_plan.cache_info().misses
+    assert FieldCodec.encode(records, annotation) == expected
+    assert FieldCodec._record_plan.cache_info().misses == before + 1
+    assert codec.compile_decoder(annotation) is plan
+
+    def unexpected(*args):
+        raise AssertionError("The value path parsed an annotation")
+
+    monkeypatch.setattr(FieldCodec, "_representation", staticmethod(unexpected))
+    monkeypatch.setattr(codec, "get_args", unexpected)
+    monkeypatch.setattr(codec, "get_origin", unexpected)
+    assert FieldCodec.encode(records, annotation) == expected
+    assert FieldCodec._record_plan.cache_info().misses == before + 1
 
 
 def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
@@ -219,7 +381,7 @@ def test_family_refusal_keeps_its_own_message_once(annotation, data):
     with pytest.raises(MalformedRecord) as refused:
         FieldCodec.decode(annotation, data)
     assert str(refused.value) == "Unknown Choice name: 'absent'"
-    assert type(refused.value.__cause__) is ValueError
+    assert type(refused.value.__cause__) is UnknownFamilyMember
     assert str(refused.value.__cause__) == str(refused.value)
 
 
@@ -311,7 +473,10 @@ def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause()
     with pytest.raises(ValueError) as failure:
         FieldCodec.decode(str | int, None)
     assert isinstance(failure.value.__cause__, ValueError)
-    assert str(failure.value.__cause__) == "Expected <class 'str'>, received NoneType"
+    from agent_comms.field_codec import compile_decoder
+
+    first = compile_decoder(str | int).alternatives[0]
+    assert str(failure.value.__cause__) == f"Expected {first.target}, received NoneType"
 
 
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
@@ -344,10 +509,13 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
         pass
 
     for target, value in ((int, True), (bool, 1), (str, DerivedStr("text")),
-                          (int, DerivedInt(4)), (DerivedInt, 4),
+                          (int, DerivedInt(4)),
                           (float, True), (float, math.inf), (float, math.nan), (int, None)):
         with pytest.raises(ValueError):
             FieldCodec.decode(target, value)
+    # An unsupported declaration is a programming error, not malformed data.
+    with pytest.raises(TypeError, match="Unsupported JSON type"):
+        FieldCodec.decode(DerivedInt, 4)
     assert FieldCodec.decode(int | None, None) is None
     assert FieldCodec.decode(Literal[True, 1], True) is True
     assert type(FieldCodec.decode(Literal[True, 1], 1)) is int
@@ -492,8 +660,8 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
 
     arguments = {"from": "sender", "to": "receiver", "body": "hello"}
     event = ToolStartTranscript(
-        tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
-        tool=ToolDeclaration.record("comms_send", arguments),
+        position=0, tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
+        tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
     )
     encoded = FieldCodec.encode(event)
     assert encoded["tool"]["tool"] == "comms_send"

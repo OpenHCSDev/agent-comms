@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .field_codec import FieldCodec, PathText
 from .native_tool_call import SelectedToolDenied
 from .standing_rules import UndatedStandingRule
+from .storage_room import (
+    AllocationRoomWork, BuildRoomWork, RoomAllocation, TestGateRoomWork,
+)
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -55,7 +58,7 @@ class MemoryUse:
 
 
 @dataclass(frozen=True)
-class StorageRule:
+class StorageRule(RoomAllocation):
     floor_gib: float = 5.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
@@ -126,14 +129,18 @@ class StorageRule:
 
     def memory(self) -> MemoryUse:
         """Available memory, the largest idle pytest temp dirs and the largest test processes."""
-        lines = (self.proc / 'meminfo').read_text().splitlines()
-        available = next(int(line.split()[1]) for line in lines if line.startswith('MemAvailable:'))
+        available = self.memory_available_bytes()
         idle = time.time() - self.idle_minutes * 60
         dirs = (MemoryHolder(str(path), self.tree_gib(path))
                 for path in self.temp_root.glob('pytest-of-*/*')
                 if path.is_dir() and path.stat().st_mtime < idle)
-        return MemoryUse(available / 2**20, self.largest(dirs),
+        return MemoryUse(available / 2**30, self.largest(dirs),
                          self.largest(self.test_processes()))
+
+    def memory_available_bytes(self):
+        lines = (self.proc / 'meminfo').read_text().splitlines()
+        return next(int(line.split()[1]) * 1024 for line in lines
+                    if line.startswith('MemAvailable:'))
 
     def largest(self, holders: Iterator[MemoryHolder]) -> tuple[MemoryHolder, ...]:
         return tuple(sorted(holders, key=lambda holder: -holder.gib)[:self.shown])
@@ -264,7 +271,8 @@ class ShellProgram:
 
 
 class StorageEffect:
-    """Preflight one actual operation; completion stores no filesystem facts."""
+    """Preflight one actual operation and declare its measured work, if any."""
+    work: ClassVar[tuple] = ()
 
 
 @dataclass(frozen=True)
@@ -285,8 +293,18 @@ class ForbiddenStorageEffect(StorageEffect):
 
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
+    work = (AllocationRoomWork,)
+
     def check(self, rule, thread):
         rule.require_allocation(thread)
+
+
+class BuildStorageEffect(AllocateStorageEffect):
+    work = (BuildRoomWork,)
+
+
+class TestGateStorageEffect(AllocateStorageEffect):
+    work = (TestGateRoomWork,)
 
 
 @dataclass(frozen=True)
@@ -357,6 +375,29 @@ class AllocatesOnCommands(ShellProgram):
         return (AllocateStorageEffect(),) if self.matches(args, self.prefixes) else ()
 
 
+class MeasuredCommands(ShellProgram):
+    """Compose command declarations, including sibling capabilities in the MRO."""
+
+    def decode(self, args, cwd):
+        if not {'--help', '-h'}.isdisjoint(args):
+            return ()
+        return tuple(owner.effect() for owner in type(self).__mro__
+                     if 'commands' in owner.__dict__ and any(
+                         self.matches((name, *args), owner.commands) for name in self.names))
+
+
+class BuildsOnCommands(MeasuredCommands):
+    effect = BuildStorageEffect
+    commands = (('build_runtime.py',), ('python', 'build_runtime.py'),
+                ('python', '-m', 'hatchling', 'build'), ('python', '-m', 'build'))
+
+
+class TestsOnCommands(MeasuredCommands):
+    effect = TestGateStorageEffect
+    commands = (('pytest',), ('py.test',), ('python', '-m', 'pytest'),
+                ('python', 'test_gate.py'))
+
+
 class WritesTargets(ShellProgram):
     targets = slice(None)
     minimum = 1
@@ -406,13 +447,15 @@ class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTr
         return super().effects(args, cwd)
 
 
-class PythonProgram(ForbidsCommands, AllocatesOnCommands):
+class PythonProgram(ForbidsCommands, BuildsOnCommands, TestsOnCommands, AllocatesOnCommands):
     names = frozenset({'python'})
     versioned = True
     forbidden = (('-m', 'venv'),)
-    prefixes = (('-m', 'pip', 'install'), ('build_runtime.py',))
+    prefixes = (('-m', 'pip', 'install'),)
 
     def effects(self, args, cwd):
+        while args and args[0] in ('-I', '-B', '-u', '-E', '-s'):
+            args = args[1:]
         args = [Path(args[0]).name, *args[1:]] if args and not args[0].startswith('-') else args
         return super().effects(args, cwd)
 
@@ -428,7 +471,15 @@ class MakeEnvironmentProgram(ForbidsCommands):
 
 
 class DiskProgram(AllocatesOnCommands):
-    names = frozenset({'ffmpeg', 'recordmydesktop', 'build_runtime.py'})
+    names = frozenset({'ffmpeg', 'recordmydesktop'})
+
+
+class BuildProgram(BuildsOnCommands):
+    names = frozenset({'build_runtime.py'})
+
+
+class TestGateProgram(TestsOnCommands):
+    names = frozenset({'pytest', 'py.test'})
 
 
 class PackageProgram(AllocatesOnCommands):

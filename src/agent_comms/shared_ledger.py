@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from .cli_result import CliResult
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, SingleFieldValue
 from .locked_store import LockedStore, RootFile
 from .thread_owned_state import ThreadOwnedState
 
@@ -16,38 +16,27 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class LedgerDocument(CliResult):
+class LedgerDocument(SingleFieldValue, CliResult):
     """The ledger's one free-form JSON document as read; its keys are its authors'."""
 
-    entries: Mapping[str, object]
-
-    def encoded(self) -> object:
-        return self.to_wire()
-
-    def to_wire(self) -> dict[str, object]:
-        return dict(self.entries)
-
+    entries: dict[str, object]
 
 @dataclass(frozen=True, slots=True)
-class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]]):
+class SharedLedger(RootFile, ThreadOwnedState, LockedStore[LedgerDocument]):
     """One free-form JSON document; no in-memory mirror or closed value family."""
 
     filename: ClassVar[str] = "ledger.json"
     json_indent = 2
 
-    @property
-    def record_type(self) -> type[dict[str, Any]]:
-        return dict[str, Any]
+    record_type = LedgerDocument
 
-    def empty(self) -> dict[str, Any]:
-        return {}
-
-    def document(self) -> LedgerDocument:
-        return LedgerDocument(self.read())
+    def empty(self) -> LedgerDocument:
+        return LedgerDocument({})
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:
-        changes = FieldCodec.decode(self.record_type, dict(updates))
-        self.update(lambda values: {**values, **changes, "last_updated_by": author})
+        changes = FieldCodec.decode(LedgerDocument, dict(updates))
+        self.update(lambda document: LedgerDocument(
+            {**document.entries, **changes.entries, "last_updated_by": author}))
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Remove exact structural references to these thread names."""
@@ -83,10 +72,10 @@ class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]]):
 
         removed = 0
 
-        def change(values: dict[str, Any]) -> dict[str, Any]:
+        def change(document: LedgerDocument) -> LedgerDocument:
             nonlocal removed
-            cleaned, removed = clean(values)
-            return cast(dict[str, Any], cleaned) if removed else values
+            cleaned, removed = clean(document.entries)
+            return LedgerDocument(cast(dict[str, object], cleaned)) if removed else document
 
         self.update(change)
 
@@ -117,10 +106,10 @@ class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]]):
 
         changed = 0
 
-        def change(values: dict[str, Any]) -> dict[str, Any]:
+        def change(document: LedgerDocument) -> LedgerDocument:
             nonlocal changed
-            renamed, changed = rename(values)
-            return cast(dict[str, Any], renamed) if changed else values
+            renamed, changed = rename(document.entries)
+            return LedgerDocument(cast(dict[str, object], renamed)) if changed else document
 
         self.update(change)
         return changed

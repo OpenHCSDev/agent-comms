@@ -4,6 +4,7 @@ import json
 import os
 
 import pytest
+from acp.exceptions import RequestError
 
 import agent_comms.agent_events as ae
 from agent_comms.acp import CommsAgent
@@ -45,7 +46,7 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp_path, monkeypatch):
+async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp_path, monkeypatch, native_runtime_package):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
@@ -57,7 +58,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
     comms.registry.declare(
-        comms.registry.new_thread(name='sender', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        comms.registry.new_thread(name='sender', tags=frozenset({'comms'}), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     incoming = comms.messaging.send("sender", "#comms", "Private input").message
     original_send = comms.messaging.send
@@ -69,7 +70,8 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
         observed.append(json.loads(files[0].read_text()))
         return original_send(*args, **kwargs)
 
-    async def events(*args, **kwargs):
+    async def events(*args, package, tool_mode, **kwargs):
+        assert package == native_runtime_package
         yield ae.Done(
             ok=False,
             text="SECRET native stderr",
@@ -79,9 +81,10 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
 
     monkeypatch.setattr(comms.messaging, "send", publish)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    await owner.turns.run_agent_turn(
-        session, session, "Private input", origins=(incoming,)
-    )
+    with pytest.raises(RequestError):
+        await owner.turns.run_agent_turn(
+            session, session, "Private input", origins=(incoming,)
+        )
     assert observed[0]["sequences"] == [incoming.seq]
     assert observed[0]["reason"] == "native_preflight_timeout"
     rows = [json.loads(line) for line in (comms.root / "bus.jsonl").read_text().splitlines()]
@@ -93,6 +96,6 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
         stored_inputs(owner.inputs.dispositions.root)
         .rows[owner.inputs.dispositions.bus_key(incoming, comms.registry.require(session))]
         .declared_name
-        == "unknown"
+        == "not_sent"
     )
     await owner.shutdown()

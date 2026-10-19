@@ -32,7 +32,7 @@ def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, threa
     assert TurnRunner.backend_for(runner, 'durable', restored) is backend
 
 
-def test_location_methods_and_missing_history(tmp_path):
+def test_location_methods_and_missing_history(tmp_path, source_reads):
     location = DurableDatabase(str(tmp_path / 'missing.sqlite3'))
     assert isinstance(location, RuntimeLocation)
     assert location.arguments() == {'session_file': location.path}
@@ -40,7 +40,7 @@ def test_location_methods_and_missing_history(tmp_path):
     assert location.resumable is True
     assert location.model_choice is None
     with pytest.raises(BackendDeclarationError, match='cannot select native sessions'):
-        location.select_session(tmp_path, None)
+        location.select_session(tmp_path, None, source_reads)
     with pytest.raises(ValueError, match='forking'):
         location.require_forkable()
     source = location.history_source(tmp_path, None)

@@ -307,7 +307,7 @@ class InputDispositions(TypedStore):
         )
 
     def clear_native(self, key: str, native_id: str, text: str) -> None:
-        """A native clear moves its original input, or nothing is published."""
+        """Clear only the matching native input; publish nothing if it differs."""
         refusal = "Native clear differs from its original input"
         self._transition(key, lambda row: row.clear_native(native_id, text).require_moved(refusal))
 

@@ -1,0 +1,1497 @@
+--- a/order.py
++++ b/order.py
+@@ -1,809 +1,7 @@
+-"""The only way claude-code sends an order to a unit. Refuses soft or vague orders; tracks deadlines and strikes.
+-
+-  order.py send UNIT DUE(HH:MM) BODYFILE [--traced PATH:LINE] [--clean] [--reassign "<concrete failure>"] [--replaces MSG]   send a numbered order with a deadline
+-     the body must declare, on their own lines:
+-       Problems: P<n>[, P<m>...]                       (the listed problems it owns, batched by surface for one owner; one open order per problem)
+-       Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
+-       Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
+-                                             (--clean only when the unit showed no incompetence)
+-     --replaces without --clean is a send-back: it strikes the unit and roasts the blunt line in #comms
+-  order.py say UNIT[,UNIT] BODYFILE           a non-order message (answer, ownership call); refused if it orders work
+-  order.py problem "TEXT" --where PATH:LINE     record a problem (it alarms every minute until an order owns it)
+-  order.py close PID --works "EVIDENCE"        the fix works in the app; the problem leaves the list
+-  order.py fold PID --into PID --why "..."     a duplicate row joins the problem that already states it
+-  order.py board                               regenerate fleet-board.md from problems and orders
+-  order.py done UNIT MSG --sha SHA           the unit delivered that order (SHA it pushed); late delivery is a strike
+-  order.py drop UNIT MSG --by NEWMSG           an older order replaced by a newer order to the same unit (no credit, no strike)
+-  order.py strike UNIT --why "..." [--caught "WHO at STAGE"]   a send-back, a missed deadline or a false claim; stage is review/install/live/tristan
+-  order.py overdue                           loop: every minute, name units past their deadline
+-
+-Tristan 2026-10-16: "we don't tolerate incompetence ... they'd just be fired instead of berated."
+-Two strikes on one task: the task is taken away and reassigned (`fire`). Nothing here judges
+-code; it refuses orders that leave a unit room to interpret, and refuses to let a deadline lapse silently.
+-Owner: claude-code (RTS rotation). Delete with the rts directory when the role ends.
+-"""
+-import storage
+-import calendar, fcntl, json, os, re, subprocess, sys, time
+-RTS = '/home/ts/.cache/agent-scratch/rts'
+-DEADLINES, STRIKES = f'{RTS}/deadlines.json', f'{RTS}/strikes.jsonl'
+-DONE = f'{RTS}/done.jsonl'  # every delivered order, written by done(); the board shows its problem as install-pending
+-SENT = f'{RTS}/sent.jsonl'  # every message claude-code sends to units, written where it is sent
+-PROBLEMS = f'{RTS}/problems.json'  # the one problem list; fleet-board.md is generated from it
+-BOARD = '/home/ts/.agent-comms/docs/agents/fleet-board.md'
+-NARRATIVE = '/home/ts/.agent-comms/docs/agents/fleet-narrative.md'  # public record of every failure, in plain words
+-# Words that hide what happened. A strike must say what the unit did in words Tristan uses.
+-JARGON = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
+-
+-
+-def jargon_in(text: str) -> list[str]:
+-    """Jargon in plain prose: quoted text, `code`, indented quote lines, paths and snake_case identifiers are code names, not the sentence."""
+-    prose = re.sub(r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b|\b\w+_\w+\b', ' ', text)
+-    return sorted({m.group(0).lower() for m in JARGON.finditer(prose)})
+-B = '/var/tmp/agent-comms-live-20260927-wzjtqhza'
+-CLI = 'agent-comms'
+-
+-# Phrases that hand the decision back to the unit or ask permission instead of ordering.
+-SOFT = re.compile(r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|when you get a chance|"
+-                  r"feel free|if you (think|agree|want)|thoughts\??|what do you think|thanks|thank you|sorry|"
+-                  r"no rush|optional(ly)?|up to you|might want|suggest)\b", re.I)
+-
+-
+-def post(recipients, body):
+-    """Send one message from claude-code and record it in SENT; judge.py reads orders from there."""
+-    if found := jargon_in(body):
+-        sys.exit(f'REFUSED, nothing sent: your own message uses jargon {found}. Say what happened in plain words.')
+-    refuse_dogma(re.sub(r'(?m)`[^`\n]*`|"[^"\n]*"|^ {4}.*$', ' ', body))  # quoting the dogma to correct it is allowed
+-    command = ['timeout', '300', CLI, '--root', B, 'send', '--from', 'claude-code']
+-    for unit in recipients:
+-        command += ['--to', unit]
+-    out = subprocess.run(command + ['--type', 'info', '--body', body], capture_output=True, text=True)
+-    if '"id"' not in out.stdout:
+-        sys.exit(f'Send failed: {out.stdout}{out.stderr}')
+-    sent = json.loads(out.stdout)['id']
+-    with open(SENT, 'a') as f:
+-        f.write(json.dumps(dict(id=sent, to=list(recipients), text=body, at=time.time())) + '\n')
+-    return sent
+-
+-
+-def facts(order):
+-    """The problems one order owns: a batch of related problems goes to one owner as one order."""
+-    return order.get('facts') or ([order['fact']] if order.get('fact') else [])
+-
+-
+-_held = None  # deadlines.json lock: held from the first read until this command writes or exits
+-
+-
+-def load(path, empty):
+-    """Reading deadlines.json takes its lock, so no other order.py run writes back a stale copy over this one's."""
+-    global _held
+-    if path == DEADLINES and _held is None:
+-        _held = open(DEADLINES + '.lock', 'w')
+-        fcntl.flock(_held, fcntl.LOCK_EX)
+-    return json.load(open(path)) if os.path.exists(path) else empty
+-
+-
+-def save(path, value):
+-    """Atomic replace, so unlocked readers (rotate.py, judge.py) never see half a file; releases the deadlines lock."""
+-    global _held
+-    temporary = f'{path}.{os.getpid()}.tmp'
+-    with open(temporary, 'w') as f:
+-        json.dump(value, f, indent=1)
+-    os.replace(temporary, path)
+-    if path == DEADLINES:
+-        release()
+-
+-
+-def release():
+-    global _held
+-    if _held is not None:
+-        fcntl.flock(_held, fcntl.LOCK_UN)
+-        _held.close()
+-        _held = None
+-
+-
+-# Tristan 2026-10-17: "the paper refutes the dogma; I've done the proofs; enforce them." Paper 1 proves multiple
+-# parents derive every required pair with nothing outside (the top rung), that composition and forwarding supply
+-# the same pairs outside (Fig 3, Thm 4.6), and that is-a and has-a are not opposites. A reason that faults
+-# inheritance, mixins or multiple parents as such is dogma, not a restated fact, and is refused wherever the
+-# commander writes it. A real defect is stated as a Slop: line instead.
+-DOGMA = re.compile(r"composition over inheritance|(prefer|favou?r|use) composition|inherits (two|both|multiple|several|\d+)\b"
+-                   r"|multiple (inheritance|parents) (is (bad|wrong|dangerous|confusing|fragile|slop)|causes|creates|smells|complicates)|diamond problem|fragile base"
+-                   r"|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))|too many (parents|base classes|mixins)"
+-                   r"|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+|inheritance (abuse|soup|hell|is wrong)", re.I)
+-
+-
+-def refuse_dogma(text):
+-    if found := DOGMA.search(re.sub(r'(?m)^Banned:.*$', '', text)):
+-        sys.exit(f'REFUSED, nothing recorded: "{found.group()}" faults inheritance itself. Paper 1 proves multiple parents derive '
+-                 'what composition and forwarding supply outside (Thm 4.6, Fig 3). Name the restated fact in a Slop: line '
+-                 '(identity, membership, implementation or state) and the declaration that derives it.')
+-
+-
+-# Tristan 2026-10-17: "eliminate forwarding; use inheritance and multiple parents, and decompose the hierarchy if it
+-# is not sound; never write slop to get around an incorrect hierarchy; make it impossible to be a slop lover."
+-# A forwarder restates an implementation pair (paper 1 Fig 3: fields + forwarding leave routes to maintain), so
+-# nothing the commander approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
+-# route: fold the false owner into the real one, or compose the providers as parents.
+-FORWARDER = re.compile(
+-    r"^\+\s*(?:def \w+\([^)]*\)(?:\s*->[^:]+)?:\s*return self\.\w+\.\w+(?:\([^()]*\))?\s*$"      # one-line def returning self.x.y(...)
+-    r"|\w+\s*=\s*property\(lambda \w+:\s*\w+\.\w+\.\w+\)"                                        # attr = property(lambda s: s._a.attr)
+-    r"|def __getattr__\(self)", re.M)
+-FORWARD_BODY = re.compile(r"^\+(\s*)def (\w+)\(self[^)]*\)[^:]*:\s*\n\+\1\s+return self\.\w+\.\2\b", re.M)  # def x(self): / return self._a.x(...)
+-KEEP_SLOP = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through"
+-                       , re.I | re.M)
+-HIERARCHY_WORD = re.compile(r"\b(new class(es)?|new base|base class|changing the hierarchy|inheritance|mixins?|multiple parents|changing \w+State)\b", re.I)
+-UNDOES_HIERARCHY = re.compile(r"\b(flatten\w*|remov\w*|replac\w*|delet\w*|collaps\w*|single-parent|one-parent|merg\w*)\b", re.I)
+-
+-
+-def bans_hierarchy_fix(text):
+-    """A Banned item that forbids adding classes, bases or parents; banning their removal is fine."""
+-    for line in re.findall(r'(?m)^Banned:(.*)$', text):
+-        for item in re.split(r',|;|\bor\b', line):
+-            if HIERARCHY_WORD.search(item) and not UNDOES_HIERARCHY.search(item):
+-                return item.strip()
+-    return None
+-
+-
+-def overrides(sources):
+-    """Names a class answers again for a question a base in the same module declares: a per-state answer, not forwarding."""
+-    import ast
+-    found = set()
+-    for text in sources:
+-        try:
+-            tree = ast.parse(text)
+-        except SyntaxError:
+-            continue
+-        classes = {c.name: c for c in tree.body if isinstance(c, ast.ClassDef)}
+-        def own(c):
+-            names = set()
+-            for node in c.body:
+-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+-                    names.add(node.name)
+-                elif isinstance(node, ast.Assign):
+-                    names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+-                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+-                    names.add(node.target.id)
+-            return names
+-        def inherited(c, seen=()):
+-            names = set()
+-            for b in c.bases:
+-                if isinstance(b, ast.Name) and b.id in classes and b.id not in seen:
+-                    names |= own(classes[b.id]) | inherited(classes[b.id], seen + (b.id,))
+-            return names
+-        for c in classes.values():
+-            found |= own(c) & inherited(c)
+-    return found
+-
+-
+-def forwarders_added(diff, sources=()):
+-    """Lines a diff adds that only hand a call to another object. A subclass answering a question its base declares
+-    (sources: the files after the change) is a per-state override, which is the polymorphism the paper asks for.
+-    A call that passes the holder itself (`return self.state.ready(self)`) asks the current state object to decide
+-    for this owner: that is the state pattern doing the deciding, not a hand-off."""
+-    kept = overrides(sources)
+-    state_call = re.compile(r'return self\.\w+\.\w+\((?:[^()]*,\s*)?self\b')
+-    defs = lambda text: re.search(r'def (\w+)', text)
+-    return ([m.group(0).strip() for m in FORWARDER.finditer(diff)
+-             if not (defs(m.group(0)) and defs(m.group(0)).group(1) in kept) and not state_call.search(m.group(0))]
+-            + [f'def {m.group(2)} -> self.?.{m.group(2)}' for m in FORWARD_BODY.finditer(diff)
+-               if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
+-
+-
+-def refuse_slop_love(text):
+-    text = re.sub(r'(?m)`[^`\n]*`|"[^"\n]*"|^ {4}.*$', ' ', text)  # quoting an old order to correct it is allowed
+-    if found := (m.group() if (m := KEEP_SLOP.search(text)) else bans_hierarchy_fix(text)):
+-        sys.exit(f'REFUSED, nothing recorded: "{found.strip()}" keeps a forwarder or bans fixing the hierarchy. '
+-                 'Fold the false owner into the real one or compose providers as parents, and delete every route.')
+-
+-
+-class Slop:
+-    """Paper 1's definition, required wherever the commander calls something slop: code restating a required fact
+-    (an identity, a contract membership, an implementation pair, or a second writable copy of one state) that a
+-    complete mechanism derives once from its declaration. Naming slop means naming the fact, where it is
+-    restated, the declaration that should own it and the mechanism that derives it from there; a label alone
+-    tells the unit nothing it can check."""
+-    KINDS = {'identity': 'which meaning this is', 'membership': 'which contract or set it belongs to',
+-             'implementation': 'which implementation it gets', 'state': 'a second writable copy of one value'}
+-    MECHANISMS = ('nominal-key', 'subclass', 'mixin', 'base-method', 'init-subclass', 'metaclass', 'declaration', 'delete-copy')
+-    USAGE = ('Refused: slop needs its formal statement: --slop KIND (' + '|'.join(KINDS) + ') --fact "<the required fact, 4+ words>" '
+-             '--at PATH:LINE (where it is restated) --derive MECH (' + '|'.join(MECHANISMS) + ') --by PATH:LINE (the declaration that owns it)')
+-    LINE = re.compile(r'^Slop: (\w+); fact (.+?); at (\S+:\d+); derive ([\w-]+) on (\S+:\d+)\s*$', re.M)
+-
+-    def __init__(self, kind, fact, at, derive, by):
+-        problems = []
+-        if kind not in self.KINDS:
+-            problems.append(f'kind {kind!r} is not one of {sorted(self.KINDS)}')
+-        if len(fact.split()) < 4:
+-            problems.append('the fact needs 4+ words')
+-        if derive not in self.MECHANISMS:
+-            problems.append(f'mechanism {derive!r} is not one of {self.MECHANISMS}')
+-        for place in (at, by):
+-            path, _, line = place.rpartition(':')
+-            if not (os.path.isfile(path) and line.isdigit() and int(line) <= sum(1 for _ in open(path))):
+-                problems.append(f'{place} does not exist')
+-        if problems:
+-            sys.exit(self.USAGE + '\n  ' + '\n  '.join(problems))
+-        self.kind, self.fact, self.at, self.derive, self.by = kind, fact, at, derive, by
+-
+-    @classmethod
+-    def from_args(cls, args):
+-        try:
+-            return cls(*(args[args.index(flag) + 1] for flag in ('--slop', '--fact', '--at', '--derive', '--by')))
+-        except ValueError:
+-            sys.exit(cls.USAGE)
+-
+-    @classmethod
+-    def from_order(cls, body):
+-        """Every Slop: line of an order; an order that calls something slop must carry at least one."""
+-        found = [cls(*m.groups()) for m in cls.LINE.finditer(body)]
+-        if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
+-            sys.exit('Refused order: it calls something slop without a line\n  Slop: <' + '|'.join(cls.KINDS)
+-                     + '>; fact <required fact>; at <path:line restated>; derive <' + '|'.join(cls.MECHANISMS) + '> on <path:line owner>')
+-        return found
+-
+-    def render(self):
+-        return (f'{self.at} restates a {self.kind} fact ({self.KINDS[self.kind]}): {self.fact}. '
+-                f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
+-
+-
+-BLUNT = re.compile(r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|worthless|broke|broken|pointless|waste)\b", re.I)
+-
+-
+-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, replaces=None, disk=False, traced=None):
+-    body = open(body_file).read()
+-    problems = []
+-    # Storage is a hard rule: below the floor no order may ask for work that allocates disk; tool_watch blocks the
+-    # allocating calls themselves, so source edits on existing checkouts still go out. --disk passes a cleanup order.
+-    if storage.free_gb() < storage.FLOOR_GB and not disk and (asked := storage.ALLOCATES.search(body)):
+-        problems.append(f'/home has {storage.free_gb():.1f} GB free, under the {storage.FLOOR_GB} GB floor, and the order asks for "{asked.group()}"')
+-    if quota := storage.over_quota(unit):
+-        problems.append(f'{quota}: it cleans up its own checkouts and scratch before it gets new work')
+-    refuse_dogma(body)
+-    refuse_slop_love(body)
+-    Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
+-    # Tristan 2026-10-16: borderline rude at all times; the only exception is no witnessed incompetence.
+-    if not clean and not BLUNT.search(body):
+-        problems.append('not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was')
+-    # Quoted text is a citation (e.g. naming the banned words), not my own wording.
+-    unquoted = re.sub(r'"[^"\n]*"|“[^”\n]*”', '', body)
+-    if soft := sorted({m.group(0).lower() for m in SOFT.finditer(unquoted)}):
+-        problems.append(f'soft wording {soft}: state the edit, do not ask')
+-    if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) < 1:
+-        problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
+-    if not re.search(r'(?i)\breport\b', body):
+-        problems.append('no report line: say exactly what the unit sends back (sha, counts before -> after)')
+-    if not re.search(r'(?i)\bbanned\b|\bno (new|cache|debounce|flag|fallback|local import)', body):
+-        problems.append('no banned shapes: name the slop shapes this task invites')
+-    if not re.fullmatch(r'\d{1,2}:\d{2}', due):
+-        problems.append('due must be HH:MM EDT')
+-    fact = re.search(r'(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\b', body)
+-    group = re.findall(r'P\d+', fact[1]) if fact else []
+-    owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
+-    check = re.search(r'(?m)^Check:\s*(\S+)\s*::\s*(.+?)\s*->\s*(\d+)\s*$', body)
+-    if not fact:
+-        problems.append('no Problem: P<n> line; record it first with `order.py problem` (every order owns a listed problem)')
+-    elif any(pid not in load(PROBLEMS, {}) for pid in group):
+-        problems.append(f'{[pid for pid in group if pid not in load(PROBLEMS, {})]} not open problems')
+-    if not owner:
+-        problems.append('no Owner: path:line of the existing owner the fix belongs on')
+-    elif not os.path.exists(owner[1]) or int(owner[2]) > sum(1 for _ in open(owner[1])):
+-        problems.append(f'Owner {owner[1]}:{owner[2]} does not exist; read the code and name the real owner')
+-    if not check:
+-        problems.append('no Check: <repo> :: <command> -> N; done runs it, so make it the real acceptance count')
+-    elif not os.path.isdir(check[1]):
+-        problems.append(f'Check repo {check[1]} is not a directory')
+-    # 2026-10-17: my P215 check could never print its target and my P238 premise named lines that did
+-    # something else. An order's check must fail now (or it proves nothing), and every absolute
+-    # path:line it cites must exist.
+-    if check and os.path.isdir(check[1]) and not problems:
+-        try:
+-            ran = subprocess.run(['bash', '-c', check[2]], cwd=check[1], capture_output=True, text=True, timeout=90)
+-            got = re.findall(r'\d+', ran.stdout)
+-            if got and int(got[-1]) == int(check[3]):
+-                problems.append(f'Check already prints {check[3]} before any work: `{check[2]}` proves nothing; write a check that fails now')
+-        except subprocess.TimeoutExpired:
+-            problems.append('Check took over 90 s; done runs it too, so make it a focused count')
+-    for path, line in re.findall(r'(/home/ts/\S+?\.\w+):(\d+)', body):
+-        if not os.path.exists(path) or int(line) > sum(1 for _ in open(path, errors='replace')):
+-            problems.append(f'cited {path}:{line} does not exist; read the code before citing it')
+-    # codex, 2026-10-16 in #comms: ownership reversals and competing queued orders wasted work.
+-    # One owner through completion; a change of owner names the concrete failure, and a
+-    # change of direction to the same unit names the order it replaces.
+-    held = [(u, d['msg']) for u, owed in load(DEADLINES, {}).items() for d in owed if set(facts(d)) & set(group)]
+-    holders = [(u, m) for u, m in held if u != unit]
+-    mine = [m for u, m in held if u == unit]
+-    if fact and holders and not reassign:
+-        problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
+-    if reassign is not None and len(reassign.split()) < 8:
+-        problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
+-    if fact and mine and replaces not in mine:
+-        problems.append(f'{unit} already holds {mine} on this problem; pass --replaces <that id> so the old order is withdrawn, never queue a competing one')
+-    # Tristan 2026-10-18: Pi Durable passed through five owners on grep checks and nobody ran one turn.
+-    # An order names the user-visible behavior that closes it; done needs a file showing that behavior.
+-    works = re.search(r'(?m)^Works when:\s*(.+)$', body)
+-    if not mechanical and (not works or len(works.group(1).split()) < 8):
+-        problems.append('add "Works when: <the user-visible run that closes this, 8+ words>"; a grep never closes a problem')
+-    if reassign and fact:
+-        owners = {s['unit'] for s in load_strikes() if s.get('task') == fact} | {u for u, _ in holders}
+-        if len(owners) >= 2 and not traced:
+-            problems.append(f'{fact} has had {sorted(owners)}; read the failing path end to end yourself and pass --traced PATH:LINE (the first line that fails) before handing it on again')
+-    if traced and not (os.path.exists(traced.rsplit(':', 1)[0])):
+-        problems.append(f'--traced {traced} does not exist')
+-    if problems:
+-        sys.exit('Refused order:\n  ' + '\n  '.join(problems))
+-    struck = [s for s in load_strikes() if s['unit'] == unit and s.get('task') == fact]
+-    if fact and len(struck) >= 2 and not mechanical:
+-        sys.exit(f'Refused: {unit} has {len(struck)} strikes on {fact}. Reassign {fact}; only --mechanical orders on it reach {unit}.')
+-    sent = post([unit], f'{body.rstrip()}' + (f'\nThis replaces my order {replaces}; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + storage.RULE.replace('<you>', unit) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.' + f'\nDue {due} EDT. Miss it and the task is reassigned.')
+-    deadlines = load(DEADLINES, {})
+-    # One unit can owe several orders; each keeps its own deadline.
+-    key = group[0]
+-    if reassign:
+-        for other, owed in list(deadlines.items()):
+-            if other != unit and any(set(facts(d)) & set(group) for d in owed):
+-                taken = [d for d in owed if set(facts(d)) & set(group)]
+-                deadlines[other] = [d for d in owed if not set(facts(d)) & set(group)]
+-                # A Claude fork holds its order as claude-agent-<id>; it has no bus thread, I stop it myself.
+-                if all(d['msg'].startswith('claude-agent-') for d in taken):
+-                    continue
+-                post([other], f'Taken off you: {", ".join(group)} ("{load(PROBLEMS, {})[group[0]]["text"][:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.')
+-    if replaces:
+-        deadlines[unit] = [d for d in deadlines.get(unit, []) if d['msg'] != replaces]
+-    deadlines.setdefault(unit, []).append(dict(due=due, msg=sent, at=time.time(), fact=key, facts=group,
+-                                               check=[check[1], check[2], int(check[3])], disk=disk,
+-                                               works=works.group(1) if works and not mechanical else None))  # disk: this order may allocate under the floor
+-    save(DEADLINES, deadlines)
+-    print(sent)
+-    # A reassignment replaces another unit's order; the new owner did nothing wrong (claude-code, P399).
+-    if replaces and not clean and not reassign:
+-        # Tristan 2026-10-16: a send-back is a strike, no warnings; and every send-back is roasted in #comms.
+-        # Done here so I cannot send work back and forget either (I did, all afternoon).
+-        verdict = next(l for l in body.splitlines() if BLUNT.search(l)).strip()
+-        # judge.py back already struck this send-back; one failure is one strike (judge-0002, P382).
+-        recent = [json.loads(l) for l in open(STRIKES) if l.strip()][-20:]
+-        # Only the same failure dedupes: a send-back or a missed deadline, not an unrelated strike on the task.
+-        if not any(r['unit'] == unit and r.get('task') == group[0]
+-                   and ('sent back' in r['why'] or ' missed ' in r['why'])
+-                   and time.time() - r['at'] < 900 for r in recent):
+-            strike(unit, f'sent back on {group[0]}: {verdict}')
+-
+-
+-def say(units, body_file):
+-    body = open(body_file).read()
+-    # Numbered edits or a report line are an order: it needs a deadline, so it goes through send.
+-    if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) >= 2 or re.search(r'(?mi)^\s*(report|due)\b.*:', body):
+-        sys.exit('Refused: a numbered edit list or a Report/Due line is an order. Use `order.py send` so it gets a tracked deadline.')
+-    refuse_dogma(body)
+-    refuse_slop_love(body)
+-    Slop.from_order(body)
+-    print(post(units.split(','), body.rstrip()))
+-
+-
+-def drop(unit, msg, by):
+-    deadlines = load(DEADLINES, {})
+-    owed = deadlines.get(unit, [])
+-    if not any(d['msg'] == msg for d in owed):
+-        sys.exit(f'Refused: {unit} owes no order {msg}')
+-    newer = next((d for d in owed if d['msg'] == by), None)
+-    old = next(d for d in owed if d['msg'] == msg)
+-    if newer is None or newer['at'] <= old['at']:
+-        sys.exit(f'Refused: {by} is not a newer open order to {unit}; only a live newer order replaces an old one')
+-    deadlines[unit] = [d for d in owed if d['msg'] != msg]
+-    save(DEADLINES, deadlines)
+-    print(f'{unit}: {msg} replaced by {by}')
+-
+-
+-def problem(text, where, unit, due, order_file, disk=False):
+-    """A problem is born owned: it is logged and its order sent in one step, or not at all."""
+-    body = open(order_file).read()
+-    if 'Problem: NEW' not in body:
+-        sys.exit('Refused: the order file needs a "Problem: NEW" line; a problem is never logged without its order')
+-    path, _, line = where.rpartition(':')
+-    if not os.path.exists(path) or not line.isdigit() or int(line) > sum(1 for _ in open(path)):
+-        sys.exit(f'Refused: {where} is not a real file:line; find where the problem lives first')
+-    if len(text.split()) < 8:
+-        sys.exit('Refused: describe the problem (8+ words): what is wrong, what it costs')
+-    problems = load(PROBLEMS, {})
+-    closed = [json.loads(l)['id'] for l in open(f'{RTS}/closed.jsonl') if '"id"' in l]
+-    held = [f for owed in load(DEADLINES, {}).values() for d in owed for f in facts(d)]
+-    pid = f'P{max([int(k[1:]) for k in (*problems, *closed, *held) if k[1:].isdigit()] + [0]) + 1}'
+-    problems[pid] = dict(text=text, where=where, at=time.time())
+-    save(PROBLEMS, problems)
+-    open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
+-    try:
+-        send(unit, due, order_file, disk=disk)
+-    except SystemExit:
+-        problems.pop(pid)
+-        save(PROBLEMS, problems)
+-        open(order_file, 'w').write(body)
+-        raise
+-    board()
+-    print(pid)
+-
+-
+-def close(pid, works):
+-    problems = load(PROBLEMS, {})
+-    if pid not in problems:
+-        sys.exit(f'Refused: no open problem {pid}')
+-    if len(works.split()) < 8:
+-        sys.exit('Refused: say what you saw working in the installed app (8+ words, with the artifact path)')
+-    open_orders = [(u, d['msg']) for u, owed in load(DEADLINES, {}).items() for d in owed if pid in facts(d)]
+-    if open_orders:
+-        sys.exit(f'Refused: {pid} still has open orders {open_orders}; done or drop them first')
+-    closed = problems.pop(pid)
+-    save(PROBLEMS, problems)
+-    with open(f'{RTS}/closed.jsonl', 'a') as f:
+-        f.write(json.dumps(dict(closed, id=pid, works=works, closed=time.time())) + '\n')
+-    board()
+-    print(f'{pid} closed')
+-
+-
+-def fold(pid, into, why):
+-    """A duplicate row joins the problem that already states it; its text moves there, nothing is lost."""
+-    problems = load(PROBLEMS, {})
+-    if pid not in problems or into not in problems or pid == into:
+-        sys.exit(f'Refused: {pid} and {into} must be two different open problems')
+-    if len(why.split()) < 8:
+-        sys.exit('Refused: say why they are the same fact (8+ words)')
+-    if any(pid in facts(d) for owed in load(DEADLINES, {}).values() for d in owed):
+-        sys.exit(f'Refused: {pid} has open orders; link them to {into} first')
+-    gone = problems.pop(pid)
+-    problems[into]['text'] += f' [+{pid}: {gone["text"]}]'
+-    save(PROBLEMS, problems)
+-    with open(f'{RTS}/closed.jsonl', 'a') as f:
+-        f.write(json.dumps(dict(gone, id=pid, folded_into=into, why=why, closed=time.time())) + '\n')
+-    board()
+-    print(f'{pid} folded into {into}')
+-
+-
+-def last_activity(unit):
+-    lines = open(ACTIVITY).read().splitlines()[-6000:]
+-    stamps = [l[:8] for l in lines if l[9:].startswith(unit + ' ')]
+-    return stamps[-1] if stamps else None
+-
+-
+-def ownership():
+-    """Every open problem has an owner with an open order, and that owner is acting."""
+-    orders = {pid: (u, d) for u, owed in load(DEADLINES, {}).items() for d in owed for pid in facts(d)}
+-    delivered = {r.get('fact') for r in map(json.loads, open(DONE)) if r.get('fact')} if os.path.exists(DONE) else set()
+-    rows = []
+-    for pid, p in sorted(load(PROBLEMS, {}).items(), key=lambda kv: int(kv[0][1:])):
+-        # A delivered problem stays on the board until it is seen working in the installed app; codex installs it.
+-        # A problem only Tristan or a BLOCKED goal can move is held by that, not unowned.
+-        unit, d = orders.get(pid, ('codex (merged, install pending)', None) if pid in delivered else (p.get('held_by'), None))
+-        rows.append((pid, p, unit, d, last_activity(unit) if unit else None))
+-    return rows
+-
+-
+-def board():
+-    lines = ['# Fleet board', '',
+-             'GENERATED by rts/order.py from problems.json and deadlines.json. Do not edit by hand:',
+-             '`order.py problem` adds a row, `order.py send ... Problem: P<n>` gives it an owner, `order.py close` removes it.', '',
+-             '| Problem | Where | Owner | Order | Due | Owner last acted |', '|---|---|---|---|---|---|']
+-    for pid, p, unit, d, seen in ownership():
+-        lines.append(f'| {pid}: {p["text"]} | {p["where"]} | {unit or "**NO OWNER**"} | {d["msg"] if d else "-"} | '
+-                     f'{d["due"] if d else "-"} | {seen or "-"} |')
+-    open(BOARD, 'w').write('\n'.join(lines) + '\n')
+-
+-
+-def link(unit, msg, pid):
+-    """Attach an order sent before the problem list existed to its problem."""
+-    deadlines = load(DEADLINES, {})
+-    order = next((d for d in deadlines.get(unit, []) if d['msg'] == msg), None)
+-    if order is None or pid not in load(PROBLEMS, {}):
+-        sys.exit(f'Refused: {unit} owes no order {msg}, or {pid} is not open')
+-    holders = [u for u, owed in deadlines.items() for d in owed if pid in facts(d) and u != unit]
+-    if holders:
+-        sys.exit(f'Refused: {pid} is already owned by {holders}')
+-    order['facts'] = [*facts(order), *([] if pid in facts(order) else [pid])]
+-    order.setdefault('fact', pid)
+-    save(DEADLINES, deadlines)
+-    board()
+-    print(f'{pid} owned by {unit} via {msg}')
+-
+-
+-def load_strikes():
+-    if not os.path.exists(STRIKES):
+-        return []
+-    with open(STRIKES) as f:
+-        return [json.loads(line) for line in f if line.strip()]
+-
+-
+-STAGES = ('tool call', 'review', 'install', 'live', 'tristan')  # where a mistake was caught; later is worse
+-
+-
+-def strike(unit, why, caught='claude-code at review'):
+-    """HARD RULE (Tristan 2026-10-16): every failure goes on the public record, in plain words, damning and exact.
+-
+-    The strike is written to the narrative file and posted to #comms in the same step, so no
+-    failure stays private and none is described in words that hide what happened.
+-    """
+-    if len(why.split()) < 10:
+-        sys.exit('Refused: say what the unit actually did, plainly, in a full sentence (10+ words).')
+-    if jargon := jargon_in(why):
+-        sys.exit(f'Refused: jargon {jargon} hides what happened. Say it the way you would tell Tristan.')
+-    # Tristan 2026-10-16: what matters is how a mistake happened, how often, and how and when it was caught.
+-    if not any(stage in caught for stage in STAGES):
+-        sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "codex at review".')
+-    task = (re.search(r'\bP\d+\b', why) or re.search('', '')).group(0) or None
+-    if task is None:
+-        sys.exit('Refused: name the task (P-number) the strike is for; strikes count per task.')
+-    with open(STRIKES, 'a') as f:
+-        f.write(json.dumps(dict(unit=unit, task=task, why=why, caught=caught, at=time.time())) + '\n')
+-    n = len([s for s in load_strikes() if s['unit'] == unit and s.get('task') == task])
+-    line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
+-            f'caught by {caught}): {why}')
+-    new_file = not os.path.exists(NARRATIVE)
+-    with open(NARRATIVE, 'a') as f:
+-        if new_file:
+-            f.write('# What the fleet actually did\n\nEvery failure, in plain words, as it happened. Written by rts/order.py strike; never edited.\n\n')
+-        f.write(f'- {line}\n')
+-    try:
+-        post(['#comms'], f'On the record: {line}')
+-    except SystemExit as failed:  # the strike is already on the record; a rerun would strike twice
+-        print(f'Strike recorded, but the #comms post failed ({failed}). Repost with order.post; do not strike again.', file=sys.stderr)
+-    print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
+-
+-
+-def done(unit, msg, sha, repo=None, seen=None):
+-    deadlines = load(DEADLINES, {})
+-    order = next((d for d in deadlines.get(unit, []) if d['msg'] == msg), None)
+-    if order is None:
+-        sys.exit(f'Refused: {unit} owes no order {msg}')
+-    if order.get('works') and not (seen and os.path.isfile(seen)):
+-        sys.exit(f'Refused: this order closes when "{order["works"]}"; pass --seen FILE (the screenshot or log you read that shows it)')
+-    operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
+-    if not operation and not re.fullmatch(r'[0-9a-f]{7,40}|#\d+', sha):
+-        sys.exit('Refused: --sha must be the pushed commit (or #PR) that delivers the order')
+-    if 'check' in order:
+-        check_repo, command, want = order['check']
+-        repo = repo or check_repo  # a named checkout holding the delivered commit runs the same check
+-        # The check proves the delivered commit only when it runs on that commit, clean.
+-        # The delivery sha is the order's own commit; the checkout may be at it or past it, and lateness is that commit's time.
+-        if not operation and subprocess.run(['git', '-C', repo, 'merge-base', '--is-ancestor', sha.lstrip('#'), 'HEAD']).returncode:
+-            sys.exit(f'Refused: {sha} is not in {repo} HEAD. Check out a commit containing the delivered commit there so the check runs on it.')
+-        if not operation and subprocess.run(['git', '-C', repo, 'status', '--porcelain', '--untracked-files=no'], capture_output=True, text=True).stdout.strip():
+-            sys.exit(f'Refused: {repo} has uncommitted changes; the check would not be about {sha}.')
+-        if not operation:
+-            diff = subprocess.run(['git', '-C', repo, 'show', '--first-parent', '-m', '--format=', sha.lstrip('#')], capture_output=True, text=True).stdout
+-            changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
+-            after = [subprocess.run(['git', '-C', repo, 'show', f"{sha.lstrip('#')}:{f}"], capture_output=True, text=True).stdout for f in changed]
+-            if added := forwarders_added(diff, after):
+-                sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
+-        ran = subprocess.run(['bash', '-c', command], cwd=repo, capture_output=True, text=True, timeout=120)
+-        # grep -c prints nothing and exits 1 when no file matches: that is a count of 0.
+-        got = re.findall(r'\d+', ran.stdout) or (['0'] if ran.returncode == 1 and not ran.stdout.strip() else [])
+-        if not got or int(got[-1]) != want:
+-            sys.exit(f'Refused: the order\'s own check `{command}` in {repo} printed {ran.stdout.strip()[-200:]!r}, wanted {want}. Not delivered.')
+-    trees, _ = storage.unit_paths(unit)
+-    if left := [t for t in trees if any(f.lower() in t.lower() for f in facts(order))]:
+-        sys.exit(f'Refused: {unit} still has the checkout {left} for this order; storage rule: it removes it before the order counts as done.')
+-    if quota := storage.over_quota(unit):
+-        sys.exit(f'Refused: {quota}; storage rule: it cleans up before the order counts as done.')
+-    if operation:
+-        delivered, delivered_at = time.strftime('%H:%M'), time.time()
+-    repo = repo or (order.get('check') or [None])[0]
+-    if repo is None:
+-        sys.exit('Refused: pass --repo so the delivery time comes from the commit, not from when I got round to it')
+-    stamp = None if operation else subprocess.run(['git', '-C', repo, 'show', '-s', '--format=%ct', sha.lstrip('#')], capture_output=True, text=True)
+-    if stamp is not None and stamp.returncode:
+-        sys.exit(f'Refused: {sha} is not a commit in {repo}: {stamp.stderr.strip()}')
+-    if stamp is not None:
+-        delivered_at = int(stamp.stdout.split()[0])
+-        delivered = time.strftime('%H:%M', time.localtime(delivered_at))
+-    deadlines[unit] = [d for d in deadlines[unit] if d is not order]
+-    if not deadlines.get(unit):
+-        deadlines.pop(unit, None)
+-    save(DEADLINES, deadlines)
+-    with open(DONE, 'a') as f:
+-        f.write(json.dumps({'unit': unit, 'msg': msg, 'fact': order.get('fact'), 'done': sha, 'at': delivered_at}) + '\n')
+-    # The deadline is the day's HH:MM; delivery after it is a strike, never a clean met.
+-    # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
+-    if sha != 'op' and delivered_at > due_at(order):
+-        strike(unit, f'late on {order.get("fact")}: order {msg} due {order["due"]} delivered {delivered} as {sha}')
+-        return
+-    # A met deadline clears the unit's strikes: the record is per task.
+-    kept = [s for s in load_strikes() if not (s['unit'] == unit and s.get('task') == order.get('fact'))]
+-    with open(STRIKES, 'w') as f:
+-        f.writelines(json.dumps(s) + '\n' for s in kept)
+-    print(f'{unit}: order {msg} met as {sha}, strikes on {order.get("fact")} cleared')
+-
+-
+-ACTIVITY = '/home/ts/.cache/agent-scratch/rts/activity.log'
+-
+-
+-def first_calls(deadlines):
+-    """Each order starts a first-tool-call clock: 2 minutes, separate from its commit deadline."""
+-    today = time.strftime('%Y-%m-%d')
+-    lines = open(ACTIVITY).read().splitlines()[-4000:]
+-    def acted_since(unit, at):
+-        since = time.strftime('%H:%M:%S', time.localtime(at))
+-        return any(line[9:].startswith(unit + ' ') and line[:8] >= since for line in lines)
+-    watched = {line[9:].split(' ', 1)[0] for line in lines}
+-    missing, changed = [], False
+-    for unit, owed in deadlines.items():
+-        if unit not in watched:
+-            continue  # tool_watch cannot see this unit's harness; its clock is the commit deadline
+-        for d in owed:
+-            if d.get('started') or 'at' not in d or time.strftime('%Y-%m-%d', time.localtime(d['at'])) != today:
+-                continue
+-            if acted_since(unit, d['at']):
+-                d['started'] = changed = True
+-            elif time.time() - d['at'] > 120 and not d.get('no_first_call'):
+-                d['no_first_call'] = changed = True
+-                missing.append(f'{unit} (order {d["msg"]}, sent {time.strftime("%H:%M", time.localtime(d["at"]))})')
+-    return missing, changed
+-
+-
+-HUNTS = f'{RTS}/hunts.jsonl'
+-HUNT_ROOTS = [('/home/ts/wt/core-check', 'src/agent_comms'), ('/home/ts/wt/toad-check', 'src/toad')]
+-
+-
+-def hunt(where, why, sent=None):
+-    """A hunt is a hot-path read with a verdict: file:line, what scales or repeats, and the order it became (or --clean)."""
+-    path, _, line = where.rpartition(':')
+-    if not os.path.exists(path) or not line.isdigit() or int(line) > sum(1 for _ in open(path)):
+-        sys.exit(f'Refused: {where} is not a real file:line')
+-    if len(why.split()) < 10:
+-        sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
+-    if sent and sent not in {d['msg'] for owed in load(DEADLINES, {}).values() for d in owed}:
+-        sys.exit(f'Refused: {sent} is not an open tracked order; send it first or mark the hunt --clean')
+-    with open(HUNTS, 'a') as f:
+-        f.write(json.dumps(dict(where=os.path.realpath(path) + ':' + line, why=why, sent=sent, at=time.time())) + '\n')
+-    print(f'hunt recorded: {where} -> {sent or "clean"}')
+-
+-
+-def next_hunt():
+-    """Least-recently hunted file among the most-churned production files on origin/main."""
+-    hunted = {}
+-    for h in (json.loads(l) for l in open(HUNTS)) if os.path.exists(HUNTS) else ():
+-        f = h['where'].rpartition(':')[0]
+-        hunted[f] = max(hunted.get(f, 0), h['at'])
+-    candidates = []
+-    for repo, root in HUNT_ROOTS:
+-        log = subprocess.run(['git', '-C', repo, 'log', 'origin/main', '--since=7.days', '--name-only', '--format=', '--', root],
+-                             capture_output=True, text=True).stdout.split()
+-        churn = {}
+-        for f in log:
+-            full = os.path.realpath(os.path.join(repo, f))
+-            if os.path.exists(full) and f.endswith('.py'):
+-                churn[full] = churn.get(full, 0) + 1
+-        candidates += sorted(churn, key=churn.get, reverse=True)[:15]
+-    return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
+-
+-
+-def latest_replies():
+-    """Each unit's newest message to me or #comms, from one read of the bus tail."""
+-    with open(f'{B}/bus.jsonl', 'rb') as f:
+-        f.seek(max(0, os.path.getsize(f.name) - 3_000_000))
+-        lines = f.read().splitlines()[1:]
+-    latest = {}
+-    for line in lines:
+-        try:
+-            m = json.loads(line)
+-        except ValueError:
+-            continue
+-        to = str(m.get('to'))
+-        if 'claude-code' in to or '#comms' in to:
+-            latest[m.get('from')] = m
+-    return latest
+-
+-
+-def replied(latest, unit, since):
+-    """The unit's latest message to me after the order, so an overdue alarm is read against what it said."""
+-    m = latest.get(unit)
+-    if m is None or float(m.get('ts', 0)) <= since:
+-        return '; no reply since the order'
+-    at = time.strftime('%H:%M', time.localtime(float(m['ts'])))
+-    return f'; REPLIED {at} [{m["id"]}]: {" ".join(str(m.get("text")).split())[:160]} -- read it before pushing'
+-
+-
+-def due_at(order) -> float:
+-    """The deadline is the first HH:MM at or after the moment the order was sent."""
+-    hour, minute = map(int, order['due'].split(':'))
+-    sent = time.localtime(order['at'])
+-    due = time.mktime((sent.tm_year, sent.tm_mon, sent.tm_mday, hour, minute, 0, 0, 0, -1))
+-    return due + 86400 if due < order['at'] - 60 else due
+-
+-
+-def overdue():
+-    checked = 0
+-    while True:
+-        if time.time() - checked > 300:
+-            checked = time.time()
+-            if storage.free_gb() < storage.CLEANUP_GB:
+-                print(f'DISK LOW: /home has {storage.free_gb():.1f} GB free (cleanup due under {storage.CLEANUP_GB} GB) -> put a cleanup owner on it now', flush=True)
+-            heavy = [q for u in load(DEADLINES, {}) if (q := storage.over_quota(u))]
+-            if heavy:
+-                print('VIOLATION storage quota: ' + '; '.join(heavy) + ' -> order the cleanup with --disk', flush=True)
+-        deadlines = load(DEADLINES, {})
+-        missing, changed = first_calls(deadlines)
+-        if changed:
+-            save(DEADLINES, deadlines)
+-        if missing:
+-            print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
+-                  flush=True)
+-        now = time.strftime('%H:%M')
+-        unowned = [pid for pid, p, unit, d, seen in ownership() if unit is None and time.time() - p['at'] > 300]
+-        if unowned:
+-            print(f'NO OWNER: {", ".join(unowned)} -> order.py send UNIT DUE FILE with Problem: line, now', flush=True)
+-        stale = [f'{pid} {unit} (last {seen})' for pid, p, unit, d, seen in ownership()
+-                 if unit and seen and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
+-        if stale:
+-            print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
+-        replies = latest_replies()
+-        late = [f'{u} (due {d["due"]}, order {d["msg"]}{replied(replies, u, d["at"])})' for u, owed in load(DEADLINES, {}).items()
+-                for d in owed if due_at(d) < time.time()]
+-        if late:
+-            print('OVERDUE: ' + ', '.join(late) + ' -> read the diff now; missed = order.py strike, 2 strikes = fire',
+-                  flush=True)
+-        # Units leave finished PRs open and wander off. An open PR naming an ordered problem that
+-        # nobody has touched for 5 minutes is a stall, whatever the unit says it is doing.
+-        ordered = {pid: (u, d['at'], due_at(d)) for u, owed in load(DEADLINES, {}).items() for d in owed for pid in facts(d)}
+-        release()
+-        idle_prs = []
+-        for repo in ('OpenHCSDev/agent-comms', 'OpenHCSDev/toad', 'OpenHCSDev/textual'):
+-            listed = subprocess.run(['gh', 'pr', 'list', '-R', repo, '--state', 'open', '--limit', '40',
+-                                     '--json', 'number,title,updatedAt'], capture_output=True, text=True, timeout=60)
+-            for pr in json.loads(listed.stdout or '[]'):
+-                touched = calendar.timegm(time.strptime(pr['updatedAt'], '%Y-%m-%dT%H:%M:%SZ'))
+-                for pid in re.findall(r'P\d+', pr['title']):
+-                    # An order sent after the last touch is the push; until its deadline, OVERDUE owns the alarm.
+-                    if pid in ordered and time.time() - touched > 300 and ordered[pid][1] < touched and time.time() > ordered[pid][2]:
+-                        idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
+-        if idle_prs:
+-            print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
+-        hunts = [json.loads(l) for l in open(HUNTS)] if os.path.exists(HUNTS) else []
+-        if not hunts or time.time() - hunts[-1]['at'] > 900:
+-            print(f'HUNT DUE (none in 15 min): read {next_hunt()} for per-event or per-history work or slop, '
+-                  'then order.py hunt FILE:LINE --why "..." [--sent ORDER] (or --clean)', flush=True)
+-        release()
+-        time.sleep(60)
+-
++"""agent_comms.commander.order owns this command; this is its old filename only."""
++import os
++import sys
+ 
+ if __name__ == '__main__':
+-    a = sys.argv[1:]
+-    import capacity
+-    who = 'claude-code'
+-    if '--fork' in a:  # a forked commander: keeps its beat fresh and is never blocked by the overload gate
+-        n = a.index('--fork')
+-        who = a[n + 1]
+-        capacity.beat(who)
+-        del a[n:n + 2]
+-    elif a[:1] and a[0] in ('send', 'say', 'problem', 'hunt', 'fold'):
+-        capacity.require()  # HARD RULE: overloaded means fork, not more orders from me
+-    if a[:1] and a[0] in ('send', 'strike', 'done', 'drop', 'say', 'problem', 'close', 'fold', 'hunt'):
+-        import rules
+-        rules.require(who)  # HARD RULE: no commander action, mine or a fork's, on rules not re-read in 20 min
+-    if a[:1] == ['send'] and len(a) >= 4:
+-        opt = lambda k: a[a.index(k) + 1] if k in a[4:-1] else None
+-        send(*a[1:4], clean='--clean' in a[4:], mechanical='--mechanical' in a[4:], reassign=opt('--reassign'), replaces=opt('--replaces'), disk='--disk' in a[4:], traced=opt('--traced'))
+-    elif a[:1] == ['strike'] and len(a) == 6 and a[2] == '--why' and a[4] == '--caught':
+-        strike(a[1], a[3], a[5])
+-    elif a[:1] == ['strike'] and len(a) == 4 and a[2] == '--why':
+-        strike(a[1], a[3])
+-    elif a[:1] == ['done'] and len(a) >= 5 and a[3] == '--sha':
+-        opt = lambda k: a[a.index(k) + 1] if k in a[5:-1] else None
+-        done(a[1], a[2], a[4], opt('--repo'), seen=opt('--seen'))
+-    elif a[:1] == ['drop'] and len(a) == 5 and a[3] == '--by':
+-        drop(a[1], a[2], a[4])
+-    elif a[:1] == ['say'] and len(a) == 3:
+-        say(a[1], a[2])
+-    elif a[:1] == ['problem'] and len(a) in (10, 11) and a[2] == '--where' and a[4] == '--to' and a[6] == '--due' and a[8] == '--order' and a[10:] in ([], ['--disk']):
+-        problem(a[1], a[3], a[5], a[7], a[9], disk=a[10:] == ['--disk'])
+-    elif a[:1] == ['close'] and len(a) == 4 and a[2] == '--works':
+-        close(a[1], a[3])
+-    elif a[:1] == ['fold'] and len(a) == 6 and a[2] == '--into' and a[4] == '--why':
+-        fold(a[1], a[3], a[5])
+-    elif a[:1] == ['link'] and len(a) == 4:
+-        link(*a[1:])
+-    elif a[:1] == ['hunt'] and len(a) in (4, 6) and a[2] == '--why' and (len(a) == 4 or a[4] == '--sent'):
+-        hunt(a[1], a[3], a[5] if len(a) == 6 else None)
+-    elif a[:1] == ['next-hunt']:
+-        print(next_hunt())
+-    elif a[:1] == ['board']:
+-        board()
+-    elif a[:1] == ['overdue']:
+-        overdue()
+-    else:
+-        sys.exit('REFUSED, nothing recorded. Usage:\n' + __doc__.split('\n\n')[0])
++    os.execv('/home/ts/.local/share/agent-comms/current/bin/agent-comms-commander',
++             ['agent-comms-commander', 'order', *sys.argv[1:]])
+--- a/judge.py
++++ b/judge.py
+@@ -1,251 +1,7 @@
+-"""claude-code's verdict on every unit edit, judged against the order that unit is carrying out.
+-
+-  judge.py show [thread]                          unjudged edits in full, beside the unit's current order
+-  judge.py ok ID:CODE... --serves "<exact words of the order>" --line "<exact diff line>"... --why "..."
+-      (--peer BUSID lets --serves quote another agent's message to that unit instead of mine)
+-  judge.py back ID:CODE... --msg BUSID --line "<exact slop line>"... --why "violates ...: ..." --roast "<blunt, why it is stupid, with because>" --fix "<owner and replacing shape>"
+-      (--roast is posted to #comms with the unit and the quoted slop line, so the whole fleet
+-       learns what was stupid and nobody repeats it; a send-back without a roast is refused)
+-
+-A verdict is a set of semantic claims the tool can falsify: --serves must be words from
+-the unit's current order (which clause this edit carries out), and every edit must contain
+-one of the --line quotes (the deleted authority or added owner I judged it by). Without
+-reading each edit and deciding what it does, the claims cannot be written.
+-
+-Each edit's CODE is printed only after its last hunk line, so a verdict needs the
+-whole edit on screen: a show piped into head or /dev/null yields no codes.
+-  judge.py alarm                                  loop: every minute, name edits unjudged for 5 min
+-
+-  judge.py superseded ID:CODE... --by ORDERID --line "<exact diff line>"... --why "..."
+-       (the task moved to another unit by ORDERID; its old edits are neither ok nor sent back)
+-A verdict without a reason is refused; a send-back must cite a real message from
+-claude-code to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
+-Owner: claude-code (RTS rotation). Delete with the rts directory when the role ends.
+-"""
+-import hashlib, json, os, re, subprocess, sys, time
+-RTS = '/home/ts/.cache/agent-scratch/rts'
+-EDITS, VERDICTS = f'{RTS}/edits.jsonl', f'{RTS}/verdicts.jsonl'
+-SENT = f'{RTS}/sent.jsonl'  # written by order.py post()
+-B = '/var/tmp/agent-comms-live-20260927-wzjtqhza'
+-BUS = f'{B}/bus.jsonl'
+-CLI = '/home/ts/.local/bin/agent-comms'
+-
+-
+-def rows(path):
+-    if not os.path.exists(path):
+-        return []
+-    with open(path) as f:
+-        text = f.read()
+-    # A last line with no newline is an append still being written, not a row yet.
+-    complete = text if text.endswith('\n') else text[:text.rfind('\n') + 1]
+-    return [json.loads(line) for line in complete.splitlines() if line.strip()]
+-
+-
+-def unjudged():
+-    judged = {v['id'] for v in rows(VERDICTS)}
+-    return [e for e in rows(EDITS) if e['id'] not in judged]
+-
+-
+-def my_messages(thread):
+-    """claude-code's messages to thread, newest first, from the log order.py writes at every send.
+-
+-    Rescanning 300 MB of the bus per verdict scaled with bus size; the send site is the one
+-    place every order passes through, so its own record cannot miss one.
+-    """
+-    return [dict(id=m['id'], text=m['text']) for m in rows(SENT) if thread in m['to']][::-1]
+-
+-
+-FORK_ARGS: list[str] = []
+-BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
+-
+-
+-def branches_added(edit) -> int:
+-    """Branches the edit's new text has beyond its old text (branch-vs-polymorphism: presumed slop)."""
+-    count = lambda text: sum(1 for line in text.splitlines() if BRANCH.search(line))
+-    return sum(count(h['new']) - count(h['old']) for h in edit['hunks'])
+-
+-
+-def check_code(edit):
+-    """Four hex digits derived from the edit's own text; shown only after its full hunks."""
+-    return hashlib.sha256((edit['id'] + json.dumps(edit['hunks'])).encode()).hexdigest()[:4]
+-
+-
+-def show(thread=None):
+-    pending = [e for e in unjudged() if thread in (None, e['thread'])]
+-    by_thread = {}
+-    for e in pending:
+-        by_thread.setdefault(e['thread'], []).append(e)
+-    for name, edits in by_thread.items():
+-        orders = my_messages(name)
+-        intent = (orders[0].get('text') or '')[:1500] if orders else 'NO ORDER FROM ME: what is this unit doing and who asked?'
+-        print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDER ({orders[0]["id"] if orders else "-"}):\n{intent}\n')
+-        for e in edits:
+-            print(f'--- {e["id"]} {time.strftime("%H:%M", time.localtime(e["at"]))} {e["path"]}')
+-            for h in e['hunks']:
+-                print(''.join(f'- {l}\n' for l in h['old'].splitlines()) + ''.join(f'+ {l}\n' for l in h['new'].splitlines()))
+-            print(f'=== end {e["id"]} code {check_code(e)}')
+-    print(f'{len(pending)} unjudged')
+-
+-
+-def peer_order(peer, thread):
+-    """Text of another agent's recent message PEER to thread (work a peer legitimately assigned)."""
+-    if peer is None:
+-        return ''
+-    with open(BUS, 'rb') as f:
+-        f.seek(max(0, os.path.getsize(BUS) - 200_000_000))
+-        f.readline()
+-        for line in f:
+-            if peer.encode() in line[:300]:
+-                m = json.loads(line)
+-                to = m['to'] if isinstance(m['to'], list) else [m['to']]
+-                if m['id'] == peer and thread in to:
+-                    return m.get('text') or ''
+-    sys.exit(f'Refused: {peer} is not a recent message to {thread}')
+-
+-
+-def roast(thread, lines, text, fix, slop):
+-    """Every send-back is a fleet lesson, sent to the unit that wrote the slop and to #comms: the quoted slop,
+-    the required fact it restates and the declaration that derives it (paper 1's definition), why that is
+-    stupid, and what replaces it."""
+-    import order
+-    body = (f'{thread}, this is stupid slop and it is going back:\n'
+-            + '\n'.join(f'    {l.strip()}' for l in lines)
+-            + f'\nThe slop: {slop.render()}'
+-            + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
+-    print('roast sent to the unit and #comms: ' + order.post([thread, '#comms'], body))
+-
+-
+-def strike_task(thread, msg):
+-    """The task a send-back strikes: the cited message's `Problem:` line, else its first P-number, else the one task of the unit's open order.
+-
+-    Decided before the verdict is written, so a send-back is never recorded without its strike.
+-    """
+-    text = next(m['text'] for m in my_messages(thread) if m['id'] == msg)
+-    if found := re.search(r'^Problem: (P\d+)\b', text, re.M) or re.search(r'\b(P\d+)\b', text):
+-        return found.group(1)
+-    with open(f'{RTS}/deadlines.json') as f:
+-        open_facts = sorted({p for d in json.load(f).get(thread, []) for p in (d.get('facts') or [d.get('fact')]) if p})
+-    if len(open_facts) != 1:
+-        sys.exit(f'Refused: {msg} names no P-number and {thread} has open tasks {open_facts}; cite the order message for the task')
+-    return open_facts[0]
+-
+-
+-def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast_text=None, fix=None, slop=None, no_owner=None):
+-    if len(why.split()) < 6:
+-        sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
+-    edits = {e['id']: e for e in rows(EDITS)}
+-    ids = [t.split(':')[0] for t in tokens]
+-    missing = [i for i in ids if i not in edits]
+-    if missing:
+-        sys.exit(f'Refused: unknown edit ids {missing}')
+-    unread = [t for t in tokens if t != f'{t.split(":")[0]}:{check_code(edits[t.split(":")[0]])}']
+-    if unread:
+-        sys.exit(f'Refused: wrong or missing read codes {unread}; read each edit to its "=== end" line')
+-    if not lines:
+-        sys.exit('Refused: quote, with --line, the exact diff line each edit is judged by')
+-    for i in ids:
+-        text = ''.join(h['old'] + h['new'] for h in edits[i]['hunks'])
+-        if not any(l in text for l in lines):
+-            sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
+-    if kind == 'ok':
+-        import order
+-        for i in ids:
+-            diff = ''.join(''.join('+' + l + '\n' for l in h['new'].splitlines()) for h in edits[i]['hunks'])
+-            path = edits[i].get('path') or ''
+-            after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
+-            if added := order.forwarders_added(diff, after):
+-                sys.exit(f'Refused: edit {i} adds forwarders {added[:5]}; it goes back with judge.py back, never ok')
+-            if (extra := branches_added(edits[i])) > 0 and not (
+-                    no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
+-                    and re.search(r'/\S+:\d+', no_owner)):
+-                sys.exit(f'Refused: edit {i} adds {extra} branch(es); branching is presumed slop. Send it back naming the '
+-                         'base or ABC method that owns the decision, or pass --no-owner "<12+ words with because and '
+-                         'file:line>" proving no type could own it')
+-        for thread in {edits[i]['thread'] for i in ids}:
+-            orders = ' '.join(m['text'] for m in my_messages(thread)) + ' ' + peer_order(peer, thread)
+-            if not serves or len(serves.split()) < 4 or ' '.join(serves.split()) not in ' '.join(orders.split()):
+-                sys.exit(f'Refused: --serves must quote 4+ words of an order I sent {thread}; an edit no order asked for is not ok')
+-    if kind == 'back':
+-        if not roast_text or len(roast_text.split()) < 12 or not re.search(r'\bbecause\b', roast_text):
+-            sys.exit('Refused: --roast (12+ words, with "because"): why this is stupid, naming the fact it restates or guesses and the thing that already answers it')
+-        import order
+-        if not order.BLUNT.search(roast_text):
+-            sys.exit('Refused: --roast is polite; call it stupid, slop, lazy or useless and say why')
+-        if not fix or len(fix.split()) < 8:
+-            sys.exit('Refused: --fix (8+ words): the owner and the exact shape that replaces the slop')  # the strike's own wording rule, checked before the verdict is written
+-        if slop is None:
+-            sys.exit(order.Slop.USAGE)
+-        order.refuse_dogma(' '.join((why, roast_text, fix, *lines)))
+-        if jargon := order.jargon_in(' '.join((why, roast_text, fix, slop.render()))):
+-            sys.exit(f'Refused: --why is the strike text and contains jargon {jargon}; say it plainly')
+-        tasks = {}
+-        for thread in {edits[i]['thread'] for i in ids}:
+-            if msg not in {m['id'] for m in my_messages(thread)}:
+-                sys.exit(f'Refused: {msg} is not a message from claude-code to {thread}')
+-            tasks[thread] = strike_task(thread, msg)
+-    if kind == 'superseded':
+-        # The task moved to another unit; these edits are its abandoned branch, judged by the new owner's diff.
+-        replacing = {m['id']: m for m in rows(SENT)}.get(msg)
+-        if replacing is None:
+-            sys.exit(f'Refused: --by {msg} is not an order claude-code or a fork sent')
+-        if same := {edits[i]['thread'] for i in ids} & set(replacing['to']):
+-            sys.exit(f'Refused: {msg} went to {sorted(same)}, the same unit; its edits are ok or back, not superseded')
+-    with open(VERDICTS, 'a') as f:
+-        for i in ids:
+-            f.write(json.dumps(dict(id=i, kind=kind, why=why, msg=msg, serves=serves, lines=lines, no_owner=no_owner, at=time.time())) + '\n')
+-    print(f'{kind}: {len(ids)} edits; {len(unjudged())} still unjudged')
+-    if kind == 'back':
+-        for thread in sorted({edits[i]['thread'] for i in ids}):
+-            roast(thread, lines, roast_text, fix, slop)
+-            # A send-back is a strike (Tristan 2026-10-16); recorded here so it cannot be skipped.
+-            # One failure is one strike: a second judge sending back the same task within 15 min adds none (judge-0050, P394).
+-            recent = rows(f'{RTS}/strikes.jsonl')[-30:]
+-            if any(r['unit'] == thread and r.get('task') == tasks[thread] and 'sent back' in r['why']
+-                   and time.time() - r['at'] < 900 for r in recent):
+-                print(f'{thread}: {tasks[thread]} already struck for this send-back; no second strike')
+-                continue
+-            subprocess.run(['python3', f'{RTS}/order.py', 'strike', thread, '--why', f'{tasks[thread]} edit sent back: {why}', *FORK_ARGS], check=True)
+-
+-
+-def alarm():
+-    while True:
+-        late = [e for e in unjudged() if time.time() - e['at'] > 300]
+-        if late:
+-            counts = {}
+-            for e in late:
+-                counts[e['thread']] = counts.get(e['thread'], 0) + 1
+-            oldest = min(e['at'] for e in late)
+-            print(f'UNJUDGED {len(late)} edits over 5 min (oldest {int((time.time() - oldest) / 60)} min): '
+-                  + ', '.join(f'{t} {n}' for t, n in counts.items()) + ' -> judge.py show', flush=True)
+-        time.sleep(60)
+-
++"""agent_comms.commander.judge owns this command; this is its old filename only."""
++import os
++import sys
+ 
+ if __name__ == '__main__':
+-    args = sys.argv[1:]
+-    if not args or args[0] == 'show':
+-        show(args[1] if len(args) > 1 else None)
+-    elif args[0] == 'alarm':
+-        alarm()
+-    elif args[0] in ('ok', 'back', 'superseded'):
+-        import capacity, rules
+-        who = args[args.index('--fork') + 1] if '--fork' in args else 'claude-code'
+-        if who != 'claude-code':
+-            capacity.beat(who)
+-        rules.require(who)  # every verdict, mine or a fork's, is made after reviewing paper 1's correct-maintenance results
+-        why = args[args.index('--why') + 1] if '--why' in args else ''
+-        # --by is the Slop owner flag on back; only superseded uses it for the replacing message.
+-        flag = '--by' if args[0] == 'superseded' else '--msg'
+-        msg = args[args.index(flag) + 1] if flag in args else None
+-        ids = [a for a in args[1:] if re.fullmatch(r'[0-9a-f]{10}(:[0-9a-f]*)?', a)]
+-        serves = args[args.index('--serves') + 1] if '--serves' in args else None
+-        lines = [args[n + 1] for n, a in enumerate(args) if a == '--line']
+-        peer = args[args.index('--peer') + 1] if '--peer' in args else None
+-        roast_text = args[args.index('--roast') + 1] if '--roast' in args else None
+-        fix = args[args.index('--fix') + 1] if '--fix' in args else None
+-        import order
+-        slop = order.Slop.from_args(args) if args[0] == 'back' else None
+-        no_owner = args[args.index('--no-owner') + 1] if '--no-owner' in args else None
+-        FORK_ARGS = ['--fork', who] if who != 'claude-code' else []  # the strike runs as the judge who sent it back
+-        verdict(args[0], ids, why, msg, serves, lines, peer, roast_text, fix, slop, no_owner)
+-    else:
+-        sys.exit(__doc__)
++    os.execv('/home/ts/.local/share/agent-comms/current/bin/agent-comms-commander',
++             ['agent-comms-commander', 'judge', *sys.argv[1:]])
+--- a/rotate.py
++++ b/rotate.py
+@@ -1,58 +1,7 @@
+-"""Wake the commander once a minute on the next unit, and on every standing rule broken right now."""
+-import json, os, subprocess, time
+-from datetime import datetime
++"""agent_comms.commander.rotate owns this command; this is its old filename only."""
++import os
++import sys
+ 
+-ROOT = '/home/ts/.cache/agent-scratch/rts'
+-turn = 0
+-# Parked by standing owner decisions (blocked goals, frozen goal), not idle.
+-PARKED = {'claude-code', 'core-native-runtime', 'core-native-runtime-2', 'core-cli-sync', 'core-awareness-index', 'codex-shepherd', 'p229-route-check', 'toad-theme'}
+-
+-
+-def broken_rules(owed):
+-    """Every skill rule whose state is checkable from files, as plain lines."""
+-    lines = []
+-    seen = {}
+-    for line in open(f'{ROOT}/digests.log', errors='replace').readlines()[-6000:]:
+-        if line.startswith('TURN '):
+-            seen[line.split()[1]] = True
+-    idle = sorted(u for u in seen if not owed.get(u) and u not in PARKED)
+-    if idle:
+-        lines.append(f"IDLE UNITS with no order: {', '.join(idle)} -> give each the top unowned row now")
+-    hunts = [json.loads(l) for l in open(f'{ROOT}/hunts.jsonl')] if os.path.exists(f'{ROOT}/hunts.jsonl') else []
+-    if not hunts or time.time() - hunts[-1]['at'] > 900:
+-        lines.append('HUNT DUE: read a hot path and order the fix this wake')
+-    import capacity
+-    if why := capacity.short():
+-        lines.append(f'FORK NOW: {why}')
+-    bridges = subprocess.run(['ps', '-eo', 'args'], capture_output=True, text=True).stdout
+-    if not any('claude-bridge watch' in a and '--bus-thread claude-code' in a and 'zsh' not in a for a in bridges.splitlines()):
+-        lines.append('CLAUDE BRIDGE DOWN: Tristan sees "no bridge" -> re-arm the bridge Monitor this wake')
+-    shown = subprocess.run(['python3', 'judge.py', 'show'], cwd=ROOT, capture_output=True, text=True).stdout
+-    total = next((l.split()[0] for l in reversed(shown.splitlines()) if l.endswith('unjudged')), '0')
+-    if total.isdigit() and int(total) > 30:
+-        lines.append(f'UNJUDGED {total} edits -> judge or fork a judge slice')
+-    import rules
+-    if why := rules.stale():
+-        lines.append(f'RULES DUE ({why}) -> python3 rules.py review and answer the drawn rules before any order')
+-    return lines
+-
+-
+-shown_rules = {}
+-while True:
+-    owed = json.load(open(f'{ROOT}/deadlines.json'))
+-    units = sorted(u for u, v in owed.items() if v)
+-    if units:
+-        unit = units[turn % len(units)]
+-        turn += 1
+-        orders = ', '.join(f"{'+'.join(e['facts'])} due {e['due']}" for e in owed[unit])
+-        shown = subprocess.run(['python3', 'judge.py', 'show', unit], cwd=ROOT, capture_output=True, text=True).stdout
+-        unjudged = next((l.split(':')[1].split()[0] for l in shown.splitlines() if l.startswith('=====')), '0')
+-        print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {unjudged} -> read its git state and newest turn, judge, push or hunt", flush=True)
+-    # Tristan 2026-10-18: the per-minute repeats were noise. A rule line prints when it is new
+-    # or changed in kind, and repeats at most every 10 minutes while it stays broken.
+-    for line in broken_rules(owed):
+-        kind = line.split(':')[0].split(' -> ')[0].rstrip('0123456789 ')
+-        if shown_rules.get(kind, (None, 0))[0] != line.split('->')[0].split()[:3] or time.time() - shown_rules[kind][1] > 600:
+-            shown_rules[kind] = (line.split('->')[0].split()[:3], time.time())
+-            print(f"  RULE {line}", flush=True)
+-    time.sleep(60)
++if __name__ == '__main__':
++    os.execv('/home/ts/.local/share/agent-comms/current/bin/agent-comms-commander',
++             ['agent-comms-commander', 'rotate', *sys.argv[1:]])
+--- a/rules.py
++++ b/rules.py
+@@ -1,112 +1,7 @@
+-"""Forced rule review for the commander (HARD RULE, Tristan 2026-10-17: "you cannot trust yourself to remember the rules alone").
+-
+-The rules have one source each: the rts-command skill's bold-lead lines, every feedback memory, and paper 1's
+-correct-maintenance results (oopsla-paper-content memory). `review` prints all of them and draws three, two always from the paper, that must each be answered with how the current tick obeys or breaks it. order.py refuses every
+-commander action (send, strike, done, close, problem, hunt, say, fold, drop) until the last review is answered and
+-younger than MAX_AGE; rotate.py prints RULES DUE when it is stale.
+-
+-  python3 rules.py review [--as FORK]                 print the rules, draw three
+-  python3 rules.py answer N "<10+ words>" [--as FORK]  answer drawn rule N with what this tick does about it
+-
+-Every fork reviews for itself (Tristan 2026-10-17: forks must know correct maintenance, not carry dogma): a fork's
+-actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
+-"""
+-import glob, json, os, random, re, sys, time
+-
+-ROOT = '/home/ts/.cache/agent-scratch/rts'
+-LOG = f'{ROOT}/rules.jsonl'
+-SKILL = '/home/ts/.claude/skills/rts-command/SKILL.md'
+-MEMORY = '/home/ts/.claude/projects/-home-ts--agent-comms/memory'
+-PAPER = f'{MEMORY}/oopsla-paper-content.md'
+-MAX_AGE = 20 * 60
+-DRAWN = 3
+-# Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
+-PINNED = ('branch-vs-polymorphism', 'factor-into-parent-hard-rule', 'paper-is-law-no-dogma')
+-
+-
+-def principles() -> list[str]:
+-    """Paper 1's correct-maintenance results, the definitions every judgment is measured against."""
+-    text = open(PAPER).read()
+-    return [l[2:].strip() for l in text.splitlines() if l.startswith('- ') and len(l) > 40]
+-
+-
+-def rules() -> list[str]:
+-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(SKILL).read(), re.M)]
+-    for path in sorted(glob.glob(f'{MEMORY}/*.md')):
+-        text = open(path).read()
+-        if re.search(r'^\s*type: feedback', text, re.M):
+-            desc = re.search(r'^description: (.+)$', text, re.M)
+-            found.append(f'{os.path.basename(path)[:-3]}: {desc.group(1) if desc else ""}')
+-    return found
+-
+-
+-def last(who: str = 'claude-code') -> dict | None:
+-    rows = [r for r in (json.loads(l) for l in open(LOG)) if r.get('who', 'claude-code') == who] if os.path.exists(LOG) else []
+-    return next((r for r in reversed(rows) if r['kind'] == 'review'), None), rows
+-
+-
+-def stale(who: str = 'claude-code') -> str | None:
+-    """Why this commander's actions are refused now, or None when its last review is answered and fresh."""
+-    review, rows = last(who)
+-    if review is None:
+-        return f'no rule review recorded for {who}'
+-    answered = {r['n'] for r in rows if r['kind'] == 'answer' and r['at'] >= review['at']}
+-    if missing := [n for n in range(1, len(review["drawn"]) + 1) if n not in answered]:
+-        return f'drawn rules {missing} of the {time.strftime("%H:%M", time.localtime(review["at"]))} review are unanswered'
+-    if time.time() - review['at'] > MAX_AGE:
+-        return f'last rule review was {int((time.time() - review["at"]) / 60)} min ago (max {MAX_AGE // 60})'
+-    return None
+-
+-
+-def require(who: str = 'claude-code'):
+-    if why := stale(who):
+-        flag = '' if who == 'claude-code' else f' --as {who}'
+-        sys.exit(f'REFUSED, nothing recorded: {why}. Run python3 rules.py review{flag}, then answer each drawn rule{flag}.')
+-
+-
+-def review(who: str = 'claude-code'):
+-    every = rules()
+-    for i, r in enumerate(every, 1):
+-        print(f'{i:3}. {r}')
+-    paper = principles()
+-    print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
+-    for r in paper:
+-        print(f'  - {r}')
+-    drawn = random.sample(paper, DRAWN) if who != 'claude-code' else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+-    pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
+-    if len(pinned) != len(PINNED):
+-        sys.exit(f'Pinned rule missing from memory: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
+-    drawn += [r for r in pinned if r not in drawn]
+-    with open(LOG, 'a') as f:
+-        f.write(json.dumps({'kind': 'review', 'who': who, 'at': time.time(), 'drawn': drawn}) + '\n')
+-    print('\nAnswer each with what this tick does about it (python3 rules.py answer N "..."):')
+-    for n, r in enumerate(drawn, 1):
+-        print(f'  {n}. {r}')
+-
+-
+-def answer(n: int, text: str, who: str = 'claude-code'):
+-    review, _ = last(who)
+-    if review is None or not 1 <= n <= len(review["drawn"]):
+-        sys.exit('REFUSED: no review drawn, or N out of range')
+-    if len(text.split()) < 10:
+-        sys.exit('REFUSED: say in 10+ words what this tick does about the rule, naming a unit, problem or file')
+-    if (n <= 2 or who != 'claude-code') and not re.search(r'\S+\.py:\d+|P\d+', text):
+-        sys.exit('REFUSED: a correct-maintenance answer names the file:line or P-number it was applied to')
+-    with open(LOG, 'a') as f:
+-        f.write(json.dumps({'kind': 'answer', 'who': who, 'at': time.time(), 'n': n, 'rule': review['drawn'][n - 1], 'text': text}) + '\n')
+-    print(stale(who) or 'review complete; commander actions allowed')
+-
++"""agent_comms.commander.rules owns this command; this is its old filename only."""
++import os
++import sys
+ 
+ if __name__ == '__main__':
+-    a = sys.argv[1:]
+-    who = 'claude-code'
+-    if '--as' in a:
+-        i = a.index('--as'); who = a[i + 1]; del a[i:i + 2]
+-    if a == ['review']:
+-        review(who)
+-    elif a[:1] == ['answer'] and len(a) == 3 and a[1].isdigit():
+-        answer(int(a[1]), a[2], who)
+-    elif a == ['stale']:
+-        print(stale(who) or 'fresh')
+-    else:
+-        sys.exit(__doc__)
++    os.execv('/home/ts/.local/share/agent-comms/current/bin/agent-comms-commander',
++             ['agent-comms-commander', 'rules', *sys.argv[1:]])
+--- a/capacity.py
++++ b/capacity.py
+@@ -1,54 +1,7 @@
+-"""Commander load and forks (HARD RULE, Tristan 2026-10-17: "as soon as you feel overwhelmed fork; make it a structural reflex").
+-
+-Load is measured from the files the fleet already writes, never from how the commander feels:
+-each open order counts 1, each overdue order 2 more, and every 10 unjudged edits 1. One commander
+-carries PER_COMMANDER load. Forks register by passing `--fork NAME` to order.py, which touches
+-forks/NAME.beat; a beat younger than BEAT_AGE is a live fork. While load needs more forks than are
+-live, order.py refuses the main commander's actions and rotate.py prints FORK NOW, so the only
+-way forward is forking a slice.
+-"""
+-import json, math, os, sys, time
+-
+-ROOT = '/home/ts/.cache/agent-scratch/rts'
+-FORKS = f'{ROOT}/forks'
+-PER_COMMANDER = 6
+-BEAT_AGE = 10 * 60
+-
+-
+-def load() -> tuple[float, str]:
+-    import judge, order
+-    owed = [o for orders in json.load(open(order.DEADLINES)).values() for o in orders]
+-    overdue = sum(1 for o in owed if time.time() > order.due_at(o))
+-    unjudged = len(judge.unjudged())
+-    return len(owed) + 2 * overdue + unjudged / 10, f'{len(owed)} open orders, {overdue} overdue, {unjudged} unjudged edits'
+-
+-
+-def live_forks() -> list[str]:
+-    os.makedirs(FORKS, exist_ok=True)
+-    return [n[:-5] for n in os.listdir(FORKS) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{FORKS}/{n}') < BEAT_AGE]
+-
+-
+-def beat(name: str):
+-    os.makedirs(FORKS, exist_ok=True)
+-    with open(f'{FORKS}/{name}.beat', 'a'):
+-        os.utime(f'{FORKS}/{name}.beat')
+-
+-
+-def short() -> str | None:
+-    """Why the commander must fork now, or None when live forks cover the load."""
+-    total, parts = load()
+-    needed = math.ceil(total / PER_COMMANDER) - 1
+-    forks = live_forks()
+-    if len(forks) < needed:
+-        return (f'load {total:.0f} ({parts}) needs {needed} live fork(s), {len(forks)} live {forks}; '
+-                f'fork a slice now (each fork passes --fork NAME to order.py)')
+-    return None
+-
+-
+-def require():
+-    if why := short():
+-        sys.exit(f'REFUSED, nothing recorded: overloaded: {why}.')
+-
++"""agent_comms.commander.capacity owns this command; this is its old filename only."""
++import os
++import sys
+ 
+ if __name__ == '__main__':
+-    print(short() or f'covered: load {load()[0]:.0f}, forks {live_forks()}')
++    os.execv('/home/ts/.local/share/agent-comms/current/bin/agent-comms-commander',
++             ['agent-comms-commander', 'capacity', *sys.argv[1:]])
+--- a/tool_watch.py
++++ b/tool_watch.py
+@@ -1,163 +1,7 @@
+-"""Follow every live native session file and log each tool call with its thread name.
++"""agent_comms.commander.tool_watch owns this command; this is its old filename only."""
++import os
++import sys
+ 
+-Writes one line per call to activity.log. At each turn end (or every 25 calls in a
+-long turn) prints one digest of what the unit did, for claude-code to judge by reading it.
+-Owner: claude-code (RTS rotation). Delete with the rts directory when the role ends.
+-"""
+-import json, os, re, sys, time, glob, collections, subprocess
+-import storage
+-B = '/var/tmp/agent-comms-live-20260927-wzjtqhza'
+-LOG = '/home/ts/.cache/agent-scratch/rts/activity.log'
+-EDITS = '/home/ts/.cache/agent-scratch/rts/edits.jsonl'  # every edit in full; judge.py owns verdicts
+-WORKTREES = {}  # thread -> cwd, from process environments
+-
+-
+-def thread_names():
+-    """Session file -> thread name, from the registry's session_file (read-only)."""
+-    with open(f'{B}/registry.json') as f:
+-        threads = json.load(f)['threads']
+-    return {t['session_file']: name for name, t in threads.items() if t.get('session_file')}
+-
+-
+-def summarize(name, args):
+-    if not isinstance(args, dict):
+-        return str(args)[:160]
+-    for key in ('command', 'path', 'file_path', 'pattern', 'query', 'to', 'target'):
+-        if key in args:
+-            return f'{key}={str(args[key])[:200]!r}'
+-    return json.dumps(args)[:160]
+-
+-
+-def first(text, n):
+-    return ' '.join(str(text or '').split())[:n]
+-
+-
+-def digest_line(name, args):
+-    """What the call does, in enough detail to judge it."""
+-    if not isinstance(args, dict):
+-        return f'{name} {first(args, 160)}'
+-    if name == 'edit':
+-        edits = args.get('edits') or [args]
+-        if isinstance(edits, str):
+-            edits = json.loads(edits)
+-        edits = [e if isinstance(e, dict) else {'newText': str(e)} for e in edits]
+-        parts = [f"-{first(e.get('oldText') or e.get('old_string'), 90)} +{first(e.get('newText') or e.get('new_string'), 140)}"
+-                 for e in edits[:2]]
+-        return f"edit {args.get('path') or args.get('file_path')}: " + ' | '.join(parts)
+-    if name == 'write':
+-        return f"write {args.get('path') or args.get('file_path')}: {first(args.get('content'), 160)}"
+-    if name == 'bash':
+-        return f"bash {first(args.get('command'), 260)}"
+-    if name.startswith('comms_'):
+-        return f"{name} {first(json.dumps(args), 260)}"
+-    return f'{name} {summarize(name, args)}'
+-
+-
+-def record_edit(thread, name, args):
+-    """Each edit waits for a verdict from claude-code (judge.py); nothing judges it automatically."""
+-    if name not in ('edit', 'write') or not isinstance(args, dict):
+-        return
+-    edits = args.get('edits') or [args]
+-    if isinstance(edits, str):
+-        edits = json.loads(edits)
+-    hunks = [dict(old=e.get('oldText') or e.get('old_string') or '', new=e.get('newText') or e.get('new_string') or e.get('content') or '')
+-             for e in edits if isinstance(e, dict)]
+-    record = dict(id=f'{time.time_ns():x}'[-10:], at=time.time(), thread=thread,
+-                  path=args.get('path') or args.get('file_path'), hunks=hunks)
+-    with open(EDITS, 'a') as f:
+-        f.write(json.dumps(record) + '\n')
+-
+-
+-STRUCK = {}  # (thread, violation) -> time of the strike, so one repeated command is one strike
+-
+-
+-def enforce_storage(thread, name, args):
+-    """Storage rules are hard: a violating call is a public strike on the unit's current task, at once."""
+-    if not isinstance(args, dict) or thread in ('claude-code', 'codex', 'user'):
+-        return
+-    if name == 'bash':
+-        with open('/home/ts/.cache/agent-scratch/rts/deadlines.json') as f:
+-            disk_allowed = any(o.get('disk') for o in json.load(f).get(thread) or [])
+-        found = storage.command_violations(thread, str(args.get('command') or ''), disk_allowed)
+-    elif name in ('write', 'edit'):
+-        found = storage.write_violations(thread, str(args.get('path') or args.get('file_path') or ''))
+-    else:
+-        return
+-    with open('/home/ts/.cache/agent-scratch/rts/deadlines.json') as f:
+-        owed = json.load(f).get(thread) or []
+-    facts = [o['fact'] for o in owed if o.get('fact')]
+-    for violation in found:
+-        named = re.findall(r'--(P\d+)', violation)
+-        task = next((f for f in facts if f in named), None) if named else (facts[0] if facts else None)
+-        if time.time() - STRUCK.get((thread, violation), 0) < 600:
+-            continue
+-        STRUCK[(thread, violation)] = time.time()
+-        print(f'VIOLATION storage {thread}: {violation}', flush=True)
+-        if task and time.time() >= storage.EFFECTIVE:
+-            subprocess.run(['python3', 'order.py', 'strike', thread, '--why',
+-                            f'{task} broke the storage rule at a tool call: it {violation}; storage waste is banned outright',
+-                            '--caught', 'tool_watch at tool call'], cwd='/home/ts/.cache/agent-scratch/rts')
+-
+-
+-names, offsets = thread_names(), {}
+-turns = collections.defaultdict(list)
+-last_names = time.time()
+-
+-
+-def emit(thread, final=''):
+-    calls = turns.pop(thread, [])
+-    if not calls and (not final or final.strip() == '{"decision":"IGNORE"}'):
+-        return
+-    lines = [f'TURN {thread} ({len(calls)} calls)']
+-    lines += [f'  {c}' for c in calls[-14:]]
+-    if final:
+-        lines.append(f'  says: {first(final, 400)}')
+-    print('\n'.join(lines)[:3000], flush=True)
+-
+-
+-while True:
+-    if time.time() - last_names > 60:
+-        names.update(thread_names()); last_names = time.time()
+-    for path in set(glob.glob(f'{B}/native-sessions/*/*.jsonl')) | set(names):
+-        try:
+-            st = os.stat(path)
+-        except OSError:
+-            continue
+-        if time.time() - st.st_mtime > 900 and path not in offsets:
+-            continue
+-        start = offsets.get(path, st.st_size)  # new files: start at end; only new calls matter
+-        if st.st_size <= start:
+-            offsets[path] = st.st_size if st.st_size < start else start
+-            continue
+-        with open(path, 'rb') as f:
+-            f.seek(start); data = f.read(st.st_size - start)
+-        cut = data.rfind(b'\n') + 1
+-        offsets[path] = start + cut
+-        if path not in names and time.time() - last_names > 10:
+-            names.update(thread_names()); last_names = time.time()
+-        thread = names.get(path, path.split('/')[-2][:8])
+-        for line in data[:cut].splitlines():
+-            try:
+-                rec = json.loads(line)
+-            except ValueError:
+-                continue
+-            msg = rec.get('message') or {}
+-            if msg.get('role') != 'assistant':
+-                continue
+-            text = ''
+-            for block in msg.get('content') or ():
+-                if block.get('type') == 'text':
+-                    text += block.get('text') or ''
+-                if block.get('type') != 'toolCall':
+-                    continue
+-                name, args = block.get('name'), block.get('arguments')
+-                with open(LOG, 'a') as log:
+-                    log.write(f"{time.strftime('%H:%M:%S')} {thread} {name} {summarize(name, args)}\n")
+-                turns[thread].append(digest_line(name, args))
+-                record_edit(thread, name, args)
+-                enforce_storage(thread, name, args)
+-                if len(turns[thread]) >= 25:
+-                    emit(thread)
+-            if msg.get('stopReason') == 'stop':
+-                emit(thread, text)
+-    time.sleep(2)
++if __name__ == '__main__':
++    os.execv('/home/ts/.local/share/agent-comms/current/bin/agent-comms-commander',
++             ['agent-comms-commander', 'tool-watch', *sys.argv[1:]])

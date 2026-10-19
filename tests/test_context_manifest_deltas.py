@@ -119,7 +119,7 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
     expected = [context(owner, tmp_path, 328 + 2 * turn, turn + 1) for turn in range(40)]
     for manifest in expected:
         comms.bus.log.record_context(manifest)
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         prefix = source.witness
         rows = tuple(RecordedContextManifestSources.select(
             source.connection, thread=owner.incarnation, order_by=('offset',)))

@@ -26,7 +26,7 @@ def _expected(wired, *, active_only: bool = False) -> dict[str, int]:
 
 
 def _listed(wired, *, active_only: bool = False) -> dict[str, int]:
-    return {row["name"]: row["pending"] for row in wired.views.list_threads(active_only=active_only)}
+    return {row.thread.name: row.pending.value for row in wired.views.list_threads(active_only=active_only)}
 
 
 def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):

@@ -20,7 +20,7 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
+from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, MessageDisplayScope, ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
@@ -117,10 +117,11 @@ class BusPageIndex(TypedStore):
             self._resources.enter_context(resources.pop_all())
             return db
 
-    def _open_writer(self):
+    def _open_writer(self, *, check_same_thread: bool = True):
         """Keep disposable-schema repair inside the store's WAL attachment boundary."""
         with ExitStack() as opening:
-            db = opening.enter_context(closing(super()._open_writer()))
+            db = opening.enter_context(closing(super()._open_writer(
+                check_same_thread=check_same_thread)))
             try:
                 self.require_schema(self._schema(db))
             except StaleBusPageIndexError:
@@ -175,6 +176,11 @@ class BusPageIndex(TypedStore):
 
     def sync(self, opened: WireSnapshot) -> bool:
         """Advance the source supplied by its writer; never acquire another bus lock."""
+        # Coverage admission opened a reader. Retire it before the writer so
+        # SQLite can checkpoint on writer close, instead of leaving a cold
+        # read-only attachment to reconstruct the entire WAL on every query.
+        self._resources.close()
+        self.__dict__.pop('connection', None)
         revision = opened.revision
         size = opened.complete_prefix.boundary
         while size:
@@ -273,12 +279,13 @@ class BusPageIndex(TypedStore):
                                  descending=True, limit=1)
         return rows[0] if rows else None
 
-    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
+    def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
+                               *, through: int) -> list[LatestConversation]:
         predicate, parameters = scope.index_predicate
         return LatestConversation.read(self.connection.execute(
             f'SELECT target, sender, MAX(seq) AS seq '
-            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND ({predicate}) '
-            f'GROUP BY target, sender', (before_offset, *parameters),
+            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND seq<=? AND ({predicate}) '
+            f'GROUP BY target, sender', (before_offset, through, *parameters),
         ))
 
     def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,
@@ -323,7 +330,8 @@ class EmptyBusPageIndex(BusPageIndex):
     def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
         return None
 
-    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
+    def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
+                               *, through: int) -> list[LatestConversation]:
         return []
 
     def display_snapshot(self, scopes, boundary):

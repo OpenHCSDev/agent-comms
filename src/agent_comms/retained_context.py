@@ -1,4 +1,4 @@
-"""Turn contributors derived from one certified authored-source read."""
+"""Build a turn's saved context from one checked read of its authored records."""
 
 from dataclasses import dataclass
 from collections.abc import Mapping
@@ -11,7 +11,7 @@ from .context_segments.retained import RetainedSegment
 
 @dataclass(frozen=True)
 class RetainedFormat(WireExportFormat):
-    """An instruction artifact renders wording from its certified original row."""
+    """Write instruction text using the checked record that supplied its wording."""
 
     segment: RetainedSegment
 

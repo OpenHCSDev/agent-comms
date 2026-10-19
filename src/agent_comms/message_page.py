@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from abc import ABC, abstractmethod
 from collections import deque
 from contextlib import closing
@@ -10,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
 from .messages import Message
-from .page_traversal import NewerTraversal, OlderTraversal, PageCursor, PageTraversal
+from .page_traversal import OlderTraversal, PageCursor, PageTraversal
 from .read_basis import (
     DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope,
 )
@@ -180,10 +179,6 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                     break
         return traversal.result(window, more, opposite)
 
-    @classmethod
-    def every(cls, scope: MessageDisplayScope, *, after: int = 0) -> MessagePageRequest:
-        return cls(scope, PageBounds(NewerTraversal(after), sys.maxsize, sys.maxsize))
-
     def displayed(self, reads, document, viewer, snapshot, conversation_snapshot, source):
         def read(index):
             page = self.indexed(index, source)
@@ -204,3 +199,10 @@ class ConversationMessagePageRequest(MessagePageRequest):
 class DisplayedMessagePage:
     page: MessagePage
     displayed: DisplayBasis
+
+
+@dataclass(frozen=True, slots=True)
+class InboxPage(DisplayedMessagePage):
+    """One unread page and the unread messages beyond it in the same source cut."""
+
+    remaining: int

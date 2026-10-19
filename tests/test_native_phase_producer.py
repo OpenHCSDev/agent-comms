@@ -1,4 +1,4 @@
-"""Actual Pi event effects publish their observer phase, never infer it from text."""
+"""Pi events project the tool owner's current state, never infer it from text."""
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
@@ -11,8 +11,9 @@ import pytest
 
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.agent_events import NativePhaseChanged
-from agent_comms.backend import TurnSession
+from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_startup import NativeStartup
+from agent_comms.native_attestation import LostAttestation
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_events import MessageUpdate, ToolExecutionEnd, ToolExecutionStart, UnknownPiEvent
 from agent_comms.pi_payloads import TextDelta
@@ -25,16 +26,22 @@ from agent_comms.pi_native_backend import PersistentPiSession
     ("read", "bash"),
     ("x" * (Activity.detail_limit + 1), "y" * (Activity.detail_limit + 1)),
 ])
-async def test_native_tool_lifecycle_publishes_actual_phase_after_effects(first, second):
+async def test_native_tool_events_project_owner_state(first, second):
     root = Path.cwd()
-    session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, root=root, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+    session = NativeSessionPreparation(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, root=root, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})),
                           native_session=PersistentPiSession(), startup=NativeStartup(root))
-    session.native = SimpleNamespace(proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
-    session.active_tools = set()
+    session.native = SimpleNamespace(attestation=LostAttestation(),
+                                    proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
+    session.tool_socket = SimpleNamespace(active_tools=set())
     session.watchdog.clock = asyncio.get_running_loop().time
     session.watchdog.phase = ModelWaitPhase()
 
     async def consume(event):
+        # The socket updates its admitted calls before NativeSession projects them.
+        if isinstance(event, ToolExecutionStart):
+            session.tool_socket.active_tools.add(event.tool_id)
+        elif isinstance(event, ToolExecutionEnd):
+            session.tool_socket.active_tools.discard(event.tool_call_id)
         updates = [update async for update in event.consume(session)]
         phases = [update.phase for update in updates if isinstance(update, NativePhaseChanged)]
         assert phases == [session.watchdog.phase]

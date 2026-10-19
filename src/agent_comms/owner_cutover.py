@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
@@ -46,6 +48,10 @@ class OwnerCutover(ABC):
         if lifecycle.maintenance.current_unlocked().turn_pending:
             raise OwnerMaintenancePendingRefusal()
 
+    def stopped_resources(self, lifecycle: OwnerLifecycle):
+        """Acquire installation resources after readers exit, before the wire lock."""
+        return nullcontext()
+
     @abstractmethod
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         """Install and launch only from a batch whose owners have all stopped."""
@@ -53,16 +59,14 @@ class OwnerCutover(ABC):
 
     def recover(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         """No recovery without this operation's unchanged-original proof."""
-        from .errors import RelationViolationError
-
-        raise RelationViolationError('This operation has not certified original-unchanged recovery')
+        raise RelationViolationError('This operation has not checked original-unchanged recovery')
 
     def failed(self, failure: StoppedOwnerFailure) -> NoReturn:
-        """The operation releases its held resources before the failure leaves it.
+        """Release the operation's resources before reporting its failure.
 
-        A member that can certify unchanged owners calls restore_unchanged
-        instead. Recovery is distinct from retrying installation or input; the
-        original exception remains the result in either case.
+        Call restore_unchanged instead when the same processes can safely be
+        restored. Restoring them does not retry installation or input, and
+        either path still reports the exception that caused the failure.
         """
         self.leave_stopped(failure)
 
@@ -72,11 +76,11 @@ class OwnerCutover(ABC):
         raise failure
 
     def restore_unchanged(self, failure: StoppedOwnerFailure) -> NoReturn:
-        """Finish a declared safe disposition before a one-shot caller exits.
+        """Try the operation's recovery method before its caller exits.
 
-        Recovery is certified by recover(), never inferred from the exception
-        or its text. No installation or input is repeated. A refused recovery
-        leaves the recorded operation for review and reports BOTH failures.
+        Let recover() decide whether recovery succeeded; do not infer success
+        from exception text. Do not repeat installation or input. If recovery
+        fails, keep the operation for review and report both failures.
         """
         try:
             failure.recover()

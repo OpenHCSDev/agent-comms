@@ -1,0 +1,43 @@
+{
+  "stores": {
+    "agent_comms.catalog_store.ChannelCatalog": "ce9233bd1bdacae2cc04c5bb4b2be98e96f219bf1b40b02913ca1640fcd936a1",
+    "agent_comms.collaboration_ledger.CollaborationLedger": "31b84d65b2ac1f54250ce31f8192880d6eb6c67295e2fc2aad835f4ebfe1feb0",
+    "agent_comms.connector_store.ConnectorStore": "113e1992fe9647e07912f1b3138ca0fa5299b5ade186960fe07ca03bfd7234ae",
+    "agent_comms.read_ledger.ReadLedger": "bcc9ec9af2016cfaa1252d05e08118b4f1b73f9c4eb68553c9c37df76dc40996",
+    "agent_comms.registry_store.RegistryStore": "ed3745f30c77c59218d2be474aa580ec5bc2b0d53e144c4277f006f6952b24c4",
+    "agent_comms.relationships.RelationshipStore": "f865e917057f7b0e047c92b99c36255a2126a2dfd7a650cdc15982f24b90ab99",
+    "agent_comms.runtime_children.RuntimeChildrenStore": "b258974a17d0d0ed0635ad08b5cfc111b5c8206bb775e01b9338f948f683935b",
+    "agent_comms.runtime_info.RuntimeInfoStore": "84a30c144ca2edc44e290592d77a1c6a2679f765acb13b52d27072b2f6e8e752",
+    "agent_comms.shared_ledger.SharedLedger": "31b84d65b2ac1f54250ce31f8192880d6eb6c67295e2fc2aad835f4ebfe1feb0"
+  },
+  "conversions": [
+    {
+      "store": "agent_comms.registry_store.RegistryStore",
+      "source": "3bef5bd6411c7028a599e2a9bd66cb8662ca2a8e24a4ff4f265cb171bd2d5bbd",
+      "target": "ed3745f30c77c59218d2be474aa580ec5bc2b0d53e144c4277f006f6952b24c4",
+      "conversion": "agent_comms.registry_store.RegistryGoalConversion"
+    }
+  ],
+  "baseline_carries": [
+    "cutover.carry_acp_roles.AcpRoles",
+    "cutover.carry_archived_read_ledgers.ArchivedReadLedgers",
+    "cutover.carry_catalog_tags.CatalogTags",
+    "cutover.carry_check_revision.CheckRevisions",
+    "cutover.carry_display_counts.DisplayCounts",
+    "cutover.carry_earlier_projects.EarlierProjects",
+    "cutover.carry_external_pages.ExternalPages",
+    "cutover.carry_external_positions.ExternalPositions",
+    "cutover.carry_goal_wait_targets.GoalWaitTargets",
+    "cutover.carry_hunts.HuntRecords",
+    "cutover.carry_order_run.OrderRuns",
+    "cutover.carry_p495_read_ledger.ReadLedgerConversations",
+    "cutover.carry_problem_goal_prose.ProblemGoalProse",
+    "cutover.carry_route_package.RoutePackage",
+    "cutover.carry_runtime_info.RuntimeInfo",
+    "cutover.carry_starting_activity.StartingActivity",
+    "cutover.carry_todo_corrections.TodoCorrections",
+    "cutover.carry_todo_messages.TodoMessages",
+    "cutover.carry_todo_open_indexes.TodoOpenIndexes",
+    "cutover.carry_turn_records.TurnRecords"
+  ]
+}

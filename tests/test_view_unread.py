@@ -1,4 +1,5 @@
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.coordination_errors import DMPaintedBoundChanged
 from agent_comms.read_basis import NamedViewer
 import os
 import subprocess
@@ -12,26 +13,27 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.private_path import FileRevision
-from agent_comms.view_unread import ReplyIndex
+from agent_comms.view_unread import Counted, ReplyIndex
 
 
-def test_complete_reply_prefix_counts_during_growth_but_not_after_truncation(tmp_path):
+def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
     source = tmp_path / "native.jsonl"
     source.write_bytes(b"first reply\n")
     indexed = FileRevision.capture(source)
-    index = ReplyIndex(indexed, indexed.size, 1, str(source), True)
+    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0)
 
     with source.open("ab") as stream:
         stream.write(b"another reply\n")
     growing = FileRevision.capture(source)
-    assert index.covers(indexed)
-    assert not index.covers(growing)  # Preparation still indexes the new records.
-    assert index.counts(growing)      # Readers can show the held prefix now.
-    assert index.counted_seen(growing.size, growing) == index.through
-    assert index.counted_seen(indexed.size + 1, indexed) == 0
+    assert index.counts(indexed, 0)
+    assert not index.counts(growing, 0)  # A changed source needs a fresh suffix.
+    assert index.counts(growing, growing.size)  # The read mark itself proves zero unread.
+    assert index.counted(1, 0) == Counted(1)
 
     source.write_bytes(b"")
-    assert not index.counts(FileRevision.capture(source))
+    truncated = FileRevision.capture(source)
+    assert not index.continues(truncated)
+    assert index.counts(truncated, 0)  # Empty and fully read, independently of the old index.
 
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
@@ -107,7 +109,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
     unread_after_join = wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"]
-    with pytest.raises(ValueError, match="display.*changed"):
+    with pytest.raises(DMPaintedBoundChanged, match=r"^Transcript changed; reload the latest page\.$"):
         comms.views.mark_page_read(painted, worktree=str(tmp_path))
     assert (
         wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join
@@ -136,5 +138,5 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         assert child.returncode == 9
         reopened = wire(root)
         reopened.channels.set_channel_any_mode("#team", True)
-        assert [message.seq for message in list(reopened.views.full_history_page().messages)] == [1, 2]
+        assert [message.seq for message in list(reopened.views.channel_display_page("#team").messages)] == [1, 2]
         assert reopened.views.viewer_snapshot(str(root)).channel_unread["#team"] == 2

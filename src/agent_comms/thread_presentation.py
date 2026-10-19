@@ -63,8 +63,8 @@ class IdleThreadPresentationStatus(ThreadPresentationStatus):
 
 
 @dataclass(frozen=True, slots=True)
-class StoppedThreadPresentationStatus(IdleThreadPresentationStatus):
-    """An explicitly stopped owner is not a failed connection."""
+class InactiveThreadPresentationStatus(IdleThreadPresentationStatus):
+    """An inactive owner's state is not replaced by a failed viewer connection."""
 
     def with_disconnection[T](self, ordinary: T, disconnected: Callable[[], T]) -> T:
         return ordinary

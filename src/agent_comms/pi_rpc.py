@@ -38,8 +38,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     async def _read(self):
         try:
             while (event := await self.receive(strict=True)) is not None:
-                if not isinstance(event, Response) or self.correlate(event) is None:
-                    await self.deliver_event(event)
+                await event.deliver_to(self)
         finally:
             self._events.shutdown()
 
@@ -115,17 +114,20 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
 
     def track(self, command: PiCommand) -> asyncio.Future[Response]:
         """Expose the same pending response to the request's lifecycle owner."""
-        key = command.id or uuid4().hex
+        key = command.id if command.id is not None else uuid4().hex
         return self.pending.add(type(command), key, request=command)
 
     @staticmethod
     def command_bytes(command: PiCommand) -> bytes:
         return (json.dumps(command.to_rpc()) + "\n").encode()
 
-    def correlate(self, response) -> PiCommand | None:
+    def correlate(self, response) -> PiCommand:
         owner = response.command
-        return (
+        command = (
             self.pending.take(owner, response.id, response)
-            if response.id
+            if response.id is not None
             else self.pending.take_anonymous(owner, response)
         )
+        if command is None:
+            raise MalformedRecord("Pi RPC response has no pending command")
+        return command

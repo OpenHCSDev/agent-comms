@@ -21,20 +21,20 @@ def extend_input_claim(session, rpc, core):
     if count!=6: raise ValueError('Original native input claim consumer closure changed')
     session.write_text(source)
     replace_once(session,'    _claimNativeInput(inputId, request) {',
-                 '    _claimNativeInput(inputId, request, contributions=[]) {')
+                 '    _claimNativeInput(inputId, request, contributions=[], ownerTools) {')
     replace_once(session,'        this._nativeInputClaims.set(inputId, digest);',
-                 '        this._nativeInputClaims.set(inputId, NativeInputClaim.capture(digest,request,contributions));')
+                 '        this._nativeInputClaims.set(inputId, NativeInputClaim.capture(digest,request,contributions,ownerTools));')
     replace_once(session,'                expandPromptTemplates, source: options?.source ?? "interactive",\n            });',
-                 '                expandPromptTemplates, source: options?.source ?? "interactive",\n            },options?.contextContributions);')
+                 '                expandPromptTemplates, source: options?.source ?? "interactive",\n            },options?.contextContributions,options?.ownerTools);')
     for method,kind in (('steer','steer'),('followUp','follow_up')):
         replace_once(session,f'    async {method}(text, images, inputId) {{',
-                     f'    async {method}(text, images, inputId, contextContributions) {{')
+                     f'    async {method}(text, images, inputId, contextContributions, ownerTools) {{')
         before=f'this._claimNativeInput(inputId, {{ kind: "{kind}", text, images: images ?? null }})'
-        replace_once(session,before,before[:-1]+',contextContributions)')
+        replace_once(session,before,before[:-1]+',contextContributions,ownerTools)')
         replace_once(rpc,f'await session.{method}(command.message, command.images, command.inputId);',
-                     f'await session.{method}(command.message, command.images, command.inputId, command.contextContributions);')
+                     f'await session.{method}(command.message, command.images, command.inputId, command.contextContributions, command.ownerTools);')
     replace_once(rpc,'                    inputId: command.inputId,',
-                 '                    inputId: command.inputId,\n                    contextContributions: command.contextContributions,')
+                 '                    inputId: command.inputId,\n                    contextContributions: command.contextContributions,\n                    ownerTools: command.ownerTools,')
     replace_once(session,'        for (const record of records) {\n            const { inputId, sessionEntryId } = record;\n',
         '''        const contributors=[];
         for (const record of records) {
@@ -50,15 +50,31 @@ def extend_input_claim(session, rpc, core):
                  'return {request_generation:generation, context_digest:digest, contributors};')
     types=core/'agent-session.d.ts'
     replace_once(types,'export interface PromptOptions {',
-                 'export interface PromptOptions {\n    contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[];')
+                 'export interface PromptOptions {\n    ownerTools?: import("./turn-context.js").OwnerToolEndpoint;\n    contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[];')
     for method in ('steer','followUp'):
         replace_once(types,f'{method}(text: string, images?: ImageContent[], inputId?: string): Promise<void>;',
-            f'{method}(text: string, images?: ImageContent[], inputId?: string, contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[]): Promise<void>;')
+            f'{method}(text: string, images?: ImageContent[], inputId?: string, contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[], ownerTools?: import("./turn-context.js").OwnerToolEndpoint): Promise<void>;')
     types=core.parent/'modes/rpc/rpc-types.d.ts'
     source=types.read_text()
     before='    inputId?: string;'
     if source.count(before)!=3: raise ValueError('Original prompt/steer/follow-up declaration closure changed')
-    types.write_text(source.replace(before,before+'\n    contextContributions?: readonly import("../../core/turn-context.js").InputContributionCoordinates[];'))
+    types.write_text(source.replace(before,before+'\n    ownerTools?: import("../../core/turn-context.js").OwnerToolEndpoint;\n    contextContributions?: readonly import("../../core/turn-context.js").InputContributionCoordinates[];'))
+    replace_once(session, '            return true; // exact replay: never create a second queue or user entry',
+                 '            this._nativeInputClaims.get(inputId).requireOwnerTools(ownerTools);\n            return true; // exact replay: never create a second queue or user entry')
+    replace_once(session, '            getSystemPrompt: () => this.systemPrompt,',
+                 '            getSystemPrompt: () => this.systemPrompt,\n            getOwnerTools: () => this._nativeRun.ownerTools,')
+    runner=core/'extensions/runner.js'
+    replace_once(runner, '        this.getSystemPromptFn = contextActions.getSystemPrompt;',
+                 '        this.getSystemPromptFn = contextActions.getSystemPrompt;\n        this.getOwnerToolsFn = contextActions.getOwnerTools;')
+    replace_once(runner, '            getSystemPrompt: () => {',
+                 '            get ownerTools() { runner.assertActive(); return runner.getOwnerToolsFn(); },\n            getSystemPrompt: () => {')
+    replace_once(core/'extensions/runner.d.ts', '    private getSystemPromptFn;',
+                 '    private getSystemPromptFn;\n    private getOwnerToolsFn;')
+    types=core/'extensions/types.d.ts'
+    replace_once(types, '    getSystemPrompt(): string;',
+                 '    readonly ownerTools: import("../turn-context.js").OwnerToolConnection;\n    getSystemPrompt(): string;')
+    replace_once(types, '    getSystemPrompt: () => string;',
+                 '    getOwnerTools: () => import("../turn-context.js").OwnerToolConnection;\n    getSystemPrompt: () => string;')
 
 
 def extend_system_sources(core):

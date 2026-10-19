@@ -1,4 +1,5 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
+from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
 import hashlib
 import json
@@ -119,7 +120,7 @@ async def run(stage, package):
             persist('one-distinct-user-channel-request-published')
             async with asyncio.timeout(300):
                 while True:
-                    with Coordination(str(service.root / 'coordination.sqlite3')) as store:
+                    with Coordination(str(service.root / 'coordination.sqlite3')) as store, NativeEvidenceScope() as source_reads:
                         with store.session.read():
                             db = store.session._connection
                             claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))
@@ -136,9 +137,16 @@ async def run(stage, package):
                             assert reply.exact_target == '#openhcs'
                             actual, = service.bus.log.messages_for_references((reply.reference,))
                             assert actual.sender == child.name and actual.body.strip()
-                            history = read_historical_native_inputs(store, wire_root_id=root_id,
-                                recipient_lookup=RecordedThreadIncarnation("fixture", service.registry.require(child.name).created_at).lookup,
-                                source_seq=original.seq)
+                            history = read_historical_native_inputs(
+                                store,
+                                wire_root_id=root_id,
+                                recipient_lookup=RecordedThreadIncarnation(
+                                    "fixture",
+                                    service.registry.require(child.name).created_at,
+                                ).lookup,
+                                source_seq=original.seq,
+                                source_reads=source_reads,
+                            )
                             assert len(history) == 2 and all(row.expected_prompt_equality_established for row in history)
                             handling = service.views.message_notifications_for_references(
                                 (original.reference,))[(original.seq, original.message_id)]

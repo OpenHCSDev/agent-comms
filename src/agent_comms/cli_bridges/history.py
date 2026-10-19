@@ -18,23 +18,21 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar, Self
 
 from pydantic import TypeAdapter
 
+from agent_comms.agent_runtime import ReadsHistory
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness
 
-from .shared import EarlierRequest, HistoryNotice, SessionFacts, TranscriptUpdate
+from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
 
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
     from .opencode_protocol import Session
 
 
-class History(DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
+class History(ReadsHistory, DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
     """One session's past, oldest first, as transcript updates."""
 
     harness: ClassVar[type[Harness]]
-
-    @abstractmethod
-    def history(self) -> AsyncIterator[TranscriptUpdate]: ...
 
     @classmethod
     def readers(cls, harness: type[Harness]) -> tuple[type[Self], ...]:
@@ -62,7 +60,7 @@ class OpenCodeHistory(HarnessHistory):
     harness = OpenCodeHarness
 
     @staticmethod
-    def saved(session: Session, messages: Iterable[SavedMessage]) -> Iterator[TranscriptUpdate]:
+    def saved(session: Session, messages: Iterable[SavedMessage]) -> Iterator[RuntimeUpdate]:
         yield SessionFacts(source_id=session.id, project=session.directory, title=session.title or '')
         for saved in session.revert.kept(messages):
             yield from saved.publications()
@@ -72,9 +70,9 @@ class ReadAtOnce(ABC):
     """A past read in one pass from what exists when reading starts."""
 
     @abstractmethod
-    def read(self) -> Iterator[TranscriptUpdate]: ...
+    def read(self) -> Iterator[RuntimeUpdate]: ...
 
-    async def history(self) -> AsyncIterator[TranscriptUpdate]:
+    async def history(self) -> AsyncIterator[RuntimeUpdate]:
         for update in self.read():
             yield update
 
@@ -136,13 +134,13 @@ class JsonLines:
         return self.state()
 
     @abstractmethod
-    def record_updates(self, record, state, offset: int, raw: bytes) -> Iterator[TranscriptUpdate]: ...
+    def record_updates(self, record, state, offset: int, raw: bytes) -> Iterator[RuntimeUpdate]: ...
 
-    def decoded(self, stream: BinaryIO, start: int, boundary: int, state) -> Iterator[TranscriptUpdate]:
+    def decoded(self, stream: BinaryIO, start: int, boundary: int, state) -> Iterator[RuntimeUpdate]:
         for offset, raw in self.complete_lines(stream, start, boundary):
             yield from self.line_updates(raw, state, offset, 'A source record that was not valid JSON was omitted.')
 
-    def line_updates(self, raw: bytes, state, offset: int, damage: str) -> Iterator[TranscriptUpdate]:
+    def line_updates(self, raw: bytes, state, offset: int, damage: str) -> Iterator[RuntimeUpdate]:
         """A line that is not JSON is the harness's damage (a killed writer, two writers on one
         line) and is left out with a notice; JSON this decoder does not know is our gap and fails."""
         try:
@@ -150,7 +148,7 @@ class JsonLines:
         except ValueError:
             try:
                 json.loads(raw)
-            except ValueError:
+            except json.JSONDecodeError:
                 yield HistoryNotice(damage)
                 return
             raise
@@ -158,20 +156,14 @@ class JsonLines:
 
     def earlier_request(self, stream: BinaryIO, start: int) -> str:
         for offset, raw in self.reverse_lines(stream, start):
-            try:
-                record = self.decode_line(raw, offset)
-            except ValueError:
-                continue
+            record = self.decode_line(raw, offset)
             if text := record.request():
                 return text
         return ''
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         for offset, raw in self.reverse_lines(stream, boundary):
-            try:
-                record = self.decode_line(raw, offset)
-            except ValueError:
-                continue  # Decoded again, with its notice or failure, when read forward.
+            record = self.decode_line(raw, offset)
             if record.begins_history():
                 return offset
         return 0
@@ -210,11 +202,11 @@ class JsonLinesFile(JsonLines, ReadAtOnce):
 
     source: Path
 
-    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
+    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         """Session facts that precede the selected history; none unless the format keeps them apart."""
         return iter(())
 
-    def read(self) -> Iterator[TranscriptUpdate]:
+    def read(self) -> Iterator[RuntimeUpdate]:
         with self.source.open('rb') as stream:
             boundary = stream.seek(0, 2)
             yield from self.facts(stream, boundary)

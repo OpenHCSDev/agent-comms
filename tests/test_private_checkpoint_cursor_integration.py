@@ -1,6 +1,6 @@
 """Producer/cursor integration beyond the legacy bus byte and page caps.
 
-Provider-free native fake only: a source certificate is not an ACK or input permit.
+Provider-free native fake only: a source prefix record is not an ACK or input permit.
 """
 
 from __future__ import annotations
@@ -64,12 +64,16 @@ def _root(tmp_path: Path):
     return root, root_id, comms, first, lookup
 
 
-async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms, first, lookup = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first_turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     for number in range(1000):
@@ -83,27 +87,35 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     second_turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
     assert len(calls) == 2 and second_turn.input_id != first_turn.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        current = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
-            owner_name="alpha"
-        )
+        current = NativeSourceCursor(
+            Comms(root).bus, reopened, wire_root_id=root_id
+        ).read(owner_name="alpha", source_reads=source_reads)
         assert current is not None
         assert current.covered_seq == current.injected_seq == second.seq
         assert current.input_id == second_turn.input_id
         assert current.recipient_lookup == lookup
 
 
-async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_checked_unproven_first_source_cannot_be_skipped(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, _first, lookup = _root(tmp_path)
     bad, bad_calls = _fake_model(decision="IGNORE", digest_override="b" * 64)
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(bad_calls) == 1  # failed input is UNKNOWN; never retry it
     for number in range(101):
@@ -114,7 +126,11 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     good, good_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.cursor_status == "blocked_gap" and len(good_calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
@@ -128,14 +144,18 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     assert not (root / "read_markers.json").exists()
 
 
-async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     import agent_comms.private_bus_checkpoint as checkpoint
 
     root, root_id, comms, first, _lookup = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     original = checkpoint.append_private_bus_checkpoint_unlocked
@@ -149,19 +169,21 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     assert len(comms.bus.log.path.read_bytes().splitlines()) == first.seq + 1
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        retained = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
-            owner_name="alpha"
-        )
+        retained = NativeSourceCursor(
+            Comms(root).bus, reopened, wire_root_id=root_id
+        ).read(owner_name="alpha", source_reads=source_reads)
         assert retained is not None and retained.input_id == turn.input_id
         assert retained.injected_seq == first.seq
     assert len(calls) == 1  # recovery certifies a source, not native acceptance
 
 
-def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
+def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path, *, source_reads):
     root, root_id, comms, first, lookup = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+                owner_name="alpha", source_reads=source_reads
+            )
             is None
         )
     index = root / "private_bus_checkpoint.sqlite3"
@@ -170,7 +192,7 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         with pytest.raises((RelationViolationError, IdentityConflict)):
             NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
-                owner_name="alpha"
+                owner_name="alpha", source_reads=source_reads
             )
         assert (
             reopened.session._connection.execute(

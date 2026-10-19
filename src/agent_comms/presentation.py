@@ -39,9 +39,10 @@ from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
+from .ui_model.unread import UnreadPresentation, UnobservedUnread
 from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
                          NamedViewer)
-from .read_ledger import ReadLedger
+from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView,
@@ -317,7 +318,7 @@ class MessageNotification:
     def sent_sources(
         cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
     ):
-        """Capture one sender's bounded original source cut."""
+        """Read up to the requested number of messages sent by this thread."""
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
@@ -334,7 +335,7 @@ class MessageNotification:
         sources: Sequence[CommittedDelivery], *,
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
-        """Project outcomes from the caller's original certified source window."""
+        """Attach notification outcomes to the messages the caller already checked."""
         projected = cls.delivery_window(
             root, registry, sources, assignment_read, viewer=viewer,
         )
@@ -375,7 +376,7 @@ class ReadAll(ChannelReadMark):
                 scope = basis.scope(target)
             yield source.query_page_index(lambda index: scope.capture_all(
                 presentation.bus.reads, basis.require_viewer(), basis.registry, source, index,
-                document=basis.document,
+                document=basis.document, through=source.metadata.last_seq,
             ))
 
 
@@ -439,7 +440,7 @@ class BusPresentation:
                 read_marker_notice=basis.document.notice,
             )
         return replace(
-            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice),
+            snapshot, read_marker_notice=basis.document.notice.take(self.bus.reads),
             unread_pending=frozenset(snapshot.threads.keys() | snapshot.channels.keys()),
         )
 
@@ -460,8 +461,8 @@ class BusPresentation:
                     self.bus.activity_index.snapshot(source),
                 ) as basis:
                     scope = basis.scope(target.name)
-            # Reading identity is separate from preparing pages. Both
-            # DM and channel pages borrow the same original reader and source cut.
+            # Resolve the reader separately from page preparation. Both direct
+            # messages and channels use the captured reader and bus state.
             return basis.viewer.read_page(scope, bounds, basis, source)
 
     def mark_channel_read(
@@ -601,7 +602,7 @@ class ThreadRecord(CliResult):
             pending=pending[thread.name],
         ) for thread in threads)
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.project(self, "presence")
 
     @projected(view="presence")
@@ -672,10 +673,6 @@ class ThreadView(ThreadRecord):
         return self.activity.timestamp
 
     @projected(view="presence")
-    def session_name(self) -> str | None:
-        return self.runtime.session_name
-
-    @projected(view="presence")
     def context_used(self) -> PiCount:
         return self.runtime.context_used
 
@@ -694,9 +691,9 @@ class CoordinationSnapshot:
     references: DisplayReferences
     channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: type[ChannelSort] = NameChannelSort
-    thread_unread: Mapping[str, int] = field(default_factory=dict)
+    thread_unread: Mapping[str, UnreadPresentation] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
-    read_marker_notice: str | None = None
+    read_marker_notice: ReadNotice = field(default_factory=NoReadNotice)
 
     @classmethod
     def capture(
@@ -704,7 +701,7 @@ class CoordinationSnapshot:
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
-        visibility: RosterVisibility, read_marker_notice: str | None = None,
+        visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
         threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(
@@ -718,6 +715,7 @@ class CoordinationSnapshot:
             )),
             threads=threads,
             unread=unread, last_sent=sent, channel_unread=channel_unread,
+            thread_unread={name: UnobservedUnread() for name in threads},
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, read_marker_notice=read_marker_notice,
         )
@@ -783,6 +781,8 @@ class WireRevision(ReadState):
         *STATUS_SOURCE)
     runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,),
         *STATUS_SOURCE)
+    work_room: tuple[FileRevision, ...] = revision_source(
+        lambda views: views.registry.storage_rule.room_ledger.source_paths(), *STATUS_SOURCE)
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,),
         *STATUS_SOURCE, NotificationsView)
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,),
@@ -846,8 +846,8 @@ class WireRevision(ReadState):
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != previous.activity.get(name)}
-        status_names = names if (self.goal_waits, self.expiry_period) != (
-            earlier.goal_waits, earlier.expiry_period) else names & activity_changed
+        status_names = names if (self.goal_waits, self.expiry_period, self.work_room) != (
+            earlier.goal_waits, earlier.expiry_period, earlier.work_room) else names & activity_changed
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
             changed.update(name for name in status_names

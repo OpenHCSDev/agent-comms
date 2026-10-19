@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import json
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime
+from itertools import chain
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal, TextIO
+from uuid import uuid4
 
-from .pi_vocabulary import PendingStopReason, ThinkingLevel
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
+from .importing import ImportBuffer, ImportedSessionMetadata, ImportLimits
 from .pi_payloads import PiMessage, PiPayload
+from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .routing import TurnRouting
-from .transcript_events import NoticeTranscript, TranscriptEvent
+from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
-from .importing import ImportedSessionMetadata
 
 
 @dataclass(frozen=True)
@@ -35,6 +40,17 @@ class RecordedEntry(PiPayload):
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
     final_reply: ClassVar[bool] = False
+
+    @property
+    def child_parent(self) -> object:
+        return self.require_entry_id()
+
+    def imported_child(self, message: ImportedMessage, timestamp: datetime) -> dict[str, object]:
+        return {
+            "type": "message", "id": uuid4().hex[:16], "parentId": self.child_parent,
+            "timestamp": timestamp.isoformat(),
+            "message": message.pi_message(int(timestamp.timestamp() * 1000)),
+        }
 
     @property
     def input_boundary(self):
@@ -77,7 +93,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     def wire_member(cls, value):
         try:
             member = cls.member_named(value.get("type"))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownEntry
         return member.wire_variant(value)
 
@@ -129,12 +145,6 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         with NativeEvidenceRead.open(session_file) as evidence:
             yield evidence
 
-    @classmethod
-    @contextmanager
-    def open_input_evidence(cls, session_file):
-        with NativeInputEvidenceRead.open(session_file) as evidence:
-            yield evidence
-
     @property
     def tracked_user(self) -> MessageEntry | None:
         return None
@@ -156,6 +166,68 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     @property
     def unread_reply(self) -> bool:
         return False
+
+
+@dataclass
+class ImportedSessionWriter:
+    stream: TextIO
+    parent: NativeEntry
+
+    def append(self, message: ImportedMessage, timestamp: datetime) -> None:
+        encoded = self.parent.imported_child(message, timestamp)
+        self.stream.write(json.dumps(encoded, ensure_ascii=False) + "\n")
+        self.parent = NativeEntry.from_wire(encoded)
+
+    def import_record(
+        self, entry: RecordedEntry, events: Iterable[TranscriptEvent], limits: ImportLimits
+    ) -> None:
+        buffer = ImportBuffer(limits)
+        buffer.add(events)
+        for message in buffer.messages:
+            self.append(message, entry.timestamp.at)
+
+
+class NativeHeaderState(ABC):
+    """Acquired header lifetime, not a guess from the number of indexed inputs."""
+
+    @abstractmethod
+    def read(self, reader): ...
+
+    def decode_inputs(self, rows):
+        for row in rows:
+            entry = NativeEntry.wire_member(row).input_evidence(row)
+            if entry is not None:
+                yield entry
+
+    def start_input(self, reader, session_entry_id):
+        reader.header()
+        return (reader.source.start_at_entry(session_entry_id),)
+
+
+class UnreadNativeHeader(NativeHeaderState):
+    def decode_inputs(self, rows):
+        rows = iter(rows)
+        for first in rows:
+            yield NativeEntry.from_evidence(first)
+            break
+        yield from super().decode_inputs(rows)
+
+    def read(self, reader):
+        header = reader._accept_header((NativeEntry.from_evidence(reader.source.consume_header()),))
+        reader.entries = (header,)
+        reader.header_state = AcceptedNativeHeader()
+        return header
+
+
+class AcceptedNativeHeader(NativeHeaderState):
+    def read(self, reader):
+        reader.source.verify()
+        return reader.entries[0]
+
+
+class IndexedNativeHeader(AcceptedNativeHeader):
+    def start_input(self, reader, session_entry_id):
+        return ()  # The acquired reader already indexes each verified append.
 
 
 class NativeEvidenceRead:
@@ -180,9 +252,8 @@ class NativeEvidenceRead:
     @contextmanager
     def open(cls, session_file):
         """One original descriptor and byte-verification lifetime for every read."""
-        from .native_pi import PrivateEvidenceRead, _private_session_dir
+        from .native_pi import PrivateEvidenceRead
 
-        _private_session_dir(session_file.parent)
         with PrivateEvidenceRead.open(session_file) as source:
             evidence = cls(source)
             try:
@@ -214,6 +285,7 @@ class NativeEvidenceRead:
     def _forget(self) -> None:
         self.entries: tuple[NativeEntry, ...] = ()
         self.inputs: dict[str, int] = {}
+        self.header_state: NativeHeaderState = UnreadNativeHeader()
 
     def close(self):
         self.source.close()
@@ -241,6 +313,26 @@ class NativeEvidenceRead:
                     raise MalformedRecord(
                         "ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
+
+    def _accept_header(self, entries):
+        if not entries or not isinstance(entries[0], SessionEntry):
+            raise MalformedRecord('Native Pi session header is invalid')
+        entries[0].require_header()
+        return entries[0]
+
+    def header(self):
+        """Read and decode record one without discarding an existing input index."""
+        from .native_pi import NativePiUnavailable
+
+        try:
+            return self.header_state.read(self)
+        except MalformedRecord as error:
+            self.close()
+            raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
+
+    def observe_input(self, input_id, session_entry_id):
+        """Full-history readers preserve their contiguous branch semantics."""
+        return self.observe()
 
     def observe(self):
         """Decode the captured cut."""
@@ -275,22 +367,17 @@ class NativeEvidenceRead:
         self.source.reverify_from_start()
         return self._observe(reverified=True)
 
-    def _observe(self, *, reverified: bool):
+    def _observe(self, *, reverified: bool, initial_rows=()):
         from .native_pi import (
             NativeEvidencePrefixChanged,
             NativePiUnavailable,
-            _private_session_dir,
         )
 
         try:
-            _private_session_dir(self.source.path.parent)
-            appended = tuple(self.decode_rows(self.source.rows()))
+            appended = tuple(self.decode_rows(chain(initial_rows, self.source.rows())))
             self.index(appended)
             entries = self.entries + appended
-            if not entries or not isinstance(entries[0], SessionEntry):
-                raise MalformedRecord("Native Pi session header is invalid")
-            entries[0].require_header()
-            _private_session_dir(self.source.path.parent)
+            self._accept_header(entries)
         except NativeEvidencePrefixChanged:
             if reverified:
                 self.close()
@@ -307,6 +394,7 @@ class NativeEvidenceRead:
             self.close()
             raise
         self.entries = entries
+        self.header_state = IndexedNativeHeader()
         return entries[0], entries
 
     def decode_rows(self, rows):
@@ -315,25 +403,24 @@ class NativeEvidenceRead:
 
 
 class NativeInputEvidenceRead(NativeEvidenceRead):
-    """Verify every source byte; decode only the header and original input records.
+    """Check every file byte, but decode only the header and submitted inputs.
 
-    The inherited descriptor, append and refusal lifetime is unchanged. This is
-    an acquired input-proof projection, not a history index or another store.
+    Keep the parent class's file handle, append handling and error behavior.
+    Read input evidence from that file without adding a history index or store.
     """
 
+    def observe_input(self, input_id, session_entry_id):
+        """A recorded native entry locates the first needed input, not a bus sequence."""
+        return self._observe(
+            reverified=False, initial_rows=self.header_state.start_input(self, session_entry_id),
+        )
+
     def decode_rows(self, rows):
-        for index, row in enumerate(rows):
-            # The first physical record must remain the original session header.
-            if index == 0 and not self.entries:
-                yield NativeEntry.from_evidence(row)
-                continue
-            entry = NativeEntry.wire_member(row).input_evidence(row)
-            if entry is not None:
-                yield entry
+        yield from self.header_state.decode_inputs(rows)
 
 
 class NativeEvidenceScope(ExitStack):
-    """One acquired input-proof source for a bounded corroboration operation.
+    """One recipient-owned input-proof source across its corroboration lifetime.
 
     Only the current descriptor and its decoded bytes are held. Switching
     journals closes the previous reader; no proof, acknowledgement or disposition is
@@ -344,19 +431,14 @@ class NativeEvidenceScope(ExitStack):
         super().__init__()
         self.readers: dict[Path, NativeInputEvidenceRead] = {}
 
-    @classmethod
     @contextmanager
-    def borrow(cls, scope: NativeEvidenceScope | None = None):
-        """One owner chooses borrowed or newly acquired resource lifetime."""
-        if scope is None:
-            with cls() as acquired:
-                yield acquired
-        else:
-            try:
-                yield scope
-            except BaseException:
-                scope.close()
-                raise
+    def borrow(self):
+        """Retain this owner's reader on success; retire it on refused evidence."""
+        try:
+            yield self
+        except BaseException:
+            self.close()
+            raise
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()
@@ -380,6 +462,10 @@ class NativeEvidenceScope(ExitStack):
 
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
+    @property
+    def child_parent(self) -> object:
+        return self.parent_id
+
     version: int | None = None
     cwd: str | None = field(default=None, metadata={"wire_omit_default": True})
     parent_session: str | None = field(default=None, metadata={
@@ -393,6 +479,12 @@ class SessionEntry(NativeEntry):
     def require_header(self) -> None:
         if not self.id:
             raise MalformedRecord("Native Pi session header is invalid")
+
+    def require_reopen(self) -> None:
+        """Saved native execution supports v3; display may decode older headers."""
+        self.require_header()
+        if self.version != 3:
+            raise MalformedRecord("Strict native v3 session header required")
 
 
 @dataclass(frozen=True, kw_only=True)
