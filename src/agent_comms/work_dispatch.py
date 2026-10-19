@@ -42,7 +42,10 @@ class WorkDispatch:
         storage = comms.registry.storage_rule
         checkout = storage.order_checkout(name, self.action.problem)
         candidate = comms.registry.new_thread(
-            name, frozenset(), str(checkout), model=defaults.model,
+            name,
+            frozenset(),
+            str(checkout),
+            model=defaults.model,
             thinking_level=defaults.thinking_level,
         )
         self.action.request_ref(GoalActionContext(comms.goals, candidate))
@@ -50,16 +53,32 @@ class WorkDispatch:
         CheckoutStorageEffect(checkout).check(storage, candidate)
         subprocess.run(
             ("git", "-C", self.action.order.check.directory, "fetch", "origin", "main"),
-            check=True, capture_output=True, text=True, timeout=60,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         subprocess.run(
-            ("git", "-C", self.action.order.check.directory, "worktree", "add", "-b",
-             f"auto/{name}", str(checkout), "origin/main"),
-            check=True, capture_output=True, text=True, timeout=60,
+            (
+                "git",
+                "-C",
+                self.action.order.check.directory,
+                "worktree",
+                "add",
+                "-b",
+                f"auto/{name}",
+                str(checkout),
+                "origin/main",
+            ),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
-            replace(candidate, session_file=location.read_key), StoppedThreadStatus(),
+            replace(candidate, session_file=location.read_key),
+            StoppedThreadStatus(),
         )
         # A failed publication leaves a stopped unit and its checkout, not an
         # untracked running task. A failed/uncertain start never releases the claim.
@@ -77,9 +96,12 @@ class WorkDispatch:
         if current.holder or not current.pending:
             return
         action = OrderGoalAction(
-            problem=current.id, expected_revision=current.revision,
-            order=current.order.reissued(time.time()), request=current.goal.request(),
-            deadline=current.deadline, commander=commander.name,
+            problem=current.id,
+            expected_revision=current.revision,
+            order=current.order.reissued(time.time()),
+            request=current.goal.request(),
+            deadline=current.deadline,
+            commander=commander.name,
         )
         cls(action, revision=current.revision).start(comms)
 
@@ -133,12 +155,18 @@ class CheckedPhaseTask(PhaseTask):
         now = time.time()
         order = replace(self.order.reissued(now), serves=phase)
         action = CreateProblemGoalAction(
-            problem=self.problem, repo=self.repo, text=self.text, order=order,
-            request=order.request(commander, (self.problem,)), commander=commander.name,
+            problem=self.problem,
+            repo=self.repo,
+            text=self.text,
+            order=order,
+            request=order.request(commander, (self.problem,)),
+            commander=commander.name,
             deadline=RecordedEventTime(now + self.deadline_seconds),
         )
         WorkDispatch(action, revision=0).start(comms)
 
     def done(self, todos: Iterable[Todo]) -> bool:
-        return any(todo.id == self.problem and not todo.state.open and todo.order.accepted
-                   for todo in todos)
+        return any(
+            todo.id == self.problem and not todo.state.open and todo.order.accepted
+            for todo in todos
+        )
