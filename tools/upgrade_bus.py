@@ -292,8 +292,7 @@ def route_readers(patience: int = 120) -> None:
     try:
         acquire_exclusive_route_lock(descriptor)
     except TimeoutError:
-        holders = "; ".join(f"PID {holder.pid}: {holder.command}"
-                            for holder in route_lock_holders(descriptor))
+        holders = "; ".join(holder.describe() for holder in route_lock_holders(descriptor))
         raise UpgradeRefused(f"Clients still hold the route after {patience}s: {holders}") from None
     finally:
         signal.alarm(0)
