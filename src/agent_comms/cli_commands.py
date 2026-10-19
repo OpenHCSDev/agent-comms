@@ -61,7 +61,7 @@ from .exporting import (
 )
 from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .presentation import CountedRead, InboxRead, ThreadRecord, UncountedRead
+from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
@@ -607,7 +607,10 @@ class AcknowledgedResult(CliResult):
 
 @dataclass(frozen=True)
 class WhoResult(CliResult):
-    who: tuple[Mapping[str, object], ...]
+    who: tuple[ThreadView, ...]
+
+    def to_wire(self) -> object:
+        return FieldCodec.project(self, "presence")
 
 
 @dataclass(frozen=True)
@@ -1281,7 +1284,7 @@ class WhoCliCommand(CliCommand):
     help = "Presence: who is in the chat"
 
     def apply(self, ctx: Comms) -> CliResult:
-        return WhoResult(tuple(ctx.views.who()))
+        return WhoResult(ctx.views.who())
 
 
 @dataclass(frozen=True, kw_only=True)
