@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import Field, dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -150,7 +150,7 @@ class ThreadSlice[Value](ABC):
 
     @staticmethod
     @abstractmethod
-    def cut(raw: dict, canonical: str) -> dict:
+    def cut(raw: Any, canonical: str) -> Any:
         """This field's wire value restricted to ``canonical``."""
 
     @classmethod
@@ -208,9 +208,22 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
+class DocumentVersion(ThreadSlice[int]):
+    """A format version belongs to the whole document, including a one-row cut."""
+
+    @staticmethod
+    def cut(raw: int, canonical: str) -> int:
+        return raw
+
+    @classmethod
+    def copy(cls, value: int) -> int:
+        return value
+
+
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence):
+    version: Literal[1] = field(default=1, metadata={"thread_slice": DocumentVersion})
     threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
     statuses: dict[str, ThreadStatus] = field(
         default_factory=dict, metadata={"thread_slice": OwnRow})

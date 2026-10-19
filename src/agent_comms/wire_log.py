@@ -51,6 +51,7 @@ from .store_files import (
     StoreLock,
     StoreLockOwner,
     StoreLockContention,
+    StoreWriteRequired,
     _atomic_write_text,
     _iter_jsonl_stream,
     _store_lock,
@@ -589,15 +590,14 @@ class WireLog(StoreLockOwner, lock_rank=1):
         delivery must not keep a POSIX lock until the event loop resumes.
         Cancellation joins acquired work before the original descriptor closes.
         """
-        from .private_bus_checkpoint import CheckpointNeedsRepair
 
         # Readers share the bus lock so idle workers don't queue behind each
         # other; only a checkpoint repair needs the exclusive lock.
         mode = SharedLock()
         try:
             return await self._read_checked_under_lock(read, mode)
-        except CheckpointNeedsRepair as error:
-            return await self._read_checked_under_lock(read, mode.after_repair_needed(error))
+        except StoreWriteRequired as error:
+            return await self._read_checked_under_lock(read, mode.after_write_needed(error))
 
     async def _read_checked_under_lock(self, read: Callable, mode: LockMode):
         from .child_process import Platform

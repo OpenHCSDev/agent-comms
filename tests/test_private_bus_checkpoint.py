@@ -684,7 +684,7 @@ def test_only_a_shared_reader_retries_a_needed_repair_exclusively(mode, escalate
     error = CheckpointNeedsRepair("lagged suffix")
     if escalated is None:
         with pytest.raises(CheckpointNeedsRepair) as raised:
-            mode.after_repair_needed(error)
+            mode.after_write_needed(error)
         assert raised.value is error
     else:
-        assert type(mode.after_repair_needed(error)) is escalated
+        assert type(mode.after_write_needed(error)) is escalated

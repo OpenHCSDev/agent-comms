@@ -35,7 +35,7 @@ from .envelope_claim_transitions import (
 from .coordination_tables.publications import PublicationIntents
 from .errors import HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
-from .store_files import ExclusiveLock, LockMode, SharedLock
+from .store_files import ExclusiveLock, LockMode, SharedLock, StoreWriteRequired
 from .field_codec import FieldCodec, MalformedRecord
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
@@ -1318,7 +1318,7 @@ def _rebuild_checkpoint_unlocked(
     return expected
 
 
-class CheckpointNeedsRepair(Exception):  # noqa: N818 - names a state
+class CheckpointNeedsRepair(StoreWriteRequired):  # noqa: N818 - names a state
     """A reader holding the shared bus lock found rows the checkpoint does not
     cover yet, or an unfinished checkpoint write.
 

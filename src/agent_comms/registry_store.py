@@ -22,7 +22,7 @@ from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
 from .registration_change import NativeSourcePublication
 from .native_input_owner import RegistryOwner
 from .routing import TurnRouting
-from .store_files import SharedLock
+from .store_files import LockMode, SharedLock, StoreLock
 from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import ActiveTurn, StoredTurnRecord
@@ -36,8 +36,34 @@ class RegistryRevision:
     """
 
     revision: FileRevision | None
-    document: RegistryDocument
     raw: dict
+    store: RegistryStore = field(repr=False, compare=False)
+    earlier: tuple[dict, RegistryDocument] | None = field(default=None, repr=False)
+
+    @cached_property
+    def document(self) -> RegistryDocument:
+        if self.revision is None:
+            return self.store.empty()
+        return self.store._bind_document(RegistryDocument.from_wire(self.raw, self.earlier))
+
+    def successor(self, revision: FileRevision | None, raw: dict) -> RegistryRevision:
+        # Retain only an already decoded predecessor, not a chain of revisions.
+        earlier = ((self.raw, self.__dict__["document"])
+                   if "document" in self.__dict__ else None)
+        return RegistryRevision(revision, raw, self.store, earlier)
+
+    @classmethod
+    def written(cls, revision: FileRevision, raw: dict, store: RegistryStore,
+                document: RegistryDocument) -> RegistryRevision:
+        result = cls(revision, raw, store)
+        result.__dict__["document"] = document.copy()
+        return result
+
+    def entry(self, name: str) -> RegistryEntry:
+        if "document" in self.__dict__:
+            return self.document.entry(name)
+        entry = RegistryDocument.entry_from_wire(self.raw, name)
+        return replace(entry, thread=self.store._bind_thread(entry.thread))
 
     @cached_property
     def snapshot(self) -> RegistrySnapshot:
@@ -125,9 +151,34 @@ class RegistryEdit:
             self.original = self.store.read_revision_unlocked()
 
 
+class RegistryGoalConversion:
+    """The unversioned registry goal transition, never an alternate decoder."""
+
+    source_version = 0
+    target_version = RegistryDocument().version
+
+    @classmethod
+    def converted(cls, raw: dict) -> dict:
+        threads = {name: dict(thread) for name, thread in raw.get("threads", {}).items()}
+        for thread in threads.values():
+            if thread.get("goal") == {}:
+                thread["goal"] = None
+        return {**raw, "version": cls.target_version, "threads": threads}
+
+
+class RegistryStoreLock(StoreLock):
+    @classmethod
+    @contextmanager
+    def hold(cls, path: Path, descriptor: int, mode: LockMode):
+        RegistryStore(path)._prepare_unlocked(mode)
+        yield cls(descriptor)
+
+
 @dataclass(frozen=True, slots=True)
 class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
     json_indent = 2
+    lock_type: ClassVar[type[StoreLock]] = RegistryStoreLock
+    conversion: ClassVar[type[RegistryGoalConversion]] = RegistryGoalConversion
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -143,7 +194,27 @@ class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
     def _read_unlocked(self) -> RegistryDocument:
         return self.read_revision_unlocked().document
 
+    def _prepare_unlocked(self, mode: LockMode) -> None:
+        revision = self._raw_revision_unlocked()
+        if revision.revision is None:
+            return
+        version = FieldCodec.decode(int, revision.raw.get("version", 0))
+        if version == self.conversion.target_version:
+            return
+        if version != self.conversion.source_version:
+            raise RelationViolationError(f"Unsupported registry version: {version}")
+        mode.require_writer()
+        # Decode completely before publication; malformed goals never become NoGoal.
+        document = self._decode(self.conversion.converted(revision.raw))
+        self.save_unlocked(document)
+
     def read_revision_unlocked(self) -> RegistryRevision:
+        revision = self._raw_revision_unlocked()
+        with self.cache.decoding:
+            revision.document
+        return revision
+
+    def _raw_revision_unlocked(self) -> RegistryRevision:
         self.private_guard_unlocked()  # before even a cache hit
         revision = FileRevision.capture(self.path)
         entry = self.cache.entry
@@ -153,17 +224,11 @@ class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
             entry = self.cache.entry
             if entry is not None and entry.revision == revision:
                 return entry
-            if revision is None:
-                raw, document = {}, self.empty()
-            else:
-                raw = json.loads(self.path.read_text())
-                if entry is None or entry.revision is None:
-                    document = self._decode(raw)
-                else:
-                    document = self._bind_document(
-                        RegistryDocument.from_wire(raw, (entry.raw, entry.document))
-                    )
-            entry = RegistryRevision(revision, document, raw)
+            raw = {} if revision is None else json.loads(self.path.read_text())
+            if not isinstance(raw, dict):
+                raise RelationViolationError("Registry document must be an object")
+            entry = (RegistryRevision(revision, raw, self) if entry is None
+                     else entry.successor(revision, raw))
             self.cache.entry = entry
             return entry
 
@@ -196,18 +261,12 @@ class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
         A decoded revision already in this process's cache answers directly.
         """
         with self.locked(mode=SharedLock()):
-            self.private_guard_unlocked()
+            source = self._raw_revision_unlocked()
             revision = self.revision_unlocked()
-            if revision[0] is None:
+            if source.revision is None:
                 return RegistryEntryRevision(revision, self.empty().entry(name))
-            entry = self.cache.entry
-            if entry is not None and entry.revision == revision[0]:
-                return RegistryEntryRevision(revision, entry.document.entry(name))
-            raw = json.loads(self.path.read_text())
-            decoded_entry = RegistryDocument.entry_from_wire(raw, name)
-            return RegistryEntryRevision(
-                revision, replace(decoded_entry, thread=self._bind_thread(decoded_entry.thread))
-            )
+            with self.cache.decoding:
+                return RegistryEntryRevision(revision, source.entry(name))
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
@@ -236,7 +295,7 @@ class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
         if (revision := FileRevision.capture(self.path)) is not None:
-            self.cache.entry = RegistryRevision(revision, document.copy(), raw)
+            self.cache.entry = RegistryRevision.written(revision, raw, self, document)
 
     def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer.

@@ -28,13 +28,16 @@ if TYPE_CHECKING:
     import sqlite3
 
     from .private_bus_checkpoint import (
-        CheckpointNeedsRepair,
         PrefixWitness,
         WritableCheckpoint,
     )
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
     from .child_process import Platform
+
+
+class StoreWriteRequired(Exception):
+    """This checked store needs an exclusive writer before a reader can proceed."""
 
 
 class LockMode(ABC):
@@ -59,8 +62,8 @@ class LockMode(ABC):
         """Require the exclusive holder before rebuilding a replaced source."""
 
     @abstractmethod
-    def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
-        """The mode that may repair what this holder could only name."""
+    def after_write_needed(self, error: StoreWriteRequired) -> LockMode:
+        """The mode that may write what this holder could only name."""
 
 
 class SharedLock(LockMode):
@@ -78,10 +81,9 @@ class SharedLock(LockMode):
         return checkpoint.check_final(bus, marker, db, stream)
 
     def require_writer(self) -> None:
-        from .private_bus_checkpoint import CheckpointNeedsRepair
-        raise CheckpointNeedsRepair("Replaced bus file needs its page index rebuilt.")
+        raise StoreWriteRequired("This store needs an exclusive writer before reading.")
 
-    def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
+    def after_write_needed(self, error: StoreWriteRequired) -> LockMode:
         return ExclusiveLock()
 
 
@@ -102,7 +104,7 @@ class ExclusiveLock(LockMode):
     def require_writer(self) -> None:
         pass
 
-    def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
+    def after_write_needed(self, error: StoreWriteRequired) -> LockMode:
         raise error
 
 
@@ -318,8 +320,6 @@ def _store_lock(
 ) -> Iterator[StoreLock]:
     """Acquire a store lock synchronously; inherited POSIX locks end at last close."""
     from .child_process import Platform
-    from .private_bus_checkpoint import CheckpointNeedsRepair
-
     platform = Platform.current()
     with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
         def acquire(mode):
@@ -332,8 +332,8 @@ def _store_lock(
 
         try:
             lock = acquire(mode)
-        except CheckpointNeedsRepair as error:
-            lock = acquire(mode.after_repair_needed(error))
+        except StoreWriteRequired as error:
+            lock = acquire(mode.after_write_needed(error))
         yield lock
 
 
