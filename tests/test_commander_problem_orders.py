@@ -773,49 +773,29 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     assert comms.registry.require('worker').goal == goal
 
 
-def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
-    """On a pre-verdicts store every step from the deleted goal carry on runs in chain order, each
-    from the revision that last wrote it; the current Todo reports the missing column until then."""
+def test_column_carries_run_before_order_validation(commander):
+    """A retained store already has verdicts/releases; messages is added before orders read it."""
     comms, _ = commander
     completed_with_pending(commander)
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
-        db.execute('ALTER TABLE todo DROP COLUMN verdicts')
-        db.execute('ALTER TABLE todo DROP COLUMN corrections')
         db.execute('ALTER TABLE todo DROP COLUMN messages')
         db.commit()
     with (closing(CoordinationStore.read_snapshot(path)) as db,
-          pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"')):
+          pytest.raises(sqlite3.OperationalError, match='no such column: "messages"')):
         list(Todo.stream(db))
     repo = Path(__file__).parents[1]
-    steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
-    members = {'carry_problem_goals': ('ProblemGoals', 2),
-               'carry_todo_verdicts': ('TodoVerdicts', 3),
-               'carry_todo_corrections': ('TodoCorrections', 3),
-               'carry_todo_open_indexes': ('TodoOpenIndexes', 2),
-               'carry_todo_messages': ('TodoMessages', 3)}
-    names = list(steps)
-    assert names[names.index('carry_problem_goals'):] == list(members)
+    names = [step.name for step in CarryChain.at(repo, 'HEAD').steps]
+    members = {'carry_todo_messages': ('TodoMessages', 3),
+               'carry_todo_corrections': ('TodoCorrections', 0),
+               'carry_order_run': ('OrderRuns', 0),
+               'carry_todo_open_indexes': ('TodoOpenIndexes', 0)}
+    assert names[names.index('carry_todo_messages'):] == list(members)
     for name, (member, changed) in members.items():
-        held = tmp_path / name
-        held.mkdir()
-        # A deleted step is declared where it was last written; one still in the tree, at HEAD.
-        wrote = steps[name].revision if steps[name].revision != 'HEAD' else subprocess.run(
-            ['git', '-C', str(repo), 'log', '-1', '--diff-filter=AM', '--format=%H', 'HEAD', '--',
-             f'tools/cutover/{name}.py'], capture_output=True, text=True, check=True).stdout.strip()
-        archive = subprocess.run(['git', '-C', str(repo), 'archive', wrote,
-                                  'src', 'tools'], capture_output=True, check=True).stdout
-        subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
-        ran = subprocess.run([sys.executable, '-c',
-                              'import importlib, pathlib, sys; '
-                              'm=importlib.import_module(\"cutover.\"+sys.argv[1]); '
-                              'c=getattr(m,sys.argv[2]); '
-                              'import json; print(json.dumps({\"changed\":c.carry(pathlib.Path(sys.argv[3]),apply=True).changed}))',
-                              name, member, str(comms.root)],
-                             capture_output=True, text=True, cwd=held,
-                             env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
-        assert ran.returncode == 0, ran.stderr
-        assert json.loads(ran.stdout.splitlines()[-1])['changed'] == changed
+        carry = getattr(importlib.import_module('cutover.' + name), member)
+        assert carry.carry(comms.root, apply=False).changed == changed
+        assert carry.carry(comms.root, apply=True).changed == changed
+        assert carry.carry(comms.root, apply=False).changed == 0
     with closing(CoordinationStore.read_snapshot(path)) as db:
         assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
 
