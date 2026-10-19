@@ -252,7 +252,10 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
         if original is None:
             yield DraftPublication()
             return
-        transcript = ExternalTranscript(root, original.owner_lookup)
+        from .registration import Registration
+        thread = Registration(root).require(original.owner_thread)
+        original.require_recorded_owner(thread)
+        transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
             publication = TurnDraftPublication(original.owner_lookup, connection, input_id)
             try:
@@ -346,7 +349,7 @@ class StoreRead(TranscriptSource):
         return self.transcript._cut(self.connection)
 
     @contextmanager
-    def draft_snapshot(self, root: Path, thread: str):
+    def draft_snapshot(self, root: Path, incarnation: ThreadIncarnation):
         yield self.connection
 
     def _records(self, where: str, parameters: tuple, *,
@@ -391,11 +394,15 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
-    lookup: str
+    incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, DraftRow)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
+
+    @property
+    def lookup(self) -> str:
+        return self.incarnation.require_recorded().lookup
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
@@ -462,7 +469,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def end_turn(self) -> None:
         with self.reading() as records:
-            draft = records.current_draft(self.root, self.lookup)
+            draft = records.current_draft(self.root, self.incarnation)
         draft.end_turn(self)
 
     @contextmanager
