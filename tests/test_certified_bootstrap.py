@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import PublicationActivationBlocked
@@ -66,7 +67,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_r
         page = reader.read(limit=1, partial=True, source_reads=source_reads)
         assert page.more_sources and page.blocked_seq == first.seq
         assert page.covered_seq == 0 and page.injected_source_seqs == ()
-        assert [message.seq for message in list(comms.bus.full_history_page().messages)] == [first.seq, second.seq]
+        assert [message.seq for message in list(comms.views.history_page(ANY_CHANNEL).messages)] == [first.seq, second.seq]
         with pytest.raises(ValueError, match="received bool"):
             reader.read(limit=True, source_reads=source_reads)
 
