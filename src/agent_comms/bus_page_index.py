@@ -274,14 +274,12 @@ class BusPageIndex(TypedStore):
         return rows[0] if rows else None
 
     def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
-                               *, through: int | None = None) -> list[LatestConversation]:
+                               *, through: int) -> list[LatestConversation]:
         predicate, parameters = scope.index_predicate
-        bound = ' AND seq<=?' if through is not None else ''
-        limits = (through,) if through is not None else ()
         return LatestConversation.read(self.connection.execute(
             f'SELECT target, sender, MAX(seq) AS seq '
-            f'FROM "{BusPageRow.declared_name}" WHERE offset<?{bound} AND ({predicate}) '
-            f'GROUP BY target, sender', (before_offset, *limits, *parameters),
+            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND seq<=? AND ({predicate}) '
+            f'GROUP BY target, sender', (before_offset, through, *parameters),
         ))
 
     def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,
@@ -327,7 +325,7 @@ class EmptyBusPageIndex(BusPageIndex):
         return None
 
     def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
-                               *, through: int | None = None) -> list[LatestConversation]:
+                               *, through: int) -> list[LatestConversation]:
         return []
 
     def display_snapshot(self, scopes, boundary):

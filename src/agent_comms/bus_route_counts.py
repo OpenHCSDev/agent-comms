@@ -534,7 +534,7 @@ class OpenedRouteCounts(BusRouteCounts):
                 UNION ALL
                 SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
             ), roots AS MATERIALIZED (
-                SELECT row.target,row.sender,row.sender_lookup,row.time_root AS root
+                SELECT row.target,row.sender,row.sender_lookup,row.time_root AS root,row.seq AS latest_seq
                 FROM route_keys AS route
                 JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=(
                     SELECT latest.seq FROM "{RouteEntryRow.declared_name}" AS latest
@@ -580,7 +580,8 @@ class OpenedRouteCounts(BusRouteCounts):
                     WHERE target=request.target AND sender=request.sender AND sender_lookup=request.sender_lookup
                         AND seq<=min(request.high_water,:through)
                     ORDER BY seq DESC LIMIT 1)
-                LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
+                LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root
+                WHERE request.high_water<request.latest_seq''',
                 self._request_bindings(self.deliveries) | ReadCursor.sql_bindings(self.registry,
                     {actor: cursor.counted(self.deliveries[actor], self.registry)
                      for actor, cursor in seen.items()})))

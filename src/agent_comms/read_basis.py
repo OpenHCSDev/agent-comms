@@ -393,9 +393,6 @@ class ReadCursor:
             self.conversations.get(conversation, ConversationCursor()),
         ))
 
-    def fully_read(self, sequence: int) -> bool:
-        return self.for_conversation(AllConversation()).high_water >= sequence
-
     def add(self, displayed: Iterable[DisplayedConversation]) -> ReadCursor:
         conversations = dict(self.conversations)
         for item in displayed:
@@ -806,10 +803,16 @@ class MessageDisplayScope(ABC):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document,
-                    within: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
+                    through: int) -> DisplayBasis:
+        return self.capture_deliveries(reads, viewer, snapshot, source, index,
+                                       document=document, audience=self, through=through)
+
+    def capture_deliveries(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                           source: OpenedWireSource, index: BusPageIndex, *, document,
+                           audience: MessageDisplayScope, through: int) -> DisplayBasis:
         prefixes: dict[Conversation, int] = {}
-        for row in index.latest_by_conversation(within, source.boundary, through=through):
-            if self.includes(row):
+        for row in index.latest_by_conversation(self, source.boundary, through=through):
+            if audience.includes_indexed(row):
                 conversation = self.read_key(row.sender, row.target, snapshot)
                 prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
@@ -831,6 +834,9 @@ class MessageDisplayScope(ABC):
         targets = self.index_targets
         return ((key, value) for key, value in cursor.conversations.items()
                 if key.in_targets(targets, snapshot))
+
+    def includes_indexed(self, row) -> bool:
+        return self.includes(row)
 
     @abstractmethod
     def includes(self, message: Message) -> bool:
@@ -936,8 +942,8 @@ class ChannelDisplayScope(MessageDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class AllChannelDisplayScope(ChannelDisplayScope):
-    """A complete wire view cannot reduce cursors to explicit target names."""
+class AllTargetsDisplayScope(ChannelDisplayScope):
+    """A scope that may match any target cannot reduce cursors to target names."""
 
     targets: frozenset[str] = frozenset()
 
@@ -951,15 +957,6 @@ class AllChannelDisplayScope(ChannelDisplayScope):
     def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
         return cursor.for_conversation(AllConversation()).high_water
 
-    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document,
-                    within: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
-        sequence = source.metadata.last_seq
-        if through is not None:
-            sequence = min(sequence, through)
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
-            (DisplayedConversation(AllConversation(), (), sequence),), source.bus_identity)
-
     @property
     def index_predicate(self) -> tuple[str, tuple]:
         return "1", ()
@@ -969,19 +966,31 @@ class AllChannelDisplayScope(ChannelDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class MemberActivityDisplayScope(AllChannelDisplayScope):
+class AllChannelDisplayScope(AllTargetsDisplayScope):
+    """Only the complete wire view can acknowledge every conversation at once."""
+
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document,
+                    through: int) -> DisplayBasis:
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            (DisplayedConversation(AllConversation(), (), through),),
+            source.bus_identity)
+
+
+@dataclass(frozen=True, slots=True)
+class MemberActivityDisplayScope(AllTargetsDisplayScope):
     """Member activity may match a sender, DM peer or mention on any target."""
 
     participant_names: frozenset[str] = frozenset()
 
-    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document,
-                    within: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
+    def capture_deliveries(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                           source: OpenedWireSource, index: BusPageIndex, *, document,
+                           audience: MessageDisplayScope, through: int) -> DisplayBasis:
         # Mentions and authorship may select only part of a channel conversation.
         # Unlike the whole-bus view, they cannot grant its unseen prefix.
-        rows = self.offsets(index, lower=None, upper=through + 1 if through is not None else None,
+        rows = self.offsets(index, lower=None, upper=through + 1,
                             descending=False, before_offset=source.boundary)
-        return reads.capture_indexed(viewer, (row for row in rows if within.includes(row)),
+        return reads.capture_indexed(viewer, (row for row in rows if audience.includes_indexed(row)),
                                      snapshot, source, index, document=document)
 
     @classmethod
@@ -1002,10 +1011,17 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
                 (*targets, *names, *names, *names))
 
     def includes(self, message: Message) -> bool:
-        return (message.target in self.targets or message.sender in self.participant_names
+        return self._includes(message.sender, message.target,
+                              (mention.thread for mention in message.mentions))
+
+    def includes_indexed(self, row) -> bool:
+        return self._includes(row.sender, row.target, row.mentions)
+
+    def _includes(self, sender: str, target: str, mentions: Iterable[str]) -> bool:
+        return (target in self.targets or sender in self.participant_names
                 or any(name in self.participant_names
-                       for name in CommandTarget.named(message.target).direct_names)
-                or any(mention.thread in self.participant_names for mention in message.mentions))
+                       for name in CommandTarget.named(target).direct_names)
+                or any(name in self.participant_names for name in mentions))
 
 
 @dataclass(frozen=True, slots=True)
