@@ -13,6 +13,8 @@ from . import tool_declaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .messages import Message
+from .order_story import StoryEvent
+from .recorded_time import EventTime, UnrecordedEventTime
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
@@ -370,7 +372,8 @@ class ToolStartTranscript(ToolTranscript):
             digest = tool_declaration.ToolDeclaration.call_digest(
                 self.tool_name, self.tool, self.raw_input)
             calls[self.tool_call_id] = OrderCall(
-                self.tool_call_id, self.tool_name, digest, RunningCallState)
+                self.tool_call_id, self.tool_name, digest, RunningCallState,
+                UnrecordedEventTime() if self.timestamp is None else EventTime.capture(self.timestamp))
 
     def imported(self) -> ImportedMessage:
         return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
@@ -411,26 +414,33 @@ class ToolEndTranscript(ToolTranscript):
 
 class CallState(DeclaredFamily, affix="CallState"):
     """Where one tool call stands in its unit's records."""
+    story_status: ClassVar[str]
 
 
 class RunningCallState(CallState):
     """Started; no result is recorded yet."""
+    story_status = "still running"
 
 
 class SucceededCallState(CallState):
-    pass
+    story_status = "succeeded"
 
 
 class FailedCallState(CallState):
-    pass
+    story_status = "failed"
 
 
 @dataclass(frozen=True)
-class OrderCall:
+class OrderCall(StoryEvent):
     tool_call_id: str
     tool_name: str
     digest: str
     state: type[CallState]
+    at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    def story_text(self) -> str:
+        return (f"tool call {self.tool_call_id} started ({self.state.story_status} now): "
+                f"{self.digest}")
 
 
 @dataclass(frozen=True)

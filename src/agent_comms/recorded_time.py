@@ -68,6 +68,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def clock(self) -> str:
         return "-"
 
+    def chronology(self) -> float:
+        """Undated facts follow dated ones without pretending to know their time."""
+        return float("inf")
+
     def require_recorded(self, label: str) -> None:
         raise ValueError(f"{label} requires a recorded time.")
 
@@ -120,6 +124,9 @@ class RecordedEventTime(EventTime):
 
     def clock(self) -> str:
         return time.strftime("%H:%M:%S", time.localtime(self.at))
+
+    def chronology(self) -> float:
+        return self.at
 
     def recorded_at(self, label: str) -> float:
         return self.at

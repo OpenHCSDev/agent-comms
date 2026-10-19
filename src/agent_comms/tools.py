@@ -78,6 +78,7 @@ from .task_sources import (
     TaskScopeSelection, OriginalTaskChange,
 )
 from .order_work import OrderWork
+from .order_story import FleetStory, OrderStory
 from .turn_digests import LastTurns, OrderEditCountRead, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
@@ -934,6 +935,37 @@ class CommsTurnsTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
         return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderStoryTool(ReadTool, ToolRequest):
+    label = "Order story"
+    description = ("Read the problem's retained dated facts oldest first, plus its current state. "
+                   "Includes its holder's recorded work; cannot reconstruct overwritten orders "
+                   "or unrecorded transition times.")
+    problem: str = tool_field("Problem ID")
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
+        todo = comms.goals.todos.get(self.problem)
+        events = list(todo.story())
+        if todo.assignment is not None:
+            work = CommsOrderWorkTool(problem=self.problem).apply(comms, caller)
+            events.extend(event for call in work.calls for event in call.story(self.problem))
+        return OrderStory(self.problem, todo.order.line,
+                          tuple(sorted(events, key=lambda event: event.at.chronology())))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFleetStoryTool(ThreadReadTool):
+    label = "Fleet story"
+    description = "Read every retained strike and send-back for this commander, newest first."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
+        actor = comms.registry.require(caller.subject(self.thread)).incarnation
+        todos = comms.goals.todos.history_for_commander(actor)
+        return FleetStory(tuple(sorted(
+            (event for todo in todos for event in todo.fleet_story()),
+            key=lambda event: event.at.chronology(), reverse=True)))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -24,6 +24,7 @@ from uuid import uuid4
 from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
+from .order_story import FleetStoryEvent, StoryEvent, StoryLine, StorySource
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
@@ -66,7 +67,7 @@ class FileDeliveryEvidence(DeliveryEvidence):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrderDelivery(DeclaredFamily, affix="Delivery"):
+class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
     evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
                                       metadata={"wire_omit_default": True})
@@ -74,6 +75,9 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     @property
     def work(self) -> str:
         return "delivered work"
+
+    def story_text(self) -> str:
+        return self.work
 
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
@@ -1063,7 +1067,7 @@ class LocatedProblemFinding(ProblemFinding):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
+class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
@@ -1132,6 +1136,9 @@ class FoldedProblemOrder(ProblemOrder):
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return (f"{todo.id} folded into {self.into}: {self.why}",)
 
+    def story(self, problem: str) -> tuple[StoryLine, ...]:
+        return self.original.story(problem)
+
 
 @dataclass(frozen=True, kw_only=True)
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
@@ -1167,6 +1174,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     pending: ClassVar[bool]
     line: ClassVar[str]
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
+
+    def story(self, problem: str) -> tuple[StoryLine, ...]:
+        return (StoryLine(self.at, f"{problem}: ordered {self.id}: {'; '.join(self.edits)}"),)
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
@@ -1298,6 +1308,9 @@ class DeliveredProblemOrder(CheckedProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Delivered, waiting on install"
+
+    def story(self, problem: str) -> tuple[StoryLine, ...]:
+        return (*super().story(problem), *self.delivery.story(problem))
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
@@ -1619,7 +1632,7 @@ class AssignTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(TodoOperation):
+class StrikeTodo(TodoOperation, FleetStoryEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -1634,6 +1647,9 @@ class StrikeTodo(TodoOperation):
         if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
             return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+    def story_text(self) -> str:
+        return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
 
     def repeats(self, recorded: StrikeTodo) -> bool:
         return False
@@ -1663,13 +1679,17 @@ class VerdictAudience:
 
 
 @dataclass(frozen=True)
-class OrderVerdict(TodoOperation, declared_name=None):
+class OrderVerdict(TodoOperation, StoryEvent, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
     tool_call_id: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
+
+    def story_text(self) -> str:
+        return (f"{self.actor.name} judged {self.previous.owner}'s tool call "
+                f"{self.tool_call_id}: {self.line}")
 
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
@@ -1701,6 +1721,12 @@ class AcceptedVerdict(OrderVerdict):
             raise ValueError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
     line = "Accepted"
 
+    def quoted_source(self) -> str:
+        return "order"
+
+    def story_text(self) -> str:
+        return f'{super().story_text()}; {self.quoted_source()} words: "{self.quote}"'
+
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
@@ -1714,6 +1740,9 @@ class AcceptedVerdict(OrderVerdict):
 @dataclass(frozen=True)
 class PeerAcceptedVerdict(AcceptedVerdict):
     peer: str
+
+    def quoted_source(self) -> str:
+        return f"peer message {self.peer}"
 
     def prepare(self, goals, current):
         with goals.bus.log.opened_wire_snapshot() as source:
@@ -1739,6 +1768,9 @@ class SupersededVerdict(OrderVerdict):
     reason: str
     line = "Superseded"
 
+    def story_text(self) -> str:
+        return f"{super().story_text()} by {self.replacement}: {self.reason}"
+
     def prepare(self, goals, current):
         replacing = [todo for todo in goals.todos.held_for_commander(self.actor)
                      if todo.sent_in(self.replacement)]
@@ -1755,7 +1787,7 @@ class SupersededVerdict(OrderVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(OrderVerdict):
+class SendBackVerdict(OrderVerdict, FleetStoryEvent):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
@@ -1773,7 +1805,7 @@ class SendBackVerdict(OrderVerdict):
 
 
 @dataclass(frozen=True)
-class VoidStrikeTodo(TodoOperation):
+class VoidStrikeTodo(TodoOperation, StoryEvent):
     """The commander takes back a strike recorded in error; the strike stays on the record."""
     actor: ThreadIncarnation
     strike: StrikeTodo
@@ -1789,9 +1821,13 @@ class VoidStrikeTodo(TodoOperation):
         StrikeReason(self.reason)
         return replace(current, voided=(*current.voided, self), revision=current.revision + 1)
 
+    def story_text(self) -> str:
+        return (f"{self.actor.name} voided the strike against {self.strike.previous.owner} "
+                f"recorded at {self.strike.at.clock()}: {self.reason}")
+
 
 @dataclass(frozen=True)
-class ReleaseTodo(TodoOperation):
+class ReleaseTodo(TodoOperation, StoryEvent):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
     actor: ThreadIncarnation
     previous: Assignment
@@ -1804,6 +1840,9 @@ class ReleaseTodo(TodoOperation):
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
+
+    def story_text(self) -> str:
+        return f"{self.actor.name} released {self.previous.owner}: {self.reason.text}"
 
 
 @dataclass(frozen=True)
@@ -1969,12 +2008,24 @@ class Todo(TypedTable):
     assignment: Assignment | None
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
-    strikes: tuple[StrikeTodo, ...] = ()
-    voided: tuple[VoidStrikeTodo, ...] = ()
-    released: tuple[ReleaseTodo, ...] = ()
-    verdicts: tuple[OrderVerdict, ...] = ()
+    strikes: tuple[StrikeTodo, ...] = field(default=(), metadata={"story": True})
+    voided: tuple[VoidStrikeTodo, ...] = field(default=(), metadata={"story": True})
+    released: tuple[ReleaseTodo, ...] = field(default=(), metadata={"story": True})
+    verdicts: tuple[OrderVerdict, ...] = field(default=(), metadata={"story": True})
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
+
+    def story_sources(self) -> Iterator[StorySource]:
+        yield self.order
+        for declared in fields(self):
+            if declared.metadata.get("story"):
+                yield from getattr(self, declared.name)
+
+    def story(self) -> tuple[StoryLine, ...]:
+        return tuple(event for source in self.story_sources() for event in source.story(self.id))
+
+    def fleet_story(self) -> tuple[StoryLine, ...]:
+        return tuple(event for source in self.story_sources() for event in source.fleet_story(self.id))
 
     @property
     def pending(self):

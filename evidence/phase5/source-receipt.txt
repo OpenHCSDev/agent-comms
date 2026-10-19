@@ -1,0 +1,21 @@
+Owner: pi-cn-phase5
+Base Core: origin/main 011084fc5d7ade25c41685585c2ccbde0267992c
+Execution: /home/ts/code/projects/agent-comms/stack/.venv/bin/python 3.14.5
+Source: /home/ts/wt/pi-cn-phase5--P1/src on PYTHONPATH
+Entrypoint: python -m agent_comms.cli --root <owned scratch bus> tool --from lead
+No installed-runtime or Toad revision claim. No build/publish/restart operation.
+
+Source files used by the final CLI fleet read:
+fa0f26506ab901064c06daece716f97ee522cf374ed7dc3f5fb287559f3900a8  src/agent_comms/order_story.py
+5b89f5a8a6c1274232e8291a3a4061c3fe45515408c7410b19712b2858dff297  src/agent_comms/recorded_time.py
+267a469f710b1d94ff440243891dc62ee27162d6fe680770fda1f6405836af4c  src/agent_comms/todos.py
+da733ec5e0f2e14a533ea3cb696f3aba6fb29de70afb80c9eaeeb7096b043a46  src/agent_comms/tools.py
+b07a12f036e55bbc051dd01e1b69c7bc270774757ed5eb6b46150b110155e7f3  src/agent_comms/transcript_events.py
+
+Lifecycle: actual CLI-created order; actual native read from a saved-session copy;
+CLI acceptance, send-back plus strike, and checked operation delivery. Story output
+at every step is preserved in lifecycle.md. Duplicate reads matched and did not
+write the Todo store. No original session was changed; no input was replayed.
+
+Remaining: complete transition history, exactly-once public send-back posting,
+script board/narrative/roast deletion. Phase 5 is not complete.

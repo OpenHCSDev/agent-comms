@@ -1,0 +1,6 @@
+bus/
+pytest/
+worker.jsonl*
+*.log
+*.exit
+work.json
