@@ -93,7 +93,8 @@ def held_by(unit: str) -> tuple[Todo, ...]:
 
 
 def units() -> frozenset[str]:
-    """The threads this commander gives orders to; the owner, claude-ai and peer commanders are not among them."""
+    """The threads this commander gives orders to; the owner, claude-ai and peer commanders
+    are not among them."""
     return COMMS.goals.todos.units(COMMS.registry.require(ME).incarnation)
 
 

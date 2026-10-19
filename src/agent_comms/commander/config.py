@@ -61,6 +61,11 @@ class CommanderConfig(BaseModel):
     def installed(cls) -> CommanderConfig:
         return cls.model_validate_json(cls.path().read_text())
 
+    @property
+    def storage_exempt(self) -> frozenset[str]:
+        """The commander and the human do not hold unit checkouts."""
+        return frozenset({self.commander, 'user'})
+
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
         path = self.path(home)
