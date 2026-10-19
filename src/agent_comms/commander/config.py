@@ -38,6 +38,15 @@ class Repo(BaseModel):
     github: str
     source: str = 'src'
 
+    def contains(self, sha: str) -> bool:
+        """Only a successful ancestry proof in this installed checkout permits closure."""
+        result = subprocess.run(
+            ('git', '-C', str(self.checkout), 'merge-base', '--is-ancestor', sha, 'HEAD'),
+            capture_output=True, timeout=60)
+        if result.returncode not in (0, 1):
+            result.check_returncode()
+        return result.returncode == 0
+
     @classmethod
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote."""
