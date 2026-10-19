@@ -256,27 +256,52 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """The order script installed for lead on the commander bus, with a git checkout its orders check."""
+    """The order script run by lead: lead's registration holds its commander facts and its process
+    is this test's, with a git checkout its orders check."""
     import importlib
+    import os
     import subprocess
     import sys
+    from dataclasses import replace
 
-    from agent_comms.commander.config import CommanderConfig
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.commander.config import Commander, CommanderConfig
 
     comms, _ = commander
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     repo = tmp_path / "repo"
     repo.mkdir()
     for command in (("init", "-q"), ("remote", "add", "origin", "https://github.com/OpenHCSDev/agent-comms.git")):
         subprocess.run(["git", "-C", str(repo), *command], check=True)
-    CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
+    config = CommanderConfig(cli=Path(sys.executable).parent / "agent-comms",
         state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
         skill=tmp_path / "skill.md", rules=(), repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
-        disk=tmp_path).write(tmp_path)
-    CommanderConfig.installed.cache_clear()
+        disk=tmp_path)
+    config.prepare()
+    lead = comms.registry.require("lead")
+    comms.registry.declare(replace(lead, tags=lead.tags | {CommanderConfig.TAG},
+        process_identity=ProcessIdentity.capture(os.getpid()), commander_config=config))
+    Commander.calling.cache_clear()
     from agent_comms.commander import order
     yield importlib.reload(order), repo
-    CommanderConfig.installed.cache_clear()
+    Commander.calling.cache_clear()
+
+
+@pytest.fixture
+def commander_facts(commander, commander_script):
+    """Change the commander facts lead's registration holds; the next dispatch reads them."""
+    from dataclasses import replace
+
+    from agent_comms.commander.config import Commander
+
+    comms, _ = commander
+
+    def change(**facts):
+        lead = comms.registry.require("lead")
+        comms.registry.declare(replace(lead, commander_config=replace(lead.commander_config, **facts)))
+        Commander.calling.cache_clear()
+    return change
 
 
 @pytest.fixture

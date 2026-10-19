@@ -223,7 +223,8 @@ class MergeGrowth(DatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
-        return tuple(growth for repo in me().config.repos for growth in cls.merges(repo) if growth.over)
+        return tuple(growth for repo in me().config.repos
+                     for growth in cls.merges(repo) if growth.over)
 
     @property
     def over(self) -> bool:

@@ -33,8 +33,10 @@ def principles() -> list[str]:
 
 
 def rules() -> list[str]:
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(str(me().config.skill)).read(), re.M)]
-    for path in [path for directory in me().config.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
+    skill = me().config.skill.read_text()
+    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', skill, re.M)]
+    for path in [path for directory in me().config.rules
+                 for path in sorted(glob.glob(f'{directory}/*.md'))]:
         text = open(path).read()
         if re.search(r'^\s*type: feedback', text, re.M):
             desc = re.search(r'^description: (.+)$', text, re.M)
@@ -55,7 +57,8 @@ def review(who: str):
     print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:
         print(f'  - {r}')
-    drawn = random.sample(paper, DRAWN) if who != me().name else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    drawn = (random.sample(paper, DRAWN) if who != me().name
+             else random.sample(paper, 2) + random.sample(every, DRAWN - 2))
     pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')

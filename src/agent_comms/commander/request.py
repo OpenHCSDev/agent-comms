@@ -24,7 +24,8 @@ def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
     thread = me().comms.registry.require(me().name)
     return tuple(request for goal in thread.goal.active()
-                 for request in goal.order.open_requests(goal, me().comms.goals, thread.incarnation))
+                 for request in goal.order.open_requests(
+                     goal, me().comms.goals, thread.incarnation))
 
 
 class RequestVerb(CommanderVerb):
@@ -37,7 +38,8 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
     text: str = option("text")
 
     def run(self) -> None:
-        goal = me().comms.goals.update_goal(me().name, SetGoalAction(text=self.text, order=RequestGoalOrder()))
+        goal = me().comms.goals.update_goal(
+            me().name, SetGoalAction(text=self.text, order=RequestGoalOrder()))
         print(goal.require().id)
 
 
@@ -49,7 +51,8 @@ class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
 
     def run(self) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())
-        me().comms.goals.update_goal(me().name, CompletedGoalAction(progress=self.why, expect=expect))
+        me().comms.goals.update_goal(
+            me().name, CompletedGoalAction(progress=self.why, expect=expect))
         print(f"{self.id} done")
 
 

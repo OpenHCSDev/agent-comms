@@ -11,24 +11,29 @@ from __future__ import annotations
 
 import math, os, sys, time
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..comms import Comms
-from . import order
 from .config import me
 
 PER_COMMANDER = 6
 BEAT_AGE = 10 * 60
 
 
+def forks() -> Path:
+    directory = me().config.state / 'forks'
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
 def live_forks() -> list[str]:
-    os.makedirs(me().config.state / 'forks', exist_ok=True)
-    return [n[:-5] for n in os.listdir(me().config.state / 'forks') if n.endswith('.beat') and time.time() - os.path.getmtime(f'{me().config.state / 'forks'}/{n}') < BEAT_AGE]
+    now = time.time()
+    return [beat.stem for beat in forks().glob('*.beat') if now - beat.stat().st_mtime < BEAT_AGE]
 
 
 def beat(name: str):
-    os.makedirs(me().config.state / 'forks', exist_ok=True)
-    with open(f'{me().config.state / 'forks'}/{name}.beat', 'a'):
-        os.utime(f'{me().config.state / 'forks'}/{name}.beat')
+    with open(forks() / f'{name}.beat', 'a'):
+        os.utime(forks() / f'{name}.beat')
 
 
 @dataclass(frozen=True)

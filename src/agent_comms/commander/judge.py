@@ -104,7 +104,8 @@ def roast(audience, thread, lines, text, fix, slop):
 
 def alarm():
     while True:
-        late = [edit for edit in Edit.unjudged(me().comms, me().name) if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(me().comms, me().name)
+                if time.time() - edit.at > 300]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
@@ -168,7 +169,8 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
         orders = {todo.id: todo for todo in order.held_orders() if todo.sent_in(self.msg)}
-        edits = {edit.id: edit for edit in Edit.unjudged(me().comms, me().name) if edit.problem in orders}
+        edits = {edit.id: edit for edit in Edit.unjudged(me().comms, me().name)
+                 if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')

@@ -20,8 +20,10 @@ from cutover.carry import CarryChain
 
 from agent_comms.change_report import FileLine
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.child_process import BoundedRun
+from agent_comms.child_process import BoundedRun, ProcessIdentity
+from agent_comms.commander.config import Commander, CommanderConfig, Repo
 from agent_comms.comms import Comms
+from agent_comms.errors import RelationViolationError
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
@@ -29,6 +31,7 @@ from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
@@ -455,7 +458,7 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
 
 
 def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_module(
-        commander, commander_script, monkeypatch, tmp_path):
+        commander, commander_script, commander_facts, monkeypatch, tmp_path):
     """P12 deleted acp_ingress.py while Toad imported it; the check must read Toad's imports too."""
     comms, _ = commander
     script, repo = commander_script
@@ -463,8 +466,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
-    monkeypatch.setattr(script, 'CONFIG', script.me().config.model_copy(update={'repos': (
-        script.Repo(checkout=toad, github='OpenHCSDev/toad'),)}))
+    commander_facts(repos=(script.Repo(checkout=toad, github='OpenHCSDev/toad'),))
     (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
     edit = 'Delete src/agent_comms/acp_ingress.py.'
     with pytest.raises(SystemExit, match=rf"\['{toad}'\] import"):
@@ -1427,3 +1429,34 @@ def test_a_done_report_with_no_claim_is_refused_and_a_merged_claim_passes_claim_
     assert isinstance(comms.goals.todos.get('P1').order, DeliveredProblemOrder)
     report = CommsGoalTool(goal_id='request', status=CompletedGoalAction, progress='done', claims=merged)
     assert isinstance(report.apply(comms, caller).goal.state, CompletedGoal)
+
+
+def test_commander_registration_gives_each_caller_its_own_board_and_refuses_an_untagged_one(comms, tmp_path):
+    """Two commanders registered on one machine, with no machine-wide config, each resolve their own
+    name, board and repos from the registration of the thread whose process calls; a caller holding
+    the facts without the commander tag is refused."""
+    names = ("fork-router", "dqdock", "untagged")
+    children = {name: subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"]) for name in names}
+    try:
+        for name, child in children.items():
+            home = tmp_path / name
+            config = CommanderConfig(
+                cli=Path(sys.executable).parent / "agent-comms", state=home / "state", board=home / "board.md",
+                narrative=home / "narrative.md", skill=home / "SKILL.md", rules=(),
+                repos=(Repo(checkout=home / "repo", github=f"fleet/{name}"),), worktrees=home / "wt",
+                scratch=home / "scratch", disk=home)
+            tags = frozenset() if name == "untagged" else frozenset({CommanderConfig.TAG})
+            comms.registry.declare(comms.registry.new_thread(
+                name, tags, str(home), process_identity=ProcessIdentity.capture(child.pid),
+                commander_config=config, execution=ExternalThreadExecution))
+        for name in ("fork-router", "dqdock"):
+            commander = Commander.of(Comms(comms.root), children[name].pid)
+            assert (commander.name, commander.config.board, commander.config.repos[0].github) == (
+                name, tmp_path / name / "board.md", f"fleet/{name}")
+        with pytest.raises(RelationViolationError, match="untagged is not a registered commander"):
+            Commander.of(comms, children["untagged"].pid)
+        assert not (tmp_path / ".config/agent-comms/commander.json").exists()
+    finally:
+        for child in children.values():
+            child.kill()
+            child.wait()

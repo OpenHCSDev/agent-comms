@@ -59,7 +59,8 @@ def post(audience: VerdictAudience, body: str) -> str:
     One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
     """
     target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-    out = subprocess.run(['timeout', '300', str(me().config.cli), '--root', str(me().comms.root), 'send', '--from', me().name, '--to', target,
+    out = subprocess.run(['timeout', '300', str(me().config.cli), '--root', str(me().comms.root),
+                          'send', '--from', me().name, '--to', target,
                           '--type', 'info', '--body', audience.addressed(target, body)],
                          capture_output=True, text=True)
     if '"id"' not in out.stdout:
@@ -426,7 +427,8 @@ def problem(text, unit, due, order_file, request):
 
 def close(pid, works, artifact):
     """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
-    ThreadCaller(me().name).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact), me().comms)
+    ThreadCaller(me().name).invoke(
+        CommsProblemCloseTool(problem=pid, works=works, artifact=artifact), me().comms)
     board()
     print(f'{pid} closed')
 
@@ -489,7 +491,8 @@ def strike(unit: str, task: str, why: str, caught: str | None = None, *,
     caught = caught or f'{me().name} at review'
     # What matters is how a mistake happened, how often, and how and when it was caught.
     if not any(stage in caught for stage in STAGES):
-        sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{me().name} at review".')
+        sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES},'
+                 f' e.g. "{me().name} at review".')
     todo = me().todos.get(task)
     if not todo.state.open or todo.held().owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
@@ -519,7 +522,8 @@ def done(pid, sha, delivered=None, screenshot=''):
         if added := forwarders_added(diff, after):
             sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
     thread = me().comms.registry.require(unit)
-    if left := [str(t) for t in me().comms.registry.storage_rule.checkouts_of(thread) if pid.lower() in t.name.lower()]:
+    checkouts = me().comms.registry.storage_rule.checkouts_of(thread)
+    if left := [str(t) for t in checkouts if pid.lower() in t.name.lower()]:
         sys.exit(f'Refused: {unit} still has the checkout {left} for this order; storage rule: it removes it before the order counts as done.')
     try:
         me().comms.registry.storage_rule.require_quota(thread)
@@ -622,7 +626,8 @@ def reply(unit: str, since: float) -> dict | None:
         except ValueError:
             continue
         to = str(m.get('to'))
-        if m.get('from') == unit and float(m.get('ts', 0)) > since and (me().name in to or '#comms' in to):
+        if (m.get('from') == unit and float(m.get('ts', 0)) > since
+                and (me().name in to or '#comms' in to)):
             latest = m
     return latest
 
@@ -848,7 +853,9 @@ class StrikeVerb(OrderVerb, RuledVerb):
     unit: str = option("unit")
     pid: str = option("pid", help="the problem the strike is for; strikes count per problem")
     why: str = option("--why")
-    caught: str | None = option("--caught", default=None, help='"WHO at STAGE" (default: this commander at review); stage is review/install/live/user')
+    caught: str | None = option("--caught", default=None,
+                                help='"WHO at STAGE" (default: this commander at review);'
+                                     ' stage is review/install/live/user')
 
     def run(self) -> None:
         strike(self.unit, self.pid, self.why, self.caught)

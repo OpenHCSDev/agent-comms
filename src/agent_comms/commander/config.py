@@ -97,7 +97,7 @@ class Commander:
         caller = next((thread for identity in lineage(pid) for thread in threads
                        if thread.process_identity == identity), None)
         if caller is None:
-            raise RelationViolationError(f'pid {pid} runs for no registered thread, so no commander')
+            raise RelationViolationError(f'pid {pid} runs for no registered thread: no commander')
         if CommanderConfig.TAG not in caller.tags or caller.commander_config is None:
             raise RelationViolationError(
                 f'{caller.name} is not a registered commander: its registration lacks the '

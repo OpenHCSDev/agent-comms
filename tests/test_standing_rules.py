@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.config import CommanderConfig, Repo
+from agent_comms.commander.config import Commander, Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
@@ -37,7 +37,7 @@ def standing(commander, commander_script):
     for module in (judge, capacity):
         importlib.reload(module)
     module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
-    state = CommanderConfig.installed().state
+    state = Commander.calling().config.state
     return commander[0], state, module
 
 
@@ -365,7 +365,7 @@ def test_memory_low_fires_under_the_threshold_naming_idle_temp_dirs(commander, t
     assert low.line().endswith(" -> put a cleanup owner on it now")
 
 
-def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monkeypatch, tmp_path):
+def test_merge_growth_names_each_merge_over_the_limit(commander, standing, commander_facts, monkeypatch, tmp_path):
     comms, _, module = standing
     origin, checkout = tmp_path / "growth.git", tmp_path / "growth"
     subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
@@ -389,8 +389,7 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    monkeypatch.setattr(module, "CONFIG", module.me().config.model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)}))
+    commander_facts(repos=(Repo(checkout=checkout, github="fleet/growth"),))
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "
