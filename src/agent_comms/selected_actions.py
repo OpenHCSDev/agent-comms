@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import Id128Text
-from .native_tool_call import NativeToolMode, NoNativeTools
+from .native_tool_call import NativeToolMode, ContextOnlyToolMode
 from .turn_context import InstructionFile
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ class SelectedAction(ABC):
     def instruction_files(self) -> tuple[InstructionFile, ...]: ...
 
     def mode(self, owner: CodingToolOwner) -> NativeToolMode:
-        return NoNativeTools()
+        return ContextOnlyToolMode()
 
     def apply(self, owner: CodingToolOwner) -> None:
         return None
@@ -72,7 +72,7 @@ class BatchSelectedAction(SelectedAction):
         )
 
     def mode(self, owner):
-        mode = NoNativeTools()
+        mode = ContextOnlyToolMode()
         for assignment, action in self.originals:
             mode = mode.or_else(
                 lambda: action.mode(owner.for_original(assignment, action.operation_id()))

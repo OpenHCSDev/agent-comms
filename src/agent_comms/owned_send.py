@@ -170,7 +170,7 @@ class OwnedSend(CodingToolOwner):
             decision = RefusedSend()
         yield decision
 
-    def verify(self, turn, snapshot) -> None:
+    def verify(self, store, turn, snapshot) -> None:
         """Recheck the running original without binding it or consuming its wait again."""
         from .native_tool_call import SelectedToolDenied
 
@@ -190,7 +190,7 @@ class OwnedSend(CodingToolOwner):
         from .store_files import _store_lock
 
         with _store_lock(self.comms._wire_lock_path):
-            self.verify(turn, self.comms.registry.snapshot())
+            self.verify(store, turn, self.comms.registry.snapshot())
             canonical = resource.normalized(Path(self.thread.worktree))
             with self.comms.bus.log.certified_read() as source:
                 if prior is not None and source.claim(canonical) == prior:

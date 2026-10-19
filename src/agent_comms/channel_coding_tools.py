@@ -144,7 +144,7 @@ class CodingToolOwner(ABC):
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> None:
         def check(store: Coordination) -> None:
-            self.verify(turn, self.comms.registry.snapshot())
+            self.verify(store, turn, self.comms.registry.snapshot())
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(turn.launch.session.directory, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
@@ -165,7 +165,7 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
 
     @abstractmethod
-    def verify(self, turn, snapshot): ...
+    def verify(self, store, turn, snapshot): ...
 
     @abstractmethod
     def claim_resource(self, store, turn, resource, slot, prior): ...
@@ -200,11 +200,11 @@ class SelectedCodingToolOwner(CodingToolOwner):
             operation_id=operation_id,
         ))
 
-    def verify(self, turn, snapshot):
+    def verify(self, store, turn, snapshot):
         if self.input_id != turn.command.input_id:
             raise SelectedToolDenied("Native tool input changed")
-        verify_sent_full_input(self.store, self.claim_scope, self.owner_name, self.input_id)
-        verify_selected_wake(self.comms, self.store, self.claim_scope, self.owner_name)
+        verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
+        verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
 
     def claim_resource(self, store, turn, resource, slot, prior):
         scope = prior.claim_scope if prior is not None else replace(self.claim_scope, operation_id=slot)

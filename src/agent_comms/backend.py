@@ -52,7 +52,7 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
-from .native_tool_call import NativeToolMode, NoNativeTools
+from .native_tool_call import NativeToolMode
 from .selected_tool_broker import ToolTransport
 from .mro_dispatch import MroDispatch, handles
 from dataclasses import replace

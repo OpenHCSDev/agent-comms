@@ -36,7 +36,7 @@ from .native_pi import (
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_startup import NativeStartup
-from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied
+from .native_tool_call import NativeToolMode, SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
@@ -61,7 +61,6 @@ class NoObserver:
 
 
 NO_NATIVE_OBSERVER = NoObserver()
-NO_NATIVE_TOOLS = NoNativeTools()
 NO_FOLLOWING_INPUTS = FollowingInputs()
 
 T = TypeVar("T")
@@ -279,7 +278,7 @@ class TrackedTurnSession(TurnSession):
         prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,
         ingress: MaintenanceIngress = UNCOORDINATED_INGRESS,
         startup: NativeStartup,
-        selected_tool_mode: NativeToolMode = NO_NATIVE_TOOLS,
+        selected_tool_mode: NativeToolMode,
         observe_event: NativeObserver = NO_NATIVE_OBSERVER,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         execution: NativeExecution,

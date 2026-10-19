@@ -38,7 +38,6 @@ from .text_digest import TextDigest
 from .tracked_turn import (
     NO_FOLLOWING_INPUTS,
     NO_NATIVE_OBSERVER,
-    NO_NATIVE_TOOLS,
     NativeObserver,
     TrackedTurnSession,
 )
@@ -144,7 +143,7 @@ class PrivateSendClaim(PromptBoundary):
         execution: SelectedExecution,
         *,
         model: SelectedModel,
-        selected_tool_mode: NativeToolMode = NO_NATIVE_TOOLS,
+        selected_tool_mode: NativeToolMode,
         observe_event: NativeObserver = NO_NATIVE_OBSERVER,
         following: FollowingInputs = NO_FOLLOWING_INPUTS,
     ) -> NativeTurnResult:

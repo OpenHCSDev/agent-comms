@@ -277,22 +277,21 @@ class NativeToolMode(ABC):
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         """Return the native tool selection and reviewed extension."""
 
-    @abstractmethod
     async def open_transport(self, turn, ownership) -> ToolTransport:
-        """Open this turn's transport in its resource lifetime."""
+        """Every turn opens a real endpoint, including context-only turns."""
+        from .selected_tool_broker import ToolTransport
+
+        return await ToolTransport.open(turn, ownership)
 
     def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
         return self
 
 
-class NoNativeTools(NativeToolMode):
+class ContextOnlyToolMode(NativeToolMode):
+    """Explicit context-only permission; transport still belongs to every turn."""
+
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         return ("--no-tools",)
-
-    async def open_transport(self, turn, ownership) -> ToolTransport:
-        from .selected_tool_broker import ToolTransport
-
-        return await ToolTransport.open(turn, ownership)
 
     def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
         return factory()

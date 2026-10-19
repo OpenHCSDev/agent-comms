@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .pi_commands import Prompt
+from .native_tool_call import ContextOnlyToolMode
 
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Sequence
@@ -100,7 +101,8 @@ class NativeSessionPreparation(backend.TurnSession):
             package=package, root=root,
             environment=environment, session_file=session_file,
         ))
-        preparation = cls(launch, Prompt(message=""), persistent_session=persistent, startup=NativeStartup.for_launch(launch))
+        preparation = cls(launch, Prompt(message=""), persistent_session=persistent,
+                          startup=NativeStartup.for_launch(launch), tool_mode=ContextOnlyToolMode())
         async with session_writer_fence(launch.session.session_file):
             try:
                 async with aclosing(preparation.run()) as stream:
