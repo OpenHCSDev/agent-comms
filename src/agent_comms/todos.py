@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self, cast
 from uuid import uuid4
 
 from . import skills
@@ -1674,15 +1674,16 @@ class Evidence(DeclaredFamily, affix="Evidence"):
             raise ValueError("Cite the state the strike stands on: "
                              + ", ".join(member.form for member in cls.members_with(cls))
                              + "; a board row, goal text or another agent's account is not state.")
+        order = cast(CheckedProblemOrder, current.order)
         for cited in evidence:
-            cited.verify(goals, current)
+            cited.verify(goals, order)
 
     @abstractmethod
-    def verify(self, goals: Goals, current: Todo) -> None: ...
+    def verify(self, goals: Goals, order: CheckedProblemOrder) -> None: ...
 
     @staticmethod
-    def git(current: Todo, *args: str) -> int:
-        return subprocess.run(("git", "-C", current.order.check.directory, *args),
+    def git(order: CheckedProblemOrder, *args: str) -> int:
+        return subprocess.run(("git", "-C", order.check.directory, *args),
                               capture_output=True, timeout=30).returncode
 
 
@@ -1695,9 +1696,9 @@ class CommitEvidence(Evidence):
     def cited(cls, text: str) -> Self:
         return cls(text)
 
-    def verify(self, goals: Goals, current: Todo) -> None:
-        if self.git(current, "cat-file", "-e", f"{self.sha}^{{commit}}"):
-            raise ValueError(f"{self.sha} is no commit of {current.order.check.directory}")
+    def verify(self, goals: Goals, order: CheckedProblemOrder) -> None:
+        if self.git(order, "cat-file", "-e", f"{self.sha}^{{commit}}"):
+            raise ValueError(f"{self.sha} is no commit of {order.check.directory}")
 
 
 @dataclass(frozen=True)
@@ -1710,9 +1711,9 @@ class DiffEvidence(Evidence):
     def cited(cls, text: str) -> Self:
         return cls(*text.split(".."))
 
-    def verify(self, goals: Goals, current: Todo) -> None:
-        if self.git(current, "diff", "--quiet", self.a, self.b) != 1:
-            raise ValueError(f"{self.a}..{self.b} changes nothing in {current.order.check.directory}")
+    def verify(self, goals: Goals, order: CheckedProblemOrder) -> None:
+        if self.git(order, "diff", "--quiet", self.a, self.b) != 1:
+            raise ValueError(f"{self.a}..{self.b} changes nothing in {order.check.directory}")
 
 
 @dataclass(frozen=True)
@@ -1725,9 +1726,9 @@ class TurnRecordEvidence(Evidence):
     def cited(cls, text: str) -> Self:
         return cls(*text.split(":", 1))
 
-    def verify(self, goals: Goals, current: Todo) -> None:
+    def verify(self, goals: Goals, order: CheckedProblemOrder) -> None:
         turns = TurnDigestRead(goals.root, goals.registry.require(self.thread),
-                               TurnsSince(current.order.at.recorded_at("An order"))).read().turns
+                               TurnsSince(order.at.recorded_at("An order"))).read().turns
         if self.turn_id not in {turn.turn_id for turn in turns}:
             raise ValueError(f"{self.thread} recorded no turn {self.turn_id} since this order")
 
@@ -1743,7 +1744,7 @@ class ProcessEvidence(Evidence):
         pid, start = text.split(":")
         return cls(int(pid), int(start))
 
-    def verify(self, goals: Goals, current: Todo) -> None:
+    def verify(self, goals: Goals, order: CheckedProblemOrder) -> None:
         if not Platform.current().matches(ProcessIdentity(self.pid, self.start)):
             raise ValueError(f"No process {self.pid} started at {self.start} is running")
 
@@ -1757,7 +1758,7 @@ class RuntimeEvidence(Evidence):
     def cited(cls, text: str) -> Self:
         return cls(text)
 
-    def verify(self, goals: Goals, current: Todo) -> None:
+    def verify(self, goals: Goals, order: CheckedProblemOrder) -> None:
         if not Path(self.path).is_absolute() or not Path(self.path).exists():
             raise ValueError(f"{self.path} is no existing absolute runtime path")
 
