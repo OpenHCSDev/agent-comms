@@ -13,10 +13,10 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.locked_store import LockedStore
 from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
-from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True, slots=True)

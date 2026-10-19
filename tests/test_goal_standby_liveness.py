@@ -8,8 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import NoFinishedTurn
-from agent_comms.turn_lease import NoTurn
+from agent_comms.turn_lease import NoFinishedTurn, NoTurn
 
 import agent_comms.agent_events as ae
 from agent_comms.schedule_rules import WakeScheduleCheck
