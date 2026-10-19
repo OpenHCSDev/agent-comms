@@ -332,8 +332,9 @@ class RecoverySnapshot:
     def release_resources(self, boundary: NativeBoundary, outcome: TerminalAttempt) -> None:
         """Release the durable generations acquired by this exact final attempt.
 
-        No live selected turn or in-memory tool claim list is needed. A claim
-        belonging to a later attempt (or an unbound manual claim) is untouched.
+        No live selected turn or in-memory tool claim list is needed. Claims
+        without a recorded attempt retire at their incarnation's next turn end;
+        a claim belonging to a later attempt is untouched.
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
         bus, bus_lock = boundary.bus, boundary.bus_lock
@@ -341,13 +342,13 @@ class RecoverySnapshot:
         metadata = bus.log.private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
             current = source.claim_projection()
+        owner = boundary.registry.require(attempt.owner_thread)
+        if not owner.incarnation.selects_lookup(attempt.owner_lookup):
+            return
         owned = tuple(
             claim for claim in current.values()
-            if claim.claim_scope is not None
-            and claim.claim_scope.execution_id == attempt.execution_id
-            and claim.claim_scope.attempt_ordinal == attempt.attempt_ordinal
-            and claim.claim_scope.recipient_lookup == attempt.owner_lookup
-            and claim.claim_scope.participant_generation == attempt.owner_generation
+            if claim.incarnation == str(owner.created_at)
+            and claim.claim_scope.finished_by(attempt)
         )
         bus.publisher.release_resources(boundary, owned, outcome.release_wording)
 

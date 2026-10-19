@@ -15,7 +15,7 @@ from .coordination_tables.executions import ExecutionOrigin
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
-from .envelope_claim_transitions import WakeClaim
+from .envelope_claim_transitions import SelectedAttemptClaim
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .native_pi import NativePiUnavailable
 from .owner_fence import prepare_fence_token
@@ -148,7 +148,7 @@ class SelectedAttempt:
         participant = self.participant
         turn = participant.owner.require_active_turn()
         assignment = self.stage.assignments[0]
-        claim_scope = WakeClaim(
+        claim_scope = SelectedAttemptClaim(
             wire_root_id=participant.root_id,
             source_seq=assignment.wire_seq,
             source_message_id=assignment.message_id,

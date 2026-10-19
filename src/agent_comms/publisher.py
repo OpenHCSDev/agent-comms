@@ -35,6 +35,7 @@ from .envelope_claim_transitions import (
     ClaimTransition,
     FileClaimPath,
     WakeClaim,
+    NoLiveAttempt,
     _release_resource,
 )
 from .errors import (
@@ -175,6 +176,7 @@ class ClaimWrites(PrivateWrites):
         incarnation: str,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path | ClaimRelease] = (),
+        claim: WakeClaim = NoLiveAttempt(),
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
@@ -186,7 +188,7 @@ class ClaimWrites(PrivateWrites):
         with self.opened_activity() as activity, self.log.locked() as bus_lock:
             return self._publish_claim_envelope_unlocked(
                 bus_lock, self._registry.snapshot(), message,
-                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases, activity=activity,
+                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases, claim=claim, activity=activity,
             )
 
     def _publish_claim_envelope_unlocked(
@@ -199,7 +201,7 @@ class ClaimWrites(PrivateWrites):
         incarnation: str,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path | ClaimRelease] = (),
-        claim: WakeClaim | None = None,
+        claim: WakeClaim = NoLiveAttempt(),
         activity: ActivityClocks,
     ) -> Message:
         """The claim envelope under a held bus lock and its locked registry snapshot."""
@@ -214,8 +216,9 @@ class ClaimWrites(PrivateWrites):
             raise RelationViolationError("Claim and release sets must be finite sequences.")
         if len(claims) + len(releases) > ClaimTransition.max_resources:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        if claim is not None and (not claims or releases):
-            raise RelationViolationError("Bound claims require the selected wake boundary.")
+        if claims:
+            claim.require_live()
+        claim.require_claim_only(claims, releases)
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")

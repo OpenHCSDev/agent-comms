@@ -21,7 +21,7 @@ from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
 from .message_reference import MessageReference
 from .field_codec import (BoundedText, EnvelopeSequence, FieldCodec, Id128Text, ProjectionSequence,
-                          ResourcePathText, Sha256Text)
+                          NullMember, RecordMember, ResourcePathText, Sha256Text, SubclassUnion)
 from .thread_identity import GenerationCounter, TurnId
 
 
@@ -121,8 +121,80 @@ class AssignmentBinding:
             raise ClaimTransitionError("Assignment revision must be positive.")
 
 
+class WakeClaim(SubclassUnion, ABC, affix=""):
+    """The attempt lifetime recorded by every resource acquisition."""
+
+    @abstractmethod
+    def require_live(self) -> None: ...
+
+    @abstractmethod
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None: ...
+
+    @abstractmethod
+    def finished_by(self, attempt) -> bool: ...
+
+    @abstractmethod
+    def finished_turn(self, turn_id: str, claimed_generation: int) -> bool: ...
+
+    def require_claim_only(self, claims, releases) -> None:
+        if not claims or releases:
+            raise ClaimTransitionError("Attempt scope requires a claim-only transition.")
+
+
 @dataclass(frozen=True, slots=True)
-class WakeClaim:
+class NoLiveAttempt(NullMember, WakeClaim):
+    """Stored unscoped acquisitions have no live attempt and retire with their owner."""
+
+    def require_live(self) -> None:
+        raise ClaimTransitionError("A new file claim requires its current turn attempt.")
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        pass
+
+    def require_claim_only(self, claims, releases) -> None:
+        pass  # Release envelopes also have no acquiring attempt.
+
+    def finished_by(self, attempt) -> bool:
+        return True
+
+    def finished_turn(self, turn_id: str, claimed_generation: int) -> bool:
+        return True
+
+
+class LiveAttemptClaim(RecordMember, WakeClaim):
+    operation_id: str
+
+    def require_live(self) -> None:
+        pass
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        if is_used(self.operation_id):
+            raise IdentityConflict("Claim operation was already consumed")
+
+
+@dataclass(frozen=True, slots=True)
+class OwnedAttemptClaim(LiveAttemptClaim):
+    """An ordinary native turn has a registry lease, not a selected execution."""
+
+    turn_id: str
+    owner_claimed_generation: int = field(metadata={"wire_name": 'owner_admission_generation'})
+    operation_id: Annotated[str, Id128Text]
+    version: Literal[2] = field(default=2, metadata={"wire_required": True})
+
+    def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
+        TurnId.for_registration(self.turn_id)
+        GenerationCounter.require_positive(self.owner_claimed_generation)
+
+    def finished_by(self, attempt) -> bool:
+        return False
+
+    def finished_turn(self, turn_id: str, claimed_generation: int) -> bool:
+        return (self.turn_id, self.owner_claimed_generation) == (turn_id, claimed_generation)
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedAttemptClaim(LiveAttemptClaim):
     """A selected N/K execution bound into the durable resource-claim row."""
 
     wire_root_id: str
@@ -137,7 +209,14 @@ class WakeClaim:
     turn_id: str
     participant_generation: int
     attempt_ordinal: int
-    version: int = field(default=1, metadata={"wire_required": True})
+    version: Literal[1] = field(default=1, metadata={"wire_required": True})
+
+    def finished_by(self, attempt) -> bool:
+        return (self.execution_id, self.attempt_ordinal, self.recipient_lookup, self.participant_generation) == (
+            attempt.execution_id, attempt.attempt_ordinal, attempt.owner_lookup, attempt.owner_generation)
+
+    def finished_turn(self, turn_id: str, claimed_generation: int) -> bool:
+        return (self.turn_id, self.owner_claimed_generation) == (turn_id, claimed_generation)
 
     @property
     def binding(self) -> AssignmentBinding:
@@ -204,8 +283,8 @@ class ClaimTransition:
         default=(), metadata={"wire_required": True})
     releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
     generation: str | None = field(default=None, metadata={"wire_required": True})
-    claim_scope: WakeClaim | None = field(
-        default=None, metadata={"wire_name": 'admission', "wire_omit_default": True, "wire_nonnull": True}
+    claim_scope: WakeClaim = field(
+        default_factory=NoLiveAttempt, metadata={"wire_name": 'admission', "wire_omit_default": True}
     )
 
     def __post_init__(self) -> None:
@@ -218,14 +297,11 @@ class ClaimTransition:
             Id128Text.decode(self.generation)
         elif self.generation is not None:
             raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
-        if self.claim_scope is not None and (
-                not self.claims or self.releases):
-            raise ClaimTransitionError("Wake claim_scope requires a claim-only transition.")
+        self.claim_scope.require_claim_only(self.claims, self.releases)
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
         """A selected operation stays consumed even after its resources release."""
-        if self.claim_scope is not None and is_used(self.claim_scope.operation_id):
-            raise IdentityConflict("Wake claim operation was already consumed")
+        self.claim_scope.require_new_operation(is_used)
 
     @property
     def resources(self) -> tuple[str, ...]:
@@ -273,7 +349,7 @@ class ClaimOwner:
     generation: Annotated[str, Id128Text]
     seq: Annotated[int, EnvelopeSequence]
     message_id: Annotated[str, BoundedText]
-    claim_scope: WakeClaim | None = field(default=None, metadata={"wire_name": 'admission'})
+    claim_scope: WakeClaim = field(metadata={"wire_name": 'admission'})
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)

@@ -13,6 +13,7 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .messages import ClaimNoticeKind
+from .envelope_claim_transitions import OwnedAttemptClaim
 
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
@@ -204,6 +205,7 @@ class OwnedSend(CodingToolOwner):
                 worktree=Path(self.thread.worktree),
                 incarnation=str(owner.created_at),
                 claims=(resource,),
+                claim=OwnedAttemptClaim(self.turn.value, self.claim_scope, slot),
             )
             return committed.require_claim_transition().claimed(canonical)
 
@@ -211,8 +213,13 @@ class OwnedSend(CodingToolOwner):
         """The ordinary turn owns its acquisitions through native/tool retirement."""
         def release() -> None:
             with NativeBoundary(self.comms.bus) as boundary:
+                metadata = boundary.bus.log.private_marker_unlocked()
+                with boundary.bus_lock.current_source(boundary.bus.log, metadata) as source:
+                    owned = tuple(claim for claim in source.claim_projection().values()
+                                  if claim.incarnation == str(self.thread.created_at)
+                                  and claim.claim_scope.finished_turn(self.turn.value, self.claim_scope))
                 boundary.bus.publisher.release_resources(
-                    boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
+                    boundary, owned, "Released files after an ordinary turn"
                 )
 
         await Coordination.run_worker(release)
