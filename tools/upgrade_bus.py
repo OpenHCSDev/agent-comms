@@ -27,8 +27,8 @@ itself on the copy: a new thread answers a DM while Toad shows it
 A live run never waits for owners. It backs the bus up (tar plus a hash of every file)
 while no writer can change it, carries it, reads it back, moves every link and then
 ``current`` to the new runtime and restarts the host services onto it. Each running
-owner keeps its existing process; only active declarations whose process died are
-started after the services restart. The report contains those actual start results. Runtimes no process uses, other than the
+owner is queued to restart after its own turn ends; active declarations whose process
+died are started after the services restart. The report records both operations. Runtimes no process uses, other than the
 new and the previous one, are removed. A failure after the backup holds maintenance and
 preserves the bus, the previous runtime and the backup for forward repair. Nothing is
 sent and no input is replayed.
@@ -1180,6 +1180,7 @@ class Skipped(Outcome):
 @dataclass(frozen=True)
 class Installed(Outcome):
     passed: Passed
+    queued: tuple[QueuedRestart, ...]
     started: tuple[OwnerStartResult, ...]
     services: tuple[str, ...]
     backup: str
@@ -1318,9 +1319,10 @@ def live(
             file=sys.stderr,
         )
         raise
+    queued = runtime.queue_restarts(root)
     started = runtime.start_dead(root)
     return Installed(
-        passed, started, services, str(backup.path), prune({runtime.path, installed.path})
+        passed, queued, started, services, str(backup.path), prune({runtime.path, installed.path})
     )
 
 
