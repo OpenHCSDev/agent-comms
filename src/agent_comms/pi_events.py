@@ -235,21 +235,8 @@ class AgentSettled(NativePiEvent):
         if not self.settles(session):
             session.skip = True
             return
-        session.settlement_count += 1
-        if session.persistent_session is not None and session.inputs.pending:
-            session.skip = True
-            return
-        session.prompt_state = session.prompt_state.settle(self)
-        if not session.stats.requested:
-            session.watchdog.tick()
-            session.watchdog.progress()
-            session.watchdog.phase = phases.SettlingStatsPhase()
-            if session.persistent_session is not None:
-                await session.stats.request(session)
-            else:
-                yield events.StreamSettled()
-            if session.persistent_session is None and session.finish_event is None:
-                await session.stats.request(session)
+        for event in await session.agent_settled(self):
+            yield event
 
     @property
     def retry_progress(self) -> bool:
@@ -289,9 +276,7 @@ class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
         updates = self.outcome.apply(self, session)
-        session.output.retry_result = self.outcome.result(
-            self.attempt, session.output.redact
-        )
+        session.record_retry(self.outcome.result(self.attempt, session.output.redact))
         for event in updates:
             yield event
 
@@ -718,7 +703,7 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
                 yield event
 
         if self.assistant_message_event is not None:
-            for event in self.assistant_message_event.emit(session):
+            for event in await self.assistant_message_event.emit(session):
                 yield event
 
     def convert(self):
@@ -785,7 +770,7 @@ class Response(NativePiEvent, DurablePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         owner = session.native.reader.correlate(self)
         if owner.invalidates_identity(self, session):
-            async for event in session.invalidate_identity():
+            for event in await session.invalidate_identity():
                 yield event
             return
         for event in owner.on_response(self, session):

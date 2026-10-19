@@ -7,7 +7,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack, ExitStack
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from . import pi_commands as commands
 from . import pi_events as pi
-from .agent_events import AgentEvent, InputRefused
+from .agent_events import AgentEvent
 from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -24,7 +24,7 @@ from .field_codec import Id128Text, MalformedRecord
 from .external_transcript import DraftRow
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
-from .mro_dispatch import MroDispatch, handles
+from .mro_dispatch import handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_package import VerifiedNativePackage
@@ -39,7 +39,6 @@ from .native_pi import (
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode, SelectedToolDenied
-from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
@@ -48,11 +47,14 @@ from .turn_context import InputContributionCoordinates
 from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
 
 if TYPE_CHECKING:
+    from .acp_failure import ProviderRetryResult
     from .agent_backend import TurnInbox
     from .coordinated_runtime import NativeExecution
     from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
     from .pi_native_backend import PersistentPiSession
+    from .pi_payloads import UserMessage
+    from .turn_failure import TurnFailure
 
 
 NativeObserver = Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]]
@@ -255,7 +257,6 @@ class TrackedTurnSession(TurnSession):
         self.retainable = False
         self.cursor_delivery = cursor_delivery
         self.following = following
-        self.rejected_commands: list[InputRefused] = []
         self.model = model
         self.prompt_send_boundary = prompt_send_boundary
         self.ingress = ingress
@@ -266,7 +267,6 @@ class TrackedTurnSession(TurnSession):
         self.draft_written_at = 0.0
         self.draft_start = 0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
-        self.finished = False
 
     @classmethod
     async def execute(
@@ -384,7 +384,6 @@ class TrackedTurnSession(TurnSession):
             return
         await self.native_session.close()
 
-
     async def next_event(self) -> pi.PiEvent:
         try:
             while True:
@@ -482,38 +481,34 @@ class TrackedTurnSession(TurnSession):
         self.native_start = sender.native_start
         self.ensure_input_forwarding()
 
-    @handles(pi.MessageStart)
-    async def message_start(self, event: pi.MessageStart):
-        await event.message.tracked_start(self, event)
-        return self.DISCARD
-
-    async def later_input_started(self, event: pi.MessageStart) -> None:
+    async def accept_user_message(
+        self, message: UserMessage, event: pi.MessageStart
+    ) -> tuple[AgentEvent, ...]:
+        """The original input starts when Pi commits it; any other user message is a later input."""
+        if message.matches_input(self.command.message, self.command.input_id):
+            return ()
         matched, input_id = self.inputs.mark_started(self, event)
         if not matched:
             raise NativePiUnavailable("Native Pi started a user message this turn did not send")
         source = await self.following.started(input_id)
         self.terminal = source.continue_response(self.terminal, self.text_parts)
         self.text_parts.clear()
+        return ()
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:
         if event.input_id == self.command.input_id:
             self.context_commit = ObservedNativeCommit(event)
 
-    @handles(pi.MessageUpdate)
-    async def message_update(self, event: pi.MessageUpdate):
-        if event.assistant_message_event is not None:
-            await self.dispatch(event.assistant_message_event)
-        return self.DISCARD
-
     async def assistant_started(self) -> None:
+        await super().assistant_started()
         self.draft_written_at = 0.0
         self.draft_start = len(self.text_parts)
         self.draft_publication.begin_message(time.time())
 
-    @handles(TextDelta)
-    async def text_delta(self, delta: TextDelta) -> None:
-        self.text_parts.append(delta.delta)
+    async def text_received(self, text: str) -> None:
+        await super().text_received(text)
+        self.text_parts.append(text)
         now = time.monotonic()
         if now - self.draft_written_at >= .1:
             await Coordination.run_worker(partial(
@@ -521,25 +516,23 @@ class TrackedTurnSession(TurnSession):
                 islice(self.text_parts, self.draft_start, None)))
             self.draft_written_at = now
 
-    @handles(pi.MessageEnd)
-    async def message_end(self, event: pi.MessageEnd):
-        await event.message.tracked_end(self)
-        return self.DISCARD
+    async def assistant_ended(self) -> None:
+        await Coordination.run_worker(self.draft_publication.retire_message)
 
     def accept_tool_round(self, message):
         super().accept_tool_round(message)
         self.text_parts.clear()
         self.terminal = self.terminal.tool_round()
-        return True
+
+    def accept_unfinished_message(self, failure: TurnFailure) -> None:
+        self.output.record_failure(failure)
+
+    def record_retry(self, result: ProviderRetryResult) -> None:
+        """A tracked failure proves its terminal; it grants no provider retry permission."""
 
     def accept_final_message(self, message):
         self.tool_socket.assert_complete()
         self.terminal = self.terminal.append(message.authoritative_text)
-
-    @handles(pi.NativeRetryEnd)
-    async def native_retry_finished(self, event: pi.NativeRetryEnd):
-        event.outcome.finish_request(self)
-        return self.DISCARD
 
     async def context_proof(self) -> NativeContextProof:
         if not self.prompt_state.acknowledged:
@@ -556,15 +549,16 @@ class TrackedTurnSession(TurnSession):
                 evidence=source_reads.for_source(self.active_session_file),
             ))
 
-
-
-    @handles(pi.AgentSettled)
-    async def settled(self, event: pi.AgentSettled):
+    async def agent_settled(self, event: pi.AgentSettled) -> tuple[AgentEvent, ...]:
         # Pi runs an input it was handed before settling; the turn ends after that run.
-        if event.settles(self) and self.inputs.all_written_started:
+        if self.inputs.all_written_started:
             with self.startup.measurements.operation("native_agent_settled"):
                 self.finished = True
-        return self.DISCARD
+        return ()
+
+    async def invalidate_identity(self) -> tuple[AgentEvent, ...]:
+        # A tracked turn has no authority to recover a session another command replaced.
+        raise NativePiUnavailable("Native Pi session identity changed during a turn")
 
     async def result(self) -> NativeTurnResult:
         with self.startup.measurements.operation("native_terminal_result"):

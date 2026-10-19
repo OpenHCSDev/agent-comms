@@ -61,13 +61,15 @@ from .send_outcome import SendBoundary
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
-from .turn_phase import ShutdownPhase, TurnPhase
+from .turn_phase import SettlingStatsPhase, ShutdownPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnWaitExpired
 
 if TYPE_CHECKING:
+    from .acp_failure import ProviderRetryResult
     from .pi_native_backend import PersistentPiSession
+    from .pi_payloads import AssistantMessage, UserMessage
 
 
 def compaction_summary(value: Any) -> str:
@@ -233,10 +235,42 @@ class NativeSession(MroDispatch, ABC):
         self.usage = UsageAccount()
         self.output = TurnOutput()
         self.rejected_signal = asyncio.Event()
+        self.rejected_commands: list[events.InputRefused] = []
+        self.explicit_interrupt = False
+        self.settlement_count = 0
+        self.finished = self.skip = False
 
     def accept_tool_round(self, message):
         self.tool_socket.announce(message.content)
-        return True
+
+    def accept_final_message(self, message: AssistantMessage) -> None:
+        """A turn that only streams its output takes no answer from the final message."""
+
+    def accept_unfinished_message(self, failure: failures.TurnFailure) -> None:
+        """A streaming turn reports an unfinished message through its output, not a failure."""
+
+    async def assistant_started(self) -> None:
+        self.output.start_message()
+
+    async def assistant_ended(self) -> None:
+        """A streaming turn keeps no per-message draft."""
+
+    async def text_received(self, text: str) -> None:
+        self.output.append(text)
+
+    async def agent_settled(self, event: pi.AgentSettled) -> tuple[events.AgentEvent, ...]:
+        """Settling asks Pi for the turn's statistics before the turn reports itself finished."""
+        self.settlement_count += 1
+        if self.inputs.pending:
+            self.skip = True
+            return ()
+        self.prompt_state = self.prompt_state.settle(event)
+        if not self.stats.requested:
+            self.watchdog.tick()
+            self.watchdog.progress()
+            self.watchdog.phase = SettlingStatsPhase()
+            await self.stats.request(self)
+        return ()
 
     @property
     def has_start_listener(self):
@@ -378,7 +412,6 @@ class NativeSession(MroDispatch, ABC):
             )
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
-        self.finished = self.skip = False
         self.loop = asyncio.get_running_loop()
         self.owner = asyncio.current_task()
         async with AsyncExitStack() as resources:
@@ -485,31 +518,32 @@ class NativeSession(MroDispatch, ABC):
         self.prompt_state = self.prompt_state.dispatch()
         self.watchdog.await_input()
 
-    async def invalidate_identity(self) -> AsyncIterator[events.AgentEvent]:
+    async def invalidate_identity(self) -> tuple[events.AgentEvent, ...]:
         self.native.attestation = self.native.attestation.invalidate()
         self.usage.invalidate()
         self.output.discard_text()
-        yield self.context_info()
-        yield events.TurnState(
+        updates = (self.context_info(), events.TurnState(
             state="failed",
             reason_code="session_identity_uncertain",
             elapsed_ms=0,
             phase=ShutdownPhase(),
-        )
+        ))
         self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
         await self.abort_stalled_rpc()
         self.finished = True
+        return updates
 
     def request_retried(self) -> None:
         """Pi compacted after an overflow and re-sends the same request."""
         self.output.request_retried()
 
+    def record_retry(self, result: ProviderRetryResult) -> None:
+        """The provider retry outcome decides whether this turn's failure may run again."""
+        self.output.retry_result = result
+
     async def initialize_rpc(self) -> None:
-        self.explicit_interrupt = False
-        self.rejected_commands: list[events.AgentEvent] = []
         self.model_name: str | None = None
         self.active_session_file = self.launch.session.session_file
-        self.settlement_count = 0
         self.watchdog.reading()
         self.started_during_abort: list[str | None] = []
 
@@ -582,7 +616,9 @@ class TurnSession(NativeSession):
             self.command.message, self.command.input_id
         )
 
-    async def accept_user_message(self, message, event):
+    async def accept_user_message(
+        self, message: UserMessage, event: pi.MessageStart
+    ) -> tuple[events.AgentEvent, ...]:
         """Own the original/follow-up input effect across all decoded user messages."""
         if self.prompt_state.awaiting_start and self.matches_original_input(message):
             if not self.notify_input_started(None, self.command.input_id, self.command.message):
@@ -592,32 +628,27 @@ class TurnSession(NativeSession):
                 )
                 await self.abort_stalled_rpc()
                 self.finished = True
-                return
+                return ()
             self.prompt_state = self.prompt_state.start(event)
-            if self.has_start_listener:
-                yield events.OriginalInputStarted()
             self.ensure_input_forwarding()
-        elif self.started_input:
+            return (events.OriginalInputStarted(),) if self.has_start_listener else ()
+        if self.started_input:
             matched, input_id = self.inputs.mark_started(self, event)
             if matched:
-                yield events.FollowingInputStarted(id=input_id)
-            else:
-                self.inputs.uncertain = True
-                self.output.final_assistant_stop = False
-                self.output.record_failure(
-                    failures.FollowupUnrecognized(
-                        "Pi RPC saw an unrecognized follow-up user message start."
-                    )
+                return (events.FollowingInputStarted(id=input_id),)
+            self.inputs.uncertain = True
+            self.output.final_assistant_stop = False
+            self.output.record_failure(
+                failures.FollowupUnrecognized(
+                    "Pi RPC saw an unrecognized follow-up user message start."
                 )
-                await self.abort_stalled_rpc()
-                self.finished = True
-                return
+            )
         else:
             self.inputs.uncertain = True
             self.output.final_assistant_stop = False
             self.output.record_failure(
                 failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
             )
-            await self.abort_stalled_rpc()
-            self.finished = True
-            return
+        await self.abort_stalled_rpc()
+        self.finished = True
+        return ()

@@ -527,12 +527,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
         return WithheldDisclosure()
 
-    async def tracked_end(self, session) -> None:
-        """Non-assistant messages cannot supply a tracked final response."""
-
-    async def tracked_start(self, session, event) -> None:
-        """Only a user message can be an input the tracked turn was handed."""
-
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
@@ -640,14 +634,6 @@ class AssistantMessage(PiMessage):
     provider_thinking_level: str | None = wire_field("providerThinkingLevel")
     assistant = True
 
-    async def tracked_start(self, session, event) -> None:
-        await session.assistant_started()
-
-    async def tracked_end(self, session) -> None:
-        from .coordinator import Coordination
-        self.stop_reason.tracked(session, self)
-        await Coordination.run_worker(session.draft_publication.retire_message)
-
     @property
     def authoritative_text(self) -> str:
         return "".join(part.final_text for part in self.content)
@@ -657,7 +643,7 @@ class AssistantMessage(PiMessage):
         return self.stop_reason.successful
 
     async def apply_start(self, session, event):
-        session.output.start_message()
+        await session.assistant_started()
         return ()
 
     @property
@@ -679,6 +665,7 @@ class AssistantMessage(PiMessage):
             updates.extend(self.usage.charges(session.usage))
         session.output.final_assistant_stop = reason.successful and session.started_input
         updates.extend([event async for event in reason.apply(session, self)])
+        await session.assistant_ended()
         return tuple(updates)
 
     @property
@@ -714,12 +701,8 @@ class UserMessage(PiMessage):
     def matches_input(self, text, native_id):
         return self.text == text and self.input_id == native_id
 
-    async def tracked_start(self, session, event) -> None:
-        if not self.matches_input(session.command.message, session.command.input_id):
-            await session.later_input_started(event)
-
     async def apply_start(self, session, event):
-        return tuple([update async for update in session.accept_user_message(self, event)])
+        return await session.accept_user_message(self, event)
 
     def observe_start_abort(self, session, event):
         session.observe_input_during_abort(event)
@@ -812,7 +795,7 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     def events(self):
         return ()
 
-    def emit(self, session):
+    async def emit(self, session):
         return self.events()
 
 
@@ -828,8 +811,8 @@ class TextDelta(PiDelta, declared_name="text_delta"):
     def events(self):
         return (events.Chunk(text=self.delta),)
 
-    def emit(self, session):
-        session.output.append(self.delta)
+    async def emit(self, session):
+        await session.text_received(self.delta)
         return self.events()
 
 
@@ -849,7 +832,7 @@ class ToolDelta:
     progress = True
     response_progress = True
 
-    def emit(self, session):
+    async def emit(self, session):
         return ()
 
 
@@ -870,7 +853,7 @@ class UnknownDelta(PiDelta):
     payload: dict[str, Any]
     opaque = True
 
-    def emit(self, session):
+    async def emit(self, session):
         return ()
 
 
