@@ -13,6 +13,7 @@ from .errors import RelationViolationError
 from .messages import AlertKind, NoticeRole
 from .native_source_cursor import NativeSourceCursor
 from .private_sidecar import SidecarCommitUnknown
+from .send_result import SendResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,11 +23,13 @@ class CoordinatedTurn:
     input_id: str
     publications: tuple[PublicationEvidence, ...]
     cursor_status: str = "unavailable"
+    notices: tuple[str, ...] = ()
 
     @classmethod
     async def capture(
         cls, participant, input_id, disposition: type[AssignmentState],
         publications: tuple[PublicationEvidence, ...] = (),
+        *, notices: tuple[str, ...] = (),
     ):
         return cls(
             participant.batch.assignment_ids,
@@ -34,6 +37,7 @@ class CoordinatedTurn:
             input_id,
             publications,
             await cls.cursor_status_for(participant, input_id),
+            notices,
         )
 
     @staticmethod
@@ -65,7 +69,7 @@ class CoordinatedTurn:
 
 def publish_native_failure(
     participant, input_id, description, *, native_response=None, source_error=None
-):
+) -> SendResult:
     """Existing durable alert, never another wake or retry authorization."""
     diagnostic = record_terminal_failure(
         participant.comms.root,
@@ -76,7 +80,7 @@ def publish_native_failure(
         native_response=native_response,
         source_error=source_error,
     )
-    participant.comms.messaging.send(
+    return participant.comms.messaging.send(
         participant.owner.thread.name,
         participant.batch.target,
         f"Message processing failed: {description} "

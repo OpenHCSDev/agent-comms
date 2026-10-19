@@ -35,7 +35,7 @@ def _case(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(tmp_path)))
-    comms.messaging.send_message("sender", "recipient", "first")
+    comms.messaging.send("sender", "recipient", "first").message
     assert _sync(comms).complete
     return comms
 
@@ -55,7 +55,7 @@ def test_reader_counts_uncommitted_append_while_writer_decodes_without_index_loc
     tmp_path, monkeypatch
 ):
     comms = _case(tmp_path, monkeypatch)
-    comms.messaging.send_message("sender", "recipient", "appended")
+    comms.messaging.send("sender", "recipient", "appended").message
     entered = threading.Event()
     release = threading.Event()
     with _open_source(comms) as source:
@@ -83,8 +83,8 @@ def test_reader_counts_uncommitted_append_while_writer_decodes_without_index_loc
 
 def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
     comms = _case(tmp_path, monkeypatch)
-    comms.messaging.send_message("sender", "recipient", "appended")
-    comms.messaging.send_message("sender", "recipient", "appended again")
+    comms.messaging.send("sender", "recipient", "appended").message
+    comms.messaging.send("sender", "recipient", "appended again").message
     # One reader sync commits at most one row past the bound; the second
     # row stays beyond it.
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
@@ -96,7 +96,7 @@ def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
 def test_readers_use_the_bus_projection_to_complete_their_cut(tmp_path, monkeypatch, read):
     comms = _case(tmp_path, monkeypatch)
     for body in ("second", "third"):
-        comms.messaging.send_message("sender", "recipient", body)
+        comms.messaging.send("sender", "recipient", body).message
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     reader = wire(tmp_path, projection=CompletingRouteCounts)
 
@@ -123,7 +123,7 @@ def test_cli_who_completes_unindexed_history_that_the_ui_reads_unit_by_unit(
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(tmp_path)))
     for body in ("first", "second", "third"):
-        comms.messaging.send_message("sender", "recipient", body)
+        comms.messaging.send("sender", "recipient", body).message
     assert not BusRouteCounts(comms.bus.log.path).path.exists()
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
 

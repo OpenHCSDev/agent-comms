@@ -196,7 +196,7 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
             pass
         await asyncio.sleep(0.1)
         assert calls == 3  # Intermediate bus files publish through the marker.
-        comms.messaging.send_message("sender", "owner", "wake on final marker")
+        comms.messaging.send("sender", "owner", "wake on final marker").message
         await require_calls(4)
     finally:
         task.cancel()

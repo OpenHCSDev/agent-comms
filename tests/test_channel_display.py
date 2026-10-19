@@ -54,12 +54,12 @@ def bodies(page):
 
 def test_default_off_and_opt_in_only_changes_display(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("outsider", "#api", "exact target")
-    comms.messaging.send("alice", "bob", "member to outsider")
-    comms.messaging.send("bob", "carol", "outsider to member")
-    comms.messaging.send("outsider", "bob", "explicit @alice mention")
-    comms.messaging.send("outsider", "#ui", "unrelated channel")
-    comms.messaging.send("outsider", "bob", "ordinary outsider DM")
+    comms.messaging.send("outsider", "#api", "exact target").message.message_id
+    comms.messaging.send("alice", "bob", "member to outsider").message.message_id
+    comms.messaging.send("bob", "carol", "outsider to member").message.message_id
+    comms.messaging.send("outsider", "bob", "explicit @alice mention").message.message_id
+    comms.messaging.send("outsider", "#ui", "unrelated channel").message.message_id
+    comms.messaging.send("outsider", "bob", "ordinary outsider DM").message.message_id
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
         before_delivery = comms.bus.pending_counts_opened(source, basis)
     before_wire = tmp_path.joinpath("bus.jsonl").read_bytes()
@@ -112,7 +112,7 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
 
 def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "member DM")
+    comms.messaging.send("alice", "bob", "member DM").message.message_id
     original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
@@ -167,7 +167,7 @@ def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
 
 def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "old sender DM")
+    comms.messaging.send("alice", "bob", "old sender DM").message.message_id
     comms.channels.set_channel_any_mode("api", True)
     high_water = comms.bus.log.latest_sequence()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
@@ -206,13 +206,13 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     comms.messaging.send_user_message("#api", "owned before rename", worktree=str(tmp_path))
     comms.registry.rename(viewer, "human")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
-    comms.messaging.send("alice", "bob", "before threshold")
+    comms.messaging.send("alice", "bob", "before threshold").message.message_id
     comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
     comms.channels.set_channel_any_mode("#api", True)
     # The previously hidden DM was never painted, so enabling the broader
     # projection must expose it as unread despite the exact-channel marker.
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
-    comms.messaging.send("bob", "alice", "after threshold")
+    comms.messaging.send("bob", "alice", "after threshold").message.message_id
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 2
     # The old user sender is still an alias of the current human viewer.
     comms.messaging.send_user_message("#api", "human owned", worktree=str(tmp_path))
@@ -223,9 +223,9 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
 
 def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "first projected")
-    comms.messaging.send("outsider", "#api", "second target")
-    comms.messaging.send("bob", "alice", "third projected")
+    comms.messaging.send("alice", "bob", "first projected").message.message_id
+    comms.messaging.send("outsider", "#api", "second target").message.message_id
+    comms.messaging.send("bob", "alice", "third projected").message.message_id
     comms.channels.set_channel_any_mode("#api", True)
     rows = comms.views.channel_display_page("#api").messages
     first_bytes = len((json.dumps(rows[0].to_wire()) + "\n").encode())
@@ -240,14 +240,14 @@ def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
 
 def test_fixed_opened_boundary_excludes_later_append(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "within boundary")
+    comms.messaging.send("alice", "bob", "within boundary").message.message_id
     comms.channels.set_channel_any_mode("#api", True)
     original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
     def append():
         started.set()
-        comms.messaging.send("alice", "bob", "outside boundary")
+        comms.messaging.send("alice", "bob", "outside boundary").message.message_id
         finished.set()
 
     @contextmanager
@@ -289,14 +289,14 @@ def test_failed_document_write_does_not_publish_mode(tmp_path):
 def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
     comms = populated(tmp_path)
     comms.channels.set_channel_any_mode("#api", True)
-    comms.messaging.send("alice", "bob", "before retag")
+    comms.messaging.send("alice", "bob", "before retag").message.message_id
     original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
     def retag_and_send():
         started.set()
         comms.channels.update_tags("alice", remove=frozenset({"api"}), add=frozenset({"ui"}))
-        comms.messaging.send("alice", "bob", "late nonmember")
+        comms.messaging.send("alice", "bob", "late nonmember").message.message_id
         finished.set()
 
     @contextmanager
@@ -348,7 +348,7 @@ def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):
 def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
     comms = populated(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("bob", "#api", "outside unread")
+    comms.messaging.send("bob", "#api", "outside unread").message.message_id
     original = comms.bus.log.opened_wire_snapshot
     changed = False
 
@@ -375,14 +375,14 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
 
 def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("bob", "#api", "row1")
+    comms.messaging.send("bob", "#api", "row1").message.message_id
     original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
     def mark_then_append():
         started.set()
         comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
-        comms.messaging.send("bob", "#api", "row2")
+        comms.messaging.send("bob", "#api", "row2").message.message_id
         finished.set()
 
     @contextmanager
@@ -408,7 +408,7 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
 def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_path):
     comms = populated(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("alice", viewer, "DM original")
+    comms.messaging.send("alice", viewer, "DM original").message.message_id
     started, finished = Event(), Event()
     failures = []
 
@@ -418,7 +418,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
             started.set()
             for n in range(20):
                 other.registry.heartbeat("alice")
-                other.messaging.send("alice", "#api", f"burst {n}")
+                other.messaging.send("alice", "#api", f"burst {n}").message.message_id
         except BaseException as error:
             failures.append(error)
         finally:
@@ -457,8 +457,8 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
 def test_views_answer_how_far_the_bus_has_grown(tmp_path):
     comms = populated(tmp_path)
     assert comms.views.latest_sequence() == 0
-    comms.messaging.send("outsider", "#api", "to a channel")
-    comms.messaging.send("alice", "bob", "to someone else")
+    comms.messaging.send("outsider", "#api", "to a channel").message.message_id
+    comms.messaging.send("alice", "bob", "to someone else").message.message_id
     # Every message counts, not only those one conversation shows.
     newest_in_channel = comms.views.channel_display_page("#api").messages[-1].seq
     assert comms.views.latest_sequence() == comms.bus.log.latest_sequence() > newest_in_channel

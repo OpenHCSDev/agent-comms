@@ -16,7 +16,7 @@ def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(tmp_path)))
-    first = comms.messaging.send_message("sender", "recipient", "first")
+    first = comms.messaging.send("sender", "recipient", "first").message
     log = comms.bus.log
 
     original_marker = log.private_marker_unlocked
@@ -47,13 +47,13 @@ def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture
         readers = (executor.submit(capture), executor.submit(capture))
         assert readers_entered.wait(timeout=5), "bus readers serialized behind each other"
         delivery = executor.submit(
-            comms.messaging.send_message, "sender", "recipient", "after snapshots"
+            comms.messaging.send, "sender", "recipient", "after snapshots"
         )
         time.sleep(0.05)
         assert not delivery.done(), "publication entered while shared source capture was active"
         release_readers.set()
         cuts = tuple(reader.result(timeout=5) for reader in readers)
-        second = delivery.result(timeout=5)
+        second = delivery.result(timeout=5).message
 
     assert cuts[0] == cuts[1]
     assert cuts[0][0] == first.seq
@@ -68,7 +68,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    first = comms.messaging.send_message("sender", "recipient", "first")
+    first = comms.messaging.send("sender", "recipient", "first").message
     with BusPageIndex(comms.bus.log.path) as prepared:
         assert prepared.sync()
 
@@ -78,7 +78,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
         with BusPageIndex(comms.bus.log.path) as reader, reader.snapshot():
             saved = BusPageSource.one(reader.connection, singleton=1)
             assert saved is not None
-            second = comms.messaging.send_message("sender", "recipient", "second")
+            second = comms.messaging.send("sender", "recipient", "second").message
 
             def sync():
                 update_started.set()
@@ -108,7 +108,7 @@ def test_relationship_tail_decode_does_not_hold_publication_resources(tmp_path, 
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.messaging.send_message("sender", "recipient", "first")
+    comms.messaging.send("sender", "recipient", "first").message
     decoding = threading.Event()
     release = threading.Event()
     original = WireRecord.public_from_wire
@@ -123,9 +123,9 @@ def test_relationship_tail_decode_does_not_hold_publication_resources(tmp_path, 
         reader = executor.submit(comms.relationships.snapshot, "recipient")
         assert decoding.wait(timeout=5)
         publication = executor.submit(
-            comms.messaging.send_message, "sender", "recipient", "during decode"
+            comms.messaging.send, "sender", "recipient", "during decode"
         )
-        second = publication.result(timeout=5)
+        second = publication.result(timeout=5).message
         release.set()
         reader.result(timeout=5)
 

@@ -666,17 +666,17 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
                 break
         assert drains, "the first tick never drained"
         settled = len(drains)
-        comms.messaging.send_message("sender", "gamma", "for gamma")
+        comms.messaging.send("sender", "gamma", "for gamma").message
         await tick()  # only shared stores grew, and none of it addresses beta
         assert len(drains) == settled, "another agent's bus append woke an idle owner"
-        comms.messaging.send_message("sender", "gamma", "another for gamma")
+        comms.messaging.send("sender", "gamma", "another for gamma").message
         await tick()
         assert len(drains) == settled
         assert address_reads
-        comms.messaging.send_message("sender", "beta", "for beta")
+        comms.messaging.send("sender", "beta", "for beta").message
         await tick()  # the address record has an unauthorized row for beta: full tick
         assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"
-        comms.messaging.send_message("sender", "gamma", "more for gamma")
+        comms.messaging.send("sender", "gamma", "more for gamma").message
         (comms.root / "private_bus_checkpoint.sqlite3").unlink()
         await tick()  # the address record is unavailable: never invent 'not mine'
         assert len(drains) == settled + 2, "an unavailable address record answered instead of the full tick"

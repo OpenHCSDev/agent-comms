@@ -64,7 +64,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
     before_goal = comms.registry.require("beta").goal
     before_wait = comms.goals.goal_wait("beta")
 
-    comms.messaging.send_message("sender", "beta", "Selected direct message")
+    comms.messaging.send("sender", "beta", "Selected direct message").message
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await recorded_request(control, agent)
@@ -150,7 +150,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
         old_key, seq=None, owner="beta", claim_scope=claim_scope, target="beta", text="Do not replay"
     )
     old_row = stored_inputs(agent.inputs.dispositions.root).rows[old_key]
-    comms.messaging.send_message("sender", "beta", "Selected direct message")
+    comms.messaging.send("sender", "beta", "Selected direct message").message
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)
@@ -284,7 +284,7 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     )
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    comms.messaging.send_message("sender", "beta", "First local selected instruction")
+    comms.messaging.send("sender", "beta", "First local selected instruction").message
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         assert await asyncio.to_thread(entered.wait, 12), (
@@ -374,7 +374,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
 
     monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
-    comms.messaging.send_message("sender", "beta", "Selected DM")
+    comms.messaging.send("sender", "beta", "Selected DM").message
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)

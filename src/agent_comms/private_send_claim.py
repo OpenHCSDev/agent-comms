@@ -154,6 +154,7 @@ class PrivateSendClaim(PromptBoundary):
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer keeps the single-use send token after the input is recorded.
         """
+        lease = self.owner.thread.require_turn_lease()
         registry = await Coordination.run_worker(self.bus._registry.snapshot)
         try:
             result = await TrackedTurnSession.execute(
@@ -174,8 +175,7 @@ class PrivateSendClaim(PromptBoundary):
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
-                    record_request_progress, self.bus.log.path.parent,
-                    self.owner.thread.require_turn_lease(),
+                    record_request_progress, self.bus.log.path.parent, lease,
                 ),
                 prompt_send_boundary=self,
                 execution=execution,
@@ -196,8 +196,6 @@ class PrivateSendClaim(PromptBoundary):
                 raise retry from error
             raise
         finally:
-            lease = self.owner.thread.turn_lease
-            assert lease is not None
             await Coordination.run_worker(partial(
                 record_acquisition_progress, self.bus.log.path.parent, lease,
                 self.input_id, self._measurements,

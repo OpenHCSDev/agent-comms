@@ -30,6 +30,7 @@ from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, CommandTarget
+from .read_basis import AllChannelDisplayScope, ChannelDisplayScope
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
@@ -226,7 +227,7 @@ class HistoryViews:
         """Bounded channel history for any client adapter."""
         selected = CommandTarget.named(target).require_channel()
         channel = self.channels.catalog.read().require_channel(selected.name)
-        return ChannelHistory(channel.name, channel.history_targets).page(self.presentation, bounds)
+        return ChannelHistory(channel.history_scope()).page(self.presentation, bounds)
 
     def last_sent_timestamps(
         self, rows: Iterable[tuple[str, float]], *, registry: RegistrySnapshot,
@@ -239,7 +240,7 @@ class HistoryViews:
         return canonical
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        return ChannelHistory(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets).page(
+        return ChannelHistory(AllChannelDisplayScope(BuiltinChannel.ANY.value)).page(
             self.presentation, bounds
         )
 

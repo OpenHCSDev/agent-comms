@@ -6,7 +6,7 @@ from agent_comms.read_basis import OnReadWatchAcknowledgment
 
 
 async def test_watch_emits_startup_unread_then_arrival_and_leaves_untaken_unread(wired):
-    first = wired.messaging.send_message("PR111", "fixer", "already unread")
+    first = wired.messaging.send("PR111", "fixer", "already unread").message
 
     async with aclosing(wired.bus.watch("fixer", acknowledgment=OnReadWatchAcknowledgment)) as watcher:
         initial = await asyncio.wait_for(anext(watcher), timeout=3)
@@ -15,7 +15,7 @@ async def test_watch_emits_startup_unread_then_arrival_and_leaves_untaken_unread
         # The consumer awaits one arrival, without polling the inbox or wire.
         arrival = asyncio.create_task(anext(watcher))
         try:
-            second = wired.messaging.send_message("PR111", "fixer", "new arrival")
+            second = wired.messaging.send("PR111", "fixer", "new arrival").message
             emitted = await asyncio.wait_for(arrival, timeout=3)
             assert emitted.message_id == second.message_id
         finally:
@@ -23,7 +23,7 @@ async def test_watch_emits_startup_unread_then_arrival_and_leaves_untaken_unread
                 arrival.cancel()
                 await asyncio.gather(arrival, return_exceptions=True)
 
-        third = wired.messaging.send_message("PR111", "fixer", "not taken")
+        third = wired.messaging.send("PR111", "fixer", "not taken").message
         # Closing here never advances the iterator to the third message.
 
     unread = {message.message_id for message in wired.bus.inbox("fixer")}

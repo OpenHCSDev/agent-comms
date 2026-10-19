@@ -22,7 +22,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(tmp_path / 'saved.jsonl'), title='Preserved title', task='Original task', active_turn=ActiveTurn('old-turn', os.getpid()))
     old.registry.declare(live)
     old.registry.declare(missing)
-    old.messaging.send("live", "missing", "Old pending work must not be replayed")
+    old.messaging.send("live", "missing", "Old pending work must not be replayed").message.message_id
     current.registry.declare(replace(live, title="Current live title"))
     current.messaging.initialize_private_initial_protocol()
     current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))

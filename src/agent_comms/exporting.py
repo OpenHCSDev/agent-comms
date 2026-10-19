@@ -134,8 +134,7 @@ class ChannelScope(WireExportScope):
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         channel = catalog.read().require_channel(self.channel)
         channel.require_routable()
-        targets = channel.history_targets
-        return ResolvedExportScope(self, lambda message: message.target in targets)
+        return ResolvedExportScope(self, channel.history_scope().includes)
 
 
 @dataclass(frozen=True, slots=True)

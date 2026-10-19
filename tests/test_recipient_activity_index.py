@@ -179,7 +179,7 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
     comms = canonical_goal_wire(tmp_path / "bus")
     for name in ("sender", "peer-a", "peer-b"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({"ci"}), str(tmp_path)))
-    sent = comms.messaging.send_message("sender", "#ci", "channel outcome")
+    sent = comms.messaging.send("sender", "#ci", "channel outcome").message
     with comms.bus.log.certified_read() as source:
         original = source.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup

@@ -107,7 +107,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
             comms.registry.new_thread(name, frozenset(), str(tmp_path), model='selected-offline/fixture', thinking_level=OffThinkingLevel)
         )
     # Ordinary publication must reach the same bootstrap as explicit protocol install.
-    first = comms.messaging.send_message("sender", "recipient", "BOOTSTRAP_FIRST")
+    first = comms.messaging.send("sender", "recipient", "BOOTSTRAP_FIRST").message
     if base_only_owner:
         # Model the reported partial install on this disposable root only.
         for name in ("coordination.sqlite3", "native_prompt_bindings.sqlite3"):
@@ -142,7 +142,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         assert not comms.registry.require("recipient").process_alive
         comms.owners.start("recipient")
         assert comms.registry.require("recipient").process_identity != original.process_identity
-        second = comms.messaging.send_message("sender", "recipient", "BOOTSTRAP_SECOND")
+        second = comms.messaging.send("sender", "recipient", "BOOTSTRAP_SECOND").message
         until(lambda: len(replies()) == 2 and not comms.registry.require("recipient").active_turn.executing)
         assert replies()[1].body == "BOOTSTRAP_REPLY_2" and replies()[1].target == "sender"
         assert len(requests) == 2 and not failures
