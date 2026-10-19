@@ -24,6 +24,7 @@ from uuid import uuid4
 
 from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
+from .coordinator import Coordination
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -472,8 +473,9 @@ class Stalling:
     @abstractmethod
     def last_move(self, ordered: float) -> float: ...
 
-    @abstractmethod
-    def stall_reason(self) -> str: ...
+    def stall_reason(self) -> str:
+        """The strike reason, with the window this class declares in ``seconds``."""
+        return f"{self.state}; no commit, push or PR change for {self.seconds // 60} minutes"
 
     def stall_at(self, ordered: float) -> float:
         return self.last_move(ordered) + self.seconds
@@ -503,9 +505,6 @@ class Moving(Stalling):
     def last_move(self, ordered: float) -> float:
         return max(ordered, self.at)
 
-    def stall_reason(self) -> str:
-        return f"no commit, push or PR change for ten minutes after {self.state}"
-
     def distance_readings(self) -> DistanceReadings:
         return self.readings
 
@@ -520,9 +519,6 @@ class MissingCheckoutProgress(Moving, FoundProgress):
         if not source.checkout.exists():
             yield cls(at=max((source.since, *(pr.updated_at for pr in source.requests("open")))))
 
-    def stall_reason(self) -> str:
-        return "the ordered checkout is missing and its PR has not changed for ten minutes"
-
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
@@ -535,9 +531,6 @@ class NoCommitProgress(Stalling, OrderProgress):
 
     def last_move(self, ordered: float) -> float:
         return ordered
-
-    def stall_reason(self) -> str:
-        return "no commit, push or PR change for ten minutes after the order"
 
 
 @dataclass(frozen=True)
@@ -2345,7 +2338,6 @@ class TodoStore(TypedStore):
 
     async def watch_stalled(self, storage: StorageRule) -> None:
         """The backend observes Git/PR changes; Stalling alone owns the deadline."""
-        from .coordinator import Coordination
 
         while True:
             await Coordination.run_worker(lambda: self.advance_stalled(storage))

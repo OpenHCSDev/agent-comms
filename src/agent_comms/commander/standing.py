@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from ..comms import Comms
+from ..goal_actions import OrderGoalAction
 from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingRule,
                               UndatedStandingRule)
 from ..goals import Goal
@@ -61,7 +62,8 @@ class RequestStalled(UndatedStandingRule):
 
 @dataclass(frozen=True)
 class WheelSpin(StandingRule, declared_name=None):
-    """Progress problems read from Core; the commander chooses the next assignee."""
+    """An order is not getting closer to done, or a unit sits with no order; Core gives the
+    order to a unit that will move it, with no deadline and no commander turn involved."""
 
     todo: Todo
 
@@ -77,6 +79,16 @@ class WheelSpin(StandingRule, declared_name=None):
                        if thread.name not in excluded
                        and TurnDigestRead(comms.root, thread, bound).native()),
                       key=lambda thread: thread.name)
+
+    def assign(self, comms: Comms, commander: str, unit: Thread) -> None:
+        """The order sent again to ``unit`` through its Goal, with the order's own text."""
+        todo = comms.goals.todos.get(self.todo.id)
+        order = todo.order.reissued(time.time())
+        comms.goals.update_goal(unit.name, OrderGoalAction(
+            problem=todo.id, expected_revision=todo.revision, order=order,
+            request=todo.goal.request(), deadline=todo.deadline, commander=commander,
+            traced=todo.order.owner))
+        comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(todo)}")
 
 
 @dataclass(frozen=True)
@@ -102,8 +114,8 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
 
     def line(self) -> str:
         return (f"WHEEL SPIN: {self.todo.holder} kept working on {self.todo.id} while its distance"
-                " to done did not fall across two readings -> Core strikes it; the commander"
-                " chooses the next unit")
+                " to done did not fall across two readings -> Core strikes it and gives the order"
+                " to an idle unit")
 
     def enforce(self, comms: Comms, commander: str) -> None:
         todo = comms.goals.todos.get(self.todo.id)
@@ -113,6 +125,8 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 todo.revision, comms.registry.require(commander).incarnation, held,
                 f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
                 " across two readings"), commander)
+        for unit in self.idle(comms, commander)[:1]:
+            self.assign(comms, commander, unit)
 
 
 @dataclass(frozen=True)
@@ -125,12 +139,20 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
         rows = (todo for todo in comms.goals.todos.for_commander(
             comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
-        idle = cls.idle(comms, commander)
-        return tuple(cls(todo, unit.name) for unit, todo in zip(idle, rows, strict=False))
+        idle, found = cls.idle(comms, commander), []
+        for todo in rows:  # a unit struck on a problem never gets that problem back
+            unit = next((unit for unit in idle if not todo.live_strikes(unit.name)), None)
+            if unit is not None:
+                idle.remove(unit)
+                found.append(cls(todo, unit.name))
+        return tuple(found)
 
     def line(self) -> str:
         return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
-                f" -> the commander must pick its next owner")
+                f" -> Core gives it to {self.unit}")
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.assign(comms, commander, comms.registry.require(self.unit))
 
 
 @dataclass(frozen=True)
