@@ -557,7 +557,7 @@ class TurnSession(NativeSession):
 
     async def open_transport(self, resources: AsyncExitStack) -> None:
         self.tool_socket = await self.tool_mode.open_transport(self, resources)
-        self.command = self.make_command(owner_tools=self.tool_socket.connection).identified()
+        self.command = self.make_command(owner_tools=self.tool_socket.connection)
         del self.make_command
         self.output.sensitive = bool(self.command.images)
 
@@ -574,10 +574,6 @@ class TurnSession(NativeSession):
     async def tool_finished(self, event):
         self.tool_socket.tool_finished(event, self.command.input_id)
 
-    @property
-    def input_id(self):
-        return self.command.input_id
-
     def reject_prompt(self, response):
         error = self.output.error(str(response.error or "Prompt was rejected"))
         yield self.watchdog.state(
@@ -588,13 +584,13 @@ class TurnSession(NativeSession):
 
     def matches_original_input(self, message):
         return self.inputs.permits_interaction and message.matches_input(
-            self.command.message, self.input_id
+            self.command.message, self.command.input_id
         )
 
     async def accept_user_message(self, message, event):
         """Own the original/follow-up input effect across all decoded user messages."""
         if self.prompt_state.awaiting_start and self.matches_original_input(message):
-            if not self.notify_input_started(None, self.input_id, self.command.message):
+            if not self.notify_input_started(None, self.command.input_id, self.command.message):
                 self.inputs.uncertain = True
                 self.output.record_failure(
                     failures.InputMissing("Pi input start did not match the durable attempt.")

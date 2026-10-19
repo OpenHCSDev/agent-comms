@@ -6,7 +6,7 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
@@ -65,11 +65,7 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: str | None = field(default=None, metadata={"wire_omit_default": True})
-
-    def identified(self):
-        """Retain an assigned RPC id, or assign it once before writing."""
-        return self if self.id else replace(self, id=uuid4().hex)
+    id: str | None = field(default_factory=lambda: uuid4().hex)
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -77,14 +73,13 @@ class PiCommand(DeclaredFamily):
 
     @asynccontextmanager
     async def pending_response(self, channel, writer):
-        command = self.identified()
-        future = channel.track(command)
+        future = channel.track(self)
         try:
-            writer.write(channel.command_bytes(command))
+            writer.write(channel.command_bytes(self))
             await writer.drain()
             yield future
         finally:
-            channel.pending.discard(type(command), command.id)
+            channel.pending.discard(type(self), self.id)
             future.cancel()
 
     async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
@@ -103,6 +98,8 @@ class PiCommand(DeclaredFamily):
     def to_rpc(self) -> dict[str, Any]:
         data = FieldCodec.encode(self)
         data["type"] = data.pop("kind")
+        if self.id is None:
+            del data["id"]
         return data
 
     @classmethod
@@ -113,6 +110,7 @@ class PiCommand(DeclaredFamily):
             cls.member_named(kind)
         except ValueError:
             return UnknownCommand(wire=value)
+        data.setdefault("id", None)
         return FieldCodec.decode(cls, {"kind": kind, **data})
 
     @classmethod

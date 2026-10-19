@@ -16,7 +16,7 @@ from agent_comms.prompt_state import UnacknowledgedPrompt
 
 
 def prompt(**options):
-    return Prompt(message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64), **options).identified()
+    return Prompt(message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64), **options)
 
 
 async def test_only_the_matching_prompt_response_yields_the_accepted_result():
@@ -64,5 +64,4 @@ def test_anonymous_wire_command_keeps_its_anonymous_id():
     decoded = PiCommand.from_wire(raw)
     assert decoded.id is None
     assert decoded.to_rpc() == raw
-    identified = decoded.identified()
-    assert identified.id and identified.identified() is identified
+    assert prompt().id and prompt().id != prompt().id
