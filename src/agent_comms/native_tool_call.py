@@ -8,16 +8,18 @@ These process-local transactions never reconstruct authority from saved evidence
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Never
 
 
 
 if TYPE_CHECKING:
     from .native_tool_transport import ToolTransport
+    from .envelope_claim_transitions import FileClaimPath
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -259,6 +261,95 @@ class NativeToolCall(ABC):
 
     @abstractmethod
     def claim_failed(self) -> None: ...
+
+
+@dataclass
+class CodingCall(NativeToolCall):
+    @abstractmethod
+    def allowed_claim(self) -> FileClaimPath | None: ...
+
+    @abstractmethod
+    def digest(self) -> str: ...
+
+    def decide_storage(self, registry, thread: str) -> None:
+        """A call without executable effects has nothing to decide."""
+
+    def commit_terminal(
+        self, is_error: bool, directory: Path, input_id: str, round_number: int
+    ) -> None:
+        from .selected_tool_broker import record_selected_terminal
+
+        slot = self.slot(input_id, round_number)
+        record_selected_terminal(directory, slot, slot)
+
+    def claim_failed(self) -> None:
+        # A denied ordinary tool may report an error and let Pi explain it. The
+        # consumed call cannot be retried; this grants no mutation authority.
+        pass
+
+    @classmethod
+    def decode(cls, call_id: object, name: object, arguments: object) -> CodingCall:
+        if (
+            type(call_id) is not str
+            or not call_id
+            or len(call_id) > 256
+            or type(name) is not str
+        ):
+            raise SelectedToolDenied("Malformed native coding call identity")
+        from .field_codec import MalformedRecord
+        from .native_tools import NativeToolDeclaration
+
+        try:
+            return NativeToolDeclaration.from_call(name, arguments, call_id=call_id)
+        except MalformedRecord as error:
+            return RefusedCodingCall(call_id, name, arguments, str(error))
+
+    def slot(self, input_id: str, round_number: int) -> str:
+        identity = f"{input_id}\0{round_number}\0{self.call_id}"
+        return hashlib.sha256(identity.encode()).hexdigest()[:32]
+
+
+@dataclass
+class ArgumentRefusal(UncertainClaim):
+    refusal: RefusedCodingCall
+
+    async def consume(
+        self, call: NativeToolCall, action: Callable[[], Awaitable[None]],
+    ) -> None:
+        raise SelectedToolDenied(self.refusal.reason)
+
+
+@dataclass
+class RefusedCodingCall(CodingCall):
+    """Invalid arguments cannot execute, but still own real start/error events."""
+
+    tool_name: str
+    arguments: object
+    reason: str
+
+    def __post_init__(self) -> None:
+        self.claim_scope = ArgumentRefusal(self)
+
+    @property
+    def name(self) -> str:
+        return self.tool_name
+
+    def allowed_claim(self) -> Never:
+        raise SelectedToolDenied(self.reason)
+
+    def digest(self) -> str:
+        return f'REFUSED {self.name}: {" ".join(self.reason.split())[:200]}'
+
+    def correlate(self, candidate: NativeToolCall) -> None:
+        self.reject_correlated(candidate)
+
+    def reject_correlated(self, existing: NativeToolCall) -> None:
+        # Pi may normalize arguments before its socket arrives. Whichever
+        # arrives first keeps the same lifecycle object, never permission.
+        if (self.call_id, self.name) != (existing.call_id, existing.name):
+            raise SelectedToolDenied("Refused coding call identity changed")
+        existing.claim_scope.refuse(existing, self.claim_scope)
+
 
 
 @dataclass(frozen=True)

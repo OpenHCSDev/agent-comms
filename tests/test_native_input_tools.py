@@ -3,7 +3,7 @@ import asyncio
 import json
 
 from agent_comms.tracked_turn import TrackedTurnSession
-from agent_comms.native_tools import NativeExecutableTool
+from agent_comms.native_tools import NativeToolDeclaration
 from delivery_owner_fixture import reply_turn_finished
 
 
@@ -28,7 +28,7 @@ async def test_goal_continuation_calls_comms_goal(native_backend, monkeypatch):
 
     monkeypatch.setattr(native.provider, "response_chunks", chunks)
     async with native.open_owner(runtime_enabled=True, auto_wake=True,
-                                 native_options=NativeExecutableTool.extension_arguments(native.package.path)) as (owner, session):
+                                 native_options=NativeToolDeclaration.extension_arguments(native.package.path)) as (owner, session):
         goal = await owner.turns.goals.set_goal(session, "Verify one native comms_goal call, then block this private goal.")
         goal_id = goal.id
         await asyncio.wait_for(reply_turn_finished(owner, session), 30)
@@ -75,7 +75,7 @@ async def test_preopened_native_process_reads_through_input_connection(native_ba
     monkeypatch.setattr(TrackedTurnSession, "acquire_native", preopened)
     monkeypatch.setattr(native.provider, "response_chunks", chunks)
     async with native.open_owner(runtime_enabled=True, auto_wake=True,
-                                 native_options=NativeExecutableTool.extension_arguments(native.package.path)) as (owner, session):
+                                 native_options=NativeToolDeclaration.extension_arguments(native.package.path)) as (owner, session):
         comms = owner._comms
         comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))
         comms.messaging.send("verifier", session, "Fresh per-input connection verification").message

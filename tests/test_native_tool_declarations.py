@@ -49,9 +49,9 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
-        event = events.ToolStart.from_call("case", tool.declared_name, call.tool.arguments)
+        event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
         assert event.kind == tool.acp_kind and event.args == tool.arguments
-        assert call.tool == tool and tool.reads() in event.title
+        assert call.call_id == "case" and call.arguments == tool.arguments and tool.reads() in event.title
     unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
@@ -87,7 +87,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     ("edit", "Edit", "edit"), ("write", "Write", "edit"),
 ])
 def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
-    from agent_comms.channel_coding_tools import CodingCall
+    from agent_comms.native_tool_call import CodingCall
     from agent_comms.native_tool_call import SelectedToolDenied
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
@@ -132,8 +132,8 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
-    from agent_comms.channel_coding_tools import CodingCall
-    from agent_comms.native_tools import NativeExecutableTool
+    from agent_comms.native_tool_call import CodingCall
+    from agent_comms.native_tools import NativeToolDeclaration, NativeExecutableTool
     from agent_comms.tools import CommsSendTool, ToolRequest
 
     assert ToolRequest.__registry__ is CodingTool.__registry__ is ToolDeclaration.__registry__
@@ -141,14 +141,15 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
     assert "undeclared" not in ToolDeclaration.names()
     assert all(isinstance(member.label, str) for member in ToolDeclaration.members_with(ToolDeclaration))
-    assert set(NativeExecutableTool.members_with(NativeExecutableTool)) == (
+    assert set(NativeToolDeclaration.members_with(NativeToolDeclaration)) == (
         set(CodingTool.members_with(CodingTool)) | set(ToolRequest.members_with(ToolRequest))
     )
     for request in ToolRequest.members_with(ToolRequest):
         arguments = {"from": "source", "to": "destination", "body": "decode-only"}
         call = CodingCall.decode("isolated-call", request.declared_name, arguments)
-        assert call.tool is request and call.arguments == arguments
-        assert call.tool.claim is None
+        assert isinstance(call, NativeExecutableTool) and call.name == request.declared_name
+        assert call.call_id == "isolated-call" and call.arguments == arguments
+        assert call.allowed_claim() is None
     from agent_comms.field_codec import FieldCodec
 
     assert isinstance(FieldCodec.decode(ToolRequest, {"tool": "comms_send", "from": "source",

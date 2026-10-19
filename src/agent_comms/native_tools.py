@@ -2,29 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
-from .native_tool_call import SelectedToolDenied
+from .native_tool_call import CodingCall, SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
 
-if TYPE_CHECKING:
-    from .channel_coding_tools import CodingCall, CoordinationCall, ExecutableCodingCall
-
-
-class NativeExecutableTool(ToolDeclaration):
+class NativeToolDeclaration(ToolDeclaration):
     """A declared tool participating in the existing native owner check."""
-
-    claim: ClassVar[None] = None
-
-    @classmethod
-    def storage_effects(cls, cwd):
-        return ()
 
     @classmethod
     @abstractmethod
@@ -49,6 +40,35 @@ class NativeExecutableTool(ToolDeclaration):
         return cls.field_value(name).create_call(call_id, decoded)
 
 
+@dataclass
+class NativeExecutableTool(NativeToolDeclaration, CodingCall):
+    """A decoded tool is the live call; runtime fields are not model arguments."""
+
+    call_id: str = field(default="", kw_only=True, metadata={"wire_transient": True})
+    claim: ClassVar[None] = None
+
+    @classmethod
+    def storage_effects(cls, cwd):
+        return ()
+
+    @property
+    def name(self) -> str:
+        return self.declared_name
+
+    def allowed_claim(self) -> FileClaimPath | None:
+        return self.claim
+
+    def decide_storage(self, registry, thread: str) -> None:
+        worktree = Path(registry.require(thread).worktree)
+        registry.decide_storage(thread, self.storage_effects(worktree))
+
+    @classmethod
+    def create_call(cls, call_id: str, arguments: dict[str, object]) -> NativeExecutableTool:
+        call = cls.parse_arguments(arguments)
+        call.call_id = call_id
+        return call
+
+
 class NativeRequestTools:
     """Core's existing CLI decodes and executes its declared request fields."""
 
@@ -58,13 +78,22 @@ class NativeRequestTools:
 
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]) -> CoordinationCall:
-        from .channel_coding_tools import CoordinationCall
-
-        return CoordinationCall(call_id, cls, arguments)
+        return CoordinationCall(call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
         return package / "agent-comms-extensions/global-agent-comms/index.mjs"
+
+
+@dataclass(kw_only=True)
+class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=None):
+    """Core's CLI owns argument decoding; this call owns identity and live events."""
+
+    declared_name: str
+    arguments: dict[str, object]
+
+    def reads(self) -> str:
+        return json.dumps(self.arguments)
 
 
 class ArgumentTool:
@@ -79,7 +108,7 @@ class ArgumentTool:
         return encoded
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class PathTool:
     path: str
 
@@ -98,7 +127,7 @@ class PatternSearchTool:
         return self.pattern
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class CodingTool(ArgumentTool, NativeExecutableTool):
     """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
 
@@ -114,17 +143,11 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
         return ()
 
     @classmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]) -> ExecutableCodingCall:
-        from .channel_coding_tools import ExecutableCodingCall
-
-        return ExecutableCodingCall(call_id, cls.parse_arguments(arguments))
-
-    @classmethod
     def native_extension(cls, package: Path) -> Path:
         return package / "dist/channel_coding_tools.mjs"
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
     label = "Read"
@@ -135,7 +158,7 @@ class ReadTool(PathTool, CodingTool):
         return None
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
@@ -166,7 +189,7 @@ class MutatingPathTool(PathTool):
         return (EditCall(call_id, at, thread, self.path, self.replacements(), problem),)
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class EditTool(MutatingPathTool, CodingTool):
     label = "Edit"
     edits: tuple[ReplacementEdit, ...]
@@ -190,7 +213,7 @@ class EditTool(MutatingPathTool, CodingTool):
     claim_type = ExistingFileClaim
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class WriteTool(MutatingPathTool, CodingTool):
     label = "Write"
     content: str
@@ -204,7 +227,7 @@ class WriteTool(MutatingPathTool, CodingTool):
     claim_type = WritableFileClaim
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class FilePatchTool(PathTool, ToolDeclaration):
     """A file change known by its path and diff alone (Codex's patch), without replacement text."""
     acp_kind = "edit"

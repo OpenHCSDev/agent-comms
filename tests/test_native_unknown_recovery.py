@@ -292,8 +292,8 @@ async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, mo
     (root / "runtime").mkdir(mode=0o700)
     # This test substitutes a local RPC child, not the native package. Install
     # the declarations' extension paths so launch can reach its RPC preflight.
-    from agent_comms.native_tools import NativeExecutableTool
-    for tool in NativeExecutableTool.members_with(NativeExecutableTool):
+    from agent_comms.native_tools import NativeToolDeclaration
+    for tool in NativeToolDeclaration.members_with(NativeToolDeclaration):
         extension = tool.native_extension(tmp_path)
         extension.parent.mkdir(parents=True, exist_ok=True)
         extension.touch()
