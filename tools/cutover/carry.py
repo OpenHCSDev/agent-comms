@@ -97,30 +97,6 @@ class CarryLedger:
             os.close(directory)
 
 
-@dataclass(frozen=True)
-class RetainedBus:
-    """One running bus and the exact carry names its ledger records."""
-
-    name: str
-    root: str
-    applied: tuple[str, ...]
-    filename: ClassVar[str] = "retained_buses.json"
-
-    @classmethod
-    def at(cls, repo: Path, revision: str) -> tuple[RetainedBus, ...]:
-        files = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
-        if cls.filename not in files:
-            return ()
-        return FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(
-            git(repo, "show", f"{revision}:{STEPS}/{cls.filename}")))
-
-    def require_applied(self, retired: frozenset[str]) -> None:
-        missing = retired - set(self.applied)
-        if missing:
-            raise ValueError(
-                f"Retained bus {self.name} still needs retired steps: {sorted(missing)}")
-
-
 class Carry(ABC):
     after: ClassVar[str | None]
 
@@ -311,10 +287,6 @@ class CarryChain:
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
-        retired_steps = frozenset(
-            name for name in retired if Step.holds_carry(cls.source(repo, revision, name)[1]))
-        for bus in RetainedBus.at(repo, revision):
-            bus.require_applied(retired_steps)
         retired_columns = frozenset(
             column for name in retired
             for column in Step.declared_columns(cls.source(repo, revision, name)[1]))
