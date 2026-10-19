@@ -346,7 +346,9 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 
     old, _live, _source, _messages, root_id = archived_notification
     for name in ("sender", "reader", "agent"):
-        old.channels.replace_tags(name, frozenset({"team"}))
+        old.registry.register(
+            replace(old.registry.require(name), tags=frozenset({"team"}))
+        )
     original = publish_initial(old, 
         "sender", "#team", "collective mixed response states"
     )
