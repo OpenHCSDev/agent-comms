@@ -36,6 +36,7 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -48,7 +49,6 @@ from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarr
 from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
-from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -145,13 +145,10 @@ class Stack:
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
-    def require_idle(self, root: Path, names: list[str]) -> None:
-        """The installed lifecycle reads its own turn records before any stop."""
-        run(self.python, "-c",
-            "import sys; from pathlib import Path; from agent_comms.comms import wire; "
-            "comms=wire(Path(sys.argv[1])); snapshot=comms.registry.snapshot(); "
-            "[comms.owners.require_restart_idle(snapshot.require(name)) for name in sys.argv[2:]]",
-            root, *names, cwd=self.checkout, env=self.environment())
+    def owners(self, root: Path, command: str, names: list[str]) -> None:
+        """Admit the captured owner set together and join every request before proceeding."""
+        with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
+            list(pool.map(lambda name: self.cli(root, command, "--name", name), names))
 
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
@@ -171,12 +168,18 @@ class Revisions:
     def __post_init__(self) -> None:
         self.trees: dict[str, Path] = {}
 
+    @staticmethod
+    def prepare(path: Path) -> None:
+        run("git", "-C", path, "submodule", "update", "--init", "--recursive", "--checkout")
+
     def tree(self, revision: str) -> Path:
         if revision not in self.trees:
             path = self.scratch / f"tree-{revision[:12]}"
             run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
             self.trees[revision] = path
-        return self.trees[revision]
+        path = self.trees[revision]
+        self.prepare(path)
+        return path
 
     def close(self) -> None:
         for path in self.trees.values():
@@ -275,31 +278,6 @@ def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...]
     return {"steps": steps, "files": carried(root, before, steps), "read": reader.verify(root)}
 
 
-def route_readers(patience: int = 120) -> None:
-    """Bus watches close on their own once maintenance is declared. Toad's observation process
-    (ui_model/observation.py:1223) and an ACP agent (acp.py:512) hold the route for their whole
-    life and never pause, so the wait gives up after ``patience`` seconds and names them."""
-    directory = Path.home() / ".local/state/agent-comms"
-    if not directory.exists():
-        return
-    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
-
-    def gave_up(signum: int, frame: object) -> None:
-        raise TimeoutError
-
-    previous = signal.signal(signal.SIGALRM, gave_up)
-    signal.alarm(patience)
-    try:
-        acquire_exclusive_route_lock(descriptor)
-    except TimeoutError:
-        holders = "; ".join(holder.describe() for holder in route_lock_holders(descriptor))
-        raise UpgradeRefused(f"Clients still hold the route after {patience}s: {holders}") from None
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, previous)
-        os.close(descriptor)
-
-
 def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool) -> dict:
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     run("git", "-C", checkout, "fetch", "-q", "origin")
@@ -392,28 +370,22 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
-    try:
-        installed.require_idle(root, running)
-    except BaseException:
-        maintenance.clear(held)
-        raise
     lock = installed.lock
     try:
-        for name in running:
-            installed.cli(root, "stop", "--name", name)
-        route_readers()
+        installed.owners(root, "stop", running)
         with transcripts_held(root):
             backup = Backup.take(root, ROUTE, (root,),
                 root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
         maintenance.clear(held)
-        start(installed, root, running)
+        installed.owners(root, "start", running)
         print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
               f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
     try:
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
+        Revisions.prepare(checkout)
         installed.relock()
         installed.prepare_native()
         passed = carry_and_read(root, backup.files(), pending, staged, installed, revisions, [])
@@ -427,14 +399,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
               f"maintenance held, checkout and bus preserved; backup: {backup.path}",
               file=sys.stderr)
         raise
-    start(installed, root, running)
+    installed.owners(root, "start", running)
     return {"stopped_and_started": running, **passed, "services": services,
             "backup": str(backup.path)}
-
-
-def start(stack: Stack, root: Path, names: list[str]) -> None:
-    for name in names:
-        stack.cli(root, "start", "--name", name)
 
 
 def stopped(signum: int, frame: object) -> None:
