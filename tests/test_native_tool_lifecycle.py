@@ -11,7 +11,7 @@ import pytest
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.native_tool_call import NativeToolCall, SelectedToolDenied, ToolStartNotSeen
+from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
@@ -106,8 +106,14 @@ async def test_socket_arrival_before_native_events_waits_without_authority(polic
     p.end()
     p.socket.assert_complete()
     assert p.effects == ["one"]
-    with pytest.raises(SelectedToolDenied):
-        await p.socket.handle_request(p.raw())
+    # A provider id may be reused in a later round. A socket request alone
+    # cannot declare that round or reopen the completed call's permission.
+    pending = asyncio.create_task(p.socket.handle_request(p.raw()))
+    await asyncio.sleep(0)
+    assert not pending.done()
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
     with pytest.raises(SelectedToolDenied):
         p.end()
     assert p.effects == ["one"]
@@ -193,70 +199,54 @@ async def test_cancelled_wait_cannot_be_restarted_or_replayed(policy):
     assert not p.effects
 
 
-async def test_start_timeout_retains_observations_without_reopening_claim(policy, monkeypatch):
+async def test_start_event_not_elapsed_time_owns_authorization(policy):
     p = policy
-
-    async def missed_start(call):
-        raise ToolStartNotSeen()
-
-    with monkeypatch.context() as timeout:
-        timeout.setattr(NativeToolCall, "_wait_started", missed_start)
-        with pytest.raises(ToolStartNotSeen):
-            await p.socket.handle_request(p.raw())
-    assert not p.effects
-    p.announce()
-    p.start()
-    with pytest.raises(SelectedToolDenied, match="already consumed"):
-        await p.socket.handle_request(p.raw())
-    if p.selected:
-        with pytest.raises(SelectedToolDenied):
-            p.end(is_error=True)
-        with pytest.raises(SelectedToolDenied):
-            p.socket.assert_complete()
-    else:
-        p.end(is_error=True)
+    request = asyncio.create_task(p.socket.handle_request(p.raw()))
+    try:
+        # Beyond the removed ten-second limit: load cannot turn a queued start
+        # into a refusal, and waiting grants no permission on its own.
+        await asyncio.sleep(10.1)
+        assert not request.done() and not p.effects
+        p.announce()
+        p.start()
+        assert await request == {"ok": True}
+        p.end()
         p.socket.assert_complete()
-    assert not p.effects
+        assert p.effects == ["one"]
+    finally:
+        request.cancel()
+        await asyncio.gather(request, return_exceptions=True)
 
 
-async def test_delayed_declaration_binds_only_its_exact_request(policy, monkeypatch):
+async def test_delayed_declaration_binds_only_its_exact_request(policy):
     p = policy
     if p.selected:
         return  # Selected policy has one slot, not consecutive normal rounds.
-
-    async def missed_start(call):
-        raise ToolStartNotSeen()
-
-    with monkeypatch.context() as timeout:
-        timeout.setattr(NativeToolCall, "_wait_started", missed_start)
-        with pytest.raises(ToolStartNotSeen):
-            await p.socket.handle_request(p.raw("first"))
+    first = asyncio.create_task(p.socket.handle_request(p.raw("first")))
     second = asyncio.create_task(p.socket.handle_request(p.raw("second")))
     try:
         await asyncio.sleep(0)
-        with pytest.raises(KeyError):
-            p.socket.calls.require(0, "first")
         p.announce("first")
         assert p.socket.calls.require(0, "first").call_id == "first"
         with pytest.raises(KeyError):
             p.socket.calls.require(0, "second")
         p.start("first")
-        p.end("first", is_error=True)
+        assert await first == {"ok": True}
+        p.end("first")
         with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
-            p.socket.assert_complete()  # The unresolved request cannot disappear.
-        assert not p.effects and not second.done()
+            p.socket.assert_complete()
+        assert p.effects == ["first"] and not second.done()
         p.announce("second")
         p.start("second")
         assert await second == {"ok": True}
         p.end("second")
         p.socket.assert_complete()
-        assert p.effects == ["second"]
+        assert p.effects == ["first", "second"]
         assert [round.number for round in p.socket.calls.rounds] == [0, 1]
-        first = p.socket.calls.require(0, "first")
-        assert not (p.root / "selected-tool-ledger" / first.slot(p.input_id, 0)).exists()
     finally:
+        first.cancel()
         second.cancel()
-        await asyncio.gather(second, return_exceptions=True)
+        await asyncio.gather(first, second, return_exceptions=True)
 
 
 async def test_concurrent_duplicate_requests_admit_exactly_once(policy):

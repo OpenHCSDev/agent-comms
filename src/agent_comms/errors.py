@@ -42,3 +42,7 @@ class HumanInitialUnknownError(RelationViolationError):
 
 class HumanClaimBlockedError(RelationViolationError):
     """A prior private reservation cannot be safely retried."""
+
+
+class CheckpointNeedsRepairError(Exception):
+    """A shared source requires exclusive checkpoint repair before it can open."""
