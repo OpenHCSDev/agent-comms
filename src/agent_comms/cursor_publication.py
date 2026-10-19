@@ -84,6 +84,10 @@ class CursorPublication:
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
         return self.comms.owners.launch_authority.cursor_scope(self, thread_name, session_id)
 
+    def shared_scope(self) -> CursorScope:
+        """A shared root's scope: it launches no owner whose cursor this process publishes."""
+        return NoCursorScope()
+
     def live_scope(self, root_id: str, thread_name: str, session_id: str) -> CursorScope:
         """A private root's scope: this process's live owner of ``thread_name``."""
         try:

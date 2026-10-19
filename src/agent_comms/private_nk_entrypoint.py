@@ -14,12 +14,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
-from .native_package import NativePackageError, VerifiedNativePackage, pinned_native_package
-from .native_pi import _private_session_dir
+from .coordinator import Coordination
+from .native_arguments import NativeArguments
+from .native_package import (
+    MANIFEST, NativePackageError, VerifiedNativePackage, pinned_native_package,
+)
+from .native_pi import NativePiUnavailable, _private_session_dir
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
-    from .cursor_publication import CursorPublication, CursorScope
+    from .acp_extension import CursorScope
+    from .cursor_publication import CursorPublication
     from .launch_runtime import LaunchRuntime
     from .threads import Thread
 
@@ -106,20 +111,19 @@ class SharedRootLaunch(RootLaunch):
         return agent_bin
 
     def package_for(self, command: str) -> VerifiedNativePackage:
-        from .native_package import MANIFEST
-        from .native_pi import NativePiUnavailable
-
         stack_launcher = MANIFEST.parent / "bin/pi-native"
         if Path(shutil.which(command) or command).resolve() != stack_launcher.resolve():
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         return VerifiedNativePackage.acquire(pinned_native_package())
 
-    def cursor_scope(self, publication, thread_name, session_id):
-        from .cursor_publication import NoCursorScope
+    def cursor_scope(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> CursorScope:
+        return publication.shared_scope()
 
-        return NoCursorScope()
-
-    async def cursor_metadata(self, publication, thread_name, session_id):
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple:
         return ()
 
 
@@ -145,7 +149,7 @@ class PrivateNkLaunch(RootLaunch):
         return runtime.native_entrypoint
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
-        if agent_bin == "pi":
+        if agent_bin == NativeArguments.default_binary:
             # The default stock binary cannot attest native input IDs.
             # Keep the owner on this installation's pinned Pi entrypoint.
             agent_bin = runtime.native_entrypoint
@@ -156,12 +160,10 @@ class PrivateNkLaunch(RootLaunch):
             agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
         # Explicit launch installs the current runtime before registering
         # this owner. Readers never create or repair runtime schemas.
-        from .coordinator import Coordination
-
         with Coordination(str(self.validated_root / "coordination.sqlite3")) as store:
             store.install_private_runtime()
             store.participants.register(
-                thread.incarnation.lookup,
+                thread.incarnation.require_recorded().lookup,
                 thread.name,
                 thread.name,
                 committed=True,
@@ -171,10 +173,14 @@ class PrivateNkLaunch(RootLaunch):
     def package_for(self, command: str) -> VerifiedNativePackage:
         return self.validate()
 
-    def cursor_scope(self, publication, thread_name, session_id):
+    def cursor_scope(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> CursorScope:
         return publication.live_scope(self.wire_root_id, thread_name, session_id)
 
-    async def cursor_metadata(self, publication, thread_name, session_id):
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple:
         return await publication.observed_metadata(thread_name, session_id)
 
     @classmethod

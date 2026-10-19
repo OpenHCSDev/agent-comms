@@ -146,7 +146,7 @@ def configured_catalog(verified_native_package, tmp_path, monkeypatch):
     catalog = ConfigOptions(
         NativeArguments.default_binary, NativeArguments.parse(()),
         RestartEnvironment(native_config=tmp_path / "config", agent_directory=tmp_path / "config"),
-        verified_native_package,
+        lambda: verified_native_package,
     )
     monkeypatch.setattr(ConfigOptions, "configured", classmethod(lambda cls: catalog))
     return catalog

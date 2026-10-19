@@ -6,9 +6,9 @@ import asyncio
 import os
 from dataclasses import dataclass, replace
 from abc import abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
@@ -240,19 +240,25 @@ class ConfigOptions:
         agent_bin: str,
         agent_args: NativeArguments,
         configuration: RestartEnvironment,
-        package: VerifiedNativePackage,
+        acquire_package: Callable[[], VerifiedNativePackage],
     ):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
-        self.package = package
+        self.acquire_package = acquire_package
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
+
+    @cached_property
+    def package(self) -> VerifiedNativePackage:
+        """The verified artifact, acquired when a catalog or configuration first runs Pi."""
+        return self.acquire_package()
 
     @classmethod
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
         command = NativeArguments.configured_binary()
         configuration = RestartEnvironment.inherit(os.environ)
-        package = NativePiRpcLaunch.package_for_command(
+        package = partial(
+            NativePiRpcLaunch.package_for_command,
             command, LaunchRuntime.running(), configuration.root,
         )
         return cls(command, NativeArguments.configured(), configuration, package)
@@ -294,7 +300,7 @@ class SessionConfigOptions(ConfigOptions):
             agent_bin,
             agent_args,
             replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
-            comms.owners.launch_authority.package_for(agent_bin),
+            partial(comms.owners.launch_authority.package_for, agent_bin),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
