@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack, ExitStack
+from contextlib import AsyncExitStack, ExitStack, aclosing
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -372,8 +372,12 @@ class OwnedTurn:
         content = InputContent(
             text=rendered.text, images=tuple(self.images), contributions=rendered.contributions,
         )
-        async for event in self.backend.run_turn(self.thread, content, delivery):
-            await self.progress.consume(event)
+        try:
+            async with aclosing(self.backend.run_turn(self.thread, content, delivery)) as stream:
+                async for event in stream:
+                    await self.progress.consume(event)
+        finally:
+            await sender.release_resources()
 
     async def acquire(self, resources: AsyncExitStack, permit_cleanup: AsyncExitStack) -> bool:
         """Join source acquisition before exposing this turn's loop capabilities."""

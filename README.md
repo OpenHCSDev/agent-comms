@@ -81,13 +81,24 @@ Git. Source distributions retain that stamp, and Git archives use their export
 stamp. Rebuild after changing the checked-out commit to refresh the build identity.
 
 ```bash
-pip install -e ".[dev]"
+git clone --recurse-submodules https://github.com/OpenHCSDev/agent-comms.git
+cd agent-comms
+pip install -e src/agent_comms/skills/refactor-audit -e ".[dev]"
 stack/bin/pi-native-test-env --python "$(command -v python)"   # prints the gate line
 PYTHONPATH=src python -m pytest --native-cache ~/.cache/agent-comms/native
 black src tests
 ruff check src tests
 mypy src
 ```
+
+The refactor-audit skill is pinned as a Git submodule under
+`src/agent_comms/skills/`. For an existing checkout, run
+`git submodule update --init --recursive` before installing or building.
+`agent-comms install` discovers every skill in that directory and links it into
+each detected harness; refactor-audit needs no separate install path or copy.
+Skill edits belong in [OpenHCSDev/refactor-audit](https://github.com/OpenHCSDev/refactor-audit),
+then the submodule pin is advanced here. The development install above also
+uses that same checkout for the shared audit measures.
 
 Tests take the native artifact of the checkout's own pin from the environment
 `stack/bin/pi-native-test-env` builds or reuses under `--cache DIR` (default
