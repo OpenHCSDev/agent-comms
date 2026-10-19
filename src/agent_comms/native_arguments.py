@@ -97,18 +97,7 @@ class ExtensionArgument(NamedOption, ValueArgument):
     short = "-e"
 
 
-class ProviderMeta(type(DeclaredFamily)):
-    """This family declares a real None key, unlike unnamed intermediate classes."""
-
-    @classmethod
-    def _handle_missing_key(meta, name, config, declaration):
-        if "__registry__" in declaration.__dict__:
-            return super()._handle_missing_key(name, config, declaration)
-        config.registry_dict[declaration.declared_name] = declaration
-        return declaration
-
-
-class ModelProvider(DeclaredFamily, metaclass=ProviderMeta, affix="Provider"):
+class ModelProvider(DeclaredFamily, affix="Provider"):
     """Provider declarations own command permission; unknown names are refused."""
 
     may_command: ClassVar[bool]
@@ -327,7 +316,8 @@ class NativeArguments:
 
     @property
     def provider_type(self) -> type[ModelProvider]:
-        return ModelProvider.member_named(self.value(ProviderArgument))
+        provider = self.value(ProviderArgument)
+        return NoSelectedModel if provider is None else ModelProvider.member_named(provider)
 
     @property
     def model(self) -> str | None:
