@@ -24,7 +24,9 @@ from agent_comms.maintenance_barrier import (
     MaintenanceHeldError,
     MaintenanceOperator,
 )
-from agent_comms.read_basis import ChannelConversation, DMConversation, ReadCursor
+from agent_comms.read_basis import (
+    ChannelConversation, ConversationCursor, DMConversation, ReadCursor,
+)
 from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
@@ -345,7 +347,8 @@ def retained_read_ledger(root: Path) -> None:
     user = RecordedThreadIncarnation("user", 1.5)
     direct = DMConversation((RecordedThreadIncarnation("alice", 2.5), user))
     ReadLedger.at(root).replace(ReadDocument(
-        messages={user: {ChannelConversation("#comms"): ReadCursor(2, (4,)), direct: ReadCursor(0, (3,))}},
+        messages={user: ReadCursor({ChannelConversation("#comms"): ConversationCursor(2, (4,)),
+                            direct: ConversationCursor(0, (3,))})},
         bus_identity=RecordedBus(FileIdentity(66308, 6861023)),
         transcripts={("user", "/sessions/a.jsonl", 6860966): 4881511},
     ))
@@ -397,7 +400,8 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     user = RecordedThreadIncarnation("user", 1.5)
     direct = DMConversation((RecordedThreadIncarnation("alice", 2.5), user))
     reads = ReadLedger.at(root).read()
-    assert reads.messages == {user: {ChannelConversation("#comms"): ReadCursor(2, (4,)), direct: ReadCursor(0, (3,))}}
+    assert reads.messages == {user: ReadCursor({ChannelConversation("#comms"): ConversationCursor(2, (4,)),
+                            direct: ConversationCursor(0, (3,))})}
     assert reads.transcripts == {("user", "/sessions/a.jsonl", 6860966): 4881511}
     assert json.loads(route.read_text()) == {"version": 2, "root": str(root), "wire_root_id": root_id}
     assert route.stat().st_mode & 0o777 == 0o600

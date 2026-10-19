@@ -269,8 +269,9 @@ class CarryChain:
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
-        retired_columns = frozenset(column for name in retired
-                                    for column in Step.declared_columns(cls.source(repo, revision, name)[1]))
+        retired_columns = frozenset(
+            column for name in retired
+            for column in Step.declared_columns(cls.source(repo, revision, name)[1]))
         if not known:
             return cls((), retired, retired_columns)
         added = cls.added_at(repo, revision)
