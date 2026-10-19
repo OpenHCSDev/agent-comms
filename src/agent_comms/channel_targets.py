@@ -5,16 +5,111 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
+from .cli_result import CliResult
+from .declared_family import DeclaredFamily
+from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
+from .field_codec import FieldCodec
+from .history_result import ChannelHistoryPageResult, DmHistoryPageResult
+from .tool_result import ToolResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
-    from .channels import Channel
-    from .read_basis import ChannelConversation, Conversation, DMConversation
+    from .channels import ChannelMemberIndex
+    from .messages import MembershipChange
+    from .read_basis import ChannelConversation, ChannelDisplayScope, Conversation, DMConversation
     from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
     from .threads import Thread
+
+
+@dataclass(frozen=True, slots=True)
+class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel", discovery_package="agent_comms.channels"):
+    """A captured channel presentation with behavior supplied by its declaration."""
+
+    name: str
+    tags: frozenset[str] = frozenset()
+    order: type[ThreadSort] = CreatedThreadSort
+    created_at: float = 0
+    pinned: bool = False
+    parent: str | None = None
+    archived: bool = False
+    any_mode: bool = False
+    routable: ClassVar[bool] = True
+    history_result_type = ChannelHistoryPageResult
+
+    def __post_init__(self) -> None:
+        name = ChannelTarget.normalize_name(self.name)
+        object.__setattr__(self, "name", name)
+        if self.parent is not None:
+            object.__setattr__(self, "parent", ChannelTarget.normalize_name(self.parent))
+        if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
+            raise ValueError("Channel ordering must be a declared ThreadSort.")
+        if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
+            raise ValueError("Channel presentation flags must be boolean.")
+        if self.any_mode and not self.exact:
+            raise ValueError("Only exact tag channels can include member activity.")
+        if self.parent is not None:
+            ChannelTarget(self.parent).validate()
+        if self.parent == name:
+            raise RelationViolationError("A channel cannot be its own parent.")
+        self.validate_declaration()
+
+    @abstractmethod
+    def validate_declaration(self) -> None: ...
+
+    @abstractmethod
+    def matches(self, tags: frozenset[str]) -> bool: ...
+
+    @abstractmethod
+    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]: ...
+
+    @property
+    @abstractmethod
+    def exact(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def read_only(self) -> bool: ...
+
+    @abstractmethod
+    def can_set_archived(self, archived: bool) -> bool: ...
+
+    @classmethod
+    def require_routable(cls) -> None:
+        if not cls.routable:
+            raise RelationViolationError("The selected view is a projection, not a routable target.")
+
+    @abstractmethod
+    def history_scope(self) -> ChannelDisplayScope: ...
+
+    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+        return self.history_scope()
+
+    @abstractmethod
+    def require_metadata(self) -> None: ...
+
+    @abstractmethod
+    def require_parent(self) -> None: ...
+
+    @abstractmethod
+    def can_restore_preferences(self, existing: bool) -> bool: ...
+
+    @abstractmethod
+    def sort_key(self, ordering, view) -> tuple: ...
+
+    @abstractmethod
+    def delete_view_bindings(self, command) -> tuple: ...
+
+    @abstractmethod
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
+
+    def pending_count(self, counts: dict[str, int]) -> int:
+        return sum(self.history_scope().target_values(counts))
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode(self)
 
 
 @dataclass(frozen=True)
@@ -30,14 +125,7 @@ class ResolvedChannel:
 
 
 def exact_stored_target(name: str) -> bool:
-    from .channels import BuiltinChannelView
-
-    if name in BuiltinChannelView.names():
-        try:
-            BuiltinChannelView.decode(name).require_routable()
-        except RelationViolationError:
-            return False
-    return True
+    return Channel.decode(name).routable if name.startswith("#") and name in Channel.names() else True
 
 
 class CommandTarget(ABC):
@@ -58,6 +146,9 @@ class CommandTarget(ABC):
             return name
         if not isinstance(name, str) or not name:
             raise ValueError("Select a named target")
+        name = name.removeprefix("@")
+        if not name:
+            raise ValueError("Select a named target")
         return ChannelTarget(name) if name.startswith("#") else ThreadTarget(name)
 
     @staticmethod
@@ -77,6 +168,12 @@ class CommandTarget(ABC):
 
     @abstractmethod
     def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog): ...
+
+    def history_view(self, viewer, catalog, channel, direct):
+        raise ValueError("History requires a #channel or DM peer.")
+
+    def history_result(self, catalog, messages, has_older):
+        raise ValueError("History requires a #channel or DM peer.")
 
     def contexts(self, declaration, channel):
         return (None,)
@@ -134,6 +231,7 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
+    history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
 
@@ -149,6 +247,14 @@ class ThreadTarget(NamedTarget):
 
     def require_dm_peer(self):
         return self.name
+
+    def history_view(self, viewer, catalog, channel, direct):
+        if viewer is None:
+            raise ValueError("DM history requires --as <participant>.")
+        return direct(viewer, self.name)
+
+    def history_result(self, catalog, messages, has_older):
+        return self.history_result_type.for_target(self.name, messages, has_older)
 
     def contexts(self, declaration, channel):
         return declaration.selection_channels(channel, self.name)
@@ -230,6 +336,15 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
+    def history_view(self, viewer, catalog, channel, direct):
+        if viewer is not None:
+            raise ValueError("--as is only valid for DM history.")
+        return channel(catalog.require_channel(self.name).history_scope())
+
+    def history_result(self, catalog, messages, has_older):
+        result_type = catalog.require_channel(self.name).history_result_type
+        return result_type.for_target(self.name, messages, has_older)
+
     def pending_count(self, counts, snapshot, catalog):
         return catalog.require_channel(self.name).pending_count(counts)
 
@@ -244,9 +359,7 @@ class ChannelTarget(NamedTarget):
         return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender=None):
-        from .channels import BuiltinChannelView
-
-        if self.name not in BuiltinChannelView.names():
+        if self.name not in Channel.names():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
     def response_policy(self, message):
@@ -320,7 +433,5 @@ class Tag:
 
     @staticmethod
     def validate(name: str, *, label: str = "Tags") -> None:
-        from .channels import BuiltinChannelView
-
-        if not name or not set(name) <= _TAG_CHARS or f"#{name}" in BuiltinChannelView.names():
+        if not name or not set(name) <= _TAG_CHARS or f"#{name}" in Channel.names():
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")

@@ -31,7 +31,7 @@ from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import CommandTarget, ThreadTarget
 from .read_basis import ChannelDisplayScope
-from .channels import AnyChannel, ChannelMemberIndex
+from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
 from .errors import UnknownChannelError, UnregisteredThreadError
@@ -182,9 +182,11 @@ class HistoryViews:
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
 
-    def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Bounded DM history for any client adapter."""
-        return DMHistory(a, b).page(self.presentation, bounds)
+    def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
+                     *, viewer: str | None = None) -> MessagePage:
+        """The decoded target selects its scope and participant requirements."""
+        view = target.history_view(viewer, self.channels.catalog.read(), ChannelHistory, DMHistory)
+        return view.page(self.presentation, bounds)
 
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Attach preserved history without allowing any historical execution."""
@@ -223,12 +225,6 @@ class HistoryViews:
     def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:
         displayed.acknowledge(self.bus.history, self.registry)
 
-    def channel_history_page(self, target: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Bounded channel history for any client adapter."""
-        selected = CommandTarget.named(target).require_channel()
-        channel = self.channels.catalog.read().require_channel(selected.name)
-        return ChannelHistory(channel.history_scope()).page(self.presentation, bounds)
-
     def last_sent_timestamps(
         self, rows: Iterable[tuple[str, float]], *, registry: RegistrySnapshot,
     ) -> dict[str, float]:
@@ -238,11 +234,6 @@ class HistoryViews:
             name = registry.canonical_name(sender)
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
-
-    def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        return ChannelHistory(AnyChannel.history_scope()).page(
-            self.presentation, bounds
-        )
 
     def export_wire(
         self,
