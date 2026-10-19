@@ -1140,6 +1140,8 @@ class CommsInboxTool(ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxRead:
         thread = self.thread
+        if not self.target.strip():
+            raise ValueError("An inbox target cannot be empty.")
         target = CommandTarget.named(self.target.strip())
         standby = self.standby
         review = (
