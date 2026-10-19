@@ -7,7 +7,7 @@ import os
 import sys
 from contextlib import contextmanager
 from tempfile import TemporaryFile
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
@@ -17,7 +17,6 @@ from pydantic import JsonValue
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText
-from .message_reference import MessageReference
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -45,7 +44,7 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def project(self, configuration: RestartEnvironment) -> RestartEnvironment:
-        return replace(configuration, pythonpath=NoImportPath(), virtual_env=str(self.prefix)).for_interpreter(self.interpreter)
+        return replace(configuration, virtual_env=str(self.prefix)).for_interpreter(self.interpreter)
 
     def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
         return self.project(configuration).apply_runtime(source)
@@ -53,12 +52,6 @@ class LaunchRuntime:
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
             raise ValueError("Target interpreter is unavailable")
-
-
-class RestoredRuntime(LaunchRuntime):
-    def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
-        return {name: value for name, value in source.items()
-                if not name.startswith("AGENT_COMMS_")}
 
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
@@ -82,31 +75,7 @@ class SpecifiedImportPath(ImportPath, JsonShapeMember):
 
 
 @dataclass(frozen=True)
-class EnvironmentRecord:
-    """Declarations of external-program environment fields, not Core launch facts."""
-
-    @classmethod
-    def variable(cls, name: str) -> str:
-        return FieldCodec.record_key(cls, name)
-
-    @classmethod
-    def strip[Environment: MutableMapping[str, str]](
-        cls, environment: Environment, *names: str,
-    ) -> Environment:
-        for declaration in fields(cls):
-            if not names or declaration.name in names:
-                environment.pop(FieldCodec.wire_key(declaration), None)
-        return environment
-
-    def encode(self) -> dict[str, str]:
-        encoded = FieldCodec.encode(self)
-        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
-                for declaration in fields(self) if "wire_name" in declaration.metadata
-                and FieldCodec.wire_key(declaration) in encoded}
-
-
-@dataclass(frozen=True)
-class RestartEnvironment(EnvironmentRecord):
+class RestartEnvironment:
     """Retained external directories and import settings selected by the launch."""
 
     home: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"})
@@ -122,15 +91,15 @@ class RestartEnvironment(EnvironmentRecord):
         object.__setattr__(self, "agent_directory", self.agent_directory.expanduser().resolve())
 
     def encode(self) -> dict[str, str]:
-        encoded = super().encode()
+        wire = FieldCodec.encode(self)
+        encoded = {FieldCodec.wire_key(item): wire[FieldCodec.wire_key(item)]
+                   for item in fields(self) if "wire_name" in item.metadata
+                   and FieldCodec.wire_key(item) in wire}
         self.pythonpath.apply(encoded)
         return encoded
 
     def for_agent(self, directory: Path) -> RestartEnvironment:
         return replace(self, agent_directory=directory)
-
-    def without_pythonpath(self) -> RestartEnvironment:
-        return replace(self, pythonpath=NoImportPath())
 
     def for_interpreter(self, interpreter: Path) -> RestartEnvironment:
         directory = str(interpreter.parent)
@@ -165,25 +134,7 @@ class RestartEnvironment(EnvironmentRecord):
 @dataclass(frozen=True)
 class ThreadLaunch:
     name: str
-    worktree: str
-    tags: frozenset[str]
-    parent: str | None
-    task: str | None
-    managed: bool
     startup_input: str | None
-
-    @classmethod
-    def current(cls) -> ThreadLaunch:
-        return LaunchRecord.current().require_thread()
-
-    @classmethod
-    def called_by(cls, name: str, canonicalize: Callable[[str], str]) -> bool:
-        return canonicalize(cls.current().name) == name
-
-    @classmethod
-    def take_startup_input(cls) -> str | None:
-        return LaunchRecord.current().take_startup_input()
-
 
 @dataclass(frozen=True)
 class LaunchRoot(DeclaredFamily, affix="LaunchRoot"):
@@ -392,8 +343,8 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
             descriptor = stream.fileno()
             yield LaunchArguments((self.argument, f"/dev/fd/{descriptor}"), (descriptor,))
 
-    def route(self):
-        return self.root_selection.route()
+    def called_by(self, name: str, canonicalize: Callable[[str], str]) -> bool:
+        return False
 
     def require_thread(self) -> ThreadLaunch:
         raise CallingThreadUnavailable("This launch has no owner thread")
@@ -419,6 +370,9 @@ class CommandLineLaunchRecord(LaunchRecord):
 class OwnerLaunchRecord(LaunchRecord):
     thread: ThreadLaunch
 
+    def called_by(self, name: str, canonicalize: Callable[[str], str]) -> bool:
+        return canonicalize(self.thread.name) == name
+
     def require_thread(self) -> ThreadLaunch:
         return self.thread
 
@@ -428,8 +382,12 @@ class OwnerLaunchRecord(LaunchRecord):
         return value
 
 
+class NativeOwnerLaunchRecord(OwnerLaunchRecord):
+    pass
+
+
 @dataclass(frozen=True)
-class ProjectLaunchRecord(OwnerLaunchRecord):
+class ProjectLaunchRecord(NativeOwnerLaunchRecord):
     project_socket: Annotated[Path, PathText]
     project_request: dict[str, JsonValue]
 

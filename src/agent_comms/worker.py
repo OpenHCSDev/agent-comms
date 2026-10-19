@@ -10,7 +10,7 @@ from contextlib import suppress
 
 from .acp import CommsAgent
 from .comms import Comms, wire
-from .launch_runtime import LaunchRecord, ThreadLaunch
+from .launch_runtime import LaunchRecord
 
 
 async def run() -> None:
@@ -26,7 +26,7 @@ async def run() -> None:
 
 async def run_owner(comms: Comms) -> None:
     record = LaunchRecord.current()
-    name = ThreadLaunch.current().name
+    name = LaunchRecord.current().require_thread().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
         comms,
@@ -41,7 +41,7 @@ async def run_owner(comms: Comms) -> None:
     initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
-        if key := ThreadLaunch.take_startup_input():
+        if key := LaunchRecord.current().take_startup_input():
             initial = asyncio.create_task(run_startup_input(agent, name, key))
         await stopped.wait()
     finally:

@@ -22,7 +22,7 @@ from .child_process import (
 )
 from .declared_family import DeclaredFamily
 from .field_codec import PathText
-from .launch_runtime import CallingThreadUnavailable, LaunchRuntime, ThreadLaunch
+from .launch_runtime import CallingThreadUnavailable, LaunchRecord, LaunchRuntime
 from .locked_store import LockedStore, RootFile
 
 
@@ -30,7 +30,7 @@ class ChildInitiator(DeclaredFamily, affix="ChildInitiator"):
     @classmethod
     def capture(cls) -> ChildInitiator:
         try:
-            return ThreadChildInitiator(ThreadLaunch.current().name)
+            return ThreadChildInitiator(LaunchRecord.current().require_thread().name)
         except CallingThreadUnavailable:
             return ApplicationChildInitiator(ProcessIdentity.capture(os.getpid()))
 

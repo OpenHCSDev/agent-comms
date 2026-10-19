@@ -369,7 +369,7 @@ class OwnerLifecycle:
                 snapshot.statuses[thread.name].active
                 and thread.process_identity.runs_here()
             ):
-                if ThreadLaunch.called_by(
+                if LaunchRecord.current().called_by(
                     thread.name,
                     canonicalize=lambda caller: self.registry.require(caller).name,
                 ):
@@ -463,7 +463,7 @@ class OwnerLifecycle:
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
-        caller = ThreadLaunch.current().name
+        caller = LaunchRecord.current().require_thread().name
         with _store_lock(self._wire_lock_path):
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:

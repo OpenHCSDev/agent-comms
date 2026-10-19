@@ -48,7 +48,7 @@ from .registry_provenance import RegistryNames
 from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
-from .threads import Thread, current_thread
+from .threads import Thread
 from .thread_identity import AgentThreadRole, ThreadRole
 from .agent_backend import RuntimeLocation
 
@@ -477,9 +477,8 @@ class ThreadManagement:
                 raise
 
     def adopt_current(self) -> Thread:
-        """Declare and register the current process's thread from env."""
-        thread = current_thread(self.registry)
-        return self.registry.declare(thread)
+        """Return the thread reserved before this owner process was launched."""
+        return self.registry.require(LaunchRecord.current().require_thread().name)
 
 
 @dataclass(frozen=True, slots=True)

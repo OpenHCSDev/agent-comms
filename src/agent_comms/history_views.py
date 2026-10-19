@@ -64,7 +64,7 @@ from .presentation import (
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
 from .store_files import SharedLock, _store_lock
 from .thread_presentation import ThreadPresentation
-from .threads import current_thread
+from .launch_runtime import LaunchRecord
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class PollTarget(DeclaredFamily, affix="Target"):
 @dataclass(frozen=True)
 class CallingThreadTarget(PollTarget):
     def thread(self, registry: Registration) -> Thread:
-        return registry.require(current_thread(registry).name)
+        return registry.require(LaunchRecord.current().require_thread().name)
 
 
 @dataclass(frozen=True)

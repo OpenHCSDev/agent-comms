@@ -168,9 +168,9 @@ class Thread(ThreadProvenance):
         """Project this captured thread and checked project request into its child's record."""
         from .runtime_requests import ProjectRuntimeRequest
 
-        from .launch_runtime import OwnerLaunchRecord
-        record = OwnerLaunchRecord.from_record(LaunchRecord.current().at_root(Path(root)),
-                         thread=replace(self.launch(), worktree=worktree, managed=True))
+        from .launch_runtime import NativeOwnerLaunchRecord
+        record = NativeOwnerLaunchRecord.from_record(LaunchRecord.current().at_root(Path(root)),
+                         thread=self.launch())
         return ProjectRuntimeRequest.for_native(snapshot, self).launch(record)
 
     def native_launch_arguments(self, arguments: NativeArguments, package: Path) -> tuple[str, ...]:
@@ -189,8 +189,7 @@ class Thread(ThreadProvenance):
         """The launch environment this thread's owner process carries."""
         from .launch_runtime import ThreadLaunch
 
-        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task,
-                            managed=False, startup_input=None)
+        return ThreadLaunch(self.name, None)
 
     def native_session_directory(self, root: Path) -> Path:
         return root / "native-sessions" / self.incarnation.require_recorded().lookup
@@ -428,21 +427,6 @@ class Thread(ThreadProvenance):
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
-
-def current_thread(registry) -> Thread:
-    """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import ThreadLaunch
-
-    launch = ThreadLaunch.current()
-    return registry.new_thread(
-        name=launch.name,
-        tags=launch.tags,
-        worktree=launch.worktree,
-        parent=launch.parent,
-        task=launch.task,
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    )
-
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.

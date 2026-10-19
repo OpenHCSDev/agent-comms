@@ -40,10 +40,12 @@ class AcpLaunchRecord extends LaunchRecord {}
 class RestartQueueLaunchRecord extends LaunchRecord {}
 class LoginLaunchRecord extends LaunchRecord {}
 class OwnerLaunchRecord extends LaunchRecord {
-  get managed() { return this.thread.managed; }
   currentThread() { return this.thread.name; }
 }
-class ProjectLaunchRecord extends OwnerLaunchRecord {
+class NativeOwnerLaunchRecord extends OwnerLaunchRecord {
+  get managed() { return true; }
+}
+class ProjectLaunchRecord extends NativeOwnerLaunchRecord {
   withProject(operation) { operation(this.project_socket, this.project_request); }
 }
 const index = process.argv.indexOf('--comms-launch');
@@ -54,7 +56,7 @@ const descriptor = Number(path.split('/').at(-1));
 if (!Number.isInteger(descriptor)) throw new Error('Launch requires an inherited descriptor');
 process.argv.splice(index, 2);
 export const launchRecord = decode([
-  CommandLineLaunchRecord, OwnerLaunchRecord, ProjectLaunchRecord,
+  CommandLineLaunchRecord, OwnerLaunchRecord, NativeOwnerLaunchRecord, ProjectLaunchRecord,
   LoginLaunchRecord, AcpLaunchRecord, RestartQueueLaunchRecord,
 ], 'LaunchRecord', JSON.parse(fs.readFileSync(path, 'utf8')));
 globalThis.agentCommsLaunchRecord = launchRecord;
