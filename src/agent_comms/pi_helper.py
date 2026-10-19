@@ -95,7 +95,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         return (*command, "--input-type=module", "--eval", cls.script.read_text()), environment
 
     @classmethod
-    async def run(cls, request: SessionHelperRequest, *, cwd: Path, env: dict[str, str] | None = None):
+    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
         command, environment = cls.launch(request, dict(os.environ if env is None else env))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
         outcome = await BoundedRun.run(
