@@ -4,15 +4,8 @@ import json
 import os
 
 import pytest
-from acp.exceptions import RequestError
-
-import agent_comms.agent_events as ae
-from agent_comms.acp import CommsAgent
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.acp_failure import NativeTurnError
 from agent_comms.diagnostics import record_terminal_failure
-from agent_comms.threads import Thread
-from stored_inputs import stored_inputs
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
@@ -46,56 +39,26 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp_path, monkeypatch, native_runtime_package):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
-    owner = CommsAgent(
-        comms,
-        agent_bin="pi",
-        auto_wake=False,
-    )
-    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
-    session = (await owner.new_session(str(tmp_path))).session_id
-    comms.registry.declare(
-        comms.registry.new_thread(name='sender', tags=frozenset({'comms'}), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    )
-    incoming = comms.messaging.send("sender", "#comms", "Private input").message
-    original_send = comms.messaging.send
-    observed = []
-
-    def publish(*args, **kwargs):
-        files = list((comms.root / "diagnostics").glob("*.json"))
-        assert len(files) == 1
-        observed.append(json.loads(files[0].read_text()))
-        return original_send(*args, **kwargs)
-
-    async def events(*args, package, tool_mode, **kwargs):
-        assert package == native_runtime_package
-        yield ae.Done(
-            ok=False,
-            text="SECRET native stderr",
-            reason_code="native_preflight_timeout",
-            diagnostic={"wait_ms": 5000},
-        )
-
-    monkeypatch.setattr(comms.messaging, "send", publish)
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    with pytest.raises(RequestError):
-        await owner.turns.run_agent_turn(
-            session, session, "Private input", origins=(incoming,)
-        )
-    assert observed[0]["sequences"] == [incoming.seq]
-    assert observed[0]["reason"] == "native_preflight_timeout"
-    rows = [json.loads(line) for line in (comms.root / "bus.jsonl").read_text().splitlines()]
-    notice = rows[-1]
-    assert notice["notice"] is True
-    assert "[Open diagnostic](file://" in notice["text"]
-    assert "SECRET" not in notice["text"]
-    assert (
-        stored_inputs(owner.inputs.dispositions.root)
-        .rows[owner.inputs.dispositions.bus_key(incoming, comms.registry.require(session))]
-        .declared_name
-        == "not_sent"
-    )
-    await owner.shutdown()
+async def test_headless_failure_publishes_original_error_without_report_file(native_backend):
+    native = native_backend
+    await native.author_history()
+    native.provider.status = 400
+    async with native.open_owner(runtime_enabled=True) as (owner, session):
+        comms = owner._comms
+        comms.registry.declare(comms.registry.new_thread(
+            name="sender", tags=frozenset({"comms"}), worktree=str(native.project),
+        ))
+        incoming = comms.messaging.send("sender", session, "Private input").message
+        with pytest.raises(NativeTurnError) as caught:
+            await owner.turns.run_agent_turn(
+                session, session, "Private input", origins=(incoming,),
+            )
+        detail = caught.value.request.failure.detail
+        assert "maximum context length exceeded" in detail
+        rows = [json.loads(line) for line in (comms.root / "bus.jsonl").read_text().splitlines()]
+        notice = rows[-1]
+        assert notice["notice"] is True
+        assert detail in notice["text"]
+        assert "Open diagnostic" not in notice["text"]
+        assert not list((comms.root / "diagnostics").glob("*.json"))
+        assert native.provider.posts == 1
