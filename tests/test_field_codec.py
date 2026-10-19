@@ -15,6 +15,31 @@ from agent_comms.messages import (
 )
 
 
+def test_transient_plan_excludes_fields_before_decoder_or_value_access():
+    class Opaque:
+        pass
+
+    @dataclass
+    class Record:
+        value: str
+        local: Opaque = field(default_factory=Opaque, repr=False, compare=False,
+            metadata={"wire_transient": True, "wire_name": ""})
+
+        def __getattribute__(self, name):
+            if name == "local":
+                raise AssertionError("A wire operation read process-local state")
+            return object.__getattribute__(self, name)
+
+    record = Record("kept")
+    assert [key for _, key in FieldCodec.record_fields(Record)] == ["value"]
+    assert FieldCodec.encode(record) == {"value": "kept"}
+    assert FieldCodec.project(record, "status") == {"value": "kept"}
+    assert FieldCodec.decode(Record, {"value": "kept"}).value == "kept"
+    assert set(FieldCodec.value_schema(Record)["properties"]) == {"value"}
+    with pytest.raises(MalformedRecord, match="Unknown fields"):
+        FieldCodec.decode(Record, {"value": "kept", "local": {}})
+
+
 def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
     from agent_comms.field_codec import DeclaredFieldPlan
 
@@ -83,7 +108,7 @@ def test_wire_absence_is_none_without_running_the_constructor_factory():
             assert FieldCodec.project(decoded, "status") == {}
         assert plan.read(raw) is None
     assert created == ["created"]
-    with pytest.raises(ValueError):
+    with pytest.raises(MalformedRecord):
         FieldCodec.decode(Record, {"id": 3})
     assert created == ["created"]
 

@@ -95,6 +95,10 @@ class FieldPlan:
         return cls.metadata_flag is not None and bool(declared.metadata.get(cls.metadata_flag))
 
     @classmethod
+    def excludes_from_records(cls, declared: Field) -> bool:
+        return False
+
+    @classmethod
     def from_declaration(cls, declared: Field, key: str, annotation: object) -> FieldPlan:
         metadata = declared.metadata
         return cls(
@@ -192,6 +196,16 @@ class DeclaredFieldPlan(FieldPlan):
     def claims(cls, declared: Field, annotation: object) -> bool:
         representation = FieldCodec._representation(annotation)[1] or FieldRepresentation
         return super().claims(declared, annotation) or representation.field_plan is cls
+
+
+class TransientFieldPlan(DeclaredFieldPlan):
+    """A process-local field never enters a record or compiles a wire decoder."""
+
+    metadata_flag = "wire_transient"
+
+    @classmethod
+    def excludes_from_records(cls, declared: Field) -> bool:
+        return cls.claims(declared, None)
 
 
 class MissingNoneFieldPlan(DeclaredFieldPlan):
@@ -780,7 +794,8 @@ class FieldCodec(Sealed):
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
         declared = [(field, FieldCodec.wire_key(field)) for field in fields(cls)
-                    if field.init and not field.metadata.get("wire_transient")]
+                    if field.init and not any(
+                        plan.excludes_from_records(field) for plan in FieldPlan._plans)]
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")
