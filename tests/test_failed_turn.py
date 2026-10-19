@@ -72,3 +72,31 @@ async def test_registry_read_failure_escapes_real_runner_then_accepts_fresh_dm(t
     assert len([m for m in messages(comms) if ended.error in m.body]) == 1
     assert not comms.registry.require('unit').executing
     print('P689: real runner failed and posted error; fresh DM accepted without stop')
+
+
+@pytest.mark.asyncio
+async def test_acquisition_read_fault_ends_the_already_created_turn(tmp_path, monkeypatch):
+    comms = copied_owner(tmp_path)
+    agent = CommsAgent(comms, auto_wake=False, runtime_enabled=False, agent_bin='pi')
+    agent.sessions.bindings['unit'] = 'unit'
+    snapshot = comms.registry.snapshot
+    observed = []
+    def fail_after_begin():
+        document = snapshot()
+        owner = document.threads['unit']
+        if owner.executing:
+            observed.append(owner.turn_record)
+            monkeypatch.setattr(comms.registry, 'snapshot', snapshot)
+            raise ValueError('P689 acquisition registry read failure')
+        return document
+    monkeypatch.setattr(comms.registry, 'snapshot', fail_after_begin)
+    with pytest.raises(ValueError, match='P689 acquisition registry read failure'):
+        async with AsyncExitStack() as resources:
+            await Coordination.run_worker(partial(
+                agent.turns.acquire_turn, resources, 'unit', 'unit', 'begin-failed', 'first task',
+            ))
+    record, = observed
+    assert isinstance(record.read(), FailedTurn)
+    assert not comms.registry.require('unit').executing
+    notice, = messages(comms)
+    assert notice.target == 'commander' and 'P689 acquisition registry read failure' in notice.body

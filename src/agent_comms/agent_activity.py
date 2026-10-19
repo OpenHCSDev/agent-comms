@@ -258,14 +258,12 @@ class AgentActivity:
             leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
             lease = leased.turn_lease
             assert lease is not None
-            try:
-                phase = PreparingPhase(detail)
-                lease.record.transition(lease, phase)
-                self._record_turn_activity(leased.name, (phase,))
-            except BaseException:
-                self.registry.release_turn(lease)
-                raise
-            return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
+        try:
+            self.transition_turn(lease, PreparingPhase(detail))
+        except BaseException as error:
+            self.finish_turn(lease, TurnEnding.from_exception(error))
+            raise
+        return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
 
     def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
         """Changed phases are real activity events, just like CLI status reports."""
