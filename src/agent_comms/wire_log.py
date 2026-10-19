@@ -10,7 +10,7 @@ import sqlite3
 import stat
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -23,6 +23,7 @@ from agent_comms.coordination_tables.publications import (
 )
 
 from .audience_manifest import MAX_WIRE_SEQ
+from .child_process import Platform
 from .bus_publication import (
     CommittedDelivery,
     has_private_wire_fields,
@@ -595,17 +596,30 @@ class WireLog(StoreLockOwner):
     async def _read_checked_under_lock[T](
         self, read: Callable[[CheckedRead], T], mode: LockMode,
     ) -> T:
-        from .child_process import Platform
         from .coordinator import Coordination
 
-        def consume(acquisition: AbstractContextManager) -> T:
-            with acquisition as lock, self._checked_source(lock) as source:
-                return read(source)
+        return await StoreLockAcquisition.current(self.path, mode).read_checked(
+            self, read, mode, Coordination.run_worker,
+        )
 
-        for source in StoreLockAcquisition.current(self.path, mode).sources(
-            self.path, UNBOUNDED_STORE_READ, self.lock_type
-        ):
-            return await Coordination.run_worker(partial(consume, source))
+    def _consume_checked[T](
+        self, read: Callable[[CheckedRead], T], acquisition: AbstractContextManager,
+    ) -> T:
+        with acquisition as lock, self._checked_source(lock) as source:
+            return read(source)
+
+    async def _read_checked_borrowed[T](
+        self, read: Callable[[CheckedRead], T], held: StoreLockAcquisition,
+        worker: Callable[[Callable[[], T]], Awaitable[T]],
+    ) -> T:
+        return await worker(partial(
+            self._consume_checked, read, held.source(self.path, UNBOUNDED_STORE_READ, self.lock_type)
+        ))
+
+    async def _read_checked_fresh[T](
+        self, read: Callable[[CheckedRead], T], mode: LockMode,
+        worker: Callable[[Callable[[], T]], Awaitable[T]],
+    ) -> T:
         platform = Platform.current()
         with _store_lock_file(self.path) as lock_file:
             await StoreLockContention(math.inf).acquire_async(
@@ -614,12 +628,12 @@ class WireLog(StoreLockOwner):
 
             def read_acquired() -> T:
                 with lock_file:
-                    return consume(StoreLockAcquisition.holding(
+                    return self._consume_checked(read, StoreLockAcquisition.holding(
                         self.path, lock_file, platform, UNBOUNDED_STORE_READ,
                         mode=mode, lock_type=self.lock_type,
                     ))
 
-            return await Coordination.run_worker(read_acquired)
+            return await worker(read_acquired)
 
     @contextmanager
     def _checked_source(self, lock: CheckedWireStoreLock):

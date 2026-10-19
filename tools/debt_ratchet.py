@@ -23,9 +23,18 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
-from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
-from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
+
+sys.path.insert(0, str(
+    Path(__file__).resolve().parents[1] / subprocess.check_output(
+        ["git", "config", "--file", str(Path(__file__).resolve().parents[1] / ".gitmodules"),
+         "--get", "submodule.src/agent_comms/skills/refactor-audit.path"], text=True,
+    ).strip() / "scripts"
+))
+
+import audit
+from audit.handler_declarations import BuiltinHandlerDeclarations
+from audit.measures import FamilyFlattened as AuditFamilyFlattened
+from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -33,6 +42,8 @@ from cutover.carry import STEPS, Step
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
+
+AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
 
 
 class Measure(DeclaredFamily, affix="Measure"):
@@ -228,7 +239,7 @@ class TypeErrors(CheckedRevision):
         Tools import the same revision's ``src`` (``upgrade_bus.py`` puts it first), never the
         installed one."""
         paths = dict.fromkeys((Path(root).parts[0], "src"))
-        return {**os.environ, "MYPYPATH": os.pathsep.join(paths)}
+        return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
 
 
 class SourceLines(Measure):

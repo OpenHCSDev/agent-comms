@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     import sqlite3
 
     from .private_bus_checkpoint import (
+        CheckedRead,
         PrefixWitness,
         WritableCheckpoint,
     )
@@ -332,15 +333,57 @@ class SynchronousStoreExecution:
     """This thread is not executing an asyncio task."""
 
 
-type StoreLockExecution = tuple[int, int, asyncio.Task | SynchronousStoreExecution]
+@dataclass(frozen=True)
+class StoreLockExecution:
+    pid: int
+    thread: int
+    task: asyncio.Task | SynchronousStoreExecution
 
 
 class UnacquiredStoreLock:
     """No physical acquisition can be borrowed by this execution."""
 
-    def sources(self, path: Path, budget: StoreReadBudget, lock_type: type[StoreLock]
-                ) -> tuple[AbstractContextManager[StoreLock], ...]:
-        return ()
+    @contextmanager
+    def locked(
+        self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
+        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+    ) -> Iterator[StoreLock]:
+        platform = Platform.current()
+        with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
+            def acquire(mode):
+                if contention is None:
+                    platform.acquire_store_lock(lock_file.fileno(), mode=mode, blocking=blocking)
+                else:
+                    contention.acquire(lock_file.fileno(), platform, mode=mode)
+                return resources.enter_context(StoreLockAcquisition.holding(
+                    store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type))
+            try:
+                lock = acquire(mode)
+            except CheckpointNeedsRepairError as error:
+                lock = acquire(mode.after_repair_needed(error))
+            yield lock
+
+    @asynccontextmanager
+    async def locked_async(
+        self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
+        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+    ) -> AsyncIterator[StoreLock]:
+        platform = Platform.current()
+        wait = contention if contention is not None else StoreLockContention(
+            math.inf if blocking else 0
+        )
+        with _store_lock_file(store_path) as lock_file:
+            await wait.acquire_async(lock_file.fileno(), platform, mode=mode)
+            with StoreLockAcquisition.holding(
+                store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type,
+            ) as lock:
+                yield lock
+
+    async def read_checked[T](
+        self, log: WireLog, read: Callable[[CheckedRead], T], mode: LockMode,
+        worker: Callable[[Callable[[], T]], Awaitable[T]],
+    ) -> T:
+        return await log._read_checked_fresh(read, mode, worker)
 
 
 @dataclass
@@ -356,18 +399,15 @@ class StoreLockAcquisition:
 
     @staticmethod
     def execution() -> StoreLockExecution:
-        owner = os.getpid(), threading.get_ident()
-        try:
-            task = asyncio.current_task()
-        except RuntimeError as error:
-            if error.args != ("no running event loop",):
-                raise
-            return *owner, SynchronousStoreExecution()
-        match task:
+        task: asyncio.Task | SynchronousStoreExecution = SynchronousStoreExecution()
+        match asyncio._get_running_loop():
             case None:
-                return *owner, SynchronousStoreExecution()
-            case _:
-                return *owner, task
+                pass
+            case loop:
+                match asyncio.current_task(loop):
+                    case asyncio.Task() as running:
+                        task = running
+        return StoreLockExecution(os.getpid(), threading.get_ident(), task)
 
     @classmethod
     def current(
@@ -386,9 +426,25 @@ class StoreLockAcquisition:
                 return acquisition
         return UnacquiredStoreLock()
 
-    def sources(self, path: Path, budget: StoreReadBudget, lock_type: type[StoreLock]
-                ) -> tuple[AbstractContextManager[StoreLock], ...]:
-        return (self.source(path, budget, lock_type),)
+    def locked(
+        self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
+        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+    ) -> AbstractContextManager[StoreLock]:
+        return self.source(store_path, read_budget, lock_type)
+
+    @asynccontextmanager
+    async def locked_async(
+        self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
+        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+    ) -> AsyncIterator[StoreLock]:
+        with self.source(store_path, read_budget, lock_type) as lock:
+            yield lock
+
+    async def read_checked[T](
+        self, log: WireLog, read: Callable[[CheckedRead], T], mode: LockMode,
+        worker: Callable[[Callable[[], T]], Awaitable[T]],
+    ) -> T:
+        return await log._read_checked_borrowed(read, self, worker)
 
     @classmethod
     @contextmanager
@@ -428,26 +484,9 @@ def _store_lock(
     lock_type: type[StoreLock] = StoreLock,
 ) -> Iterator[StoreLock]:
     """Acquire a store lock synchronously; inherited POSIX locks end at last close."""
-    for source in StoreLockAcquisition.current(store_path, mode).sources(
-        store_path, read_budget, lock_type
-    ):
-        with source as lock:
-            yield lock
-        return
-    platform = Platform.current()
-    with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
-        def acquire(mode):
-            if contention is None:
-                platform.acquire_store_lock(lock_file.fileno(), mode=mode, blocking=blocking)
-            else:
-                contention.acquire(lock_file.fileno(), platform, mode=mode)
-            return resources.enter_context(StoreLockAcquisition.holding(
-                store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type))
-
-        try:
-            lock = acquire(mode)
-        except CheckpointNeedsRepairError as error:
-            lock = acquire(mode.after_repair_needed(error))
+    with StoreLockAcquisition.current(store_path, mode).locked(
+        store_path, read_budget, mode, contention, lock_type, blocking,
+    ) as lock:
         yield lock
 
 
@@ -462,19 +501,10 @@ async def _async_store_lock(
     lock_type: type[StoreLock] = StoreLock,
 ) -> AsyncIterator[StoreLock]:
     """Borrow the same physical resource cancellably on this event loop."""
-    for source in StoreLockAcquisition.current(store_path, mode).sources(
-        store_path, read_budget, lock_type
-    ):
-        with source as lock:
-            yield lock
-        return
-    platform = Platform.current()
-    wait = contention if contention is not None else StoreLockContention(math.inf if blocking else 0)
-    with _store_lock_file(store_path) as lock_file:
-        await wait.acquire_async(lock_file.fileno(), platform, mode=mode)
-        with StoreLockAcquisition.holding(store_path, lock_file, platform, read_budget,
-                                mode=mode, lock_type=lock_type) as lock:
-            yield lock
+    async with StoreLockAcquisition.current(store_path, mode).locked_async(
+        store_path, read_budget, mode, contention, lock_type, blocking,
+    ) as lock:
+        yield lock
 
 
 def _atomic_write_text(

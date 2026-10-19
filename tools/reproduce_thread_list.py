@@ -7,6 +7,7 @@ from dataclasses import replace
 import time
 from pathlib import Path
 
+from agent_comms.cli_bridges.claude import ClaudeTranscript
 from agent_comms.comms import Comms
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.threads import Thread
@@ -23,7 +24,6 @@ def writer(root, stop, ready, result, imports, dump_after):
     while not stop.is_set():
         name = f'writer-{count % 85}'
         if imports and count < 85:
-            from agent_comms.cli_bridges.claude import ClaudeTranscript
             comms.threads.import_thread(ClaudeTranscript(root / 'source.jsonl'), name=name,
                                        worktree=str(root), tags=frozenset({'proof'}))
         elif imports:
@@ -85,7 +85,9 @@ def main():
         process.join(15)
         comms.views.transcript_reads.close()
     print(f'elapsed={time.monotonic()-start:.3f}s reads={reads} empty={empty} errors={errors} writes={counts.get(timeout=2)} writer_exit={process.exitcode} imports={args.imports}', flush=True)
-    if not reads or empty or errors or process.exitcode != 0:
+    if not reads:
+        raise RuntimeError('Sidebar observation produced no reads.')
+    if (empty, errors, process.exitcode) != (0, 0, 0):
         raise RuntimeError('Sidebar observation failed; see the original results above')
 
 
