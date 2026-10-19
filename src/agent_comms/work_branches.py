@@ -18,6 +18,7 @@ from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 from .cli_protocol import WireModel
+from .commander.config import Repo
 from .declared_family import DeclaredFamily
 from .field_codec import projected
 
@@ -185,8 +186,6 @@ query($owner: String!, $name: String!, $after: String) {
 
     @property
     def repository(self) -> tuple[str, str]:
-        from .commander.config import Repo
-
         owner, name = Repo.of(self.checkout).github.split("/")
         return owner, name
 
