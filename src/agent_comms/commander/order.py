@@ -435,10 +435,9 @@ def problem(text, unit, due, order_file, request):
     print(pid)
 
 
-def close(pid, works, artifact, working):
-    """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
-    claims = tuple(WorkingClaim(screenshot) for screenshot in working)
-    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact, claims=claims), COMMS)
+def close(pid, works, working):
+    """Core owns closing: the installed evidence and the no-open-order rule live on the Todo."""
+    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, working=WorkingClaim(working)), COMMS)
     board()
     print(f'{pid} closed')
 
@@ -996,13 +995,11 @@ class CloseVerb(OrderVerb, RuledVerb):
     help = "the fix works in the app; Core closes the problem"
     pid: str = option("pid")
     works: str = option("--works")
-    artifact: str = option("--artifact")
-    working: tuple[Annotated[Path, PathText], ...] = option(
-        "--working", action="append", parser_default_factory=list, default=(), metavar="PATH",
-        help="a screenshot of the run working; an application order closes only on one")
+    working: Annotated[Path, PathText] = option(
+        "--working", metavar="PATH", help="the screenshot of the run working")
 
     def run(self) -> None:
-        close(self.pid, self.works, self.artifact, self.working)
+        close(self.pid, self.works, self.working)
 
 
 @dataclass(frozen=True, kw_only=True)

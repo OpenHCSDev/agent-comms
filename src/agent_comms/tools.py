@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
-from .progress_claims import ProgressClaim
+from .progress_claims import ProgressClaim, WorkingClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .cli_commands import (
     ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
@@ -940,18 +940,15 @@ class CommsProblemCloseTool(ThreadToolRequest):
     description = "Record installed application evidence and close only a problem with no open order."
     problem: str = tool_field("Problem ID")
     works: str = tool_field("What worked in the app, quoting the order's Works when run")
-    artifact: str = tool_field("Existing verification artifact file")
-    claims: tuple[ProgressClaim, ...] = tool_field(
-        "The claims the order's run closes on, each with the artifact Core verifies: an "
-        "application order needs a working claim")
+    working: WorkingClaim = tool_field("The screenshot of the order's run working, which Core verifies")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
         actor = comms.registry.require(caller.name).incarnation
         todo.require_commander(actor)
-        ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
+        self.working.verify(comms, Path(todo.order.check.directory))
         closed = comms.goals.change_problem(self.problem, InstallTodo(
-            todo.revision, actor, self.works, self.artifact, self.claims), caller.name)
+            todo.revision, actor, self.works, self.working), caller.name)
         return ProblemClosed(closed)
 
 

@@ -37,7 +37,7 @@ from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
-from .progress_claims import ProgressClaim, WorkingClaim
+from .progress_claims import WorkingClaim
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -773,7 +773,7 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     def instructions(self) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def require_closing(self, works: str, claims: tuple[ProgressClaim, ...]) -> None:
+    def require_closing(self, works: str, working: WorkingClaim) -> None:
         """Refuse closing evidence that does not show this run happened."""
 
 
@@ -782,8 +782,8 @@ class MechanicalOrderRun(OrderRun):
     def instructions(self) -> tuple[str, ...]:
         return ()
 
-    def require_closing(self, works: str, claims: tuple[ProgressClaim, ...]) -> None:
-        """The order's check alone closes it."""
+    def require_closing(self, works: str, working: WorkingClaim) -> None:
+        """The order's check alone closes it; the run asks nothing of the evidence."""
 
 
 @dataclass(frozen=True)
@@ -800,15 +800,12 @@ class ApplicationOrderRun(OrderRun):
     def instructions(self) -> tuple[str, ...]:
         return (f"{self.label} {self.text}",)
 
-    def require_closing(self, works: str, claims: tuple[ProgressClaim, ...]) -> None:
-        """The run was seen working in the app: its words quoted and its screenshot claimed."""
+    def require_closing(self, works: str, working: WorkingClaim) -> None:
+        """The run was seen working in the app: its words quoted, its screenshot ``working``."""
         quoted = self.phrases(self.text) & self.phrases(works)
         if len(works.split()) < self.least_words or not quoted:
             raise ValueError(f"Describe what worked in {self.least_words}+ words, quoting "
                              f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
-        if not any(isinstance(claim, WorkingClaim) for claim in claims):
-            raise ValueError("An application order closes on a working claim: the screenshot of "
-                             f"{self.label} {self.text}")
 
     @classmethod
     def phrases(cls, text: str) -> set[tuple[str, ...]]:
@@ -967,9 +964,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return replace(self, check=correction.check,
                        check_corrections=(*self.check_corrections, correction))
 
-    def installed(
-        self, works: str, artifact: str, claims: tuple[ProgressClaim, ...]
-    ) -> ProblemOrder:
+    def installed(self, works: str, working: WorkingClaim) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
     def require_checked(self, problem: str) -> None:
@@ -1034,9 +1029,9 @@ class DeliveredProblemOrder(ProblemOrder):
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
-    def installed(self, works, artifact, claims):
-        self.run.require_closing(works, claims)
-        return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
+    def installed(self, works, working):
+        self.run.require_closing(works, working)
+        return self.copy_as(InstalledProblemOrder, works=works, working=working)
 
     def require_checked(self, problem: str) -> None:
         """The delivery passed the order's check, so its result is recorded."""
@@ -1048,16 +1043,16 @@ class DeliveredProblemOrder(ProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class InstalledProblemOrder(DeliveredProblemOrder):
     works: str
-    artifact: str
+    working: WorkingClaim
     line: ClassVar[str] = "Installed"
 
     def __post_init__(self):
         super().__post_init__()
-        if not self.works.strip() or not self.artifact.strip():
-            raise ValueError("Describe what worked and name its artifact file.")
+        if not self.works.strip():
+            raise ValueError("Describe what worked.")
 
-    def installed(self, works, artifact, claims):
-        if (works, artifact) != (self.works, self.artifact):
+    def installed(self, works, working):
+        if (works, working) != (self.works, self.working):
             raise ValueError("The order already records different installed evidence.")
         return self
 
@@ -1573,13 +1568,10 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
 @dataclass(frozen=True)
 class InstallTodo(CloseOrderTodo):
     works: str
-    artifact: str
-    claims: tuple[ProgressClaim, ...]
+    working: WorkingClaim
 
     def closed(self, current: Todo) -> ProblemOrder:
-        if not Path(self.artifact).is_file():
-            raise ValueError("Retain the installed application artifact before closing.")
-        return current.order.installed(self.works, self.artifact, self.claims)
+        return current.order.installed(self.works, self.working)
 
 
 @dataclass(frozen=True)

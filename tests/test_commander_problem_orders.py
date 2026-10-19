@@ -63,7 +63,7 @@ def working(comms):
     """The working claim an application close stands on: a screenshot that exists."""
     screenshot = Path(comms.root) / 'working.png'
     screenshot.write_bytes(b'png')
-    return (WorkingClaim(screenshot),)
+    return WorkingClaim(screenshot)
 
 
 def test_order_work_reads_the_assignees_calls_since_its_order_newest_first(commander, tmp_path):
@@ -183,7 +183,7 @@ def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(co
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
     CommsProblemCloseTool(problem='P1', works='The installed application now retains both queued orders through tab returns.',
-        artifact=str(artifact), claims=()).apply(comms, caller)
+        working=WorkingClaim(artifact)).apply(comms, caller)
     closed = comms.goals.todos.get('P1')
     assert closed.assignment is None and closed.state.declared_name == 'done'
     assert closed.order.delivery.at.at > 0
@@ -404,7 +404,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
 
     artifact = repo.parent / 'seen.png'
     artifact.write_text('x')
-    script.close('P1', 'the installed app shows the counter at one after restart', str(artifact), (artifact,))
+    script.close('P1', 'the installed app shows the counter at one after restart', artifact)
     assert not comms.goals.todos.get('P1').state.open and script.held_orders() == ()
     assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
                 'sent.jsonl', 'hunts.jsonl'} & {
@@ -1228,14 +1228,12 @@ def test_close_quotes_the_works_line(commander):
         deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P1',
     )).apply(comms, caller)
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
-    artifact = comms.root / 'installed-evidence'
-    artifact.write_text('Verified installed path')
     delivered = comms.goals.todos.get('P1')
     with pytest.raises(ValueError, match='consecutive words of: Works when:'):
-        CommsProblemCloseTool(problem='P1', artifact=str(artifact), claims=working(comms),
+        CommsProblemCloseTool(problem='P1', working=working(comms),
             works='The installed application kept both queued orders through tab returns.').apply(comms, caller)
     assert comms.goals.todos.get('P1') == delivered
-    CommsProblemCloseTool(problem='P1', artifact=str(artifact), claims=working(comms),
+    CommsProblemCloseTool(problem='P1', working=working(comms),
         works='In the installed app the board shows the problem closed, read after a restart.').apply(comms, caller)
     assert comms.goals.todos.get('P1').state.declared_name == 'done'
 
@@ -1373,12 +1371,11 @@ def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, 
     assert report.apply(comms, caller).goal.progress == 'claimed'
 
 
-def test_a_commit_done_takes_no_claim_and_only_an_application_close_needs_a_working_claim(
+def test_a_commit_done_takes_no_claim_and_every_close_carries_its_verified_working_claim(
         commander, commander_script):
     """CommitDelivery owns whether the commit is on origin, so a plain done with no --delivered
-    on a merged commit closes on its own; the run each order declares owns what its close needs:
-    a mechanical close needs no claim, an application close is refused until it has its
-    screenshot."""
+    on a merged commit passes; every close carries one typed working claim, Core verifies its
+    screenshot, and only an application run asks more of the close."""
     comms, caller = commander
     script, _ = commander_script
 
@@ -1392,8 +1389,8 @@ def test_a_commit_done_takes_no_claim_and_only_an_application_close_needs_a_work
     script.done('P1', git('rev-parse', 'HEAD'))
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
-    CommsProblemCloseTool(problem='P1', works='The check passed on the merged commit.', artifact=str(artifact),
-                          claims=()).apply(comms, caller)
+    CommsProblemCloseTool(problem='P1', works='The check passed on the merged commit.',
+                          working=WorkingClaim(artifact)).apply(comms, caller)
     assert comms.goals.todos.get('P1').state.declared_name == 'done'
 
     run = ApplicationOrderRun('The board shows the problem closed after the commander reopens the session')
@@ -1404,9 +1401,9 @@ def test_a_commit_done_takes_no_claim_and_only_an_application_close_needs_a_work
     CommsOrderDoneTool(problem='P2', delivery=OperationDelivery()).apply(comms, caller)
     works = 'In the installed app the board shows the problem closed, read after a restart.'
     delivered = comms.goals.todos.get('P2')
-    with pytest.raises(ValueError, match='An application order closes on a working claim'):
-        CommsProblemCloseTool(problem='P2', works=works, artifact=str(artifact), claims=()).apply(comms, caller)
+    with pytest.raises(ValueError, match='A working claim needs a screenshot path that exists'):
+        CommsProblemCloseTool(problem='P2', works=works,
+                              working=WorkingClaim(comms.root / 'unseen.png')).apply(comms, caller)
     assert comms.goals.todos.get('P2') == delivered
-    CommsProblemCloseTool(problem='P2', works=works, artifact=str(artifact),
-                          claims=working(comms)).apply(comms, caller)
+    CommsProblemCloseTool(problem='P2', works=works, working=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P2').state.declared_name == 'done'

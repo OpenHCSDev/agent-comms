@@ -3,11 +3,13 @@ import subprocess
 import time
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.tools import CommsOrderDoneTool
+from agent_comms.progress_claims import WorkingClaim
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline, PullRequest,
     PullRequests, PushedProgress, UnreadProgress)
@@ -260,7 +262,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     for pid in ('P2', 'P3'):
         CommsOrderDoneTool(problem=pid, delivery=OperationDelivery()).apply(comms, caller)
     p1, p2, p3 = (comms.goals.todos.get(pid) for pid in ('P1', 'P2', 'P3'))
-    held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', 'p3.png', ())))
+    held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', WorkingClaim(Path('p3.png')))))
     read = script.progress()
     assert script.install_lines(held, read, 1000.0) == ['INSTALL not planned; waiting: P1 worker, P2 worker']
     PlannedInstallDeadline(RecordedEventTime(2000.0), 'worker').plan(comms.root)
