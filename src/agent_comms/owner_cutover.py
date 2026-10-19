@@ -59,8 +59,6 @@ class OwnerCutover(ABC):
 
     def recover(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         """No recovery without this operation's unchanged-original proof."""
-        from .errors import RelationViolationError
-
         raise RelationViolationError('This operation has not checked original-unchanged recovery')
 
     def failed(self, failure: StoppedOwnerFailure) -> NoReturn:
