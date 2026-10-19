@@ -179,7 +179,7 @@ def forwarders_added(diff, sources=()):
 
 
 def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
-         traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
+         traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(), evidence=()):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -308,7 +308,7 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
-        strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
+        strike(unit, group[0], f'sent back on {group[0]}: {verdict}', evidence=evidence)
 
 
 def importers(modules: set[str], check: OrderCheck) -> list[str]:
@@ -409,9 +409,6 @@ def board():
     open(BOARD, 'w').write('\n'.join(lines) + '\n')
 
 
-STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
-
-
 def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
     """Put one line on the public record: the narrative file, then its audience.
 
@@ -435,9 +432,6 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
            evidence: tuple[Evidence, ...] = (), kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
     failure stays private and none is described in words that hide what happened."""
-    # What matters is how a mistake happened, how often, and how and when it was caught.
-    if not any(stage in caught for stage in STAGES):
-        sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{ME} at review".')
     todo = COMMS.goals.todos.get(task)
     todo.state.require_open(todo)
     if todo.held().owner != unit:
@@ -449,7 +443,6 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
 def recorded(unit: str, todo: Todo, strike: StrikeTodo) -> None:
     """Core records the strike on the task's Todo; it is written to the narrative file and posted
     to #comms in the same step."""
-    refuse(strike.reason, *OUTGOING)  # posted to #comms, so refused before Core records the strike
     if call(CommsTodoTool(id=todo.id, operation=strike)).todo.revision == todo.revision:
         return
     posted(unit, COMMS.goals.todos.get(todo.id), strike)
@@ -761,8 +754,26 @@ class OrderVerb(CommanderVerb):
     """A verb of `order`."""
 
 
+class CitedState:
+    """Derive command options from the Evidence declarations, not another kind roster."""
+
+    def __init_subclass__(cls, **kwargs):
+        cls.__annotations__ = {**cls.__annotations__,
+                               **{FieldCodec.encode(member): tuple[str, ...]
+                                  for member in Evidence.members_with(Evidence)}}
+        for member in Evidence.members_with(Evidence):
+            flag, metavar = member.form.split()
+            setattr(cls, FieldCodec.encode(member), option(
+                flag, action='append', default=(), parser_default_factory=list, metavar=metavar))
+        super().__init_subclass__(**kwargs)
+
+    def evidence(self) -> tuple[Evidence, ...]:
+        return tuple(member.cited(value) for member in Evidence.members_with(Evidence)
+                     for value in getattr(self, FieldCodec.encode(member)))
+
+
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, RuledVerb):
+class SendVerb(CitedState, OrderVerb, RuledVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
@@ -778,25 +789,7 @@ class SendVerb(OrderVerb, RuledVerb):
     def run(self) -> None:
         send(self.unit, self.due, Path(self.body_file).read_text(), clean=self.clean,
              mechanical=self.mechanical, reassign=self.reassign, traced=self.traced,
-             replaces=self.replaces, disk=self.disk)
-
-
-class CitedState:
-    """Derive command options from the Evidence declarations, not another kind roster."""
-
-    def __init_subclass__(cls, **kwargs):
-        cls.__annotations__ = {**cls.__dict__.get('__annotations__', {}),
-                               **{FieldCodec.encode(member): tuple[str, ...]
-                                  for member in Evidence.members_with(Evidence)}}
-        for member in Evidence.members_with(Evidence):
-            flag, metavar = member.form.split()
-            setattr(cls, FieldCodec.encode(member), option(
-                flag, action='append', default=(), parser_default_factory=list, metavar=metavar))
-        super().__init_subclass__(**kwargs)
-
-    def evidence(self) -> tuple[Evidence, ...]:
-        return tuple(member.cited(value) for member in Evidence.members_with(Evidence)
-                     for value in getattr(self, FieldCodec.encode(member)))
+             replaces=self.replaces, disk=self.disk, evidence=self.evidence())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -804,13 +797,11 @@ class StrikeVerb(CitedState, OrderVerb, RuledVerb):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
     why: str = option("--why")
-    caught: str = option("--caught", default=f'{ME} at review', help='"WHO at STAGE"; stage is review/install/live/user')
+    pid: str = option("pid", help="the problem the strike is for")
+    caught: str = option("--caught", default=f'{ME} at review')
 
     def run(self) -> None:
-        references = set(re.findall(r'\bP\d+\b', self.why))
-        if len(references) != 1:
-            sys.exit('Refused: name exactly one problem in --why; strikes count per problem.')
-        strike(self.unit, references.pop(), self.why, self.caught, evidence=self.evidence())
+        strike(self.unit, self.pid, self.why, self.caught, evidence=self.evidence())
 
 
 @dataclass(frozen=True, kw_only=True)

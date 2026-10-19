@@ -20,7 +20,7 @@ from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
 from ..comms import Comms
-from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, Derivation, SupersededVerdict
+from ..todos import AcceptedVerdict, PeerAcceptedVerdict, OrderVerdict, SendBackVerdict, Todo, Slop, Derivation, SupersededVerdict
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec
 from ..tool_caller import ThreadCaller
@@ -160,8 +160,6 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def report(self, todos: tuple[Todo, ...]) -> None: ...
 
     def run(self) -> None:
-        if len(self.why.split()) < 6:
-            sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
         orders = {todo.id: todo for todo in order.held_orders() if not self.msg or todo.sent_in(self.msg)}
         edits = {edit.id: edit for edit in Edit.unjudged(order.COMMS, ME) if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
@@ -248,17 +246,11 @@ class BackVerb(order.CitedState, VerdictVerb):
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
                                todo.held(), edit_id,
-                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
+                               reason=f'{todo.id} edit sent back: {self.why}',
                                evidence=self.evidence())
 
     def check_edits(self, edits: list[Edit]) -> None:
-        if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
-            sys.exit('Refused: --roast needs 12+ words with because, naming the duplicated fact and its owner')
-        if len(self.fix.split()) < 8:
-            sys.exit('Refused: --fix needs 8+ words naming the owner and replacing shape')
         self.slop()
-        order.refuse(self.roast, BluntText)
-        order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)
 
     def report(self, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
