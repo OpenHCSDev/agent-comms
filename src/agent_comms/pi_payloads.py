@@ -429,7 +429,7 @@ class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnost
     name: str | None = None
 
     @classmethod
-    def wire_member(cls, value):
+    def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
         return CodedProviderDiagnosticError if "code" in value else CodelessProviderDiagnosticError
 
     @property
