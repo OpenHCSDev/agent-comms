@@ -8,7 +8,7 @@ import os
 import socket
 import struct
 from collections.abc import Callable
-from contextlib import ExitStack, suppress
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, TypeVar, TYPE_CHECKING
@@ -311,7 +311,6 @@ class ToolTransport(Generic[Call]):
         finally:
             writer.close()
             try:
-                with suppress(ConnectionError):
-                    await writer.wait_closed()
+                await writer.wait_closed()
             finally:
                 self._handlers.discard(task)

@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import Field, dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -208,9 +208,23 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
+class WholeDocumentValue(ThreadSlice[int]):
+    """A scalar shared by the whole document and every one-thread view."""
+
+    @staticmethod
+    def cut(raw: int, canonical: str) -> int:
+        return raw
+
+    @classmethod
+    def copy(cls, value: int) -> int:
+        return value
+
+
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence):
+    version: Literal[1] = field(
+        default=1, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
     threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
     statuses: dict[str, ThreadStatus] = field(
         default_factory=dict, metadata={"thread_slice": OwnRow})

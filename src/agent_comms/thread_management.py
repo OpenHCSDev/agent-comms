@@ -415,7 +415,7 @@ class ThreadManagement:
             self.catalog,
             self.owners.releases,
             self.bus.reads,
-            transcript_read_state(self.bus.reads.path, self.registry),
+            transcript_read_state(self.bus.reads.path),
             GoalWaits.at(self.root),
             RelationshipStore.at(self.root),
             RuleReviews(self.root),

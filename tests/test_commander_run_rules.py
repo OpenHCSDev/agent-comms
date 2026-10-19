@@ -51,8 +51,8 @@ def test_send_refuses_missing_run_but_mechanical_orders_are_exempt(commander_scr
     body.write_text(f'Problem: P1\nOwner: {__file__}:1\nCheck: {repo} :: printf 0 -> 1\n'
                     '1. Repair the counter value.\nBanned: no second store\nReport: the count\n')
     kwargs = dict(clean=True, new=('P1', 'The real thread list disappears after opening saved history'))
-    with pytest.raises(SystemExit, match='Works when:'):
-        script.send('worker', '23:59', str(body), **kwargs)
+    with pytest.raises(ValueError, match='Works when:'):
+        script.send('worker', '23:59', body.read_text(), **kwargs)
     assert script.todos() == ()
-    script.send('worker', '23:59', str(body), mechanical=True, **kwargs)
+    script.send('worker', '23:59', body.read_text(), mechanical=True, **kwargs)
     assert isinstance(script.COMMS.goals.todos.get('P1').order.run, MechanicalOrderRun)

@@ -10,9 +10,15 @@ from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter
 
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.runtime_updates import (
+    AllTurnsEnded,
+    AppendDraftItem,
+    RuntimeUpdate,
+    TurnEnded,
+    TurnStarted,
+)
 
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
-from .shared import AllTurnsEnded, AppendDraftItem, TranscriptUpdate, TurnEnded, TurnStarted
 
 if TYPE_CHECKING:
     from .opencode import OpenCodeConnection
@@ -81,19 +87,19 @@ class SessionStatus(TaggedWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
     @abstractmethod
-    def publication(self) -> TranscriptUpdate: ...
+    def publication(self) -> RuntimeUpdate: ...
 
-    def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
+    def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
         return (self.publication(),)
 
 
 class IdleStatus(SessionStatus):
     wire_tag = 'idle'
 
-    def publication(self) -> TranscriptUpdate:
+    def publication(self) -> RuntimeUpdate:
         return TurnEnded()
 
-    def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
+    def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
         # All preceding parts have passed through this ordered subscription.
         stream.messages.clear()
         return (AllTurnsEnded(),)
@@ -102,7 +108,7 @@ class IdleStatus(SessionStatus):
 class BusyStatus(SessionStatus):
     wire_tag = 'busy'
 
-    def publication(self) -> TranscriptUpdate:
+    def publication(self) -> RuntimeUpdate:
         return TurnStarted()
 
 
@@ -112,7 +118,7 @@ class RetryStatus(SessionStatus):
     message: str
     next: int | float
 
-    def publication(self) -> TranscriptUpdate:
+    def publication(self) -> RuntimeUpdate:
         return TurnStarted(f'Retry {self.attempt}: {self.message}')
 
 
@@ -141,7 +147,7 @@ class OpenCodeEvent(WireModel, metaclass=RegisteredWireMeta):
     async def saved_input(self, connection: OpenCodeConnection, text: str) -> UserMessage | None:
         return None
 
-    async def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
+    async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
         return ()
 
     @classmethod
@@ -169,7 +175,7 @@ class PartUpdated(OpenCodeEvent):
             return None
         return await connection.saved_input(part.messageID)
 
-    async def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
+    async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
         if self.properties.sessionID != stream.connection.session:
             return ()
         return await stream.part(self.properties.part)
@@ -179,7 +185,7 @@ class PartChanged(OpenCodeEvent):
     wire_tag = 'message.part.delta'
     properties: PartDelta
 
-    async def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
+    async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
         delta = self.properties
         if delta.sessionID != stream.connection.session:
             return ()
@@ -190,7 +196,7 @@ class MessageUpdated(OpenCodeEvent):
     wire_tag = 'message.updated'
     properties: MessageUpdate
 
-    async def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
+    async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
         info = self.properties.info
         if info.sessionID != stream.connection.session:
             return ()
@@ -206,7 +212,7 @@ class StatusChanged(OpenCodeEvent):
     wire_tag = 'session.status'
     properties: StatusUpdate
 
-    async def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
+    async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
         if self.properties.sessionID != stream.connection.session:
             return ()
         return self.properties.status.receive(stream)
@@ -229,7 +235,7 @@ class OpenCodeStream:
         self.connection = connection
         self.messages: dict[str, MessageInfo] = {}
 
-    def snapshot(self, saved: SavedMessage) -> tuple[TranscriptUpdate, ...]:
+    def snapshot(self, saved: SavedMessage) -> tuple[RuntimeUpdate, ...]:
         self.know((saved,))
         return saved.publications()
 
@@ -237,7 +243,7 @@ class OpenCodeStream:
         """Parts that arrive later name only their message."""
         self.messages.update((message.info.id, message.info) for message in saved)
 
-    async def part(self, part: Part) -> tuple[TranscriptUpdate, ...]:
+    async def part(self, part: Part) -> tuple[RuntimeUpdate, ...]:
         if part.messageID not in self.messages:
             saved = await self.connection.message(part.messageID)
             self.messages[saved.info.id] = saved.info

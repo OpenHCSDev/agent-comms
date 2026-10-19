@@ -37,7 +37,11 @@ def test_cli_failure_leaves_links_untouched(tmp_path, monkeypatch, command):
     assert (link.lstat(), current.lstat()) == before
 
 
-def test_pending_carries_refuse_before_cli_or_maintenance(tmp_path):
+def test_pending_carries_refuse_before_cli_or_maintenance(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    current = StoppedOwnerInstallation.current_pointer()
+    current.parent.mkdir(parents=True)
+    current.symlink_to(Path(sys.executable).parent.resolve().parent)
     root = tmp_path / "private-bus"
     publication = RuntimePublication(tmp_path / "uninstalled", {})
     with pytest.raises(RuntimeError, match="tools/upgrade_bus.py"):

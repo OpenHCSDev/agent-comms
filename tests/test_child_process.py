@@ -31,6 +31,7 @@ from agent_comms.child_process import (
     TimedOutOutcome,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.launch_runtime import LaunchRuntime
 
 # The grandchild ignores TERM, so the owner must force retirement even after
 # the group leader exits. Publishing both identities proves they really ran.
@@ -63,10 +64,12 @@ async def ready(path: Path) -> None:
 @pytest.mark.asyncio
 async def test_bounded_run_retires_real_child_and_defiant_grandchild(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "tree.json"
-    result = await BoundedRun.run((sys.executable, "-c", TREE, str(acknowledgement)), timeout=1)
-    assert isinstance(result.outcome, TimedOutOutcome)
-    assert result.stdout == b"tree ready\n"
-    assert all(not member.alive() for member in identities(acknowledgement))
+    async with BoundedRun.session((sys.executable, "-c", TREE, str(acknowledgement)), timeout=30) as child:
+        # The child announces both live identities; machine load is not readiness.
+        assert await child.stdout.readline() == b"tree ready\n"
+        outcome = await child.finish()
+        assert isinstance(outcome, TimedOutOutcome)
+        assert all(not member.alive() for member in identities(acknowledgement))
 
 
 @pytest.mark.asyncio
@@ -523,7 +526,7 @@ def test_parent_pipe_cleanup_closes_after_real_exception():
     with (
         pytest.raises(ValueError, match="caller failed"),
         Platform.current().launch(
-            (sys.executable, "-c", "import time; time.sleep(60)"), ()
+            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running()
         ) as launch,
         launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
     ):

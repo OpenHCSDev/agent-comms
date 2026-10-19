@@ -84,6 +84,7 @@ class FieldPlan:
     annotation: object
     declared: Field
     metadata_flag: ClassVar[str | None] = None
+    records: ClassVar[bool] = True
     _plans: ClassVar[list[type[FieldPlan]]] = []
 
     def __init_subclass__(cls):
@@ -192,6 +193,13 @@ class DeclaredFieldPlan(FieldPlan):
     def claims(cls, declared: Field, annotation: object) -> bool:
         representation = FieldCodec._representation(annotation)[1] or FieldRepresentation
         return super().claims(declared, annotation) or representation.field_plan is cls
+
+
+class TransientFieldPlan(DeclaredFieldPlan):
+    """A process-local field never enters a record or compiles a wire decoder."""
+
+    metadata_flag = "wire_transient"
+    records = False
 
 
 class MissingNoneFieldPlan(DeclaredFieldPlan):
@@ -779,8 +787,9 @@ class FieldCodec(Sealed):
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
+        hints = FieldCodec._types(cls)
         declared = [(field, FieldCodec.wire_key(field)) for field in fields(cls)
-                    if field.init and not field.metadata.get("wire_transient")]
+                    if field.init and FieldCodec._field_plan(field, hints[field.name]).records]
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")

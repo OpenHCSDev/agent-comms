@@ -16,6 +16,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms_hooks import ClaudeHookProgram
+
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .thread_execution import ExternalThreadExecution
@@ -110,13 +112,6 @@ class ClaudeCodeHarness(Harness):
 
     executable: ClassVar[str] = 'claude'
     skills_dir: ClassVar[str] = '.claude/skills'
-    # (hook event, matcher entry, command): send-guard refuses unsafe commander
-    # sends; watch-guard tells the session when its bridge watch lapsed.
-    guards: ClassVar[tuple[tuple[str, dict[str, str], str], ...]] = (
-        ('PreToolUse', {'matcher': 'Bash'}, 'agent-comms-commander send-guard'),
-        ('UserPromptSubmit', {}, 'agent-comms-watch-guard'),
-        ('PostToolUse', {}, 'agent-comms-watch-guard'),
-    )
 
     def bus_threads(self, commander: str) -> tuple[str, ...]:
         return (commander,)
@@ -124,12 +119,15 @@ class ClaudeCodeHarness(Harness):
     def configure(self) -> tuple[Path, ...]:
         settings = self.home / '.claude/settings.json'
 
-        def add_guards(document: dict) -> None:
-            for event, matcher, command in self.guards:
-                hooks = document.setdefault('hooks', {}).setdefault(event, [])
-                if not any(hook.get('command') == command for entry in hooks for hook in entry.get('hooks', ())):
-                    hooks.append({**matcher, 'hooks': [{'type': 'command', 'command': command}]})
-        merge_json(settings, add_guards)
+        def add_hooks(document: dict) -> None:
+            for program in ClaudeHookProgram.members():
+                for event in program.events:
+                    hooks = document.setdefault('hooks', {}).setdefault(event, [])
+                    commands = {hook.get('command') for entry in hooks
+                                for hook in entry.get('hooks', ())}
+                    if program.command() not in commands:
+                        hooks.append(program.entry())
+        merge_json(settings, add_hooks)
         return (settings,)
 
 

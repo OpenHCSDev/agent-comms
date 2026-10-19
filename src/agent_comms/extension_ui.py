@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -40,9 +39,14 @@ class ExtensionUiSession:
         self.seen.add(key)
         # The controller maps unanswered, disconnected and refused replies to
         # CancelledUiChoice itself; only this outer deadline is a denial here.
-        with suppress(TimeoutError):
-            return await asyncio.wait_for(self.controller(request), timeout=15)
-        return CancelledUiChoice()
+        deadline = asyncio.timeout(15)
+        try:
+            async with deadline:
+                return await self.controller(request)
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            return CancelledUiChoice()
 
     async def fail(self, reason: str, session: TurnSession) -> None:
         session.output.record_failure(ExtensionUiFailed(reason))
@@ -50,11 +54,7 @@ class ExtensionUiSession:
         session.finished = True
 
     async def answer(self, request: DialogUiRequest, session: TurnSession) -> None:
-        try:
-            choice = await self.choose(request, session)
-        except ValueError as error:
-            await self.fail(str(error), session)
-            return
+        choice = await self.choose(request, session)
         # Input forwarding may become uncertain while the controller is awaiting
         # the user. Input permission must still hold when its answer reaches Pi.
         if not session.prompt_state.permits_extension_ui(session):

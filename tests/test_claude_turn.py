@@ -8,7 +8,8 @@ from agent_comms.cli_bridges.claude_protocol import (
     CatchUp, ClaudeSession, KnownTurn, Live, RedactedThinking, TimedRecord,
     ToolUse, UserRecord,
 )
-from agent_comms.cli_bridges.shared import ActiveItem, FinishedItem, ToolCall
+from agent_comms.runtime_updates import ActiveItem, FinishedItem
+from agent_comms.tool_calls import ToolCall
 from agent_comms.transcript_events import AssistantTranscript
 
 

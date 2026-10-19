@@ -22,14 +22,13 @@ import base64
 import hashlib
 import html
 import json
-import os
 import secrets
-import socket
+import sys
 import time
 import urllib.request
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
@@ -41,7 +40,6 @@ from pydantic import JsonValue
 from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
-from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
@@ -285,7 +283,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
 
     async def answer(self, connector: Connector) -> web.Response:
         return web.json_response(
-            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector)))
+            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector), Path(sys.executable)))
         )
 
     async def result(self, connector: Connector) -> ToolsCallResult:
@@ -296,7 +294,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except (ValueError, OSError, CoordinationError) as error:
+        except UnregisteredThreadError as error:
             return ToolsCallResult.refused(error)
         return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
 
@@ -327,6 +325,7 @@ class ToolsCallResult:
 class ToolsCallReply:
     id: int | str
     result: ToolsCallResult
+    interpreter: Annotated[Path, PathText]
     jsonrpc: Literal["2.0"] = "2.0"
 
 
@@ -404,7 +403,7 @@ class Connector:
             registration = FieldCodec.decode(
                 ClientRegistration, declared(ClientRegistration, await request.json())
             )
-        except (MalformedRecord, ValueError) as error:
+        except (MalformedRecord, json.JSONDecodeError) as error:
             return OAuthError("invalid_redirect_uri", str(error)).response()
         client_id = secrets.token_urlsafe(16)
         self.store.update(
@@ -473,7 +472,7 @@ class Connector:
     async def token(self, request: web.Request) -> web.Response:
         try:
             grant = TokenGrant.received(await request.post())
-        except (MalformedRecord, ValueError) as error:
+        except MalformedRecord as error:
             return OAuthError("invalid_request", str(error)).response()
         exchanged: list[dict[str, JsonValue]] = []
 
@@ -498,7 +497,7 @@ class Connector:
             )
         try:
             message = McpMessage.received(await request.json())
-        except (MalformedRecord, ValueError) as error:
+        except (MalformedRecord, json.JSONDecodeError) as error:
             return web.json_response(
                 {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": str(error)}}
             )
@@ -549,40 +548,6 @@ class ServeVerb(ConnectorVerb):
         return 0
 
 
-@dataclass(frozen=True)
-class ServiceProcess:
-    """The process listening on the connector's loopback port."""
-
-    pid: int
-
-    @classmethod
-    def listening(cls, port: int) -> ServiceProcess:
-        local = f"{bytes(reversed(socket.inet_aton(LOOPBACK))).hex().upper()}:{port:04X}"
-        sockets = {
-            f"socket:[{row[9]}]"
-            for row in map(str.split, Path("/proc/net/tcp").read_text().splitlines()[1:])
-            if (row[1], row[3]) == (local, "0A")  # 0A: TCP_LISTEN
-        }
-        for descriptor in Path("/proc").glob("[0-9]*/fd/*") if sockets else ():
-            with suppress(OSError):
-                if os.readlink(descriptor) in sockets:
-                    return cls(int(descriptor.parts[2]))
-        raise ValueError(f"No process listens on {LOOPBACK}:{port}")
-
-    @property
-    def unit(self) -> str:
-        """The systemd user unit that runs the service, named by the last part of its cgroup."""
-        unit = Path(Path(f"/proc/{self.pid}/cgroup").read_text().split("::", 1)[1].strip()).name
-        if not unit.endswith(".service"):
-            raise ValueError(f"The connector service (pid {self.pid}) runs in {unit}, not a unit")
-        return unit
-
-    @property
-    def executable(self) -> Path:
-        """The interpreter the service was started as; its venv link is not resolved."""
-        return Path(os.fsdecode(Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0")[0]))
-
-
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
     """Explicit qualification for a configured connector: its service runs the selected
@@ -596,18 +561,16 @@ class RoundTripVerb(ConnectorVerb):
     def apply(self, ctx: ConnectorStore) -> int | str:
         read = ToolCall.of(CommsChannelsTool)
         call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
-        try:
-            running = ServiceProcess.listening(self.port).executable
-            with ctx.granted("upgrade round trip") as token:
-                request = urllib.request.Request(
-                    f"http://{LOOPBACK}:{self.port}/mcp",
-                    data=json.dumps(FieldCodec.encode(call)).encode(),
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                with urllib.request.urlopen(request, timeout=60) as response:
-                    reply = FieldCodec.decode(ToolsCallReply, json.load(response)).result
-        except (OSError, ValueError) as error:
-            return f"The connector round trip was refused: {error}"
+        with ctx.granted("upgrade round trip") as token:
+            request = urllib.request.Request(
+                f"http://{LOOPBACK}:{self.port}/mcp",
+                data=json.dumps(FieldCodec.encode(call)).encode(),
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(request, timeout=60) as response:
+                response = FieldCodec.decode(ToolsCallReply, json.load(response))
+        running = response.interpreter
+        reply = response.result
         if running != self.runtime:
             return f"The connector service runs {running}, not the installed {self.runtime}"
         if reply.is_error:
@@ -648,10 +611,7 @@ class ApproveVerb(ConnectorVerb):
                 grants, requests=grants.requests | {self.request: replace(held, approved=True)}
             )
 
-        try:
-            ctx.update(approved)
-        except KeyError:
-            return f"No authorization {self.request!r} is waiting."
+        ctx.update(approved)
         return 0
 
 

@@ -1115,11 +1115,12 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch, tmp_pat
     ],
 )
 async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
-    from types import SimpleNamespace
-
     from agent_comms.pi_events import PiEvent
+    from agent_comms.tracked_turn import TrackedTurnSession
     from agent_comms.turn_failure import ModelRequestFailed
     from agent_comms.turn_output import TurnOutput
+    from agent_comms.turn_usage import UsageAccount
+    from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 
     event = PiEvent.from_wire({
         "type": "message_end",
@@ -1130,9 +1131,11 @@ async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason,
             "errorMessage": detail if stop_reason != "length" else None,
         },
     })
-    output = TurnOutput()
-    from agent_comms.external_transcript import DraftPublication
-    await event.message.tracked_end(SimpleNamespace(output=output, draft_publication=DraftPublication()))
+    turn = object.__new__(TrackedTurnSession)
+    output = turn.output = TurnOutput()
+    turn.usage, turn.explicit_interrupt = UsageAccount(), False
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    [update async for update in event.message.stop_reason.apply(turn, event.message)]
 
     assert output.declared_failure == ModelRequestFailed(detail)
     with pytest.raises(NativePiTerminalFailure, match=detail) as caught:

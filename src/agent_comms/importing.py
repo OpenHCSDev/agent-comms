@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .cli_bridges.history import History
-    from .cli_bridges.shared import SessionFacts
+    from .runtime_updates import SessionFacts
     from .transcript_events import TranscriptEvent
 
 

@@ -372,10 +372,10 @@ class OwnerRead(AwaitedRead):
         service.send(answer)
 
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
+        self.require_root(comms)
         try:
-            self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
-        except (OSError, ValueError, RuntimeError, RequestError) as error:
+        except (RequestError, CoordinationError) as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
@@ -1138,10 +1138,12 @@ class ObservationService:
     async def watch(self) -> None:
         from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
 
-        source = ModifiedWatchSource(self.comms.root, frozenset(
-            os.fsencode(path.name) for group in WireRevision.source_paths(self.comms.views).values()
-            for path in group if path.parent == self.comms.root))
-        async for _ in WireWatch.observations(source):
+        paths = tuple(path for group in WireRevision.source_paths(self.comms.views).values()
+                      for path in group)
+        sources = tuple(ModifiedWatchSource(directory, frozenset(
+            os.fsencode(path.name) for path in paths if path.parent == directory))
+            for directory in dict.fromkeys(path.parent for path in paths))
+        async for _ in WireWatch.observations(*sources):
             self.observe_again()
 
     def observe_again(self) -> None:
@@ -1215,8 +1217,8 @@ def serve(route: CommsRoute, connection: Connection) -> None:
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))
-        except OSError:
-            pass
+        except BrokenPipeError:
+            pass  # The reader has gone; preserve the original service failure.
         raise
     finally:
         connection.close()

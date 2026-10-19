@@ -38,6 +38,7 @@ from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     RuntimeServer,
     SocketClient,
+    SubscriberClosed,
 )
 from .pi_payloads import StateData
 from .threads import Thread
@@ -292,10 +293,9 @@ class TurnRunner:
                 )
             else:
                 return pi.CancelledUiChoice()
-        except (TimeoutError, ConnectionError, ValueError, RequestError):
-            # An unanswered, disconnected, refusing or invalid controller reply
-            # is denial, never a raw error in Pi RPC/model output or a reason to
-            # resend an uncertain MCP call. Any other failure is a defect.
+        except (TimeoutError, SubscriberClosed, RequestError):
+            # A timed-out, departed or explicitly refusing controller grants no permission.
+            # Unexpected decoder and transport defects propagate.
             return pi.CancelledUiChoice()
         if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
