@@ -32,7 +32,7 @@ from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
-    CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
+    CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, CommsVerdictTool)
 from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
@@ -136,7 +136,7 @@ def test_strike_time_and_clean_ordered_hunts_keep_their_owners(commander):
     comms, caller = commander
     todo = create(commander, 'P1')
     actor = comms.registry.require('lead').incarnation
-    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, actor, todo.assignment,
+    CommsChangeProblemTool(problem='P1', operation=StrikeTodo(todo.revision, actor, todo.assignment,
         'The assigned change broke the existing resource release path during review.', RecordedEventTime(500))).apply(comms, caller)
     current = comms.goals.todos.get('P1')
     assert current.strikes[0].at == RecordedEventTime(500)
@@ -197,7 +197,7 @@ def test_first_call_state_retains_observation_and_prior_alarm(commander):
     assert isinstance(todo.order.first_call, AwaitingFirstCall)
     for event in (NotifiedFirstCallEvent, ObservedFirstCallEvent):
         todo = comms.goals.todos.get('P1')
-        CommsTodoTool(id='P1', operation=RecordFirstCallTodo(todo.revision,
+        CommsChangeProblemTool(problem='P1', operation=RecordFirstCallTodo(todo.revision,
             comms.registry.require('lead').incarnation, event)).apply(comms, caller)
     call = comms.goals.todos.get('P1').order.first_call
     assert isinstance(call, LateObservedFirstCall)
@@ -779,7 +779,7 @@ def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander)
     comms, caller = commander
     todo = create(commander, 'P1')
     lead = comms.registry.require('lead').incarnation
-    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, lead, todo.assignment,
+    CommsChangeProblemTool(problem='P1', operation=StrikeTodo(todo.revision, lead, todo.assignment,
         'The unit delivered its order after the recorded deadline had already passed.')).apply(comms, caller)
     struck = comms.goals.todos.get('P1')
     strike, = struck.strikes
@@ -790,7 +790,7 @@ def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander)
         VoidStrikeTodo(struck.revision, worker, strike, why).apply(struck)
     closed = replace(struck, state=DoneTodoState)
     assert VoidStrikeTodo(struck.revision, lead, strike, why).apply(closed).live_strikes() == ()
-    CommsTodoTool(id='P1', operation=VoidStrikeTodo(struck.revision, lead, strike, why)).apply(comms, caller)
+    CommsChangeProblemTool(problem='P1', operation=VoidStrikeTodo(struck.revision, lead, strike, why)).apply(comms, caller)
     voided = comms.goals.todos.get('P1')
     assert voided.strikes == (strike,) and voided.voided[0].strike == strike
     assert voided.strike_count == 0 and voided.live_strikes('worker') == ()
@@ -844,11 +844,11 @@ FIRED = 'The unit took two strikes on this problem and its second delivery was l
 def test_only_the_commander_releases_a_problem_and_its_owner_stays_on_record(commander, caller, why, refused):
     comms, _ = commander
     todo = create(commander, 'P1')
-    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
+    CommsChangeProblemTool(problem='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
         todo.assignment, FIRED)).apply(comms, commander[1])
     struck = comms.goals.todos.get('P1')
     def release():
-        CommsTodoTool(id='P1', operation=ReleaseTodo(struck.revision, comms.registry.require(caller).incarnation,
+        CommsChangeProblemTool(problem='P1', operation=ReleaseTodo(struck.revision, comms.registry.require(caller).incarnation,
             struck.assignment, StrikeReason(why))).apply(comms, ThreadCaller(caller))
     if refused:
         with refused:
@@ -977,7 +977,7 @@ def test_todo_record_carries_keep_every_stored_strike(commander, step, name, col
     carry = getattr(importlib.import_module(f'cutover.{step}'), name)
     comms, caller = commander
     todo = create(commander, 'P1')
-    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
+    CommsChangeProblemTool(problem='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
         todo.assignment, 'The unit delivered its order after the recorded deadline had already passed.')).apply(comms, caller)
     struck = comms.goals.todos.get('P1')
     path = TodoStore.path_in(comms.root)
@@ -1242,7 +1242,7 @@ def order_message(commander, problem, text):
     """The commander's bus message, recorded as the one the order was sent in."""
     comms, caller = commander
     message = comms.messaging.send('lead', 'worker', text).message.message_id
-    CommsTodoTool(id=problem, operation=OrderMessage(
+    CommsChangeProblemTool(problem=problem, operation=OrderMessage(
         comms.goals.todos.get(problem).revision, comms.registry.require('lead').incarnation, message)).apply(comms, caller)
     return message
 
@@ -1387,11 +1387,11 @@ def test_an_accepted_verdict_quotes_the_order_it_serves(commander):
     todo = create(commander, 'P1')
     lead = comms.registry.require('lead').incarnation
     with pytest.raises(ValueError, match='Quote 4\\+ words'):
-        CommsVerdictTool(id='P1', operation=AcceptedVerdict(
+        CommsVerdictTool(problem='P1', operation=AcceptedVerdict(
             todo.revision, lead, todo.assignment, 'toolu_1', quote='Delete the whole bus now')).apply(comms, caller)
     assert comms.goals.todos.get('P1') == todo
     accepted = AcceptedVerdict(todo.revision, lead, todo.assignment, 'toolu_1', quote='Repair  the existing owner')
-    CommsVerdictTool(id='P1', operation=accepted).apply(comms, caller)
+    CommsVerdictTool(problem='P1', operation=accepted).apply(comms, caller)
     judged = comms.goals.todos.get('P1')
     assert (judged.verdicts, judged.strikes, judged.revision) == ((accepted,), (), todo.revision + 1)
 
@@ -1404,7 +1404,7 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     why = 'The unit wrapped the old store in a forwarding class instead of deleting it.'
     sent_back = SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation, todo.assignment,
                                 'toolu_2', reason=StrikeReason(why))
-    CommsVerdictTool(id='P1', operation=sent_back).apply(comms, caller)
+    CommsVerdictTool(problem='P1', operation=sent_back).apply(comms, caller)
     judged = comms.goals.todos.get('P1')
     assert (judged.verdicts, judged.revision, judged.strike_count) == ((sent_back,), todo.revision + 1, 1)
     assert judged.strikes[0].reason == why
@@ -1426,7 +1426,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
     assert [line.split(':')[0] for line in GoalSegment.capture(worker, goal, comms.goals).progress.splitlines()] == ['P1', 'P2']
     CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     why = 'The unit kept a second copy of the goal text.'
-    CommsVerdictTool(id='P2', operation=SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation,
+    CommsVerdictTool(problem='P2', operation=SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation,
         todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
@@ -1452,7 +1452,7 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
     create(commander, 'P1')
     comms.registry.declare(comms.registry.new_thread('replacement', frozenset(), str(comms.root), created_at=3.0))
     replacing = create(commander, 'P2', owner='replacement')
-    CommsTodoTool(id='P2', operation=OrderMessage(replacing.revision,
+    CommsChangeProblemTool(problem='P2', operation=OrderMessage(replacing.revision,
         comms.registry.require('lead').incarnation, 'm2')).apply(comms, caller)
     for name, line in VERDICT_LINES.items():
         argv = [name, *shlex.split(line)]
@@ -1461,7 +1461,7 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
             with pytest.raises(SystemExit):
                 judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
         operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
-        CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
+        CommsVerdictTool(problem='P1', operation=operation).apply(comms, caller)
         assert comms.goals.todos.get('P1').verdicts[-1] == operation
 
 

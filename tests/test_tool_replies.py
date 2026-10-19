@@ -25,7 +25,7 @@ from agent_comms.tools import (
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
-    CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool, CommsVerdictTool,
+    CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, CommsTurnsTool, CommsVerdictTool,
     CommsUnjudgedTool, CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
 )
 from agent_comms.work_branches import WorkBranches
@@ -81,10 +81,10 @@ def scenario(comms: Comms, project, monkeypatch):
                                     "text": "The canonical ownership changed"}, lead
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
-    yield CommsTodoTool, {"id": "P1", "operation": FieldCodec.encode(StrikeTodo(
+    yield CommsChangeProblemTool, {"problem": "P1", "operation": FieldCodec.encode(StrikeTodo(
         todo.revision, actor, todo.assignment, "The assigned change broke the existing resource release path during review.",
         RecordedEventTime(500)))}, lead
-    yield CommsVerdictTool, {"id": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
+    yield CommsVerdictTool, {"problem": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
         todo.revision + 1, actor, todo.assignment, "toolu_1", quote="Repair the existing owner"))}, lead
     yield CommsOrderServeTool, {"problem": "P1", "serves": RecordPlanePhase.declared_name}, lead
     yield CommsRuleReviewTool, {"entry": FieldCodec.encode(DrawnRuleReviewEntry(("Declare each fact once",), 0))}, lead
@@ -164,4 +164,6 @@ def test_a_read_tool_changes_no_store_for_any_caller(comms, tmp_path, monkeypatc
 
 def test_every_tool_declares_a_tool_result():
     for tool in ToolRequest.members_with(ToolRequest):
-        assert issubclass(result_type(tool), ToolResult), tool.declared_name
+        from typing import get_args
+        result = result_type(tool)
+        assert all(issubclass(member, ToolResult) for member in (get_args(result) or (result,))), tool.declared_name

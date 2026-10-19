@@ -25,7 +25,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
     NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, StrikeReason, Todo, UnreadProgress)
 from agent_comms.connector import CALLER
-from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
+from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsChangeProblemTool
 
 from test_commander_problem_orders import create, native_judge_edits
 
