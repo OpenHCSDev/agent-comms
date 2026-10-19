@@ -23,7 +23,6 @@ class SavedHunts(TypedRow):
 
 
 class HuntRecords(carry.TodoRows):
-    after = "carry_runtime_info"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> carry.Carried:

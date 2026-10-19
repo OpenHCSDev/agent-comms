@@ -1384,17 +1384,17 @@ class EditedCarry(Measure):
 
     @staticmethod
     def conversion(source: bytes) -> str:
-        """Conversion code is immutable; ordering and publication backups are metadata."""
+        """Conversion code is immutable; publication backups are metadata, as was the
+        predecessor an ``after`` string once restated."""
         tree = ast.parse(source)
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
                 node.body = [statement for statement in node.body
                              if not (isinstance(statement, ast.FunctionDef)
-                                     and statement.name == 'backup_files')]
-                for statement in node.body:
-                    match statement:
-                        case ast.Assign(targets=[ast.Name(id="after")]):
-                            statement.value = ast.Constant(None)
+                                     and statement.name == 'backup_files')
+                             and not (isinstance(statement, ast.Assign)
+                                      and [getattr(target, "id", None)
+                                           for target in statement.targets] == ["after"])]
         return ast.dump(tree, include_attributes=False)
 
     @classmethod
