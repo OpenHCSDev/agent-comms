@@ -82,9 +82,10 @@ class RegistryPresence(RegistryNames[Thread]):
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
         selected = (self.threads.values() if names is None else
-                    (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
+                    (self.threads[name] for name in {self.canonical_name(name) for name in names}
+                     if name in self.threads))
         return (executor for thread in selected
-                if thread is not None and self.status(thread.name).in_view(visibility)
+                if self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
 
     def channel_audience(self) -> Iterator[Thread]:
@@ -499,7 +500,7 @@ class RegistryDocument(RegistryPresence):
         if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
         self.statuses[expected.name] = expected.execution.registered_status(
-            expected, StoppedThreadStatus())
+            expected, StoppedThreadStatus()).declaration()
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
         return self.claims.generations[expected.name]
@@ -511,7 +512,7 @@ class RegistryDocument(RegistryPresence):
         if self.status(name).active:
             self.owners.advance(name)
         thread = self.threads[name]
-        self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
+        self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus()).declaration()
         self.advance_claim(name)
         self.threads[name] = thread.without_turn()
 
@@ -591,7 +592,7 @@ class RegistryDocument(RegistryPresence):
         if previous.changes_owner(resumed):
             self.advance_claim(name)
             self.owners.advance(name)
-        self.statuses[name] = resumed
+        self.statuses[name] = resumed.declaration()
         self.last_seen[name] = time.time()
 
     def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]:
@@ -609,8 +610,8 @@ class RegistryDocument(RegistryPresence):
         turn = record.read().require_active()
         if not turn.may_release(canonical_lease):
             return False, NoFinishedTurn()
-        attested = canonical_lease.can_attest(self.claims.generations[name])
-        attested = attested and turn.claimed_generation is not None and self.status(name).active
+        attested = (canonical_lease.can_attest(self.claims.generations[name])
+                    and turn.held_by(canonical_lease) and self.status(name).active)
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(

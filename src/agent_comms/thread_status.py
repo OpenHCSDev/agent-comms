@@ -34,6 +34,9 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def registered(self, thread: Thread) -> ThreadStatus:
         return self
 
+    def declaration(self) -> ThreadStatus:
+        return self
+
     def require_visible(self) -> None:
         if not self.visible:
             raise RelationViolationError("Initial direct target must be visible.")
@@ -98,9 +101,6 @@ class ActiveThreadPresence(ThreadStatus, declared_name=None):
     active = True
     visible = True
 
-    def registered(self, thread: Thread) -> ThreadStatus:
-        return thread.execution.registered_status(thread, self)
-
     def require_active(self) -> None:
         pass
 
@@ -159,16 +159,31 @@ class StoppedThreadStatus(ThreadStatus):
 
 
 class CliInboxPresence:
-    """Presence of a CLI inbox: only its bridge's registration changes it."""
+    """The declared inbox resolves its bridge process at every read."""
+
+    def registered(self, thread: Thread) -> ThreadStatus:
+        return ConnectedThreadStatus() if thread.process_identity.alive() else NoBridgeThreadStatus()
+
+    def declaration(self) -> ThreadStatus:
+        return CliInboxThreadStatus()
 
     def restored(self) -> ThreadStatus:
-        """A restored inbox has no bridge until one registers again."""
-        return NoBridgeThreadStatus()
+        """Restoration preserves the inbox declaration, never a liveness answer."""
+        return self.declaration()
 
     def after_heartbeat(self, name: str) -> ThreadStatus:
         """A CLI command is not a bridge; a heartbeat keeps the inbox as it is."""
         self.require_mutable(name)
         return self
+
+
+class CliInboxThreadStatus(CliInboxPresence, ThreadStatus):
+    """Stored external inbox declaration; connectedness is never persisted."""
+
+    receiving = False
+
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return True
 
 
 class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
