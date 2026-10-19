@@ -33,8 +33,9 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page: MessagePage, bus: MessageBus,
-                         registry: Registration) -> HistoricalDisplay | None: ...
+    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
+                              registry: Registration) -> MessagePage:
+        """The historical page carrying what this viewer was shown, read from the bus."""
 
     @abstractmethod
     def cursor(self, reads, snapshot, document) -> ReadCursor: ...
@@ -54,8 +55,9 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page: MessagePage, bus: MessageBus, registry: Registration) -> None:
-        return None
+    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
+                              registry: Registration) -> MessagePage:
+        return page
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return ReadCursor()
@@ -77,19 +79,19 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page: MessagePage, bus: MessageBus,
-                         registry: Registration) -> HistoricalDisplay:
+    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
+                              registry: Registration) -> MessagePage:
         source = page.messages[0].source
         source.validate()
         snapshot = registry.snapshot()
-        return HistoricalDisplay(
+        return replace(page, historical_display=HistoricalDisplay(
             source,
             bus.reads.capture(
                 self.resolve(snapshot).name, page.messages, snapshot,
                 Path(source.root) / "bus.jsonl",
                 conversation_snapshot=source.provenance,
             ),
-        )
+        ))
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return reads.cursor(self.name, snapshot, document=document)
