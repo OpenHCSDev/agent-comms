@@ -44,7 +44,8 @@ def main(a):
             read = order.progress()
             orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)} ({read[t.id].line})"
                                for t in owed[unit])
-            waiting = sum(edit.thread == unit for edit in judge.Edit.unjudged())
+            edits = judge.Edit.unjudged(order.COMMS, order.ME)
+            waiting = sum(edit.thread == unit for edit in edits)
             print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {waiting} -> read its git state and newest turn, judge, push or hunt", flush=True)
         for line in detached(owed):
             print(line, flush=True)
