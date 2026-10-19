@@ -245,7 +245,7 @@ def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None
         comms.messaging.send_user_message("unregistered", "wrong peer", worktree=str(tmp_path))
     user = comms.messaging.user_identity(str(tmp_path))
     with pytest.raises(RelationViolationError, match="Human messages"):
-        comms.messaging.send_message(user.name, "alice", "agent impersonation")
+        comms.messaging.send(user.name, "alice", "agent impersonation").message
     assert comms.bus.log.latest_sequence() == 0
 
 

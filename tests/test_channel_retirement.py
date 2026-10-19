@@ -32,7 +32,8 @@ def saved_catalog(root):
                 pinned_threads=frozenset({"a"}),
                 parent="#ui",
             ),
-            "#api": ChannelPreferences(parent="#engineering", any_mode=True),
+            "#api": ChannelPreferences(created_at=17, parent="#engineering", any_mode=True),
+            "#ui": ChannelPreferences(created_at=17),
         },
         saved_views={
             "engineering": SavedView(
@@ -88,7 +89,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
         m.target for m in rows
     ]
     for send in (
-        lambda: comms.messaging.send("other", "#engineering", "blocked"),
+        lambda: comms.messaging.send("other", "#engineering", "blocked").message.message_id,
         lambda: comms.messaging.send_user_message(
             "#engineering", "blocked", worktree=str(tmp_path)
         ),
@@ -104,7 +105,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     with pytest.raises(ValueError, match="reserved"):
         comms.channels.create_tag("engineering")
     comms.channels.set_channel_metadata("engineering", parent="#ui", archived=True)
-    assert catalog.read().resolve("#engineering").archived
+    assert catalog.read().require_channel("#engineering").archived
     comms.channels.set_saved_view(
         replace(imported.saved_views["engineering"], original_targets=frozenset())
     )
@@ -144,7 +145,7 @@ def test_restoring_same_named_view_keeps_current_predicate_and_original_target_h
     )
     comms.channels.set_saved_view(current)
     with comms.channels.catalog.editing() as document:
-        document.restore_missing(source, {}, existing=True)
+        document.restore_missing(source, existing=True)
     restored = comms.channels.catalog.read().saved_views["engineering"]
     assert restored.predicate == current.predicate
     assert restored.created_at == 19

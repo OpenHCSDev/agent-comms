@@ -30,6 +30,7 @@ from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, CommandTarget
+from .read_basis import AllChannelDisplayScope, ChannelDisplayScope
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
@@ -190,11 +191,10 @@ class HistoryViews:
         source = self.bus.history.attach(Path(source_root), source_read=source_read)
         catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
-        source_threads = source.provenance.threads
         with _store_lock(self._wire_lock_path):
             existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:
-                document.restore_missing(incoming, source_threads, existing=existing)
+                document.restore_missing(incoming, existing=existing)
         return source
 
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
@@ -217,7 +217,7 @@ class HistoryViews:
         viewer: DisplayViewer = AnonymousViewer(),
         bounds: PageBounds = NEWEST_PAGE,
     ) -> MessagePage:
-        channel = self.channels.catalog.read().require_channel(target, self.registry.snapshot().threads)
+        channel = self.channels.catalog.read().require_channel(target)
         return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
     def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:
@@ -226,8 +226,8 @@ class HistoryViews:
     def channel_history_page(self, target: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded channel history for any client adapter."""
         selected = CommandTarget.named(target).require_channel()
-        channel = self.channels.catalog.read().resolve(selected.name)
-        return ChannelHistory(channel.name, channel.history_targets).page(self.presentation, bounds)
+        channel = self.channels.catalog.read().require_channel(selected.name)
+        return ChannelHistory(channel.history_scope()).page(self.presentation, bounds)
 
     def last_sent_timestamps(
         self, rows: Iterable[tuple[str, float]], *, registry: RegistrySnapshot,
@@ -240,7 +240,7 @@ class HistoryViews:
         return canonical
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        return ChannelHistory(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets).page(
+        return ChannelHistory(AllChannelDisplayScope(BuiltinChannel.ANY.value)).page(
             self.presentation, bounds
         )
 
@@ -275,7 +275,7 @@ class HistoryViews:
         """Channel declarations and current members; clients never infer membership."""
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
-        channels = catalog.views(snapshot.threads)
+        channels = catalog.views()
         with self.bus.opened_activity() as clocks:
             return ChannelView.roster(
                 snapshot,
@@ -294,7 +294,7 @@ class HistoryViews:
         """Read one channel; observe and order only its own members."""
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
-        channel = catalog.require_channel(name, snapshot.threads)
+        channel = catalog.require_channel(name)
         registered = channel.members(ChannelMemberIndex(snapshot.threads.values()))
         with self.bus.opened_activity() as clocks:
             rows = ((alias, clocks.sent[alias]) for thread in registered
@@ -324,7 +324,7 @@ class HistoryViews:
         retired = set()
         for name in channels:
             try:
-                channel = catalog.require_channel(name, snapshot.threads)
+                channel = catalog.require_channel(name)
             except UnknownChannelError:
                 retired.add(name)
             else:

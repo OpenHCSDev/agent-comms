@@ -652,16 +652,67 @@ def test_unit_wording_gets_a_correction_not_a_strike(commander):
     assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
-def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
+@pytest.mark.parametrize('claim', [False, True])
+def test_published_unit_jargon_is_corrected_on_its_open_order(commander, claim):
     """No watch runs: publishing the message is what records the correction on the order."""
     comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
     create(commander, 'P1')
-    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed')
-    comms.messaging.send('worker', 'lead', 'The tests pass now.')
-    comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.')
+    from agent_comms.envelope_claim_transitions import WritableFileClaim
+    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
+    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed', claims=claims).message.message_id
+    comms.messaging.send('worker', 'lead', 'The tests pass now.').message.message_id
+    comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.').message.message_id
     corrected = comms.goals.todos.get('P1')
     assert [(c.message_id, c.words) for c in corrected.corrections] == [(vague, ('canonical', 'ownership'))]
     assert corrected.strike_count == 0
+
+
+@pytest.mark.parametrize('claim', [False, True])
+@pytest.mark.parametrize('body', ['The tests pass now.', 'The canonical ownership changed'])
+def test_old_todo_schema_refuses_before_any_bus_publication(commander, claim, body):
+    from agent_comms.envelope_claim_transitions import WritableFileClaim
+    from agent_comms.errors import RelationViolationError
+
+    comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
+    create(commander, 'P1')
+    with closing(sqlite3.connect(TodoStore.path_in(comms.root))) as db:
+        for column in ('corrections', 'verdicts', 'released'):
+            db.execute(f'ALTER TABLE todo DROP COLUMN {column}')
+        db.commit()
+    path = comms.root / 'bus.jsonl'
+    before = path.read_bytes() if path.exists() else b''
+    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
+    with pytest.raises(RelationViolationError, match='todos.sqlite3 differs from its declaration'):
+        comms.messaging.send('worker', 'lead', body, claims=claims).message.message_id
+    assert (path.read_bytes() if path.exists() else b'') == before
+
+
+def test_committed_send_reports_correction_failure_to_tool_and_cli(commander, monkeypatch):
+    import sqlite3
+    from agent_comms.cli_commands import SendCliCommand
+    from agent_comms.pi_payloads import PublishedMessageToolDetails
+    from agent_comms.tools import invoke_tool
+
+    comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
+    create(commander, 'P1')
+
+    def fail_correction(self, unit, message_id, text):
+        assert message_id.encode() in (comms.root / 'bus.jsonl').read_bytes()
+        raise sqlite3.OperationalError('P563 forced correction write failure')
+
+    monkeypatch.setattr(TodoStore, 'correct', fail_correction)
+    reply = invoke_tool(comms, 'comms_send', {
+        'from': 'worker', 'to': 'lead', 'body': 'The canonical result is on the order'}, caller=commander[1])
+    decoded = PublishedMessageToolDetails.from_wire(reply)
+    assert decoded.id == decoded.message.source.message_id
+    assert 'P563 forced correction write failure' in decoded.correction.error
+    cli = SendCliCommand(sender='worker', target='lead', body='A separate fresh CLI message').apply(comms).encoded()
+    assert 'was sent' in cli['message']
+    assert 'P563 forced correction write failure' in cli['correction']['error']
+    assert cli['id'] in cli['notices'][0]
 
 
 @pytest.mark.parametrize('step, name, column', [
@@ -773,49 +824,29 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     assert comms.registry.require('worker').goal == goal
 
 
-def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
-    """On a pre-verdicts store every step from the deleted goal carry on runs in chain order, each
-    from the revision that last wrote it; the current Todo reports the missing column until then."""
+def test_column_carries_run_before_order_validation(commander):
+    """A retained store already has verdicts/releases; messages is added before orders read it."""
     comms, _ = commander
     completed_with_pending(commander)
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
-        db.execute('ALTER TABLE todo DROP COLUMN verdicts')
-        db.execute('ALTER TABLE todo DROP COLUMN corrections')
         db.execute('ALTER TABLE todo DROP COLUMN messages')
         db.commit()
     with (closing(CoordinationStore.read_snapshot(path)) as db,
-          pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"')):
+          pytest.raises(sqlite3.OperationalError, match='no such column: "messages"')):
         list(Todo.stream(db))
     repo = Path(__file__).parents[1]
-    steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
-    members = {'carry_problem_goals': ('ProblemGoals', 2),
-               'carry_todo_verdicts': ('TodoVerdicts', 3),
-               'carry_todo_corrections': ('TodoCorrections', 3),
-               'carry_todo_open_indexes': ('TodoOpenIndexes', 2),
-               'carry_todo_messages': ('TodoMessages', 3)}
-    names = list(steps)
-    assert names[names.index('carry_problem_goals'):] == list(members)
+    names = [step.name for step in CarryChain.at(repo, 'HEAD').steps]
+    members = {'carry_todo_messages': ('TodoMessages', 3),
+               'carry_todo_corrections': ('TodoCorrections', 0),
+               'carry_order_run': ('OrderRuns', 0),
+               'carry_todo_open_indexes': ('TodoOpenIndexes', 0)}
+    assert names[names.index('carry_todo_messages'):] == list(members)
     for name, (member, changed) in members.items():
-        held = tmp_path / name
-        held.mkdir()
-        # A deleted step is declared where it was last written; one still in the tree, at HEAD.
-        wrote = steps[name].revision if steps[name].revision != 'HEAD' else subprocess.run(
-            ['git', '-C', str(repo), 'log', '-1', '--diff-filter=AM', '--format=%H', 'HEAD', '--',
-             f'tools/cutover/{name}.py'], capture_output=True, text=True, check=True).stdout.strip()
-        archive = subprocess.run(['git', '-C', str(repo), 'archive', wrote,
-                                  'src', 'tools'], capture_output=True, check=True).stdout
-        subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
-        ran = subprocess.run([sys.executable, '-c',
-                              'import importlib, pathlib, sys; '
-                              'm=importlib.import_module(\"cutover.\"+sys.argv[1]); '
-                              'c=getattr(m,sys.argv[2]); '
-                              'import json; print(json.dumps({\"changed\":c.carry(pathlib.Path(sys.argv[3]),apply=True).changed}))',
-                              name, member, str(comms.root)],
-                             capture_output=True, text=True, cwd=held,
-                             env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
-        assert ran.returncode == 0, ran.stderr
-        assert json.loads(ran.stdout.splitlines()[-1])['changed'] == changed
+        carry = getattr(importlib.import_module('cutover.' + name), member)
+        assert carry.carry(comms.root, apply=False).changed == changed
+        assert carry.carry(comms.root, apply=True).changed == changed
+        assert carry.carry(comms.root, apply=False).changed == 0
     with closing(CoordinationStore.read_snapshot(path)) as db:
         assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
 
@@ -858,7 +889,7 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
         comms.goals.update_goal(unit, SetGoalAction(text='Commander brief', goal_id=f'{unit}-brief'))
     create(commander, 'P1', owner='parted')
     create(commander, 'P2', owner='watching')
-    comms.messaging.send('lead', 'parted', 'Are you there?')
+    comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
     rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
         lines = rotate.detached(rotate.owed_orders())
@@ -868,10 +899,33 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
 def order_message(commander, problem, text):
     """The commander's bus message, recorded as the one the order was sent in."""
     comms, caller = commander
-    message = comms.messaging.send('lead', 'worker', text)
+    message = comms.messaging.send('lead', 'worker', text).message.message_id
     CommsTodoTool(id=problem, operation=OrderMessage(
         comms.goals.todos.get(problem).revision, comms.registry.require('lead').incarnation, message)).apply(comms, caller)
     return message
+
+
+def native_judge_edits(commander, judge, edits):
+    """Use the actual native reader and original call IDs, never an edit journal."""
+    comms, _ = commander
+    path = comms.root / 'judge-session.jsonl'
+    from datetime import datetime, timezone
+    stamp = datetime.fromtimestamp(199., timezone.utc).isoformat()
+    rows = [dict(type='session', id='judge-session', version=3, timestamp=stamp),
+            dict(type='message', id='input', timestamp=stamp, message=dict(role='user', content='Repair the owner', timestamp=199000))]
+    parent = 'input'
+    for edit in edits:
+        entry = 'entry-' + edit['id']
+        rows.append(dict(type='message', id=entry, parentId=parent,
+            timestamp=datetime.fromtimestamp(max(200., edit['at']), timezone.utc).isoformat(), message=dict(
+            role='assistant', timestamp=max(200., edit['at']) * 1000, stopReason='toolUse', content=[dict(
+                type='toolCall', id=edit['id'], name='edit', arguments=dict(path=edit['path'],
+                edits=[dict(oldText=h['old'], newText=h['new']) for h in edit['hunks']]))])))
+        parent = entry
+    path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    path.chmod(0o600)
+    comms.registry.register(replace(comms.registry.require('worker'), session_file=str(path)))
+    return {edit.id: edit for edit in judge.Edit.unjudged(comms, 'lead')}
 
 
 def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, commander_script):
@@ -884,9 +938,9 @@ def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, command
     create(commander, 'P2')
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='edit-1', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
-    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
+    recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P2 was the last order; this one repairs the existing owner')
-    judge.OkVerb(ids=(f'edit-1:{judge.Edit.from_row(**edit).code()}',), msg=message,
+    judge.OkVerb(ids=(f'edit-1:{recorded[edit['id']].code()}',), msg=message,
                  why='The change repairs the existing canonical state owner',
                  serves='Repair the existing owner', lines=('value = 2',)).run()
     assert [v.tool_call_id for v in comms.goals.todos.get('P1').verdicts] == ['edit-1']
@@ -903,9 +957,9 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
-    Path(judge.EDITS).write_text(''.join(json.dumps(edit) + '\n' for edit in edits))
+    recorded = native_judge_edits(commander, judge, edits)
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
-    judge.OkVerb(ids=tuple(f'{e["id"]}:{judge.Edit.from_row(**e).code()}' for e in edits),
+    judge.OkVerb(ids=tuple(f'{e["id"]}:{recorded[e["id"]].code()}' for e in edits),
                  why='The changes repair the existing canonical state owner', msg=message,
                  serves='Repair the existing owner', lines=('value = 2',)).run()
     saved = comms.goals.todos.get('P1')
@@ -924,14 +978,14 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
     comms, _ = commander
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='orphan-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
-    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
-    fields = dict(ids=(f'orphan-edit:{judge.Edit.from_row(**edit).code()}',),
+    recorded = native_judge_edits(commander, judge, [edit])
+    fields = dict(ids=('orphan-edit:0000',),
                   why='The changes repair the existing canonical state owner', lines=('value = 2',),
-                  msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner'))
+                  msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner').message.message_id)
     command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
         **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
-    with pytest.raises(SystemExit, match=r'edit orphan-edit: .* was sent in \[\] of the open orders worker holds'):
+    with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
@@ -944,12 +998,12 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     create(commander, 'P1')
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='bad-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
-    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
+    recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
     posted = []
     monkeypatch.setattr(judge.order, 'post', lambda to, body: posted.append((to, body)) or 'sent')
     why = 'The unit copied the same state into a second writable store'
-    judge.BackVerb(ids=(f'bad-edit:{judge.Edit.from_row(**edit).code()}',), why=why, msg=message,
+    judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
         slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',

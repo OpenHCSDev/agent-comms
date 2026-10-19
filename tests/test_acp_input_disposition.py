@@ -255,7 +255,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
         try:
             await wait_for(lambda: native.provider.posts == 1)
             message = await Coordination.run_worker(partial(
-                Comms(native.root).messaging.send_message,
+                Comms(native.root).messaging.send,
                 "sender", session, "are you still on the parser?",
             ))
             native.provider.response_gate = None
@@ -346,7 +346,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
 
         await Coordination.run_worker(prepare)
         initial = await Coordination.run_worker(partial(
-            Comms(native.root).messaging.send_message,
+            Comms(native.root).messaging.send,
             "sender", session, "first",
         ))
         try:
@@ -355,7 +355,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             # implementation while Core still has not opened following input.
             await wait_for(lambda: b'"id":"local-tool-once"' in native.session.read_bytes())
             message = await Coordination.run_worker(partial(
-                Comms(native.root).messaging.send_message,
+                Comms(native.root).messaging.send,
                 "sender", session, "deliver as soon as following input opens",
             ))
             await wait_for(lambda: owner.inputs.state(session).idle_revision is not None)
@@ -549,7 +549,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
         lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
         try:
-            first = comms.messaging.send_message("sender", session, "which parser is slow?")
+            first = comms.messaging.send("sender", session, "which parser is slow?").message
             await owner.inputs.drain_inbox(session)
             await wait_for(lambda: native.provider.posts == 1)
             reply_turn = owner.inputs.state(session).wake_task
@@ -565,7 +565,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
                 )
 
             await Coordination.run_worker(store_change)
-            second = comms.messaging.send_message("sender", session, "the yaml one, I mean")
+            second = comms.messaging.send("sender", session, "the yaml one, I mean").message
             native.provider.response_gate = None
             # One observer feeds settings and accepted messages through the running-turn inbox.
             await wait_for(
@@ -632,7 +632,7 @@ async def test_model_change_stored_by_another_process_reaches_the_running_turn(n
                 and owner.inputs.state(session).inbox.empty()
             )
             await Coordination.run_worker(partial(
-                elsewhere.messaging.send_message, "sender", session, "still there?"
+                elsewhere.messaging.send, "sender", session, "still there?"
             ))
             native.provider.response_gate = None
             await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 2)

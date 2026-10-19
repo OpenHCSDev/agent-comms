@@ -15,6 +15,10 @@ class ReviewScope(MessageDisplayScope):
     prefix: str
     index_targets = None
 
+    @property
+    def index_predicate(self):
+        return "1", ()
+
     def includes(self, message):
         return message.body.startswith(self.prefix)
 
@@ -29,21 +33,21 @@ def test_new_scope_preserves_indexed_progress_and_edges(
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
     messages = [
-        comms.messaging.send_message("sender", "recipient", body)
+        comms.messaging.send("sender", "recipient", body).message
         for body in ("noise", "review first", "review " + "x" * 3000,
                      "noise", "review last")
     ]
     # No consumer edit/roster entry: one declared scope is sufficient.
     request = MessagePageRequest(ReviewScope("review"), PageBounds(traversal, max_bytes=1))
-    indexed = request.read(comms.bus.log)
+    indexed = comms.bus.log.read_page(request)
     assert len(indexed.messages) == 1
     assert indexed.messages[0] == messages[first]
     assert indexed.has_newer == has_newer
     assert indexed.has_older == has_older
     continuation = type(traversal)(indexed.messages[0].seq)
-    next_page = MessagePageRequest(
+    next_page = comms.bus.log.read_page(MessagePageRequest(
         request.scope, PageBounds(continuation, max_bytes=1)
-    ).read(comms.bus.log)
+    ))
     assert next_page.messages == (messages[2],)
     assert next_page.has_older and next_page.has_newer
 
@@ -54,7 +58,7 @@ def test_dm_and_channel_pages_by_default_and_explicit_bounds(tmp_path, conversat
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
     target = "recipient" if conversation == "dm" else "#review"
-    sent = [comms.messaging.send_message("sender", target, f"{conversation} {n}") for n in range(4)]
+    sent = [comms.messaging.send("sender", target, f"{conversation} {n}").message for n in range(4)]
 
     def page(bounds=PageBounds()):
         if conversation == "dm":

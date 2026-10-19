@@ -78,7 +78,7 @@ async def test_actual_native_optional_null_then_refusal_then_next_call(native_ba
         session = await native.attach_saved_owner(owner, project=native.project, session=native.session)
         comms = owner._comms
         comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))
-        comms.messaging.send_message("verifier", session, "Fresh P488 native argument verification.")
+        comms.messaging.send("verifier", session, "Fresh P488 native argument verification.").message
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 45)
         assert native.session.read_bytes().startswith(original)

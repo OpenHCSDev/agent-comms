@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from abc import abstractmethod
@@ -124,7 +123,7 @@ class TagAction(Enum):
                 channels.rename_tag(name, new_name)
             case self.DELETE:
                 channels.delete_tag(name, disposition=disposition, confirmed=confirmed)
-        return channels.catalog.read().all_tags(channels.registry.all_threads())
+        return channels.catalog.read().tags
 
 
 class ChannelManagement:
@@ -137,20 +136,17 @@ class ChannelManagement:
         self.catalog = threads.catalog
 
     def channels(self) -> Sequence[str]:
-        return list(self.catalog.read().views(self.registry.all_threads()))
+        return list(self.catalog.read().views())
 
     def _require_available_new_tags(self, proposed: frozenset[str]) -> None:
         document = self.catalog.read()
-        threads = self.registry.all_threads()
-        for tag in proposed - document.all_tags(threads):
-            document.require_available_tag_name(tag, threads)
+        for tag in proposed - document.tags:
+            document.require_available_tag_name(tag)
 
     def create_tag(self, name: str) -> Tag:
         tag = Tag(name)
-        with _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                document.create_tag(tag.name, threads)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            document.create_tag(tag.name)
         return tag
 
     def update_tags(
@@ -172,17 +168,17 @@ class ChannelManagement:
     def _update_tags_locked(self, name, *, add, remove) -> Thread:
         self._require_available_new_tags(add)
         thread = self.registry.require(name)
-        previous_channels = self.catalog.read().views(self.registry.all_threads())
+        previous_channels = self.catalog.read().views()
         updated = replace(thread, tags=(thread.tags | add) - remove)
         self.registry.register(updated, self.registry.status(thread.name))
         updated = self.registry.require(thread.name)
         with self.catalog.editing() as document:
-            document.remember_tags(add, time.time())
+            document.remember_tags(add)
         announcers = thread.role.executor(thread) if thread.tags != updated.tags else ()
         for announcer in announcers:
             channels = {
                 **previous_channels,
-                **self.catalog.read().views(self.registry.all_threads()),
+                **self.catalog.read().views(),
             }
             for channel in channels.values():
                 for change in channel.membership_changes(thread.tags, updated.tags):
@@ -199,11 +195,9 @@ class ChannelManagement:
         return updated
 
     def set_saved_view(self, view: SavedView) -> SavedView:
-        with _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                document.set_view(view, threads)
-                result = document.saved_views[view.name]
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            document.set_view(view)
+            result = document.saved_views[view.name]
         return result
 
     def delete_saved_view(self, name: str) -> None:
@@ -211,29 +205,21 @@ class ChannelManagement:
             document.delete_view(name)
 
     def set_channel_metadata(self, name: str, *, parent: str | None, archived: bool) -> Channel:
-        with _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                return document.set_metadata(name, threads, parent=parent, archived=archived)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_metadata(name, parent=parent, archived=archived)
 
     def set_channel_archived(self, name: str, archived: bool) -> Channel:
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                channel = document.require_channel(name, threads)
-                return document.set_metadata(channel.name, threads, parent=channel.parent, archived=archived)
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            channel = document.require_channel(name)
+            return document.set_metadata(channel.name, parent=channel.parent, archived=archived)
 
     def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:
-        with _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                return document.set_any_mode(name, enabled, threads)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_any_mode(name, enabled)
 
     def set_channel_sort(self, name: str, order: type[ThreadSort]) -> Channel:
-        with _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                return document.set_preferences(name, threads, order=order)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_preferences(name, order=order)
 
     def set_channel_order(self, order: type[ChannelSort]) -> type[ChannelSort]:
         with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
@@ -241,17 +227,15 @@ class ChannelManagement:
         return order
 
     def set_channel_pinned(self, name: str, pinned: bool) -> Channel:
-        with _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                return document.set_preferences(name, threads, pinned=pinned)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_preferences(name, pinned=pinned)
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             snapshot = self.registry.snapshot()
             with self.catalog.editing() as document:
-                view = document.require_channel(channel, snapshot.threads)
+                view = document.require_channel(channel)
                 if pinned:
                     thread.role.require_executable(ValueError(
                         f"Thread {thread.name!r} is not a member of {view.name}."
@@ -267,7 +251,7 @@ class ChannelManagement:
     def rename_tag(self, name: str, new_name: str) -> None:
         Tag.validate(new_name)
         if name == new_name:
-            if name not in self.catalog.read().all_tags(self.registry.all_threads()):
+            if name not in self.catalog.read().tags:
                 raise ValueError(f"Unknown tag: {name!r}")
             return
         self._change_tag(name, new_name)
@@ -279,7 +263,7 @@ class ChannelManagement:
             raise ValueError(disposition.confirmation(name))
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            if name not in self.catalog.read().all_tags(snapshot.threads):
+            if name not in self.catalog.read().tags:
                 raise ValueError(f"Unknown tag: {name!r}")
             cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)
             return disposition.apply(self, name, cohort)
@@ -287,11 +271,11 @@ class ChannelManagement:
     def _change_tag(self, name: str, replacement: str | None) -> None:
         Tag.validate(name)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-            if name not in self.catalog.read().all_tags(self.registry.all_threads()):
+            if name not in self.catalog.read().tags:
                 raise ValueError(f"Unknown tag: {name!r}")
             if replacement is not None:
                 self.catalog.read().require_available_tag_name(
-                    replacement, self.registry.all_threads(), previous=name
+                    replacement, previous=name
                 )
 
             cohort = tuple(thread for thread in self.registry.all_threads().values() if name in thread.tags)

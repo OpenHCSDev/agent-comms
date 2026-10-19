@@ -101,5 +101,5 @@ def test_marker_ownership_failures_still_block_real_read_and_send(tmp_path, dama
     with pytest.raises(RelationViolationError):
         comms.bus.log.read_metadata_unlocked(required=True)
     with pytest.raises(RelationViolationError):
-        comms.messaging.send("owner", "peer", "must not be published")
+        comms.messaging.send("owner", "peer", "must not be published").message.message_id
     assert comms.bus.log.path.read_bytes() == bus

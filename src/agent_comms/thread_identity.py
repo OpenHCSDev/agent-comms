@@ -571,7 +571,7 @@ class UserThreadRole(ThreadRole):
         cls, reads: ReadLedger, message: Message, thread: Thread,
         snapshot: RegistryProvenance, document: ReadDocument | None,
     ) -> object:
-        return reads._displayed_recipient(message, thread, snapshot, document=document)
+        return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
 
     @classmethod
     def page_human_sender(cls) -> bool:

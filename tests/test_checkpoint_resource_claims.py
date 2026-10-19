@@ -22,7 +22,7 @@ def authored(tmp_path):
     paths = tuple(tmp_path / name for name in ('one.txt', 'two.txt', 'three.txt'))
     for path in paths:
         path.write_text('owned\n')
-    original = comms.messaging.send_message('peer', 'owner', 'original source')
+    original = comms.messaging.send('peer', 'owner', 'original source').message
     claim_scope = WakeClaim(root_id, original.seq, original.message_id,
         'cohort-v1:' + 'd' * 64, 1, 'e' * 32, 'execution-one', 'f' * 32,
         1, 'turn-one', 1, 1)
@@ -50,7 +50,7 @@ def test_multi_resource_claim_consumes_one_operation_even_after_release(tmp_path
         assert len(commits) == 1 and commits[0].operation_id == claim_scope.operation_id
         assert source.claim_operation_used(claim_scope.operation_id)
         assert all(source.claim(str(path)).claim_scope == claim_scope for path in paths[:2])
-    comms.messaging.send_message('owner', 'peer', 'release', releases=paths[:2])
+    comms.messaging.send('owner', 'peer', 'release', releases=paths[:2]).message
     assert not comms.bus.log.claim_projection()
     before = comms.bus.log.path.read_bytes()
     with pytest.raises(IdentityConflict, match='already consumed'):
@@ -74,9 +74,9 @@ def test_claim_decisions_never_read_or_decode_retained_messages(tmp_path, monkey
     monkeypatch.setattr(WireLog, 'verified_records_unlocked', forbidden)
     first = authorized(comms, claim_scope, paths[:1])
     with pytest.raises(ClaimConflict):
-        comms.messaging.send_message('peer', 'owner', 'losing', claims=[ExistingFileClaim(paths[0])])
+        comms.messaging.send('peer', 'owner', 'losing', claims=[ExistingFileClaim(paths[0])]).message
     assert comms.bus.log.claim_projection()[str(paths[0])].seq == first.seq
-    comms.messaging.send_message('owner', 'peer', 'release', releases=paths[:1])
+    comms.messaging.send('owner', 'peer', 'release', releases=paths[:1]).message
     with pytest.raises(IdentityConflict):
         authorized(comms, claim_scope, paths[1:2])
     assert not comms.bus.log.claim_projection()

@@ -22,7 +22,7 @@ from typing import Annotated, ClassVar
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
-from .private_nk_entrypoint import PrivateNkLaunch
+from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +33,10 @@ class CommsRoute(ABC):
 
     def observe_root(self) -> Path:
         return self.root.resolve()
+
+    def launch(self) -> RootLaunch:
+        """This root's launch, decoded from its marker and this installation's pin."""
+        return RootLaunch.derive(self)
 
     @contextmanager
     def hold_client_route(self) -> Iterator[None]:

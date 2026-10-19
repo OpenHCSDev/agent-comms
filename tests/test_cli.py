@@ -447,7 +447,7 @@ class TestSelectedTargetActions:
         assert result["outcomes"][2]["result"]["archived"] is True
         assert not comms.registry.status("alpha").visible
         assert comms.registry.status("active").active
-        assert comms.channels.catalog.read().resolve("#team").archived
+        assert comms.channels.catalog.read().require_channel("#team").archived
 
     def test_confirmation_and_target_override_refuse_before_any_batch_write(self, cli, tmp_path):
         comms = self.declared(tmp_path)
@@ -514,7 +514,7 @@ class TestSelectedTargetActions:
                             channel={"alpha": ("#team",), "beta": ("#other",)}).apply(comms)
         assert result.successful and len(result.outcomes) == 3
         catalog = comms.channels.catalog.read()
-        assert catalog.resolve("#team").pinned
+        assert catalog.require_channel("#team").pinned
         assert catalog.pinned_threads("#team") == {"alpha"}
         assert catalog.pinned_threads("#other") == {"beta"}
         assert {name: comms.registry.require(name).tags for name in before} == before
@@ -571,9 +571,9 @@ class TestSelectedTargetActions:
         comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=str(source)))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
         viewer = comms.messaging.user_identity(str(tmp_path)).name
-        comms.messaging.send('alpha', 'beta', 'Executor message')
-        comms.messaging.send('alpha', viewer, 'Human DM')
-        comms.messaging.send('alpha', '#team', 'Channel message')
+        comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id
+        comms.messaging.send('alpha', viewer, 'Human DM').message.message_id
+        comms.messaging.send('alpha', '#team', 'Channel message').message.message_id
         before = completed_snapshot(comms, str(tmp_path))
         assert before.thread_unread['alpha'] == before.unread['alpha'] == 1
         # The canonical tag change also publishes its membership notification.

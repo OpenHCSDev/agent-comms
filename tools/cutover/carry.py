@@ -7,14 +7,12 @@ and ``tools`` on the path. Three rules make a step safe to run on any bus at any
 - It is idempotent: data it already carried reports no change.
 - It names the step it runs ``after`` (``None`` for the first), so the order is
   declared once, by the step that depends on it.
-- It is never edited once it is on main; a different change is a new step.
-  The debt ratchet's ``EditedCarry`` measure refuses an edit, a rename and the
-  reuse of a deleted step's name.
+- Its conversion is never edited once it is on main; a different change is a
+  new step. Its predecessor may change when a finished step is retired.
 
-A step that can no longer run against the current source is deleted. Its code
-stays in Git: a bus whose ledger lacks it runs it from the revision that last wrote
-it, against the source it was written for (``tools/upgrade_bus.py``). So deleting a
-step never strands a bus.
+A finished step is deleted and its successor names the preceding kept step.
+Only predecessors still explicitly named by a kept step are recovered from Git;
+unreferenced deleted steps cannot run again.
 
 Each bus records the steps applied to it in ``carries.json``. Only this family
 reads or writes that file; nothing in ``src/`` depends on it.
@@ -31,7 +29,7 @@ import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -65,15 +63,16 @@ class CarryLedger:
     def path(self) -> Path:
         return self.root / self.name
 
-    def applied(self) -> tuple[str, ...] | None:
-        """None when this bus predates the ledger."""
+    def applied(self) -> tuple[str, ...]:
+        """Empty when this bus predates the ledger: it runs every step, and each
+        leaves already carried data unchanged."""
         if not self.path.exists():
-            return None
+            return ()
         return tuple(json.loads(self.path.read_text())["applied"])
 
     def record(self, name: str) -> None:
         """Called with the bus's wire lock held."""
-        applied = self.applied() or ()
+        applied = self.applied()
         if name in applied:
             return
         payload = json.dumps({"applied": [*applied, name]}, indent=2) + "\n"
@@ -125,7 +124,7 @@ class Carry(ABC):
         args = parser.parse_args()
         with _store_lock(args.root / "wire"):
             if args.apply and not args.before_stop:
-                applied = CarryLedger(args.root).applied() or ()
+                applied = CarryLedger(args.root).applied()
                 checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
                 try:
                     CarryChain.at(Path(checkout), "HEAD").require_next(cls.name(), applied)
@@ -220,9 +219,13 @@ def git(repo: Path, *args: str) -> bytes:
 
 @dataclass(frozen=True)
 class CarryChain:
-    """Every step a revision's history declares, in the order they run."""
+    """Every step a revision's history declares, in the order they run, and the
+    steps that history retired by deleting them."""
 
     steps: tuple[Step, ...]
+    retired: frozenset[str] = frozenset()
+    added: Mapping[str, int] = field(default_factory=dict)
+    """Each step's first main-line addition, numbered oldest first."""
 
     @classmethod
     def at(cls, repo: Path, revision: str) -> CarryChain:
@@ -235,19 +238,21 @@ class CarryChain:
                 step = Step.declared(name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
                 if step is not None:
                     known[name] = step
-        # Oldest first: the order every step reached this revision along its first parents.
-        added = git(repo, "log", "--first-parent", "-m", "--no-renames", "--format=", "--name-only",
-                    "--diff-filter=A", revision, "--", str(STEPS)).decode().split()
-        entered = [Path(path).stem for path in reversed(added)
-                   if Path(path).name.startswith("carry_") and path.endswith(".py")]
-        for name in entered:
-            if f"{name}.py" not in tree:
-                step = cls.deleted(repo, revision, name)
-                if step is not None:
-                    known[name] = step
+        # Only a declared predecessor can keep a historical step reachable.
+        # Deleting a finished step and reconnecting its successor retires it.
+        waiting = list(known.values())
+        while waiting:
+            step = waiting.pop()
+            if step.after is not None and step.after not in known:
+                predecessor = cls.deleted(repo, revision, step.after)
+                if predecessor is None:
+                    raise ValueError(f"Carry step {step.after} is in no revision of {revision}")
+                known[predecessor.name] = predecessor
+                waiting.append(predecessor)
+        retired = cls.retired_at(repo, revision, known)
         if not known:
-            return cls(())
-        known = cls.spliced(known, revision, entered.index)
+            return cls((), retired)
+        added = cls.added_at(repo, revision)
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -265,32 +270,30 @@ class CarryChain:
                 raise ValueError(f"Carry chain loops at {step.name}")
         if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
-        return cls(tuple(reversed(steps)))
+        return cls(tuple(reversed(steps)), retired, added)
 
     @staticmethod
-    def spliced(
-        known: dict[str, Step], revision: str, entered: Callable[[str], int]
-    ) -> dict[str, Step]:
-        """Each step runs after the step it names, and of the steps ready to run, the one
-        that entered history first runs first: a bus ran steps in the order they reached
-        it, so a step added after a deleted line runs after that line instead of stranding
-        every bus that ran it. Two steps in the tree that name one step are a fork in the
-        tree, and stay refused."""
-        named = [step.after for step in known.values() if step.revision == revision]
-        if len(named) != len(set(named)):
-            return known
-        waiting = sorted(known.values(), key=lambda step: entered(step.name))
-        ordered: dict[str, Step] = {}
-        tail = None
-        while waiting:
-            ready = next((step for step in waiting
-                          if step.after == tail or step.after in ordered), None)
-            if ready is None:
-                return known
-            waiting.remove(ready)
-            ordered[ready.name] = replace(ready, after=tail)
-            tail = ready.name
-        return ordered
+    def added_at(repo: Path, revision: str) -> dict[str, int]:
+        """Number each step file's first main-line addition, oldest first."""
+        log = git(repo, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=A",
+                  "--reverse", "--name-only", "--format=%x00", revision, "--", str(STEPS))
+        added: dict[str, int] = {}
+        for index, commit in enumerate(log.decode().split("\0")):
+            for path in commit.split():
+                added.setdefault(Path(path).stem, index)
+        return added
+
+    @staticmethod
+    def retired_at(repo: Path, revision: str, kept: Mapping[str, Step]) -> frozenset[str]:
+        """Step files the main line deleted without keeping them reachable.
+
+        A finished step is retired by deleting its file and reconnecting its
+        successor; a bus that already ran it keeps the name in its ledger."""
+        deleted = git(repo, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=D",
+                      "--name-only", "--format=", revision, "--", str(STEPS)).decode().split()
+        return frozenset(Path(path).stem for path in deleted
+                         if Path(path).parent == STEPS and Path(path).name.startswith("carry_")
+                         and path.endswith(".py")) - set(kept)
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
@@ -314,15 +317,20 @@ class CarryChain:
             raise ValueError(f"the bus must first run {ahead}; run tools/upgrade_bus.py")
 
     def pending(self, applied: tuple[str, ...]) -> tuple[Step, ...]:
-        """The steps a bus still needs. A bus recording a later step but not an
-        earlier one was carried out of order, and is refused."""
+        """The steps a bus still needs. A recorded step must be kept or retired. A bus may
+        lack an earlier kept step only when the main line added it after a later step
+        the bus records; otherwise it was carried out of order, and is refused."""
         names = [step.name for step in self.steps]
-        unknown = set(applied) - set(names)
+        unknown = set(applied) - set(names) - self.retired
         if unknown:
             raise ValueError(f"Bus records steps this history does not declare: {sorted(unknown)}")
         done = [name in applied for name in names]
-        if done != sorted(done, reverse=True):
-            raise ValueError("Bus ledger skips a step that a later recorded step runs after")
+        for index, name in enumerate(names):
+            if not done[index] and any(
+                later in applied and self.added[later] >= self.added[name]
+                for later in names[index + 1:]
+            ):
+                raise ValueError("Bus ledger skips a step that a later recorded step runs after")
         return tuple(step for step, applied_step in zip(self.steps, done) if not applied_step)
 
 

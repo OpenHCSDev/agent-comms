@@ -1,10 +1,10 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
@@ -12,6 +12,8 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, Unmention
 
 if TYPE_CHECKING:
     from .channels import Channel
+    from .read_basis import ChannelConversation, Conversation, DMConversation
+    from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
     from .threads import Thread
 
@@ -51,14 +53,18 @@ class BuiltinChannel(StrEnum):
     def matches(self, tags: frozenset[str]) -> bool:
         return self is not self.NONE or not tags
 
-    @property
-    def history_targets(self) -> frozenset[str] | None:
-        return None if self.aggregate else frozenset((self.value,))
-
 
 class CommandTarget(ABC):
     """A command destination owns its binding and catalog participation."""
     needs_catalog: ClassVar[bool] = False
+
+    @staticmethod
+    @overload
+    def named(name: str) -> NamedTarget: ...
+
+    @staticmethod
+    @overload
+    def named(name: CommandTarget) -> CommandTarget: ...
 
     @staticmethod
     def named(name: str | CommandTarget) -> CommandTarget:
@@ -101,6 +107,10 @@ class NamedTarget(CommandTarget):
     @property
     def names(self) -> tuple[str, ...]:
         return (self.name,)
+
+    @abstractmethod
+    def conversation_key(self, sender: str, snapshot: RegistryProvenance,
+                         channel: type[ChannelConversation], direct: type[DMConversation]) -> Conversation: ...
 
     def canonical_name(self, canonical):
         return self.name
@@ -199,12 +209,12 @@ class ThreadTarget(NamedTarget):
         message, names = recipient.role.initial_delivery(message, target)
         return ThreadTarget(target), message, names
 
-    def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
+    def display_scope(self, viewer, snapshot, catalog, direct_scope):
         return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
 
-    def conversation_key(self, sender, snapshot, constructor):
+    def conversation_key(self, sender, snapshot, channel, direct):
         names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
-        return constructor(participants=tuple(snapshot.participant(name).incarnation for name in names))
+        return direct(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
     def changed_threads(self, names, snapshot, catalog):
         return (self.canonical_name(snapshot.canonical_name),)
@@ -235,10 +245,10 @@ class ChannelTarget(NamedTarget):
         return self
 
     def pending_count(self, counts, snapshot, catalog):
-        return catalog.resolve(self.name).pending_count(counts)
+        return catalog.require_channel(self.name).pending_count(counts)
 
     def resolve(self, snapshot, catalog) -> ResolvedChannel:
-        channel = catalog.resolve(self.name)
+        channel = catalog.require_channel(self.name)
         members = tuple(ResolvedThread(thread, snapshot.status(thread.name))
                         for thread in snapshot.channel_audience()
                         if channel.matches(thread.tags))
@@ -268,22 +278,22 @@ class ChannelTarget(NamedTarget):
         return BoundedTriageWake()
 
     def require_publication(self, message, snapshot, catalog):
-        catalog().resolve(self.name).require_routable()
+        catalog().require_channel(self.name).require_routable()
 
     def initial_delivery(self, sender, message, snapshot, catalog):
-        channel = catalog.resolve(self.name)
+        channel = catalog.require_channel(self.name)
         names = [thread.name for thread in snapshot.channel_audience()
                  if thread.name != sender and channel.matches(thread.tags)]
         return self, message, names
 
-    def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
-        return channel_scope(self.name, catalog.resolve(self.name).history_targets)
+    def display_scope(self, viewer, snapshot, catalog, direct_scope):
+        return catalog.require_channel(self.name).history_scope()
 
-    def conversation_key(self, sender, snapshot, constructor):
-        return constructor(target=self.name)
+    def conversation_key(self, sender, snapshot, channel, direct):
+        return channel(target=self.name)
 
     def changed_threads(self, names, snapshot, catalog):
-        channel = catalog.resolve(self.name)
+        channel = catalog.require_channel(self.name)
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
