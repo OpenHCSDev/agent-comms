@@ -209,7 +209,7 @@ def test_selected_import_and_listing_use_real_saved_records(tmp_path, capsys, co
         agent: f"Launch {agent}" for agent in ("a1", "b2", "c3")}
     assert all(row["message_count"] == row["source_records"] == 2 for row in listing)
     assert main(["--root", str(comms.root), "import-subagents", "--session", str(session),
-                 "--agents", "c3,a1,c3", "--prefix", "selected-"]) == 0
+                 "--agents", "c3,a1,c3", "--prefix", "selected-", "--worktree", str(tmp_path)]) == 0
     result = json.loads(capsys.readouterr().out)
     assert [item["thread"] for item in result["imported"]] == ["selected-c3", "selected-a1"]
     assert "selected-b2" not in comms.registry
@@ -219,8 +219,8 @@ def test_selected_import_and_listing_use_real_saved_records(tmp_path, capsys, co
         assert item["imported_messages"] == 2
         assert item["omitted_messages"] == item["truncated_messages"] == 0
     assert main(["--root", str(comms.root), "import-subagents", "--session", str(session),
-                 "--agents", "b2,missing", "--prefix", "invalid-"]) != 0
-    assert "missing" in capsys.readouterr().err
+                 "--agents", "b2,missing", "--prefix", "invalid-", "--worktree", str(tmp_path)]) != 0
+    assert "missing" in capsys.readouterr().out
     assert "invalid-b2" not in comms.registry
 
 
@@ -330,7 +330,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     # conversation remains outside this prefix-only metadata read.
     session_path = Path(acknowledgement.session_file)
     saved.insert(1, {"type": "model_change", "id": "native-config",
-                     "provider": "authored", "modelId": "authored"})
+                     "timestamp": saved[0]["timestamp"], "provider": "authored", "modelId": "authored"})
     session_path.write_text("".join(json.dumps(record) + "\n" for record in saved)
                             + "not part of the metadata prefix\n")
     assert ImportedSessionMetadata.sources_for_owner(comms.registry, original_owner) == refs
@@ -660,8 +660,12 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     acknowledgement = comms.threads.import_thread(
         OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
     thread = comms.registry.require("imported")
-    assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
-    assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 5
+    from agent_comms.child_process import NoProcess
+
+    assert thread.process_identity == NoProcess()
+    assert comms.registry.status(thread.name) == StoppedThreadStatus()
+    assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 7
+    # Full history includes the displayed source summary and its compaction record.
     assert thread.title == "Current task"
     assert source.read_bytes() == before
     if os.name == "posix":
@@ -784,5 +788,5 @@ def test_import_cli_and_invalid_sources(tmp_path, capsys, comms):
     with pytest.raises(ValueError, match="No single"):
         read(OpenCodeHarness, tmp_path / "export.txt")
     for removed in ("--max-messages", "--max-characters", "--max-message-characters"):
-        with pytest.raises(SystemExit):
-            main(["import-subagents", "--session", str(source), removed, "1"])
+        assert main(["import-subagents", "--session", str(source), removed, "1"]) != 0
+        assert "unrecognized arguments" in capsys.readouterr().out

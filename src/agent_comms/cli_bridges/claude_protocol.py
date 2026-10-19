@@ -5,8 +5,11 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Iterator, Literal
 from xml.etree import ElementTree
+
+if TYPE_CHECKING:
+    from .claude import ClaudeTranscript
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
@@ -268,7 +271,8 @@ class ClaudeRecord(TaggedWire, ABC):
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
-    def import_updates(self, source, session: ClaudeSession, offset: int, raw: bytes):
+    def import_updates(self, source: ClaudeTranscript, session: ClaudeSession,
+                       offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from source.record_updates(self, session, offset, raw)
 
     def begins_history(self) -> bool:
@@ -787,11 +791,12 @@ class ForkContextReference(MetadataRecord):
     """A forked subagent starts from its parent's context, stored in the parent's transcript."""
     wire_tag = 'fork-context-ref'
     parentSessionId: str
-    parentLastUuid: str
+    parent_last_uuid: str = Field(alias='parentLastUuid')
 
-    def import_updates(self, source, session: ClaudeSession, offset: int, raw: bytes):
+    def import_updates(self, source: ClaudeTranscript, session: ClaudeSession,
+                       offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
         """Resolve the exact inherited cut; later parent work is not this fork's history."""
-        yield from source.inherited_updates(self.parentSessionId, self.parentLastUuid)
+        yield from source.inherited_updates(self.parentSessionId, self.parent_last_uuid)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice(f'Context inherited from session {self.parentSessionId} is not imported.'),)

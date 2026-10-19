@@ -7,7 +7,7 @@ from contextlib import aclosing
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import AsyncIterator, BinaryIO, Self
+from typing import AsyncIterator, BinaryIO, Self, cast
 
 from agent_comms.cli_protocol import WireModel
 from agent_comms.coordination_database import CoordinationStore
@@ -70,8 +70,9 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
             raise ValueError('The transcript belongs to a different Claude session.')
         return super().facts(stream, boundary)
 
-    def import_updates(self, record, state, offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
-        yield from record.import_updates(self, state, offset, raw)
+    def import_updates(self, record: object, state: object,
+                       offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
+        yield from cast(ClaudeRecord, record).import_updates(self, cast(ClaudeSession, state), offset, raw)
 
     def inherited_updates(self, session_id: str, last_uuid: str) -> Iterator[RuntimeUpdate]:
         directory = self.source.parent

@@ -218,7 +218,8 @@ class JsonLinesFile(JsonLines, ReadAtOnce):
         if raw := stream.read(boundary - offset).strip():
             yield offset, raw
 
-    def import_updates(self, record, state, offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
+    def import_updates(self, record: object, state: object,
+                       offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from self.record_updates(record, state, offset, raw)
 
     def read_import(self) -> Iterator[RuntimeUpdate]:
