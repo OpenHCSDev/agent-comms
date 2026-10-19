@@ -49,6 +49,7 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -161,7 +162,7 @@ class Home:
     def declared(self, environment: RestartEnvironment) -> RestartEnvironment:
         return replace(environment, home=str(self.path))
 
-    def environment(self, inherited: Mapping[str, str], imported: ImportPath) -> dict[str, str]:
+    def environment(self, inherited: Mapping[str, str], imported: ImportPath) -> Mapping[str, str]:
         """``inherited`` with this home's declared variables, ``imported`` its only import path."""
         declared = replace(
             self.declared(RestartEnvironment.inherit(inherited)), pythonpath=imported
@@ -198,7 +199,7 @@ class RehearsalHome(Home):
             super().declared(environment), root=None, native_config=PI, agent_directory=self.pi
         )
 
-    def environment(self, inherited: Mapping[str, str], imported: ImportPath) -> dict[str, str]:
+    def environment(self, inherited: Mapping[str, str], imported: ImportPath) -> Mapping[str, str]:
         # Nor is its own thread.
         return ThreadLaunch.strip(super().environment(inherited, imported))
 
@@ -249,7 +250,7 @@ class Runtime:
     def record(self) -> Path:
         return self.path / self.record_name
 
-    def environment(self, *paths: Path) -> dict[str, str]:
+    def environment(self, *paths: Path) -> Mapping[str, str]:
         """``paths`` alone are importable beside the runtime's own packages; ``home``
         holds the route its clients read."""
         imported = (
@@ -327,6 +328,11 @@ class Runtime:
             "--arguments",
             json.dumps({"name": name}),
         ).restart
+
+    def queue_restarts(self, root: Path) -> tuple[QueuedRestart, ...]:
+        """Every independent owner gets its request concurrently, not one stop delay at a time."""
+        with ThreadPoolExecutor() as requests:
+            return tuple(requests.map(partial(self.queue_restart, root), self.owners(root)))
 
     def settled(self, root: Path, queued: QueuedRestart, patience: int) -> QueuedRestart:
         """The queued restart once it settles; a settled restart names the owner's
@@ -692,10 +698,6 @@ def snapshot_store(source: Path, target: Path) -> None:
     shutil.copystat(source, target)
 
 
-def mib(size: int) -> str:
-    return f"{size / 2**20:.0f} MiB"
-
-
 @dataclass(frozen=True)
 class CopySize:
     """What a copy needed before it was taken, and what it holds on disk."""
@@ -782,8 +784,8 @@ class BusSnapshot:
             needed, free = self.needed(), shutil.disk_usage(copy.parent).free
             if needed > free:
                 raise UpgradeRefused(
-                    f"A copy of {self.root} needs {mib(needed)}; "
-                    f"{copy.parent} has {mib(free)} free"
+                    f"A copy of {self.root} needs {needed} bytes; "
+                    f"{copy.parent} has {free} bytes free"
                 )
             shutil.copytree(
                 self.root, copy, symlinks=True, ignore=self.skipped, copy_function=self.present
@@ -863,27 +865,27 @@ class Turn(ABC):
     """Where the rehearsal's owner is in its turn, as its replies show."""
 
     @abstractmethod
-    def state(self) -> str: ...
+    def queued_line(self, name: str, at: float) -> str: ...
 
     @abstractmethod
     def ended(self) -> float:
         """When the turn's reply arrived."""
 
 
-class RunningTurn(Turn):
-    def state(self) -> str:
-        return "running"
+class TurnRunning(Turn):
+    def queued_line(self, name: str, at: float) -> str:
+        return f"{name}: queued at {clock(at)}, turn running"
 
     def ended(self) -> float:
         raise UpgradeRefused("The owner restarted while its turn had not replied")
 
 
 @dataclass(frozen=True)
-class EndedTurn(Turn):
+class TurnEnded(Turn):
     reply: Message
 
-    def state(self) -> str:
-        return "already ended"
+    def queued_line(self, name: str, at: float) -> str:
+        return f"{name}: queued at {clock(at)}, turn already ended"
 
     def ended(self) -> float:
         return self.reply.timestamp
@@ -927,7 +929,7 @@ class TurnInProgress:
             "--limit",
             "20",
         )
-        return next(map(EndedTurn, page.carrying(self.name, self.token)), RunningTurn())
+        return next(map(TurnEnded, page.carrying(self.name, self.token)), TurnRunning())
 
     def restarted(self, runtime: Runtime, root: Path, patience: int = 600) -> OwnerRestart:
         """Queue the owner while its turn runs, and its restart once that turn ends."""
@@ -937,7 +939,7 @@ class TurnInProgress:
         return OwnerRestart(
             queued,
             (
-                f"{self.name}: queued at {clock(at)}, turn {turn.state()}",
+                turn.queued_line(self.name, at),
                 f"{self.name}: turn ended at {clock(self.now(runtime, root).ended())}",
                 f"{self.name}: {json.dumps(FieldCodec.encode(record.state))} "
                 f"onto {record.target.interpreter}",
@@ -969,7 +971,7 @@ class Publication:
 
     runtime: Runtime
 
-    def links(self) -> dict[Path, Path]:
+    def links(self) -> Mapping[Path, Path]:
         """The runtime's own programs and skills, as its own Core declares them."""
         listed = json.loads(
             self.runtime.report(
@@ -1008,7 +1010,7 @@ class Publication:
             )
 
 
-def runtime_references(runtimes: list[Path]) -> dict[Path, list[int]]:
+def runtime_references(runtimes: list[Path]) -> Mapping[Path, list[int]]:
     """This user's processes naming each runtime in their command, environment, mappings,
     working directory, executable or open files. One that cannot be read names them all."""
     references: dict[Path, list[int]] = {path: [] for path in runtimes}
@@ -1217,7 +1219,7 @@ def live(
             file=sys.stderr,
         )
         raise
-    queued = tuple(runtime.queue_restart(root, name) for name in runtime.owners(root))
+    queued = runtime.queue_restarts(root)
     return Installed(
         passed, queued, services, str(backup.path), prune({runtime.path, installed.path})
     )
