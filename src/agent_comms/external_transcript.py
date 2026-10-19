@@ -212,19 +212,8 @@ class ExternalEventRow(TypedTable):
         judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
         placeholders = lambda values: ",".join("?" for _ in values)
         since = todo.order.at.recorded_at("An order")
-        # SQL NULL is the original undated fact, decoded through FieldCodec
-        # as UnrecordedEventTime when a row is read. No time is substituted.
-        table = cls.declared_name
-        selected = f'u.thread=? AND u.kind=? AND u.tool IN ({placeholders(tools)})'
-        # Two ranges keep timestamp in the index search, rather than scanning
-        # every historical edit to evaluate an OR for each row.
-        where = (
-            f'e.rowid IN (SELECT u.rowid FROM "{table}" u WHERE {selected} AND u.timestamp>=? '
-            f'UNION ALL SELECT u.rowid FROM "{table}" u WHERE {selected} '
-            'AND u.timestamp IS NULL)'
-        )
-        scope = (thread, ToolStartTranscript.declared_name, *tools)
-        parameters = (*scope, since, *scope)
+        where = f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) AND e.timestamp>=?'
+        parameters = (thread, ToolStartTranscript.declared_name, *tools, since)
         if judged:
             where += f' AND e.call_id NOT IN ({placeholders(judged)})'
             parameters += judged
