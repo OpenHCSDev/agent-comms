@@ -135,7 +135,6 @@ class RetainedBus:
             _atomic_write_text(path, json.dumps(FieldCodec.encode(updated), indent=2) + "\n",
                                fsync_parent=True)
 
-
     @classmethod
     def restore(cls, checkout: Path, revision: str) -> None:
         """Restore the committed declaration before rolling its checkout back."""
