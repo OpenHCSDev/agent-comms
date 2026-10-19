@@ -332,6 +332,25 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
                                     f'delivered {clock(2035)} as {delivered}')
 
 
+def test_each_delivery_declares_the_strikes_it_carries(commander):
+    """A commit delivered after the deadline strikes its holder once; one on time strikes nobody,
+    and an operation strikes nobody, whenever it is recorded."""
+    comms, _ = commander
+    create(commander, 'P1', deadline=2000)
+    todo = comms.goals.todos.get('P1')
+    lead = comms.registry.require('lead').incarnation
+
+    def strikes(delivery, at):
+        return replace(delivery, at=RecordedEventTime(at)).strikes(todo, lead)
+
+    commit = CommitDelivery(commit='a' * 40, delivered_commit='b' * 40)
+    (late,) = strikes(commit, 2035)
+    assert (late.previous, late.actor, late.expected_revision) == (todo.held(), lead, todo.revision)
+    assert late.reason.startswith('P1 order order-P1 late by 35 s') and 'b' * 40 in late.reason
+    assert strikes(commit, 2000) == ()
+    assert strikes(OperationDelivery(), 9000) == ()
+
+
 def test_a_main_merge_is_never_the_delivered_commit(commander):
     """P44 recorded the commander's main merge as the delivery, 72 minutes after the unit's own push."""
     comms, caller = commander
