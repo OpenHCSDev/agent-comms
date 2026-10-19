@@ -164,4 +164,6 @@ def test_a_read_tool_changes_no_store_for_any_caller(comms, tmp_path, monkeypatc
 
 def test_every_tool_declares_a_tool_result():
     for tool in ToolRequest.members_with(ToolRequest):
-        assert issubclass(result_type(tool), ToolResult), tool.declared_name
+        from typing import get_args
+        result = result_type(tool)
+        assert all(issubclass(member, ToolResult) for member in (get_args(result) or (result,))), tool.declared_name

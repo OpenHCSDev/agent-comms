@@ -449,7 +449,8 @@ def recorded(unit: str, todo: Todo, strike: StrikeTodo) -> None:
     """Core records the strike on the task's Todo; it is written to the narrative file and posted
     to #comms in the same step."""
     refuse(strike.reason, *OUTGOING)  # posted to #comms, so refused before Core records the strike
-    if call(CommsChangeProblemTool(problem=todo.id, operation=strike)).todo.revision == todo.revision:
+    if (call(CommsChangeProblemTool(problem=todo.id, operation=strike))
+            .todo.revision == todo.revision):
         return
     posted(unit, COMMS.goals.todos.get(todo.id), strike)
 
