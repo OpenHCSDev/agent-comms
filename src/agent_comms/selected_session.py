@@ -13,7 +13,7 @@ from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import NativeSessionFileRole
-from .launch_runtime import RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .pi_vocabulary import ThinkingChoice
 
 if TYPE_CHECKING:
@@ -50,9 +50,9 @@ class SelectedSession:
         return NativeArguments(()).with_thinking(thinking_level).argv
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
-        environment = ThreadLaunch.strip(dict(os.environ))
-        environment.update(original or {})
-        configuration = RestartEnvironment.inherit(environment).for_agent(agent_dir)
+        runtime = original or LaunchRuntime.running()
+        environment = runtime.environment(os.environ)
+        configuration = runtime.configuration.for_agent(agent_dir)
         environment["PI_OFFLINE"] = "1"
         return environment, configuration
 

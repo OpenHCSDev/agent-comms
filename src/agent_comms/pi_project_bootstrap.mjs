@@ -2,20 +2,33 @@
  * Pi's CLI otherwise prefers the original cwd in the immutable session header.
  * Its SDK already supports cwdOverride; apply that supported option at CLI entry.
  */
-import { realpathSync } from "node:fs";
+import { realpathSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+// Core supplies this one process-local record explicitly. Tool subprocesses
+// inherit neither its argv nor the decoded record.
+const launchIndex = process.argv.indexOf("--comms-launch");
+if (launchIndex >= 0) {
+  const file = process.argv[launchIndex + 1];
+  if (!file) throw new Error("Launch record path is missing");
+  const record = JSON.parse(readFileSync(file, "utf8"));
+  Object.defineProperty(process, "commsLaunch", { value: Object.freeze(record) });
+  Object.defineProperty(process, "commsLaunchFile", { value: file });
+  process.argv.splice(launchIndex, 2);
+}
+const launch = process.commsLaunch;
+
 // This optional launch policy guards the SDK's default fetch transport, not
 // arbitrary sockets or subprocesses. Install before importing any SDK module.
-if (process.env.AGENT_COMMS_NATIVE_ORIGIN !== undefined) {
-  const value = process.env.AGENT_COMMS_NATIVE_ORIGIN;
+if (launch?.native_origin != null) {
+  const value = launch.native_origin;
   let selected;
   try { selected = new URL(value); } catch { /* rejected below */ }
   if (!selected || selected.protocol !== "http:" ||
       !["127.0.0.1", "[::1]"].includes(selected.hostname) ||
       selected.origin !== value || selected.username || selected.password) {
-    const error = new Error("AGENT_COMMS_NATIVE_ORIGIN requires a canonical numeric loopback HTTP origin");
+    const error = new Error("Launch origin requires a canonical numeric loopback HTTP origin");
     error.code = "ERR_AGENT_COMMS_NATIVE_ORIGIN_POLICY";
     throw error;
   }
@@ -68,7 +81,7 @@ if (process.env.AGENT_COMMS_NATIVE_ORIGIN !== undefined) {
   });
 }
 
-if (process.env.AGENT_COMMS_MANAGED === "1" && process.env.PI_WORKTREE && process.argv[1]) {
+if (launch?.thread?.managed && process.argv[1]) {
   let entry;
   try { entry = realpathSync(process.argv[1]); } catch { /* node stdin / non-file entry */ }
   const bundled = entry && basename(dirname(entry)) === "bundle";
@@ -78,7 +91,7 @@ if (process.env.AGENT_COMMS_MANAGED === "1" && process.env.PI_WORKTREE && proces
     const { SessionManager } = await import(pathToFileURL(join(dist, "core/session-manager.js")).href);
     const open = SessionManager.open;
     SessionManager.open = function (path, sessionDir, cwdOverride) {
-      return open.call(this, path, sessionDir, cwdOverride ?? process.env.PI_WORKTREE);
+      return open.call(this, path, sessionDir, cwdOverride ?? launch.thread.worktree);
     };
     if (bundled) {
       // The bundled CLI has its own private SessionManager copy. Run the

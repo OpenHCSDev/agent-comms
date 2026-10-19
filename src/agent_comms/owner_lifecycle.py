@@ -425,11 +425,12 @@ class OwnerLifecycle:
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
         agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
-        env = initial_input.launch(thread.launch()).apply(env)
-        env[NativeArguments.binary_key] = agent_bin
-        env["AGENT_COMMS_ROOT"] = str(self.launch_authority.child_root)
-        if agent_args is not None:
-            env[NativeArguments.arguments_key] = shlex.join(agent_args)
+        launch_runtime = replace(launch_runtime,
+            root=Path(self.launch_authority.child_root),
+            thread=initial_input.launch(thread.launch()), agent_bin=agent_bin,
+            agent_args=None if agent_args is None else tuple(agent_args))
+        launch_arguments = launch_runtime.write(
+            self.root / 'runtime' / f'owner-launch-{thread.incarnation.require_recorded().lookup}.json')
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:
@@ -439,7 +440,7 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker"),
+                (str(launch_runtime.interpreter), "-m", "agent_comms.worker", *launch_arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,

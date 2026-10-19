@@ -24,7 +24,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -1381,8 +1381,6 @@ class ParentLifeline:
     when the operation is stuck on another Python thread.
     """
 
-    variable = "AGENT_COMMS_PARENT_LIFELINE_FD"
-
     def __enter__(self):
         self.read_fd, self.write_fd = os.pipe()
         return self
@@ -1392,12 +1390,14 @@ class ParentLifeline:
         os.close(self.write_fd)
 
     @property
-    def environment(self) -> dict[str, str]:
-        return {**os.environ, self.variable: str(self.read_fd)}
+    def runtime(self) -> LaunchRuntime:
+        return replace(LaunchRuntime.running(), parent_lifeline_fd=self.read_fd)
 
     @classmethod
     def guard(cls) -> None:
-        descriptor = int(os.environ.pop(cls.variable))
+        descriptor = LaunchRuntime.startup().parent_lifeline_fd
+        if descriptor is None:
+            raise ValueError('Launch record has no parent lifeline')
         os.fstat(descriptor)
 
         def parent_watchdog() -> None:

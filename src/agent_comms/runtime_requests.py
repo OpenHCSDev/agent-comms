@@ -177,14 +177,6 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
         snapshot.require_owner_process(owner, process)
         return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
 
-    def environment(self, root):
-        from .runtime import socket_path
-
-        return {
-            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
-        }
-
     def require_original(self, entry):
         if not entry.matches_name(self.thread):
             raise ValueError("Project request names another original thread")

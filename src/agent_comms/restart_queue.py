@@ -109,19 +109,18 @@ class RestartTarget:
     agent_bin: str
 
     @classmethod
-    def capture(cls, comms: Comms, source: Mapping[str, str], selected: LaunchRuntime):
-        runtime = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
-        )
+    def capture(cls, comms: Comms, source: LaunchRuntime, selected: LaunchRuntime):
+        comms.owners.require_launch_authority()
+        runtime = selected.configuration
         return cls(
             str(selected.interpreter),
             runtime,
-            comms.owners.restart_entrypoint(source[NativeArguments.binary_key], selected),
+            comms.owners.restart_entrypoint(source.agent_bin, selected),
         )
 
     @property
     def launch_runtime(self) -> LaunchRuntime:
-        return LaunchRuntime(Path(self.interpreter))
+        return LaunchRuntime(Path(self.interpreter), configuration=self.runtime)
 
     def require_available(self, comms: Comms) -> None:
         self.launch_runtime.require_available()
@@ -132,13 +131,11 @@ class RestartTarget:
 
     @property
     def is_current_watcher(self) -> bool:
-        return self.launch_runtime == LaunchRuntime.running()
+        return self.launch_runtime.interpreter == LaunchRuntime.running().interpreter
 
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
-        current = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime)
-        )
+        current = LaunchRuntime.running().configuration
         if not self.is_current_watcher or self.runtime != current:
             raise ValueError("Watcher target runtime changed")
 
@@ -263,7 +260,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
         status = snapshot.statuses[owner.name]
         owner.require_restart_owner(status)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = RestartTarget.capture(comms, launch.environment, launch_runtime)
+        target = RestartTarget.capture(comms, launch.runtime, launch_runtime)
         target.require_available(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with queue.locked():
@@ -284,9 +281,11 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
 
 def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
     # The resident watcher inherits only its declared runtime configuration.
+    runtime = replace(target.launch_runtime, root=root.resolve())
+    arguments = runtime.write(root / DIRECTORY / f'watcher-launch-{uuid.uuid4().hex}.json')
     return ParentedProcess.launch(
-        (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
-        env=target.runtime.encode(),
+        (str(runtime.interpreter), "-m", "agent_comms.restart_queue", *arguments),
+        env=runtime.environment({}),
     )
 
 
@@ -413,9 +412,10 @@ async def run(comms: Comms) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
-    comms = wire(sys.argv[1])
+    runtime = LaunchRuntime.startup()
+    if len(sys.argv) != 1:
+        raise SystemExit('usage: python -m agent_comms.restart_queue --comms-launch FILE')
+    comms = wire(runtime.require_root())
     try:
         asyncio.run(run(comms))
     except (OSError, ValueError, CoordinationError) as exc:

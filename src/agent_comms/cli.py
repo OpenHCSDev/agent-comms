@@ -38,8 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root",
         default=None,
-        help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
+        help="Comms root directory (default active route or ~/.agent-comms)",
     )
+    parser.add_argument('--comms-launch', type=Path, help=argparse.SUPPRESS)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
         declaration.add_parser(subparsers)
@@ -49,8 +50,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
+        from .launch_runtime import LaunchRuntime
+        root = Path(args.root).expanduser() if args.root else None
+        if args.comms_launch is not None:
+            runtime = LaunchRuntime.read(args.comms_launch)
+            LaunchRuntime.install(runtime)
+            if root is None:
+                root = runtime.root
         command = CliCommand.member_named(args.command).from_namespace(args)
-        with client_wire(Path(args.root).expanduser() if args.root else None) as comms:
+        with client_wire(root) as comms:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

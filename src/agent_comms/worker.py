@@ -17,7 +17,8 @@ from .launch_runtime import LaunchRuntime, ThreadLaunch
 async def run() -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
-    comms = wire()
+    runtime = LaunchRuntime.startup()
+    comms = wire(runtime.require_root())
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
     name = ThreadLaunch.current().name
@@ -89,16 +90,17 @@ def main() -> int:
     before consulting a route or wire so discovery cannot start an owner.
     Registration belongs to the original thread management operation.
     """
+    runtime = LaunchRuntime.startup()
     argparse.ArgumentParser(
         prog="agent-comms-agent", description=__doc__,
         epilog=(
-            f"Select an existing owner with {ThreadLaunch.variable('name')}. "
+            "Select an existing owner with --comms-launch FILE. "
             "Use agent-comms for commands."
         ),
     ).parse_args()
     name = ThreadLaunch.current().name
 
-    comms = wire()
+    comms = wire(runtime.require_root())
     comms.owners.require_private_launch()  # Headless execution needs a private bus root.
     thread = comms.registry.require(name)
     if thread.process_identity.alive():

@@ -12,7 +12,7 @@ from typing import ClassVar
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import RestartEnvironment
+from .launch_runtime import LaunchRuntime
 
 
 class PiHelperError(ValueError):
@@ -78,7 +78,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         node = shutil.which("node")
         if node is None:
             raise PiHelperError("Pi helper needs Node")
-        configuration = RestartEnvironment.inherit(environment)
+        configuration = LaunchRuntime.running().configuration
         environment.update(configuration.encode_native())
         for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             environment.pop(key, None)

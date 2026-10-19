@@ -13,7 +13,7 @@ import sqlite3
 import sys
 from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, replace, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -135,13 +135,20 @@ def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
     from .active_route import resolve_comms_route
 
-    package = resolve_comms_route().launch().require_private().validate()
+    launch_arguments = tuple(sys.argv[1:])
+    runtime = LaunchRuntime.startup()
+    record_arguments: tuple[str, ...] = ()
+    if LaunchRuntime.argument in launch_arguments:
+        index = launch_arguments.index(LaunchRuntime.argument)
+        record_arguments = launch_arguments[index:index + 2]
+    package = resolve_comms_route(runtime.root).launch().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
         package, tuple(sys.argv[1:]), Path.cwd(), environment,
-        RestartEnvironment.inherit(environment),
-        LaunchRuntime.running(),
+        runtime.configuration,
+        runtime,
     )
+    argv = (*argv, *record_arguments)
     os.execvpe(argv[0], list(argv), environment)
     return 0
 
@@ -422,8 +429,6 @@ class NativePiRpcLaunch:
     session: SelectedSession
     package: VerifiedNativePackage
 
-    root: Path = field(kw_only=True)
-    configuration: RestartEnvironment = field(kw_only=True)
     runtime: LaunchRuntime = field(kw_only=True)
 
     @classmethod
@@ -437,7 +442,6 @@ class NativePiRpcLaunch:
         except OSError as error:
             raise NativePiUnavailable("Canonical owner instruction asset is unavailable") from error
         env = package.node_environment(environment)
-        env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
         env.update(configuration.encode_native())
         argv = (
@@ -449,7 +453,8 @@ class NativePiRpcLaunch:
     @classmethod
     def _build(cls, package, arguments, cwd, environment, session, configuration, runtime, root):
         argv, env = cls.bootstrap(package, arguments, cwd, environment, configuration, runtime)
-        return cls(argv, cwd, env, session, package, root=root, configuration=configuration, runtime=runtime)
+        return cls(argv, cwd, env, session, package,
+                   runtime=replace(runtime, root=Path(root), configuration=configuration))
 
     @classmethod
     def _command_selection(
@@ -550,13 +555,13 @@ class NativePiRpcLaunch:
         cwd = Path(cwd).resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        env = dict(os.environ)
-        env.update(environment or {})
+        runtime = environment or runtime
+        env = runtime.environment(os.environ)
         arguments += ("--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))
-        return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
+        return cls._build(package, arguments, cwd, env, session, runtime.configuration, runtime, root)
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
@@ -625,7 +630,8 @@ class NativePiRpcLaunch:
         arguments.extend(session.launch_arguments(thinking_level))
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
-        env, configuration = session.launch_environment(agent_dir, environment)
+        runtime = environment or runtime
+        env, configuration = session.launch_environment(agent_dir, runtime)
         return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
 
 

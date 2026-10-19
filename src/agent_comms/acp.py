@@ -293,7 +293,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
 
     def _debug_log(self, message: str) -> None:
-        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
+        from .launch_runtime import LaunchRuntime
+        debug_path = LaunchRuntime.running().debug_log
         if debug_path:
             with open(debug_path, "a") as debug_log:
                 debug_log.write(f"[{time.time():.3f}] {message}\n")
@@ -487,35 +488,37 @@ class CommsClient(CommsAgent):
 def main() -> int:
     from .active_route import resolve_comms_route
 
-    with resolve_comms_route().hold_client_route():
+    from .launch_runtime import LaunchRuntime
+    runtime = LaunchRuntime.startup()
+    with resolve_comms_route(runtime.require_root()).hold_client_route():
         if "--login" in sys.argv[1:]:
             from .login import run_login
 
             index = sys.argv.index("--login")
             return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
-        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
+        debug_path = runtime.debug_log
         if debug_path:
             import logging
 
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s %(name)s %(levelname)s %(message)s",
-                filename=debug_path + ".log",
+                filename=str(debug_path) + ".log",
             )
         # The stdio ACP client only attaches to a separately owned worker. A
         # private launch is checked before it can request an owner; the worker
         # independently repeats the same preflight.
-        comms = wire()
+        comms = wire(runtime.require_root())
         comms.owners.require_launch_authority()
 
         async def run() -> None:
-            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
+            if debug_path is not None:
 
                 async def watchdog() -> None:
                     while True:
                         await asyncio.sleep(5)
                         tasks = [t for t in asyncio.all_tasks() if not t.done()]
-                        with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
+                        with debug_path.open('a') as debug_log:
                             debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
                             for task in tasks:
                                 stack = task.get_stack()
@@ -541,7 +544,7 @@ def main() -> int:
                 )
 
             conn_kwargs: dict[str, Any] = {}
-            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
+            if debug_path is not None:
                 conn_kwargs["observers"] = [observe]
             try:
                 await run_agent(agent, use_unstable_protocol=agent.use_unstable_protocol,

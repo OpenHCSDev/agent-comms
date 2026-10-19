@@ -18,8 +18,9 @@ from .task_sources import AnnotationDisclosureGrant
 class AnnotationPolicy(DeclaredFamily, affix="AnnotationPolicy"):
     @classmethod
     def configured(cls):
-        raw = os.environ.get("AGENT_COMMS_ANNOTATION_POLICY")
-        return FieldCodec.decode(cls, json.loads(raw)) if raw else DisabledAnnotationPolicy()
+        from .launch_runtime import LaunchRuntime
+        source = LaunchRuntime.running().annotation_grant
+        return DisabledAnnotationPolicy() if source is None else GrantedAnnotationPolicy(source)
 
     @abstractmethod
     def observe(self, worker, session_id, manifest, values): ...

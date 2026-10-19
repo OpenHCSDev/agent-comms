@@ -222,9 +222,6 @@ class NoExtensionsArgument(NamedOption, FlagArgument):
 @dataclass(frozen=True)
 class NativeArguments:
     entries: tuple[NativeArgument, ...]
-    binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
-    arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
-    default_binary: ClassVar[str] = "pi"
 
     @classmethod
     def owner_launcher(cls, runtime: LaunchRuntime) -> str:
@@ -236,21 +233,17 @@ class NativeArguments:
 
     @classmethod
     def configured_binary(
-        cls, binary: str | None = None, environment: Mapping[str, str] | None = None,
+        cls, binary: str | None = None,
     ) -> str:
-        source = os.environ if environment is None else environment
-        return binary or source.get(cls.binary_key, cls.default_binary)
+        return binary or LaunchRuntime.running().agent_bin
 
     @classmethod
     def configured(
         cls,
         arguments: Sequence[str] | None = None,
-        environment: Mapping[str, str] | None = None,
     ) -> NativeArguments:
         if arguments is None:
-            source = os.environ if environment is None else environment
-            encoded = source.get(cls.arguments_key)
-            arguments = () if encoded is None else shlex.split(encoded)
+            arguments = LaunchRuntime.running().agent_args or ()
         return cls.parse(arguments)
 
     @classmethod

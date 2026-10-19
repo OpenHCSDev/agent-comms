@@ -22,10 +22,7 @@ class RetainedOwnerLaunch:
     process: ProcessIdentity
     interpreter: str
     environment: dict[str, str] = field(repr=False)
-    configuration: launch_runtime.RestartEnvironment = field(init=False)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "configuration", launch_runtime.RestartEnvironment.inherit(self.environment))
+    runtime: launch_runtime.LaunchRuntime
 
     @classmethod
     def capture(
@@ -44,23 +41,12 @@ class RetainedOwnerLaunch:
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
         platform.require(process)
-        route = launch_runtime.ThreadLaunch.current(environment).name
-        if not environment.get(NativeArguments.binary_key):
-            raise RelationViolationError("Owner launch configuration cannot be verified")
+        runtime = launch_runtime.LaunchRuntime.for_process(process.pid)
+        route = runtime.require_thread().name
+        platform.require(process)
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
         if snapshot.owner_identity(route) != snapshot.owner_identity(thread.name):
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
-        result = cls(process, observed_interpreter, environment)
-        result.arguments  # Decode/validate malformed shell arguments before any fence.
-        return result
-
-    @property
-    def binary(self) -> str:
-        return self.environment[NativeArguments.binary_key]
-
-    @property
-    def arguments(self) -> tuple[str, ...] | None:
-        arguments = self.environment.get(NativeArguments.arguments_key)
-        return tuple(shlex.split(arguments)) if arguments is not None else None
+        return cls(process, observed_interpreter, environment, runtime)

@@ -148,11 +148,18 @@ class PiSessionChild(PiChild):
     async def start(cls, key, attestation):
         launch, _ = key
         with ExitStack() as resources:
-            environment = dict(launch.env)
-            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
-                address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
-                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
+            from dataclasses import replace
+            from uuid import uuid4
+            runtime = launch.runtime
+            if runtime.project_socket is not None:
+                address = resources.enter_context(PrivateSocketRole.address(runtime.project_socket))
+                runtime = replace(runtime, project_socket=address)
+            if runtime.root is None:
+                raise NativePiUnavailable('Native child requires its explicit root')
+            path = runtime.root / 'runtime' / f'native-launch-{uuid4().hex}.json'
+            arguments = runtime.write(path)
+            resources.callback(path.unlink, missing_ok=True)
+            return await cls.start_command((*launch.argv, *arguments), cwd=str(launch.cwd), env=launch.env,
                 key=key, attestation=attestation, resources=resources.pop_all())
 
 
@@ -285,7 +292,7 @@ class RetainedNative(ChildNative):
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
                 root=root, worktree=worktree, environment=environment, session_file=session_file)
-            if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
+            if candidate is not None and (candidate, candidate.runtime.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original

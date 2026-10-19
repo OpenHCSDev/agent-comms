@@ -53,8 +53,8 @@ class OwnerRestartRequest:
 
     def environment(self, lifecycle: OwnerLifecycle) -> RestartEnvironment:
         self.launch_runtime.require_available()
-        return RestartEnvironment.inherit(lifecycle.restart_environment(
-            os.environ if self.runtime is None else self.runtime.encode(), self.launch_runtime))
+        lifecycle.require_launch_authority()
+        return self.launch_runtime.configuration if self.runtime is None else self.runtime
 
 
 @dataclass(frozen=True)
@@ -109,8 +109,8 @@ class OwnerRestartHandoff:
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
             return lifecycle._launch_owner_unlocked(
-                thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary, runtime),
-                self.agent_args if self.agent_args is not None else source.arguments,
+                thread, self.agent_bin or lifecycle.restart_entrypoint(source.runtime.agent_bin, runtime),
+                self.agent_args if self.agent_args is not None else source.runtime.agent_args,
                 environment=self.runtime.apply_runtime(source.environment),
                 launch_runtime=runtime,
             )
@@ -124,7 +124,7 @@ class OwnerRestartHandoff:
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
         return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
-            thread, source.binary, source.arguments, environment=source.environment,
+            thread, source.runtime.agent_bin, source.runtime.agent_args, environment=source.environment,
             launch_runtime=runtime,
         ))
 
