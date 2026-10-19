@@ -147,11 +147,12 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
 
 
 class HeldSource:
-    """A source holding one commit before any remote, one pushed commit, one open and one merged PR."""
+    """A source holding an unpushed commit, a pushed commit, an open PR and a merged PR."""
     since = 100.0
 
     def commits(self, *excluded):
-        yield {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}[excluded]
+        commits = {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}
+        yield commits[excluded]
 
     def requests(self, state):
         return {'open': [PullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0)],

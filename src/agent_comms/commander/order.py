@@ -646,7 +646,8 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
         if (crossed := t.late_since(now)) is None:
             continue
         answer = reply(t.holder, ordered) if work.strikes else None
-        if since < max(crossed, float(answer.get('ts', 0)) if answer else 0) or work.moved_after(since):
+        replied_at = float(answer.get('ts', 0)) if answer else 0
+        if since < max(crossed, replied_at) or work.moved_after(since):
             if work.strikes:
                 due = f'due {hhmm(t.deadline)}, order {t.order.id}'
                 late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
