@@ -161,12 +161,14 @@ class Stack:
 
     def relock(self) -> None:
         """OpenHCSDev packages track their mains; the lock only records this resolution."""
-        run(self.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14", cwd=self.checkout)
+        run(self.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
+            cwd=self.checkout)
         self.sync()
         self.imports()
 
     def sync(self) -> None:
-        run(self.uv, "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=self.checkout)
+        run(self.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
+            cwd=self.checkout)
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
@@ -497,7 +499,8 @@ def main() -> None:
     parser.add_argument("--root", type=lambda value: Path(value).expanduser().resolve(),
                         default=Path.home() / ".agent-comms")
     parser.add_argument("--to", default="origin/main")
-    parser.add_argument("--installer", required=True, help="The unit running this install; the plan names it")
+    parser.add_argument("--installer", required=True,
+                        help="The unit running this install; the plan names it")
     parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
     args = parser.parse_args()
     for signum in (signal.SIGTERM, signal.SIGINT):
