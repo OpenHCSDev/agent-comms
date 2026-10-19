@@ -77,6 +77,10 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     def work(self) -> str:
         return "delivered work"
 
+    @property
+    def line(self) -> str:
+        return self.work
+
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
         if result.outcome != ExitedOutcome(0):
@@ -174,8 +178,8 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
                 f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
     async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
-        merge = await self.merge_state(todo, registry)
         verified = await super().verified(todo, registry)
+        merge = await self.merge_state(todo, registry)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
                                      at=verified.at, evidence=self.evidence, merge=merge)
 
@@ -259,12 +263,16 @@ class CheckedCommitDelivery(CommitDelivery):
     merge: DeliveryMerge
 
     @property
-    def work(self) -> str:
-        return f"{super().work}; {self.merge.line}"
+    def line(self) -> str:
+        return f"{self.work}; {self.merge.line}"
 
 
 @dataclass(frozen=True, kw_only=True)
 class OperationDelivery(OrderDelivery):
+    @property
+    def line(self) -> str:
+        return "operation checked"
+
     async def require_source(self, check):
         pass
 
@@ -284,12 +292,12 @@ class PullRequest:
     merged_at: float | None = None
     updated_at: float = 0.0
     orders: tuple[str, ...] = ()
-    base: str = field(kw_only=True)
+    base: str = field(default=WorkBranches.main, kw_only=True)
 
     @classmethod
     @boundary_decoder
     def listed(cls, number: int, branch: str, head: str, merge: str, merged: str,
-               updated: str, body: str, base: str) -> Self:
+               updated: str, body: str, base: str = WorkBranches.main) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
         return cls(int(number), branch, head, merge or None,
                    _github_time(merged) if merged else None, _github_time(updated),
@@ -338,7 +346,7 @@ class PullRequests:
         key = (repo, state, order.id)
         if key not in self._read:
             self._read[key] = self.read(repo, state, order)
-        return self._read[key]
+        return tuple(request for request in self._read[key] if order.id in request.orders)
 
     def read(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
         orders = self._orders.setdefault(repo, {})
@@ -448,7 +456,7 @@ class ProgressSource:
     def requests(self, state: str) -> list[PullRequest]:
         """The order's explicit PR references survive checkout removal or branch reuse."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
-                if self.todo.order.id in pr.orders and pr.updated_at >= self.since]
+                if pr.updated_at >= self.since]
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
@@ -1413,9 +1421,10 @@ class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
 class DeliveredProblemOrder(CheckedProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+
     @property
     def line(self) -> str:
-        return f"Delivered: {self.delivery.work}, waiting on install"
+        return f"Delivered: {self.delivery.line}, waiting on install"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
