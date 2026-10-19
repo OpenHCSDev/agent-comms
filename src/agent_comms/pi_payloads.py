@@ -279,10 +279,10 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
         return self if self.to_wire() == raw else UnknownContent(raw)
 
-    def user_transcript(self, position: int):
+    def user_transcript(self, position: int, timestamp: float):
         return []
 
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         return []
 
     wire_tag = "type"
@@ -305,15 +305,15 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
 
 @dataclass(frozen=True)
 class TextContent(PiContent):
-    def user_transcript(self, position: int):
+    def user_transcript(self, position: int, timestamp: float):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(self.text, position=position)]
+        return [UserTranscript(self.text, position=position, timestamp=timestamp)]
 
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         from .transcript_events import AssistantTranscript
 
-        return [AssistantTranscript(self.text, position=position)]
+        return [AssistantTranscript(self.text, position=position, timestamp=timestamp)]
 
     text: str = field()
     text_signature: str | None = wire_field("textSignature")
@@ -326,10 +326,10 @@ class TextContent(PiContent):
 
 @dataclass(frozen=True)
 class ThinkingContent(PiContent):
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         from .transcript_events import ThinkingTranscript
 
-        return [ThinkingTranscript(self.thinking, position=position)]
+        return [ThinkingTranscript(self.thinking, position=position, timestamp=timestamp)]
 
     thinking: str = ""
     thinking_signature: str | None = wire_field("thinkingSignature")
@@ -345,11 +345,11 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return (self,)
 
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         from .transcript_events import ToolStartTranscript
 
         return [
-            ToolStartTranscript(position=position, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
+            ToolStartTranscript(position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
                                 tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
         ]
 
@@ -361,10 +361,10 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 
 @dataclass(frozen=True)
 class ImageContent(PiContent):
-    def user_transcript(self, position: int):
+    def user_transcript(self, position: int, timestamp: float):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position)]
+        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position, timestamp=timestamp)]
 
     data: str
     mime_type: str = wire_field("mimeType")
@@ -547,7 +547,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def unread_reply(self) -> bool:
         return False
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         return []
 
     wire_tag = "role"
@@ -683,14 +683,14 @@ class AssistantMessage(PiMessage):
     def unread_reply(self) -> bool:
         return bool(self.text.strip() or self.error_notice)
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         from .transcript_events import AssistantTranscript, NoticeTranscript
 
         if notice := self.error_notice:
-            return [NoticeTranscript(f"[agent error] {notice}", position=context.position)]
+            return [NoticeTranscript(f"[agent error] {notice}", position=context.position, timestamp=timestamp)]
         events = []
         for part in self.parts:
-            for event in part.assistant_transcript(context.position):
+            for event in part.assistant_transcript(context.position, timestamp):
                 if (
                     isinstance(event, AssistantTranscript)
                     and events
@@ -714,7 +714,7 @@ class UserMessage(PiMessage):
     def observe_start_abort(self, session, event):
         session.observe_input_during_abort(event)
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         from .transcript_events import ContextTranscript
 
         routing, display = context.routing, context.input_display
@@ -729,7 +729,7 @@ class UserMessage(PiMessage):
         events = []
         if display is not None:
             if raw_text and raw_text != display.text:
-                events.append(ContextTranscript(raw_text, position=context.position))
+                events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
             if display.text is None:
                 return events
             parts = (
@@ -737,7 +737,7 @@ class UserMessage(PiMessage):
                 *(part for part in parts if not isinstance(part, TextContent)),
             )
         for part in parts:
-            events.extend(part.user_transcript(context.position))
+            events.extend(part.user_transcript(context.position, timestamp))
         return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
@@ -758,7 +758,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     is_error: bool = wire_field("isError", False)
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolEndTranscript
 
@@ -768,7 +768,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
-                position=context.position,
+                position=context.position, timestamp=timestamp,
                 text=output,
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,
