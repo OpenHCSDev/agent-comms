@@ -8,6 +8,7 @@ import os
 
 import pytest
 
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import (
     NativePiUnavailable,
@@ -158,5 +159,5 @@ async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend,
         results = [row["message"] for row in rows if row.get("type") == "message"
                    and row["message"].get("role") == "toolResult"]
         assert len(results) == 1 and not results[0].get("isError")
-        assert any(native.provider.text in row.body for row in list(comms.views.full_history_page().messages)
+        assert any(native.provider.text in row.body for row in list(comms.views.history_page(ANY_CHANNEL).messages)
                    if isinstance(row, Message))

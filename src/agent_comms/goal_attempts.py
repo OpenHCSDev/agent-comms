@@ -18,6 +18,7 @@ import os
 import secrets
 import sqlite3
 import stat
+import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import ExitStack, closing, suppress
@@ -731,17 +732,17 @@ class GoalAttemptStore:
         ):
             raise StorageUncertainError("An existing owner-0700 directory is required.")
         path = directory / "goal_attempts.sqlite3"
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
-        except FileExistsError:
+        if path.exists():
             # Existing state never recreates a process-local launch capability.
             return cls(directory)
+        try:
+            fd, name = tempfile.mkstemp(prefix=".goal-attempts-init-", dir=directory)
         except OSError as error:
             raise StorageUncertainError("Could not create goal attempt store.") from error
-        else:
-            os.close(fd)
+        staging = Path(name)
         try:
-            with closing(CoordinationStore.writer(path, isolation_level=None)) as conn:
+            os.close(fd)
+            with closing(CoordinationStore.writer(staging, isolation_level=None)) as conn:
                 conn.execute("PRAGMA journal_mode=DELETE")
                 conn.execute("PRAGMA synchronous=EXTRA")
                 conn.execute("PRAGMA foreign_keys=ON")
@@ -750,9 +751,16 @@ class GoalAttemptStore:
                     table.create(conn)
                 GoalAttemptSchema.current().insert(conn)
                 conn.commit()
-            cls._sync_paths(path, directory)
+            cls._sync_paths(staging, directory)
+            # Publish only the complete schema; a concurrent initializer may win.
+            # The staging descriptor is closed before its inode becomes shared.
+            with suppress(FileExistsError):
+                os.link(staging, path, follow_symlinks=False)
+            cls._sync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
+        finally:
+            staging.unlink()
         return cls(directory)
 
     def _require_root(self) -> None:
@@ -781,14 +789,18 @@ class GoalAttemptStore:
         except sqlite3.Error as error:
             raise StorageUncertainError("Goal attempt database unavailable.") from error
 
-    @staticmethod
-    def _sync_paths(path: Path, directory: Path) -> None:
+    @classmethod
+    def _sync_paths(cls, path: Path, directory: Path) -> None:
         # Windows' CRT _commit (used by os.fsync) needs a writable handle.
         file_fd = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
         try:
             os.fsync(file_fd)
         finally:
             os.close(file_fd)
+        cls._sync_directory(directory)
+
+    @staticmethod
+    def _sync_directory(directory: Path) -> None:
         if os.name == "posix":
             dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
             try:
