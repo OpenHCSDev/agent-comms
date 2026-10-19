@@ -1268,7 +1268,7 @@ class DoneTodoState(TodoState):
     open: ClassVar[bool] = False
 
     @classmethod
-    def require_open(cls, current):
+    def require_open(cls, current: Todo) -> None:
         raise TodoError(f"{current.id} is done; a strike or hunt is recorded on an open problem.")
 
     @classmethod
