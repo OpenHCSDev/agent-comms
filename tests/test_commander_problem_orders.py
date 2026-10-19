@@ -38,7 +38,7 @@ from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, ReleaseTodo, SendBackVerdict, StrikeReason,
-    StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo, Slop, PatternCatalog, DeclarationDerivation)
+    StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo, Slop, DeclarationDerivation)
 from agent_comms.turn_context import GoalSegment
 
 
@@ -420,7 +420,7 @@ def test_delivery_time_has_its_own_named_requirement():
 
 def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
     location = FileLine(__file__, 1)
-    for pattern in PatternCatalog.ids():
+    for pattern in Slop.patterns():
         slop = Slop(pattern, 'the count of open orders', location, DeclarationDerivation, location)
         assert FieldCodec.decode(Slop, FieldCodec.encode(slop)) == slop
         assert pattern in slop.render()

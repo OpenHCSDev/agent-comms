@@ -840,27 +840,6 @@ class DefectText(BluntWords, OrderWords):
         return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
-class PatternCatalog:
-    """Valid citations come only from headings in the packaged, pinned skill."""
-
-    ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
-
-    @classmethod
-    @cache
-    def ids(cls) -> frozenset[str]:
-        root = files(skills) / 'refactor-audit' / 'references' / 'patterns'
-        ids = frozenset(found[1] for source in root.iterdir() if source.name.endswith('.md')
-                        for found in cls.ENTRY.finditer(source.read_text(encoding='utf-8')))
-        if not ids:
-            raise ValueError('The pinned refactor-audit pattern catalog is empty.')
-        return ids
-
-    @classmethod
-    def require(cls, cited: str) -> None:
-        if cited not in cls.ids():
-            raise ValueError(f'Unknown refactor-audit pattern ID {cited!r}.')
-
-
 class Derivation(DeclaredFamily, affix="Derivation"):
     sentence: ClassVar[str]
 
@@ -909,9 +888,18 @@ class Slop:
     LINE: ClassVar[re.Pattern] = re.compile(
         r'^Slop: (?P<pattern>\S+); fact (?P<fact>[^\n]+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)[ \t]*$', re.M)
 
+    PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
+
+    @classmethod
+    @cache
+    def patterns(cls) -> frozenset[str]:
+        root = files(skills) / 'refactor-audit' / 'references' / 'patterns'
+        return frozenset(found[1] for source in root.iterdir() if source.name.endswith('.md')
+                         for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
+
     def __post_init__(self):
-        with MalformedRecord.refusing(self.USAGE):
-            PatternCatalog.require(self.pattern)
+        if self.pattern not in self.patterns():
+            raise ValueError(f'{self.USAGE}. Unknown refactor-audit pattern ID {self.pattern!r}.')
         if len(self.fact.split()) < 4:
             raise ValueError('The duplicated fact needs 4+ words.')
         self.at.require_exists()
