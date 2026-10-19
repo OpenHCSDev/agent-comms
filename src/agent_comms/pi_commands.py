@@ -109,7 +109,7 @@ class PiCommand(DeclaredFamily):
         try:
             cls.member_named(kind)
         except ValueError:
-            return UnknownCommand(wire=value)
+            return UnknownCommand(id=data.get("id"), wire=value)
         data.setdefault("id", None)
         return FieldCodec.decode(cls, {"kind": kind, **data})
 
