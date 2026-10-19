@@ -154,7 +154,8 @@ class PendingSeal(CheckpointSeal):
                 FileRevision.from_stat(info), self.expected.revision.size)
             or self.prior.root_id != marker.root_id
         ):
-            raise BusPrefixUnavailableError("Private bus checkpoint pending intent is inconsistent.")
+            raise BusPrefixUnavailableError(
+                "Private bus checkpoint pending intent is inconsistent.")
         return super().recover(bus, marker, db, path, saved, info)
 
     def recovery_end(self, info: os.stat_result) -> int:
