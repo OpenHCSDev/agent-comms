@@ -21,6 +21,7 @@ from agent_comms.runtime_updates import (
     Summarized,
     TextDraft,
 )
+from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
     AssistantTranscript,
     ContextTranscript,
@@ -28,8 +29,6 @@ from agent_comms.transcript_events import (
     ThinkingTranscript,
     UserTranscript,
 )
-
-from .shared import CliToolArguments, ToolCall
 
 
 class MessageTime(WireModel):
@@ -191,8 +190,8 @@ class ToolState(TaggedWire, ABC):
 
     def call(self, part: ToolPart) -> ToolCall:
         sent = self.input.model_dump(by_alias=True, exclude_unset=True)
-        return ToolCall(part.callID, part.tool, self.input.model_dump(exclude_unset=True),
-                        tool=CliToolArguments.record_of(part.tool, sent, call_id=part.callID))
+        shown = ToolCall(part.callID, part.tool, self.input.model_dump(exclude_unset=True))
+        return CliToolArguments.decode(shown, sent)
 
 
 class PendingTool(ToolState):
