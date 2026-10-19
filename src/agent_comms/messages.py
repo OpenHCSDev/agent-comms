@@ -17,7 +17,6 @@ from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
-from .field_codec import FieldRepresentation
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -154,6 +153,10 @@ class MessageRole(InlineRecord, DeclaredFamily, affix="Role"):
     sendable: ClassVar[bool] = False
 
     @classmethod
+    def names(cls) -> tuple[str, ...]:
+        return tuple(role.declared_name for role in cls.members_with(cls) if role.sendable)
+
+    @classmethod
     def wire_record(cls):
         return MessageRoleWire
 
@@ -178,34 +181,6 @@ class MessageRole(InlineRecord, DeclaredFamily, affix="Role"):
             raise ValueError("a direct message must have exactly one frozen eligible recipient.")
         if tuple(member.canonical_thread for member in audience.recipients) != target.direct_names:
             raise ValueError("direct frozen recipient must match the exact stored target.")
-
-
-class MessageRoleName(FieldRepresentation[MessageRole]):
-    """Command input names a sendable role; persisted messages keep their inline wire form."""
-
-    @classmethod
-    def encode(cls, value: MessageRole) -> str:
-        return FieldCodec.encode(type(value))
-
-    @classmethod
-    def decode(cls, value: object) -> MessageRole:
-        name = FieldCodec.decode(str, value)
-        if name not in cls.names():
-            raise MalformedRecord(f"Role {name!r} cannot be sent.")
-        return MessageRole.member_named(name)()
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return {"type": "string", "enum": cls.names()}
-
-    @staticmethod
-    def default() -> MessageRole:
-        return ConversationRole()
-
-    @staticmethod
-    def names() -> tuple[str, ...]:
-        return tuple(name for name in MessageRole.names()
-                     if MessageRole.member_named(name).sendable)
 
 
 class InformationalMessage:
