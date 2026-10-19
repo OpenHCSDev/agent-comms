@@ -167,6 +167,26 @@ def test_delivery_checks_once_and_preserves_the_units_goal(commander):
     assert comms.registry.require('worker').goal == original_goal
 
 
+def test_core_done_records_the_check_print_even_when_a_caller_supplies_a_false_receipt(commander):
+    from agent_comms.child_process import CountPrinted
+    from agent_comms.todos import CheckedOperationDelivery
+
+    comms, caller = commander
+    marker = comms.root / 'measured-check-calls'
+    for number, supplied in enumerate((OperationDelivery(),
+                                      CheckedOperationDelivery(printed=CountPrinted(999))), 1):
+        pid = f'P{number}'
+        todo = create(commander, pid, f"printf x >> '{marker}'; printf 7", 7)
+        CommsOrderDoneTool(problem=pid, order_id=todo.order.id,
+                          delivery=supplied).apply(comms, caller)
+        recorded = TodoStore(comms.root).get(pid)
+        assert recorded.order.delivery.printed == CountPrinted(7)
+        assert recorded.order.delivery.check_line == 'Check printed 7'
+        assert 'Check printed 7' in recorded.order.progress_line
+        assert FieldCodec.decode(Todo, FieldCodec.encode(recorded)) == recorded
+    assert marker.read_text() == 'xx'  # Exactly one actual check per delivery.
+
+
 def test_failed_check_keeps_problem_pending(commander):
     comms, caller = commander
     original = create(commander, 'P1', 'printf 9', 1)

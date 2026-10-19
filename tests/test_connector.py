@@ -261,6 +261,42 @@ async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
         ("claude-ai", "Owner said go")]
 
 
+async def test_director_checks_human_permission_questions(client, store, comms):
+    from agent_comms.coordination_tables.refusals import SendRefusal
+    from agent_comms.thread_identity import UserThreadRole
+
+    comms.registry.declare(comms.registry.new_thread(
+        'human', frozenset(), str(comms.root), role=UserThreadRole, created_at=3.0))
+    reviews = RuleReviews(comms.root)
+    reviews.write('claude-ai', DrawnRuleReviewEntry(('Declare the act once',), 1))
+    reviews.write('claude-ai', AnsweredRuleReviewEntry(
+        1, 'P192 uses the existing caller role and the act family before anything is sent.'))
+    headers = {'Authorization': f'Bearer {await approved_token(client, store)}'}
+
+    async def send(target, body):
+        response = await client.post('/mcp', headers=headers, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+            'params': {'name': 'comms_send', 'arguments': {
+                'from': 'claude-ai', 'to': target, 'body': body}}})
+        assert response.status == 200
+        return (await response.json())['result']
+
+    before = comms.bus.log.latest_sequence()
+    for question in ('Should I register the worker?', 'Want me to send the order?',
+                     'Would you like me to restart the connector?'):
+        refusal = await send('human', question)
+        assert refusal['isError'] and 'Already authorized' in str(refusal)
+    assert comms.bus.log.latest_sequence() == before
+    assert len(SendRefusal.recent(comms.root, sender='claude-ai', target='human', limit=10)) == 3
+    for question in ('Should the next screen show tasks or projects?',
+                     'Should I buy a license for a different paid provider?',
+                     'Did I restart the connector?',
+                     'The log says `Should I restart the connector?`.'):
+        assert not (await send('human', question))['isError']
+    assert not (await send('worker', 'Want me to send the order?'))['isError']
+    assert comms.bus.log.latest_sequence() == before + 5
+
+
 async def test_a_call_returns_what_the_tool_returns_in_process(client, store, root):
     token = await approved_token(client, store)
     called = await (
