@@ -1,5 +1,3 @@
-"""Real scratch-bus sidebar observation concurrent with registry publication."""
-
 from __future__ import annotations
 
 import argparse
@@ -30,9 +28,7 @@ def declaration(root: Path, name: str, created_at: float = 0) -> Thread:
     )
 
 
-def writer(root: Path, stop: Event, result: Queue[int], imports: bool, dump_after: float) -> None:
-    if dump_after:
-        faulthandler.dump_traceback_later(dump_after)
+def writer(root: Path, stop: Event, result: Queue[int], imports: bool) -> None:
     comms = Comms(root)
     count = 0
     while not stop.is_set():
@@ -83,7 +79,7 @@ def main() -> None:
     reading = ObserveSidebar(str(root), True, False).observation()
     stop = mp.Event()
     counts: Queue[int] = mp.Queue()
-    process = mp.Process(target=writer, args=(root, stop, counts, args.imports, args.dump_after))
+    process = mp.Process(target=writer, args=(root, stop, counts, args.imports))
     process.start()
     start = time.monotonic()
     reads = empty = errors = 0
@@ -109,9 +105,7 @@ def main() -> None:
         f"writes={counts.get(timeout=2)} writer_exit={process.exitcode} imports={args.imports}",
         flush=True,
     )
-    if not reads:
-        raise RuntimeError("Sidebar observation produced no reads.")
-    if (empty, errors, process.exitcode) != (0, 0, 0):
+    if (reads > 0, empty, errors, process.exitcode) != (True, 0, 0, 0):
         raise RuntimeError("Sidebar observation failed; see the original results above")
 
 
