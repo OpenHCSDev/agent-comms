@@ -78,7 +78,6 @@ class TurnGoalAccount:
     claims: ExitStack
     originated: dict[str, GoalTurnPermit] = field(default_factory=dict, init=False)
     unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
-    productive_tool: events.ToolEnd | None = field(default=None, init=False)
 
     @staticmethod
     def reserve(*, owner: Thread, goal: Goal, comms: Comms, autonomous: bool) -> GoalTurnPermit:
@@ -114,8 +113,6 @@ class TurnGoalAccount:
             self.unattributed_usage.append((str(event.response_id), event.usage))
 
     def tool_ended(self, event: events.ToolEnd) -> None:
-        if event.ok:
-            self.productive_tool = event
         if event.name != "comms_set_goal" or event.ok is not True:
             return
         with _store_lock(self.comms._wire_lock_path):
@@ -146,19 +143,6 @@ class TurnGoalAccount:
         for response_id, usage in self.unattributed_usage:
             permit.record_provider_usage(store, response_id, usage)
         self.unattributed_usage.clear()
-
-    def block_active_goal(self, diagnostic: str) -> None:
-        current = self.comms.registry.require(self.thread_name).continuation_goal(self.owner)
-        current.block_after_failed_turn(
-            self.comms.goals, self.thread_name, self.owner.worktree, diagnostic,
-        )
-
-    def done(self, event: events.Done) -> None:
-        if event.ok and self.productive_tool is None and not str(event.text or "").strip():
-            self.permit.block(self,
-                "Backend reported success without assistant output "
-                "or tool activity; inspect the session before resuming."
-            )
 
     def settle_launched(self, permit: LaunchPermit, terminal: events.Done | None) -> None:
         store = self.comms.goals.open_goal_store()

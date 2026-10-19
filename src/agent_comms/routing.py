@@ -104,11 +104,6 @@ class ScheduledTurn:
             "do not invent extra work."
         )
 
-    def require_dependency_wake(self, error: Exception) -> None:
-        """Only dependency launches use standby refusal settlement."""
-        if self.goal_wait_id is None:
-            raise error
-
     @property
     def origins(self) -> tuple[Message, ...]:
         return (self.origin,) if self.origin is not None else ()

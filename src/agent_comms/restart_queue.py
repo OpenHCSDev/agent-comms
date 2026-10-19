@@ -24,7 +24,6 @@ from .comms import Comms, wire
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .coordination_errors import CoordinationError
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
@@ -337,13 +336,9 @@ def step(comms: Comms) -> None:
                 if not owner.process_alive:
                     record = record.transition(StaleRestart(reason="Owner process exited"))
                 else:
-                    try:
-                        record.target.require_watcher(comms)
-                    except ValueError as error:
-                        record = record.transition(BlockedRestart(reason=str(error)))
-                    else:
-                        # Persist before any side effect; crashes cannot authorize replay.
-                        record = record.transition(AttemptingRestart())
+                    record.target.require_watcher(comms)
+                    # Persist before any side effect; crashes cannot authorize replay.
+                    record = record.transition(AttemptingRestart())
             queue.save(record)
         if not record.state.attempting:
             continue
@@ -417,17 +412,7 @@ def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
     comms = wire(sys.argv[1])
-    try:
-        asyncio.run(run(comms))
-    except (OSError, ValueError, CoordinationError) as exc:
-        queue = RestartQueue(comms.root / DIRECTORY)
-        with queue.locked():
-            for record in queue.active_records():
-                if record.state.pending and record.target.is_current_watcher:
-                    queue.save(record.transition(
-                        BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
-                    ))
-        raise
+    asyncio.run(run(comms))
 
 
 if __name__ == "__main__":

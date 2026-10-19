@@ -395,23 +395,3 @@ class Goals:
             return action.apply(
                 GoalActionContext(self, self.registry.require(name), actor)
             )
-
-    def block_goal_after_failed_turn(
-        self,
-        name: str,
-        *,
-        started_goal: Goal,
-        expected_worktree: str,
-        diagnostic: str,
-    ) -> GoalDeclaration:
-        """Make an unresolved same-ID attempt visible without losing newer progress."""
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            current = thread.goal.matching(started_goal.id)
-            if thread.worktree != expected_worktree:
-                return thread.goal
-            blocked = current.after_failed_turn(diagnostic)
-            if blocked is current:
-                return thread.goal
-            self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
-            return blocked

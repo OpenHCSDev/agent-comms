@@ -487,10 +487,6 @@ class GoalTurnPermit(ABC):
         for permit in self.claims:
             account.settle_launched(permit, terminal)
 
-    def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
-        for permit in self.claims:
-            account.block_active_goal(diagnostic)
-
     def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
                     goal: GoalDeclaration, turn: TurnId) -> None:
         for permit in self.claims:

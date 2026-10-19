@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Awaitable, Callable, Generator, Sequence
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 
@@ -36,7 +36,7 @@ from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
-from .turn_lease import TurnEnding
+from .turn_lease import FinishedEnding, TurnEnding
 from .turn_phase import PreparingPhase, TurnPhase
 
 
@@ -153,10 +153,9 @@ class SelectedParticipant(MroDispatch):
         identity = ParticipantOwner(owner.thread, participant.participant_generation)
         with cursor_delivery.measurements.operation("model_selection"):
             model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
-        lease = cls.lease(comms, owner)
-        try:
+        async with AsyncExitStack() as resources:
             with cursor_delivery.measurements.operation("claim_lease"):
-                leased = await Coordination.run_worker(lambda: next(lease))
+                leased = await Coordination.enter_context(resources, cls.lease(comms, owner))
             with cursor_delivery.measurements.operation("claim_sources"):
                 sources = await cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch.first_route(sources)
@@ -179,10 +178,6 @@ class SelectedParticipant(MroDispatch):
                 PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
             )
             yield selected
-        finally:
-            # The blocking call may acquire the lease even if its result is not delivered.
-            # The original generator owns retirement even in that case.
-            await Coordination.run_worker(lease.close)
 
     @staticmethod
     def capture_sent_outcomes(
@@ -254,6 +249,7 @@ class SelectedParticipant(MroDispatch):
         return SelectedModel.decode(comms.threads.resolve_thread_model(name))
 
     @staticmethod
+    @contextmanager
     def lease(comms: Comms, owner: RegistryOwner) -> Generator[RegistryOwner, None, None]:
         # Registry compare-and-swap checks input and turn identity; never borrow another ACP
         # instance's turn or revive an owner through a registration side effect.
@@ -277,7 +273,7 @@ class SelectedParticipant(MroDispatch):
             comms.agents.finish_turn(lease, TurnEnding.from_exception(error))
             raise
         else:
-            comms.agents.finish_turn(lease)
+            comms.agents.finish_turn(lease, FinishedEnding())
 
     @staticmethod
     async def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:

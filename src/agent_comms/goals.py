@@ -423,9 +423,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         return goal.progress
 
-    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
-        return f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
-
     def require_model_block(self) -> None:
         pass
 
@@ -545,9 +542,6 @@ class ProblemGoalOrder(GoalOrder):
                                      *(verdict.line for verdict in todo.verdicts[-1:])))
                          for todo in todos)
 
-    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
-        return goal.progress
-
     def require_model_block(self) -> None:
         raise ValueError("A problem goal is not blocked by text: ask the commander to block the "
                          "problem's Todo, or standby with wait_for naming the decider.")
@@ -601,14 +595,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
                permit: LaunchPermit, turn: TurnId) -> None: ...
 
     @abstractmethod
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration: ...
-
-    @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
-
-    def after_failed_turn(self, diagnostic: str) -> GoalDeclaration:
-        return self
 
     def check_expected(self, current: GoalDeclaration) -> None:
         pass
@@ -697,10 +684,6 @@ class NoGoal(NullMember, GoalDeclaration):
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
                permit: LaunchPermit, turn: TurnId) -> None:
         pass
-
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
-        return self
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
         return ()
@@ -801,12 +784,6 @@ class Goal(RecordMember, GoalDeclaration):
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
                permit: LaunchPermit, turn: TurnId) -> None:
         settlement(store, permit, self, turn).dispatch_sync(self.state)
-
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
-        return goals.block_goal_after_failed_turn(
-            name, started_goal=self, expected_worktree=worktree, diagnostic=diagnostic,
-        )
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
         return (self.render_instructions(self.order.instructions(
@@ -911,13 +888,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def render_instructions(self, orders_text: str) -> str:
         return "\n\n".join(part for part in (self.order.goal_text(self), orders_text) if part)
-
-    def after_failed_turn(self, diagnostic: str) -> Goal:
-        progress = self.order.failed_turn_progress(self, diagnostic)
-        state = self.state.after_failed_turn(diagnostic)
-        if state is self.state:
-            return self
-        return replace(self, state=state, progress=progress, revision=self.revision + 1)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

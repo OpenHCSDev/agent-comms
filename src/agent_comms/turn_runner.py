@@ -352,9 +352,10 @@ class TurnRunner:
         """
         if task is not None and self.turn_tasks.get(session_id) is task:
             self.turn_tasks.pop(session_id, None)
+        ending = FinishedEnding() if error is None else TurnEnding.from_exception(error)
         async with AsyncExitStack() as resources:
             update = await Coordination.run_worker(partial(
-                self.finish_turn, resources, session_id, lease, TurnEnding.from_exception(error),
+                self.finish_turn, resources, session_id, lease, ending,
             ))
             await self.effects._emit_event(session_id, update)
 

@@ -8,11 +8,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from .activity import ObservedActivity
-from .channels import AllChannel
-from .messages import AlertKind
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion
@@ -24,6 +22,7 @@ from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .child_process import ProcessState
+    from .messaging import Messaging
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -31,9 +30,7 @@ if TYPE_CHECKING:
 class TurnEnding(DeclaredFamily, affix="Ending"):
     """Decode the context-manager exit at its boundary, not at every consumer."""
     @staticmethod
-    def from_exception(error: BaseException | None) -> TurnEnding:
-        if error is None:
-            return FinishedEnding()
+    def from_exception(error: BaseException) -> FailedEnding:
         return FailedEnding(''.join(traceback.format_exception(error)))
 
     @abstractmethod
@@ -58,7 +55,7 @@ class TurnEndingEffect(ABC):
     def write(self, record: StoredTurnRecord) -> None: ...
 
     @abstractmethod
-    def notify(self, messaging, name: str) -> None: ...
+    def notify(self, messaging: Messaging, name: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -68,7 +65,7 @@ class NewTurnEnding(TurnEndingEffect):
     def write(self, record: StoredTurnRecord) -> None:
         record._publish_unlocked(self.terminal)
 
-    def notify(self, messaging, name: str) -> None:
+    def notify(self, messaging: Messaging, name: str) -> None:
         self.terminal.notify_failure(messaging, name)
 
 
@@ -77,7 +74,7 @@ class UnchangedTurnEnding(TurnEndingEffect):
     def write(self, record: StoredTurnRecord) -> None:
         pass
 
-    def notify(self, messaging, name: str) -> None:
+    def notify(self, messaging: Messaging, name: str) -> None:
         pass
 
 
@@ -85,8 +82,13 @@ class TurnDeclaration(SubclassUnion, affix=""):
     """A recorded active turn or the idle state."""
 
     phase: TurnPhase
-    id: str | None
     started_at: float | None
+
+    @abstractmethod
+    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None: ...
+
+    @abstractmethod
+    def held_by(self, lease: TurnLeaseFence) -> bool: ...
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return self.phase.project_activity(activity)
@@ -138,14 +140,13 @@ class TurnDeclaration(SubclassUnion, affix=""):
     @abstractmethod
     def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]: ...
 
-    def notify_failure(self, messaging, name: str) -> None:
+    def notify_failure(self, messaging: Messaging, name: str) -> None:
         pass
 
 
 class IdleTurn(TurnDeclaration, declared_name=None):
     """Idle behavior is shared by an empty owner and a recorded failure."""
-    phase: ClassVar[TurnPhase] = IdlePhase()
-    id = None
+    phase = IdlePhase()
     started_at = None
     executing = False
     report_turn = ""
@@ -183,11 +184,11 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def matches(self, turn_id: TurnId) -> bool:
         return False
 
-    def lease(self, incarnation, record):
-        return None
+    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None:
+        raise RelationViolationError("registry owner has no active turn")
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
-        return False
+        raise RelationViolationError("registry owner has no active turn")
 
     def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect:
         return UnchangedTurnEnding()
@@ -199,7 +200,7 @@ class IdleTurn(TurnDeclaration, declared_name=None):
 
 @dataclass(frozen=True)
 class NoTurn(NullMember, IdleTurn):
-    pass
+    id = None
 
 
 @dataclass(frozen=True)
@@ -219,10 +220,8 @@ class EndedTurn(RecordMember, IdleTurn):
 class FailedTurn(EndedTurn):
     error: str
 
-    def notify_failure(self, messaging, name: str) -> None:
-        owner = messaging.registry.require(name)
-        messaging.send(owner.name, owner.parent or AllChannel.declared_name,
-            f"Turn {self.id} failed:\n{self.error}", type=AlertKind)
+    def notify_failure(self, messaging: Messaging, name: str) -> None:
+        messaging.report_failed_turn(name, self)
 
 
 @dataclass(frozen=True)

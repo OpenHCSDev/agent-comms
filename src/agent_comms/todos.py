@@ -2221,11 +2221,14 @@ class TodoStore(TypedStore):
             for merged in progress.missing_merges(source):
                 yield todo, merged
 
+    def for_owner(self, owner: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._open(
+            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
+            (owner.name, owner.wire_birth))
+
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
-        return any(todo.pending for todo in self._open(
-            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
-            (owner.name, owner.wire_birth)))
+        return any(todo.pending for todo in self.for_owner(owner))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """Every order that served one request, a Goal on the commander's thread, open or done."""

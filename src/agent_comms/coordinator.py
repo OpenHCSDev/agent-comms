@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from contextlib import AbstractContextManager, AsyncExitStack
 from functools import partial
 from pathlib import Path
+from types import TracebackType
 from typing import Self, TypeVar
 
 from .assignment_store import AssignmentStore
@@ -42,6 +44,26 @@ class Coordination:
             None, StoreLock.worker_context().run, operation
         )
         return await join_retirement(pending)
+
+    @staticmethod
+    async def enter_context(
+        resources: AsyncExitStack, context: AbstractContextManager[Result],
+    ) -> Result:
+        """Join entry before cancellation, and pass the real exit back to its worker."""
+        async def leave(
+            exc_type: type[BaseException] | None, error: BaseException | None,
+            traceback: TracebackType | None,
+        ) -> bool | None:
+            return await Coordination.run_worker(partial(
+                context.__exit__, exc_type, error, traceback,
+            ))
+
+        def enter() -> Result:
+            value = context.__enter__()
+            resources.push_async_exit(leave)
+            return value
+
+        return await Coordination.run_worker(enter)
 
     @classmethod
     async def run_async(
