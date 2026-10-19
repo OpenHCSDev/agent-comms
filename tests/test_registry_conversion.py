@@ -4,6 +4,7 @@ import json
 import pytest
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.registration import Registration
 from agent_comms.registry_store import RegistryNeedsConversion
 
@@ -51,9 +52,20 @@ def test_conversion_refuses_before_publication(tmp_path, change):
         raw["threads"]["worker"]["goal"] = {"unrecognized": True}
     store.path.write_text(json.dumps(raw))
     before = store.path.read_bytes()
-    with pytest.raises((RelationViolationError, ValueError)):
+    with pytest.raises(RelationViolationError):
         store.convert_format()
     assert store.path.read_bytes() == before
+
+
+@pytest.mark.parametrize("raw", [None, [], True])
+def test_nonobject_registry_is_refused_by_the_codec(tmp_path, raw):
+    store, _ = old_registry(tmp_path)
+    store.path.write_text(json.dumps(raw))
+    before = store.path.read_bytes()
+    for operation in (store.read, store.convert_format):
+        with pytest.raises(MalformedRecord):
+            operation()
+        assert store.path.read_bytes() == before
 
 
 def test_conversion_keeps_the_private_guard_authoritative(tmp_path):

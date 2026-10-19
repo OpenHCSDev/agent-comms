@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -144,7 +144,8 @@ class RegistryGoalConversion(DocumentConversion):
         return RegistryDocument().version
 
     @classmethod
-    def version(cls, raw: dict) -> int:
+    def version(cls, raw: object) -> int:
+        raw = FieldCodec.decode(dict[str, Any], raw)
         version = FieldCodec.decode(int, raw.get("version", cls.source_version))
         if version not in (cls.source_version, cls.target_version()):
             raise RelationViolationError(f"Unsupported registry version: {version}")
