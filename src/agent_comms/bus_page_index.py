@@ -117,10 +117,11 @@ class BusPageIndex(TypedStore):
             self._resources.enter_context(resources.pop_all())
             return db
 
-    def _open_writer(self):
+    def _open_writer(self, *, check_same_thread: bool = True):
         """Keep disposable-schema repair inside the store's WAL attachment boundary."""
         with ExitStack() as opening:
-            db = opening.enter_context(closing(super()._open_writer()))
+            db = opening.enter_context(closing(super()._open_writer(
+                check_same_thread=check_same_thread)))
             try:
                 self.require_schema(self._schema(db))
             except StaleBusPageIndexError:

@@ -844,7 +844,7 @@ class TypedStore(RootFile, StoreWriter):
             lifetime.push(retire)
             yield connection
 
-    def _open_writer(self) -> sqlite3.Connection:
+    def _open_writer(self, *, check_same_thread: bool = True) -> sqlite3.Connection:
         """Attach and install an absent store under the connection boundary."""
         from .coordination_database import CoordinationStore
 
@@ -856,7 +856,8 @@ class TypedStore(RootFile, StoreWriter):
             pass
         else:
             os.close(descriptor)
-        connection = CoordinationStore.writer(self.path, isolation_level=None)
+        connection = CoordinationStore.writer(
+            self.path, isolation_level=None, check_same_thread=check_same_thread)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # This query attaches an existing WAL before releasing the boundary.
@@ -899,9 +900,10 @@ class TypedStore(RootFile, StoreWriter):
             raise self.schema_error(f"{self.filename} differs from its declaration")
 
     @contextmanager
-    def writer_connection(self) -> Iterator[sqlite3.Connection]:
-        """Own attachment and validate its schema once for this writer lifetime."""
-        with self._attached(lambda: closing(self._open_writer())) as connection:
+    def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+        """Own attachment and schema; joined workers may borrow one serialized connection."""
+        with self._attached(lambda: closing(self._open_writer(
+                check_same_thread=check_same_thread))) as connection:
             self.require_schema(self._schema(connection))
             yield connection
 
