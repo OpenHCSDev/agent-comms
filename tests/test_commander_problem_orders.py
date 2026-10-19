@@ -27,6 +27,7 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
@@ -56,6 +57,13 @@ def create(commander, problem, command='printf 1', expected=1, deadline=1000, ow
         repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
     )).apply(comms, caller)
     return comms.goals.todos.get(problem)
+
+
+def working(comms):
+    """The working claim a delivery stands on: a screenshot that exists."""
+    screenshot = Path(comms.root) / 'working.png'
+    screenshot.write_bytes(b'png')
+    return (WorkingClaim(str(screenshot)),)
 
 
 def test_order_work_reads_the_assignees_calls_since_its_order_newest_first(commander, tmp_path):
@@ -147,7 +155,7 @@ def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
     marker = comms.root / 'check-calls'
     create(commander, 'P1', f"printf x >> '{marker}'; printf 0; exit 1", 0)
     create(commander, 'P2')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert marker.read_text() == 'x'
     assert comms.registry.require('worker').goal.state.active
     assert not comms.goals.todos.get('P1').pending
@@ -155,7 +163,7 @@ def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
     goal = comms.registry.require('worker').goal
     rendered = '\n'.join(goal.instructions_for(comms.goals, comms.registry.require('worker').incarnation))
     assert 'Problem: P1' not in rendered and 'Problem: P2' in rendered
-    CommsOrderDoneTool(problem='P2', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P2', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert isinstance(comms.registry.require('worker').goal.state, CompletedGoal)
 
 
@@ -163,7 +171,7 @@ def test_failed_check_keeps_problem_pending(commander):
     comms, caller = commander
     original = create(commander, 'P1', 'printf 9', 1)
     with pytest.raises(ValueError, match='printed 9, not its expected count 1'):
-        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P1') == original
     assert comms.registry.require('worker').goal.state.active
 
@@ -171,7 +179,7 @@ def test_failed_check_keeps_problem_pending(commander):
 def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(commander):
     comms, caller = commander
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
     CommsProblemCloseTool(problem='P1', works='The installed application now retains both queued orders through tab returns.',
@@ -210,7 +218,7 @@ def test_commit_delivery_records_the_actual_clean_commit_time(commander):
     commit = git('rev-parse', 'HEAD')
     git('update-ref', 'refs/remotes/origin/main', commit)
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit, delivered_commit=commit)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit, delivered_commit=commit), claims=working(comms)).apply(comms, caller)
     delivery = comms.goals.todos.get('P1').order.delivery
     assert delivery.commit == delivery.delivered == commit
     assert delivery.at == RecordedEventTime(float(git('show', '-s', '--format=%ct', 'HEAD')))
@@ -231,7 +239,7 @@ def test_delivered_order_is_not_transferred(commander, tmp_path):
     create(commander, 'P1', f"printf x >> '{marker}'; printf 1")
     create(commander, 'P2')
     CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(
-        commit=commit, delivered_commit=commit)).apply(comms, caller)
+        commit=commit, delivered_commit=commit), claims=working(comms)).apply(comms, caller)
     assert marker.read_text() == 'x'
 
     copied = Comms(shutil.copytree(comms.root, tmp_path / 'copied-root'))
@@ -278,7 +286,7 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     create(commander, 'P1', deadline=2000)
     create(commander, 'P2', deadline=2000)
     with pytest.raises(ValueError, match='no origin branch'):
-        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=delivered)).apply(comms, caller)
+        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=delivered), claims=working(comms)).apply(comms, caller)
     git('update-ref', 'refs/remotes/origin/work', delivered)
     script.done('P1', merge, delivered)
     met = comms.goals.todos.get('P1')
@@ -294,7 +302,7 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     late = git('rev-parse', 'HEAD')
     git('update-ref', 'refs/remotes/origin/main', late)
     with pytest.raises(ValueError, match='not in the checked commit'):
-        CommsOrderDoneTool(problem='P2', delivery=CommitDelivery(commit=late, delivered_commit=side)).apply(comms, caller)
+        CommsOrderDoneTool(problem='P2', delivery=CommitDelivery(commit=late, delivered_commit=side), claims=working(comms)).apply(comms, caller)
     script.done('P2', late, late)
     struck = comms.goals.todos.get('P2')
     assert script.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
@@ -340,9 +348,9 @@ def test_a_main_merge_is_never_the_delivered_commit(commander):
     git('update-ref', 'refs/remotes/origin/main', merge)
     create(commander, 'P1')
     with pytest.raises(ValueError, match='is a merge'):
-        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=merge)).apply(comms, caller)
+        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=merge), claims=working(comms)).apply(comms, caller)
     answer = git('rev-parse', 'work')
-    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=answer)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=answer), claims=working(comms)).apply(comms, caller)
     assert not comms.goals.todos.get('P1').pending
 
 
@@ -788,7 +796,7 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
         request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     with pytest.raises(ValueError, match='still open'):
         request.RequestAddVerb(text='A second owner request while the first is open').run()
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert stalled() == [
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
@@ -833,7 +841,7 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
         ' -> order its next step or mark the request done']
     create(commander, 'P1')
     assert unacted(directive.deadline + 1) == []
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
     reviewed()  # the clock now stands past the first deadline
     seq = direct('lead', 'A second directive after the first request is done.')
@@ -858,7 +866,7 @@ def completed_with_pending(commander):
     and under a Goal that was never published."""
     comms, caller = commander
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     goal = comms.registry.require('worker').goal
     assert isinstance(goal.state, CompletedGoal)
     stray(commander, 'P2', goal.id)
@@ -878,7 +886,7 @@ def test_goal_stays_open_while_problems_pend(commander):
     create(commander, 'P1')
     create(commander, 'P2', deadline=2000)
     stray(commander, 'P3', 'never-published')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.registry.require('worker').goal.state.active
     other = comms.goals.todos.get('P3')
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P2', order=order(comms.root, 'revised'),
@@ -886,7 +894,7 @@ def test_goal_stays_open_while_problems_pend(commander):
         expected_revision=comms.goals.todos.get('P2').revision)).apply(comms, caller)
     assert comms.goals.todos.get('P2').order.id == 'revised'
     assert comms.goals.todos.get('P3') == other
-    CommsOrderDoneTool(problem='P2', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P2', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.registry.require('worker').goal.state.active
 
 
@@ -1161,7 +1169,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
     goal = worker.goal
     assert (goal.text, goal.progress) == (ProblemGoalOrder.text, '')
     assert [line.split(':')[0] for line in GoalSegment.capture(worker, goal, comms.goals).progress.splitlines()] == ['P1', 'P2']
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     why = 'The unit kept a second copy of the goal text.'
     CommsVerdictTool(id='P2', operation=SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation,
         todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
@@ -1205,7 +1213,7 @@ def test_close_quotes_the_works_line(commander):
         problem='P1', order=replace(order(comms.root, 'order-P1'), run=run), request='request',
         deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P1',
     )).apply(comms, caller)
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
     delivered = comms.goals.todos.get('P1')
@@ -1239,11 +1247,11 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     callers.write_text('from flag import checked\n\ndef read(v):\n    try:\n        checked(v)\n'
                        '    except ValueError:\n        return 0\n    return 1\n')
     with pytest.raises(ValueError, match='printed 1, not its expected count 0'):
-        CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+        CommsOrderDoneTool(problem='P520', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P520') == pending
     (copied / 'flag.py').unlink()
     callers.write_text('def read(v):\n    return int(v is not None)\n')
-    CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+    CommsOrderDoneTool(problem='P520', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert not comms.goals.todos.get('P520').pending
 
 
@@ -1327,6 +1335,24 @@ def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_
         assert capsys.readouterr().out == ''
 
 
+def checkout_with_origin(root):
+    """A checkout at root holding one unpushed commit, with a bare origin beside it."""
+    def git(*args):
+        return subprocess.run(['git', '-C', str(root), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    subprocess.run(['git', 'init', '-q', '--bare', str(root / 'origin.git')], check=True)
+    git('init', '-q')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'work')
+    git('remote', 'add', 'origin', str(root / 'origin.git'))
+    return git
+
+
+def push_work(git):
+    git('push', '-q', 'origin', 'HEAD:refs/heads/work')
+    git('fetch', '-q', 'origin')
+
+
 def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, tmp_path):
     """A goal report claiming merged, installed or working is refused, naming the artifact, until
     the commit is on origin, P1's delivery recorded its check result and the screenshot exists;
@@ -1337,22 +1363,14 @@ def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, 
     comms, caller = commander
     create(commander, 'P1')
 
-    def git(*args):
-        return subprocess.run(['git', '-C', str(tmp_path), *args], check=True,
-                              capture_output=True, text=True).stdout.strip()
-
-    subprocess.run(['git', 'init', '-q', '--bare', str(tmp_path / 'origin.git')], check=True)
-    git('init', '-q')
-    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'work')
-    git('remote', 'add', 'origin', str(tmp_path / 'origin.git'))
+    git = checkout_with_origin(tmp_path)
     screenshot = tmp_path / 'working.png'
 
     def push():
-        git('push', '-q', 'origin', 'HEAD:refs/heads/work')
-        git('fetch', '-q', 'origin')
+        push_work(git)
 
     def deliver():
-        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
 
     claims = []
     for claim, missing, provide in (
@@ -1370,3 +1388,28 @@ def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, 
         claims.append(claim)
     report = CommsGoalTool(goal_id='request', status=ActiveGoalAction, progress='claimed', claims=tuple(claims))
     assert report.apply(comms, caller).goal.progress == 'claimed'
+
+
+def test_a_done_report_with_no_claim_is_refused_and_a_merged_claim_passes_claim_required(commander, tmp_path):
+    """A delivered order and a completed goal each stand only on an attached claim, never on prose;
+    a merged claim on a commit that resolves on origin carries both. The lead's worktree holds the
+    order's checkout, so both resolve the one repository."""
+    from agent_comms.goal_actions import CompletedGoalAction
+    from agent_comms.progress_claims import MergedClaim
+    from agent_comms.todos import DeliveredProblemOrder
+    from agent_comms.tools import CommsGoalTool
+    comms, caller = commander
+    create(commander, 'P1')
+    git = checkout_with_origin(tmp_path)
+    push_work(git)
+    merged = (MergedClaim(git('rev-parse', 'HEAD')),)
+    for report, refused in (
+        (CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=()), 'A delivered report needs a claim'),
+        (CommsGoalTool(goal_id='request', status=CompletedGoalAction, progress='done'), 'A completed report needs a claim'),
+    ):
+        with pytest.raises(ValueError, match=re.escape(refused)):
+            report.apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=merged).apply(comms, caller)
+    assert isinstance(comms.goals.todos.get('P1').order, DeliveredProblemOrder)
+    report = CommsGoalTool(goal_id='request', status=CompletedGoalAction, progress='done', claims=merged)
+    assert isinstance(report.apply(comms, caller).goal.state, CompletedGoal)
