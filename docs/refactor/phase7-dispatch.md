@@ -104,7 +104,15 @@ is not a first-reply proof. Production checked full-phase briefs and the scratch
 unit/order/first-reply proof remain required. Unordered rows without a checked
 order cannot be dispatched by inventing their missing check.
 
-The exact delivery-frame launch restriction, missing production declaration sites,
-and a full ControlPlanePhase checked brief draft are in
-[phase7-task-draft.md](phase7-task-draft.md). The native acceptance entrypoint is
-unfinished implementation work here, not a request for the owner to write it.
+The full ControlPlanePhase brief draft was moved into PR #1932's body at the
+owner's request. The owner explicitly authorized rotation to start the proof unit
+on a scratch bus; no helper delegation or live-bus proof writes are authorized.
+The real proof runner is tools/prove_commander_dispatch.py. Its new scratch
+root, configuration, native history and receipts are retained under
+/home/ts/.cache/agent-scratch/pi-cn-phase7/run-*/. Owner: pi-cn-phase7; purpose:
+first native reply and duplicate-dispatch acceptance. Native unit checkouts use
+the existing StorageRule's /home/ts/wt/<unit>--P<n> allocation. No auth is copied.
+The development checkout reuses an unchanged prepared native package by reflink
+copy at stack/.pi-native-a0f57a811b47862f (192 MiB apparent size). Its manifest
+matches main and VerifiedNativePackage.acquire accepts it. The native verifier
+correctly refused a symlink; no gate was disabled and no live package changed.

@@ -1,0 +1,97 @@
+--- a/src/agent_comms/plan_phases.py
++++ b/src/agent_comms/plan_phases.py
+@@ -30,7 +30,9 @@
+ 
+ class PlanPhase(OrderPhase, declared_name=None):
+     after: ClassVar[tuple[type[PlanPhase], ...]] = ()
+-    task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
++    @classmethod
++    def task(cls) -> PhaseTask:
++        return UnspecifiedPhaseTask()
+ 
+     @classmethod
+     def serving(cls, todos: Iterable[Todo]) -> tuple[Todo, ...]:
+@@ -38,7 +40,7 @@
+ 
+     @classmethod
+     def done(cls, todos: Iterable[Todo]) -> bool:
+-        return cls.task.done(cls.serving(todos))
++        return cls.task().done(cls.serving(todos))
+ 
+     @classmethod
+     def ordered(cls, todos: Iterable[Todo]) -> bool:
+@@ -80,6 +82,36 @@
+ class RecordPlanePhase(PlanPhase):
+     after = (RetainedStorePhase,)
+ 
++    @classmethod
++    def task(cls) -> PhaseTask:
++        import shlex
++        import sys
++        from pathlib import Path
++        from .change_report import FileLine
++        from .goals import OrderCheck
++        from .recorded_time import RecordedEventTime
++        from .todos import ApplicationOrderRun, PendingProblemOrder
++        from .work_dispatch import CheckedPhaseTask
++
++        checkout = Path(__file__).resolve().parents[2]
++        check = "timeout 300 " + shlex.join((sys.executable, "-X", "faulthandler",
++            "-m", "pytest", "-o", "addopts=", "-n", "0",
++            "tests/test_commander_problem_orders.py", "tests/test_commander_run_rules.py"))
++        return CheckedPhaseTask(
++            problem="P900003", repo="OpenHCSDev/agent-comms",
++            text="Complete and verify the full native commander record plane.",
++            deadline_seconds=7200,
++            order=PendingProblemOrder(
++                id="record-plane-full-task", owner=FileLine(str(Path(__file__).with_name("todos.py")), 1066),
++                check=OrderCheck(str(checkout), check),
++                edits=("Finish native verdict, strike, transfer, delivery and build-bound closing through the existing Todo and Goal owners.",),
++                banned=("No private verdict or strike files; no fixture pass claimed as native application acceptance.",),
++                report="Report the delivered commit and the copied-root native record-plane observations with their build revisions.",
++                run=ApplicationOrderRun("On a copied root, a real send-back, missed deadline and false completion each produce one record; a second strike fires the unit once; missing Works and wrong-build evidence are refused; a delivered checked order cannot transfer; renaming a deletion target cannot pass; only real installed evidence closes the whole task."),
++                at=RecordedEventTime(1), first_call_deadline=RecordedEventTime(121),
++            ),
++        )
++
+ 
+ class ReviewQueuePhase(MergedPhase):
+     after = (RecordPlanePhase,)
+@@ -88,6 +120,37 @@
+ 
+ class ControlPlanePhase(PlanPhase):
+     after = (RecordPlanePhase,)
++
++    @classmethod
++    def task(cls) -> PhaseTask:
++        import shlex
++        import sys
++        from pathlib import Path
++        from .change_report import FileLine
++        from .goals import OrderCheck
++        from .recorded_time import RecordedEventTime
++        from .todos import ApplicationOrderRun, PendingProblemOrder
++        from .work_dispatch import CheckedPhaseTask
++
++        checkout = Path(__file__).resolve().parents[2]
++        check = "timeout 300 " + shlex.join((sys.executable, "-X", "faulthandler",
++            "-m", "pytest", "-o", "addopts=", "-n", "0",
++            "tests/test_work_dispatch.py", "tests/test_standing_rules.py",
++            "tests/test_storage_rules.py", "tests/test_turn_digests.py"))
++        return CheckedPhaseTask(
++            problem="P900007", repo="OpenHCSDev/agent-comms",
++            text="Complete and verify the full native commander control plane.",
++            deadline_seconds=7200,
++            order=PendingProblemOrder(
++                id="control-plane-full-task", owner=FileLine(str(Path(__file__).with_name("standing_rules.py")), 25),
++                check=OrderCheck(str(checkout), check),
++                edits=("Move the minute wake into Core scheduling; dispatch checked ready work through native order and lifecycle owners; derive standing rules, load, growth, storage and time from their original owners; delete the replaced script and private-state decisions.",),
++                banned=("No live-bus proof writes, phase-name dispatch map, second codec, private heartbeat files or fixture pass claimed as native application acceptance.",),
++                report="Name the started scratch unit, retained order, first reply and build; report native session parity, duplicate decisions, time totals and every removed competing path.",
++                run=ApplicationOrderRun("Scratch rotation starts a real Pi unit for a declared ready task and receives its first reply; a second rotation duplicates neither unit nor order; a full native commander session uses no script process; replay of a preserved hour produces each required decision once and UnitTime classes sum to elapsed time; stopping the commander ends its wake."),
++                at=RecordedEventTime(1), first_call_deadline=RecordedEventTime(121),
++            ),
++        )
+ 
+ 
+ class CutoverPhase(PlanPhase):
