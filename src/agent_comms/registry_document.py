@@ -25,7 +25,7 @@ from .restart_refusals import (
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
-from .thread_identity import ClaimedIdentity, GenerationCounter, OwnerIdentity, TurnIdentity
+from .thread_identity import ClaimedIdentity, GenerationCounter, OwnerIdentity, RecordedThreadIncarnation, TurnIdentity
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
@@ -610,14 +610,14 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     claimed_generations: Mapping[str, int]
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
-    def threads_for(self, incarnation) -> tuple[Thread, ...]:
+    def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         thread = self.by_lookup.get(incarnation.lookup)
         return () if thread is None else (thread,)
 
     def idle_after(self, fence: FinishedTurnFence | None) -> tuple[Thread, ...]:
         if fence is None:
             return ()
-        return tuple(thread for thread in self.threads_for(fence.identity.incarnation)
+        return tuple(thread for thread in self.threads_for(fence.identity.incarnation.require_recorded())
                      if self.statuses[thread.name].active and thread.latest_idle_turn(
                          fence, self.claimed_generations.get(thread.name, 0)))
 

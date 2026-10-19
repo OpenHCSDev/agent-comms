@@ -281,23 +281,13 @@ class Goals:
                 return ()
             source, = sources
             canonical = source.name
-            waits = self.waits.read()
             released: list[str] = []
-            for goal_id, wait in waits.items():
-                if not any(
-                    target.incarnation.resolved(snapshot) == source.incarnation
-                    and (generation := wait.target_turn_generations[index]) is not None
-                    and 0 < generation <= source.turn_generation
-                    for index, target in enumerate(wait.targets)
-                ):
-                    continue
-                owner = snapshot.threads.get(snapshot.canonical_name(wait.owner.name))
-                if owner is None:
-                    continue
-                if any(self._release_finished_wait(
-                    goal, owner, snapshot, canonical, goal_id, wait,
-                ) for goal in owner.goal.active()):
-                    released.append(owner.name)
+            for wait in self.waits.targeting(source.incarnation.require_recorded(), source.turn_generation):
+                for owner in snapshot.threads_for(wait.owner):
+                    if any(self._release_finished_wait(
+                        goal, owner, snapshot, canonical, wait.goal_id, wait,
+                    ) for goal in owner.goal.active()):
+                        released.append(owner.name)
             return tuple(released)
 
     def _release_finished_wait(self, goal: Goal, owner: Thread, snapshot: RegistrySnapshot,
