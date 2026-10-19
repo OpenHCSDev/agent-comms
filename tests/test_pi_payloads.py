@@ -131,9 +131,14 @@ async def test_pi_counts_share_reported_members_and_reader_outputs(observation):
     assert emitted.context_used == PiCount.from_wire(7)
     assert emitted.context_size == (PiCount.from_wire(2000) if observation == "reported" else PiCount.from_wire(4096))
     client = AsyncMock()
-    consumer = AcpEventConsumer(SimpleNamespace(), "unit", client)
+    sessions = SimpleNamespace(publish_metadata=AsyncMock())
+    consumer = AcpEventConsumer(SimpleNamespace(sessions=sessions), "unit", client)
     await consumer.on_context_info(ContextInfo(context_used=PiCount.from_wire(7), context_size=expected))
     assert client.session_update.await_count == (1 if observation == "reported" else 0)
+    if observation == "reported":
+        sessions.publish_metadata.assert_not_awaited()
+    else:
+        sessions.publish_metadata.assert_awaited_once_with("unit")
     client.reset_mock()
     await consumer.on_context_info(emitted)
     assert client.session_update.await_args.kwargs["update"].used == 7
