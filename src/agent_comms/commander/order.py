@@ -179,11 +179,10 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
+def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
-    body = open(body_file).read()
     problems = []
     # Below the floor Core's StorageRule denies each allocating tool call, so the order prose is not checked.
     try:
@@ -370,13 +369,8 @@ def problem(text, unit, due, order_file, where, disk=False):
         sys.exit('Refused: describe the problem (8+ words): what is wrong, what it costs')
     history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
     pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
-    open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
-    try:
-        send(unit, due, order_file, new=(pid, text), disk=disk,
-             finding=LocatedProblemFinding(location))
-    except SystemExit:
-        open(order_file, 'w').write(body)
-        raise
+    send(unit, due, body.replace('Problem: NEW', f'Problem: {pid}'), new=(pid, text),
+         disk=disk, finding=LocatedProblemFinding(location))
     board()
     print(pid)
 
@@ -788,7 +782,7 @@ class SendVerb(OrderVerb, LoadedVerb):
                                 help="the first failing source line, required after two owners")
 
     def run(self) -> None:
-        send(self.unit, self.due, self.body_file, clean=self.clean,
+        send(self.unit, self.due, Path(self.body_file).read_text(), clean=self.clean,
              mechanical=self.mechanical, reassign=self.reassign, traced=self.traced,
              replaces=self.replaces, disk=self.disk)
 

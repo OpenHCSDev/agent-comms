@@ -388,7 +388,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    script.send('worker', due, str(body), replaces=created.messages[-1].message_id)  # without --clean is a send-back
+    script.send('worker', due, body.read_text().replace('Problem: NEW', f'Problem: {created.id}'), replaces=created.messages[-1].message_id)  # without --clean is a send-back
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
@@ -437,9 +437,10 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     body = order_body(repo)
     problem(script, body)
     script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
-    script.send('worker', '23:59', body, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
+    numbered = Path(body).read_text().replace('Problem: NEW', 'Problem: P1')
+    script.send('worker', '23:59', numbered, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', body, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
+    script.send('worker', '23:59', numbered, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
 
@@ -546,9 +547,10 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
                     "Works when: the installed app shows the counter at one after restart\n"
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    original = body.read_bytes()
     with pytest.raises(ValueError, match='Jargon'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
-    assert script.held_orders() == () and 'Problem: NEW' in body.read_text()
+    assert script.held_orders() == () and body.read_bytes() == original
 
 
 def test_commander_refuses_a_check_that_prints_no_count(commander_script):
