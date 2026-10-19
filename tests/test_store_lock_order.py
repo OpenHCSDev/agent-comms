@@ -52,6 +52,13 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
             return
         path = os.readlink(f'/proc/self/fd/{frame.f_locals["descriptor"]}')
         actor = threading.current_thread().name
+        if actor == "native":
+            # Activity is read and released before the ordered publication hold.
+            parent = frame.f_back
+            while parent is not None and parent.f_code is not StoreLock.ordered.__wrapped__.__code__:
+                parent = parent.f_back
+            if parent is None:
+                return
         if actor == "native" and event == "call" and path.endswith(".bus.jsonl.lock"):
             writer_at_bus.set()
         if event != "return":
