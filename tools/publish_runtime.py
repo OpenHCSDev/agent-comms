@@ -24,12 +24,12 @@ from typing import ClassVar
 
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
 from agent_comms.child_process import LinuxPlatform, ProcessIdentity, ProcessState
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
+from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.restart_queue import enqueue
 from agent_comms.store_files import _store_lock
 from cutover.carry_check_revision import CheckRevisions
@@ -163,7 +163,7 @@ class RuntimePublication:
             acquire_exclusive_route_lock(directory)
             if read_active_route(path) != previous_route:
                 raise ValueError('Active route changed during CLI check')
-            barrier = MaintenanceBarrier(root / 'registry.json')
+            barrier = Comms(root).owners.maintenance
             hold = barrier.begin(MaintenanceOperator('runtime publication'))
             try:
                 with _store_lock(barrier.wire_path):
@@ -181,7 +181,7 @@ class RuntimePublication:
         recorded before more commander orders were imported into the bus.
         """
         root = Path(hold.root)
-        MaintenanceBarrier(root / 'registry.json').require_draining_unlocked(hold)
+        Comms(root).owners.maintenance.require_draining_unlocked(hold)
         current = StoppedOwnerInstallation.current_pointer()
         if not current.is_symlink():
             if current.exists():
