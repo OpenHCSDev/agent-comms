@@ -48,7 +48,7 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
     def for_session(self, session_id: str) -> AgentCommsUpdate:
         return self
 
-    def matches_turn(self, turn_id: str | None) -> bool:
+    def matches_turn(self, turn_id: object) -> bool:
         """Facts without a turn identity apply throughout their session."""
         return True
 
@@ -666,7 +666,7 @@ class McpClientAcknowledgementUpdate(AgentCommsUpdate, declared_name="mcp_client
     turn_id: str
     acknowledgement: McpLiveAcknowledgement = field(metadata={"wire_name": 'receipt'})
 
-    def matches_turn(self, turn_id: str | None) -> bool:
+    def matches_turn(self, turn_id: object) -> bool:
         return self.turn_id == turn_id
 
 
