@@ -265,14 +265,14 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         copy_bus(root, copy)
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
         stack.prepare_native()
+        # Hold the copy before reading it, exactly as the live run holds the bus.
+        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copy / "registry.json").begin(
+            MaintenanceOperator("upgrade-bus")).nonce
         with transcripts_held(copy):
             before = bus_files(copy)
         stopping = before_stop(copy, pending, stack, revisions)
         # Optional connector qualification belongs to its own round_trip command;
         # a native-only bus must not acquire a fabricated director to update.
-        # Read back under a hold, exactly as the live run does.
-        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copy / "registry.json").begin(
-            MaintenanceOperator("upgrade-bus")).nonce
         return carry_and_read(copy, before, pending, stack, stack, revisions, stopping)
 
 
