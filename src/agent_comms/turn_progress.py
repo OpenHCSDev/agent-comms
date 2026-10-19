@@ -123,16 +123,21 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def report_failure(self, error: Exception) -> NativeTurnOutcome:
         """Attempt existing ACP error publication once without hiding the original fault."""
-        diagnostic = record_terminal_failure(
-            self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
-            event=asdict(self.result) if self.result is not None else {},
-            sequences=tuple(origin.seq for origin in self.routing.requests),
-            source_error=error,
-        )
-        detail = (
-            "Native turn failed. "
-            f"[Open diagnostic]({diagnostic.as_uri()})"
-        )
+        cause = error.__cause__ or error
+        detail = f"Native turn failed: {type(cause).__name__}: {cause}"
+        try:
+            diagnostic = record_terminal_failure(
+                self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
+                event=asdict(self.result) if self.result is not None else {},
+                sequences=tuple(origin.seq for origin in self.routing.requests),
+                source_error=error,
+            )
+        except OSError as diagnostic_error:
+            # Reporting the failed report must not require the same failed disk.
+            detail += (f" Failure diagnostic also failed: "
+                       f"{type(diagnostic_error).__name__}: {diagnostic_error}")
+        else:
+            detail += f" [Open diagnostic]({diagnostic.as_uri()})"
         if self.result is not None:
             # A transport/cleanup fault cannot reconstruct an already resolved
             # native failure. Keep the reported failure and separate diagnostic.

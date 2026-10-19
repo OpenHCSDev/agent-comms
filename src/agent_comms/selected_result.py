@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass, field
 
 from .assignment_states import AssignmentState
-from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
-from .errors import RelationViolationError
 from .messages import AlertKind, NoticeRole
-from .private_sidecar import SidecarCommitUnknown
 from .send_result import SendResult
 
 
@@ -21,7 +17,7 @@ class CoordinatedTurn:
     disposition: type[AssignmentState]
     input_id: str
     publications: tuple[PublicationEvidence, ...]
-    cursor_status: str = "unavailable"
+    cursor_status: str
     notices: tuple[str, ...] = ()
 
     @classmethod
@@ -41,21 +37,9 @@ class CoordinatedTurn:
 
     @staticmethod
     async def cursor_status_for(participant, input_id) -> str:
-        # Projection is auxiliary: failure never undoes a committed response,
-        # creates another attempt or gives permission to replay native input.
-        try:
-            cursor = await participant.cursor_delivery.advance(participant, input_id)
-        except (
-            OSError,
-            sqlite3.Error,
-            ValueError,
-            IdentityConflict,
-            StaleFence,
-            RelationViolationError,
-            PublicationActivationBlocked,
-            SidecarCommitUnknown,
-        ):
-            return "unavailable"
+        # A failed projection does not undo a committed response or authorize replay.
+        # Report the original error rather than pretending it is a cursor observation.
+        cursor = await participant.cursor_delivery.advance(participant, input_id)
         return "proven" if cursor is not None and cursor.input_id == input_id else "blocked_gap"
 
 

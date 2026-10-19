@@ -1,5 +1,6 @@
 """Image prompts survive ACP decoding, fresh Pi input and queued steering."""
 
+from bus_history import read_history
 import asyncio
 import base64
 import json
@@ -290,7 +291,7 @@ async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypat
     try:
         with pytest.raises(RequestError):
             await agent.prompt("project", [{"type": "text", "text": "#all look"}, IMAGE])
-        assert not list(agent._comms.views.full_history_page().messages)
+        assert not read_history(agent._comms)
 
     finally:
         agent.sessions.proxies.clear()

@@ -7,6 +7,7 @@ from contextlib import closing
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_entries import NativeEvidenceScope
 
+from bus_history import read_history
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
@@ -190,7 +191,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert caught.value.context.session_file == Path(seed.session_file)
     assert all(not child.alive() for child in journey.children)
     assert not journey.comms.registry.require("beta").active_turn.executing
-    notice = list(journey.comms.views.full_history_page().messages)[-1]
+    notice = read_history(journey.comms)[-1]
     assert isinstance(notice.role, NoticeRole) and "No automatic retry" in notice.body
     delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in delivery.decisions)
@@ -220,7 +221,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert result.input_id != caught.value.context.input_id
     assert all(row in journey.records() for row in before)
     assert not journey.replies
-    assert any(m.body == "NEW_INPUT_COMPLETED" for m in list(journey.comms.views.full_history_page().messages))
+    assert any(m.body == "NEW_INPUT_COMPLETED" for m in read_history(journey.comms))
     print(
         "SAVED_NATIVE_TERMINAL",
         "direct",
