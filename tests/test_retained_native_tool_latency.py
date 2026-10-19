@@ -1,6 +1,5 @@
 """Real selected native tools over an isolated retained source; localhost only."""
 from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import functools
@@ -26,7 +25,6 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root
 
-PACKAGE = str(pinned_native_package())
 SOURCE = os.environ.get("NATIVE_TOOL_LATENCY_SOURCE")
 pytestmark = pytest.mark.skipif(not SOURCE, reason="Isolated retained source required")
 
@@ -62,7 +60,8 @@ class ReadProvider(LoopbackProvider):
 
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel"])
-async def test_installed_retained_native_read_round_preserves_original_inputs(tmp_path, monkeypatch, outcome):
+async def test_installed_retained_native_read_round_preserves_original_inputs(
+        tmp_path, monkeypatch, outcome, native_runtime_package):
     source = Path(SOURCE).absolute()
     original = FileRevision.from_stat(source.stat())
     original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -154,7 +153,7 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(tm
     try:
         execution = SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta",
-            native_package=Path(PACKAGE).resolve(strict=True), session_file=saved,
+            native_package=native_runtime_package, session_file=saved,
         )
         task = asyncio.create_task(execution.run())
         if outcome == "complete":
@@ -172,7 +171,7 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(tm
             try:
                 replay = await SelectedExecution(
                     root=root, wire_root_id=root_id, owner_name="beta",
-                    native_package=Path(PACKAGE).resolve(strict=True), session_file=saved,
+                    native_package=native_runtime_package, session_file=saved,
                 ).run()
             except CoordinationError:
                 replay = None

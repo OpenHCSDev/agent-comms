@@ -471,6 +471,9 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
     assert [script.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
     script.hunt(f'{__file__}:1', 'P2', 'P1 rereads the counter per event; this read of the P2 path found it clean', None)
     assert [len(comms.goals.todos.get(pid).hunts) for pid in ('P1', 'P2')] == [0, 1]
+    done = replace(comms.goals.todos.get('P2'), state=DoneTodoState)
+    with pytest.raises(TodoError, match='P2 is done'):
+        done.state.require_open(done)
 
 
 def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_module(
