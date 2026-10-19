@@ -36,7 +36,7 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -49,7 +49,7 @@ from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
-from agent_comms.connector import PORT
+from agent_comms.connector import PORT, ServiceProcess
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -152,6 +152,20 @@ class Stack:
         history = self.cli(root, "history", "--limit", "50")  # #any: every channel
         return {"threads": len(threads), "who": len(present),
                 "history": len(history[EverythingHistoryPageResult.messages_key])}
+
+    def restart_connector(self, patience: int = 30) -> None:
+        """The service keeps the code it loaded at start, so it restarts onto this checkout."""
+        try:
+            unit = ServiceProcess.listening(self.connector_port).unit
+            run("systemctl", "--user", "restart", unit)
+        except ValueError as error:
+            raise UpgradeRefused(str(error)) from error
+        for _ in range(patience):
+            with suppress(ValueError):
+                ServiceProcess.listening(self.connector_port)
+                return
+            time.sleep(1)
+        raise UpgradeRefused(f"The connector service did not listen again within {patience}s")
 
     def round_trip(self, root: Path) -> str:
         """The running connector service, on this stack's Python, reads this bus as the bus
@@ -414,6 +428,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
         maintenance.clear(held)
+        installed.restart_connector()
         round_trip = installed.round_trip(root)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
         transcripts.close()
@@ -430,6 +445,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.prepare_native()
         maintenance.clear(held)
         start(installed, root, running)
+        with suppress(UpgradeRefused):  # back onto the restored code, if it was restarted
+            installed.restart_connector()
         print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
               f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
         raise

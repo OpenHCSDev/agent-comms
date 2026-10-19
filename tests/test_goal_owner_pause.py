@@ -29,7 +29,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert paused.state.declared_name == "paused"
     assert reopened.registry.require("worker").goal.state.pause_source.declared_name == "owner"
     assert "paused_by" not in paused.to_wire()
-    assert reopened.views.list_threads()[0]["goal"]["state"]["source"]["kind"] == "owner"
+    assert reopened.views.list_threads()[0].thread.goal.state.pause_source.declared_name == "owner"
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     report = next(
         tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"

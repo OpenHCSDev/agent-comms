@@ -89,5 +89,5 @@ class StoreSchemaReports(CliResult):
     """Every store scanned at one read, available or not."""
     reports: tuple[StoreSchemaReport | UnavailableStoreSchemaReport, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.encode(self.reports)

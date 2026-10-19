@@ -96,6 +96,16 @@ def test_steps_at_head_form_one_chain_and_each_module_declares_its_step():
             assert declared.after == step.after
 
 
+def test_retained_read_ledger_still_reaches_its_cursor_conversions():
+    chain = CarryChain.at(REPO, "HEAD")
+    pending = chain.pending(("carry_read_ledger",))
+    names = [step.name for step in pending]
+    assert names.index("carry_p495_read_ledger") < names.index("carry_archived_read_ledgers")
+    assert names.index("carry_archived_read_ledgers") < names.index("carry_goal_wait_targets")
+    assert all(step.revision != "HEAD" for step in pending
+               if step.name in ("carry_p495_read_ledger", "carry_archived_read_ledgers"))
+
+
 def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
     repo = Repository(tmp_path)
     held = repo.commit({"carry_a": step_source(None), "carry_b": step_source("carry_a")})
@@ -216,6 +226,12 @@ def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
     ({"carry_b": step_source("carry_a")}, 0),
     ({"carry_a": step_source(None).replace("Carried(0)", "Carried(1)")}, 1),
     ({"carry_a": step_source("carry_previous")}, 0),
+    ({"carry_a": step_source(None) +
+      "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 0),
+    ({"carry_a": step_source(None).replace("Carried(0)", "Carried(1)") +
+      "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 1),
+    ({"carry_a": step_source(None) +
+      "\n    @classmethod\n    def before_stop(cls, root, *, apply):\n        return Carried(1)\n"}, 1),
     ({"carry_a": None, "carry_renamed": step_source(None)}, 1),
     ({"carry_a": None}, 0),
 ])

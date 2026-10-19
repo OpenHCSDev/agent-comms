@@ -1153,10 +1153,13 @@ class EditedCarry(Measure):
 
     @staticmethod
     def conversion(source: bytes) -> str:
-        """Dependency rewiring retires steps without editing their conversion."""
+        """Conversion code is immutable; ordering and publication backups are metadata."""
         tree = ast.parse(source)
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
+                node.body = [statement for statement in node.body
+                             if not (isinstance(statement, ast.FunctionDef)
+                                     and statement.name == 'backup_files')]
                 for statement in node.body:
                     match statement:
                         case ast.Assign(targets=[ast.Name(id="after")]):

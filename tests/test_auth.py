@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 from acp.schema import SessionConfigSelectOption
 
@@ -44,10 +47,13 @@ async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_m
     assert selected.model == "saved/model"
 
 
-def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
+def test_login_runs_the_verified_native_package_without_managed_thread_identity(
+    monkeypatch, configured_catalog
+):
+    monkeypatch.setenv("PATH", "")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-be-adopted")
     monkeypatch.setenv("AGENT_COMMS_MANAGED", "1")
-    monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "pi-custom")
+    monkeypatch.setenv("NODE_OPTIONS", "--require=ambient.js")
     captured = {}
 
     def call(args, env):
@@ -56,12 +62,19 @@ def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
 
     monkeypatch.setattr("agent_comms.login.subprocess.call", call)
     assert run_login("openai-codex") == 0
-    assert captured["args"][0] == "pi-custom"
-    assert "--no-session" in captured["args"] and "--no-tools" in captured["args"]
-    assert "--mode" not in captured["args"] and "--print" not in captured["args"]
+    package = configured_catalog.package
+    arguments = captured["args"]
+    assert tuple(arguments[:len(package.node())]) == package.node()
+    extension = Path(arguments[arguments.index("-e") + 1])
+    assert extension == package.cli.with_name("pi_login_control.mjs")
+    manifest = json.loads((Path(__file__).parents[1] / "stack/native-import-manifest.json").read_text())
+    assert {"entry": "dist/pi_login_control.mjs"} in manifest["extensionEntries"]
+    assert "--no-session" in arguments and "--no-tools" in arguments
+    assert "--mode" not in arguments and "--print" not in arguments
     assert captured["env"]["AGENT_COMMS_LOGIN_PROVIDER"] == "openai-codex"
     assert "AGENT_COMMS_THREAD" not in captured["env"]
     assert "AGENT_COMMS_MANAGED" not in captured["env"]
+    assert "NODE_OPTIONS" not in captured["env"]
     with pytest.raises(ValueError):
         run_login("invalid\ncommand")
 

@@ -2144,15 +2144,6 @@
                  const latestPromptTokens = entry.message.usage.input + entry.message.usage.cacheRead + entry.message.usage.cacheWrite;
 --- a/dist/modes/interactive/interactive-mode.js
 +++ b/dist/modes/interactive/interactive-mode.js
-@@ -1140,7 +1140,7 @@
-             project: { scope: "project", paths: [], packages: new Map() },
-             path: { scope: "path", paths: [], packages: new Map() },
-         };
--        for (const item of items) {
-+        for (const {entryId, item} of items) {
-             const groupKey = this.getScopeGroup(item.sourceInfo);
-             const group = groups[groupKey];
-             const source = item.sourceInfo?.source ?? "local";
 @@ -2770,12 +2770,12 @@
                  }
                  else if (event.result) {
