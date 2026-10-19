@@ -15,6 +15,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .cli_result import ThreadToolCatalogResult
 from .launch_runtime import RestartEnvironment
+from .native_arguments import NativeArguments
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
 from .goals import (
@@ -167,14 +168,17 @@ class Thread(ThreadProvenance):
             **project.environment(root),
         }
 
-    def native_launch_arguments(self, arguments: tuple[str, ...]) -> tuple[str, ...]:
-        """Write this native launch's catalog in its config directory, not a CLI cache."""
+    def native_launch_arguments(self, arguments: NativeArguments, package: Path) -> tuple[str, ...]:
+        """Write this native launch's catalog in its config directory, not a CLI cache; only a
+        launch that loads the agent-comms extension registers the flag that reads it."""
+        if not arguments.loads(NativeRequestTools.native_extension(package)):
+            return arguments.argv
         directory = RestartEnvironment.inherit(os.environ).native_config
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
         catalog = ThreadToolCatalogResult(tuple(NativeRequestTools.catalog()), self.service_tier)
         _atomic_write_text(path, json.dumps(catalog.encoded(), separators=(",", ":")))
-        return (*arguments, "--comms-catalog", str(path))
+        return (*arguments.argv, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""

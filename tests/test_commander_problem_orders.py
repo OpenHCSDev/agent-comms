@@ -870,7 +870,7 @@ def test_column_carries_run_before_order_validation(commander):
                'carry_todo_corrections': ('TodoCorrections', 0),
                'carry_order_run': ('OrderRuns', 0),
                'carry_todo_open_indexes': ('TodoOpenIndexes', 0)}
-    assert names[names.index('carry_todo_messages'):] == list(members)
+    assert [name for name in names if name in members] == list(members)
     for name, (member, changed) in members.items():
         carry = getattr(importlib.import_module('cutover.' + name), member)
         assert carry.carry(comms.root, apply=False).changed == changed

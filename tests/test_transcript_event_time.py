@@ -9,10 +9,11 @@ import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
+from agent_comms.field_codec import MalformedRecord, RecordedTimestamp
 from agent_comms.native_entries import NativeEntry, TranscriptProjection
 from agent_comms.routing import TurnRouting
 from agent_comms.threads import Thread
-from agent_comms.transcript_events import AssistantTranscript, UserTranscript
+from agent_comms.transcript_events import AssistantTranscript
 
 
 
@@ -42,7 +43,7 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
         events = entry.events(context)
         assert len(events) == 2
         assert all(event.timestamp == expected for event in events)
-        assert entry.timestamp == stamp  # Native external field stays exact.
+        assert entry.timestamp == RecordedTimestamp(stamp)  # Native external field stays exact.
     compacted = NativeEntry.from_wire(
         {"type": "compaction", "timestamp": stamp, "summary": "kept context"}
     )
@@ -61,16 +62,16 @@ def test_new_native_entry_inherits_original_clock_projection():
     # Adding a content declaration does not add another clock propagation site.
     stamp = "2026-09-28T23:12:33.123Z"
     expected = datetime.fromisoformat(stamp).timestamp()
-    note = ExternalNoteEntry(timestamp=stamp)
+    note = ExternalNoteEntry(timestamp=RecordedTimestamp(stamp))
     assert note.events(TranscriptProjection())[0].timestamp == expected
 
 
 @pytest.mark.parametrize("stamp", [None, "not-a-time", "2026-09-28T23:12:33"])
-def test_unrecorded_clock_remains_unknown_without_losing_history(stamp):
-    entry = NativeEntry.from_wire(
-        {"type": "message", "timestamp": stamp, "message": {"role": "user", "content": "preserved"}}
-    )
-    assert entry.events(TranscriptProjection()) == [UserTranscript("preserved", timestamp=None)]
+def test_an_entry_without_an_absolute_recorded_clock_is_refused(stamp):
+    with pytest.raises(MalformedRecord):
+        NativeEntry.from_wire(
+            {"type": "message", "timestamp": stamp, "message": {"role": "user", "content": "preserved"}}
+        )
 
 
 async def test_actual_native_saved_clocks_survive_acp_snapshot_and_rebuild(
