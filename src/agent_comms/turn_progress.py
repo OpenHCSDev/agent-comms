@@ -324,7 +324,9 @@ class TurnProgress(events.AgentEventConsumer):
             await self.consume(events.Done(text="Native turn ended without a result", ok=False))
         # Cancellation must join original sends, their annotation and the
         # checkpoint before OwnedTurn can settle or release its lease.
-        await self.report_sends(await Coordination.run_worker(partial(self.publish_checkpoint, self.result)))
+        await self.report_sends(await Coordination.run_worker(
+            partial(self.publish_checkpoint, self.result)
+        ))
         checkpoint = await Coordination.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
         await self.runtime.session_update(

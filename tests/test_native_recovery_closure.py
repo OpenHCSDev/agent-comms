@@ -1,10 +1,8 @@
 """Compiled native recovery owns closure; Core preserves the original failure."""
-from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-from pathlib import Path
 
 import pytest
 
@@ -14,7 +12,6 @@ from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import NativeMessageFailureSource, NativeTurnError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import ProviderTransportFailureDiagnostic
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 from test_native_refusal_recovery import _settled_records, _stub_with
 
@@ -232,10 +229,6 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
             updates.append(update)
 
     agent.sessions.client = Client()
-    package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
     try:
         await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
         with pytest.raises(NativeTurnError) as caught:
