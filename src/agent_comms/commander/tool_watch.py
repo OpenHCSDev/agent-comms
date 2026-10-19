@@ -6,7 +6,7 @@ long turn) prints one digest of what the unit did, for the commander to judge by
 import json, os, time, glob, collections
 from pathlib import Path
 
-from . import order
+from . import judge, order
 from .config import CommanderConfig
 from ..field_codec import MalformedRecord
 from ..native_tool_call import SelectedToolDenied
@@ -17,7 +17,6 @@ from ..registration import Registration
 CONFIG = CommanderConfig.installed()
 B = str(CONFIG.root)
 LOG = f'{CONFIG.state}/activity.log'
-EDITS = f'{CONFIG.state}/edits.jsonl'  # every edit in full; judge owns verdicts
 
 
 def thread_names():
@@ -44,10 +43,8 @@ def record_edit(thread, tool):
     """Each edit waits for a verdict from the commander (judge); nothing judges it automatically."""
     if not (replacements := tool and tool.replacements()):
         return
-    record = dict(id=f'{time.time_ns():x}'[-10:], at=time.time(), thread=thread, path=tool.path,
-                  hunks=[dict(old=edit.old_text, new=edit.new_text) for edit in replacements])
-    with open(EDITS, 'a') as f:
-        f.write(json.dumps(record) + '\n')
+    judge.Edit(f'{time.time_ns():x}'[-10:], time.time(), thread, tool.path,
+               tuple(judge.Hunk(edit.old_text, edit.new_text) for edit in replacements)).append()
 
 
 STRUCK = {}  # (thread, violation) -> time of the strike, so one repeated command is one strike

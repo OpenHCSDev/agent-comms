@@ -291,7 +291,8 @@ def tool_watch(commander_script):
     """The tool-call watcher reading the commander config commander_script installed."""
     import importlib
 
-    from agent_comms.commander import tool_watch
+    from agent_comms.commander import judge, tool_watch
+    importlib.reload(judge)
     return importlib.reload(tool_watch)
 
 
