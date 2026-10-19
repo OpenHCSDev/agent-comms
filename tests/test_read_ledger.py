@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
+from agent_comms.field_codec import FieldCodec
 from agent_comms.comms import Comms, wire
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import OlderTraversal
@@ -92,10 +93,6 @@ def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_pat
 
 
 def test_typed_read_keys_round_trip_through_the_store_codec():
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.read_basis import DMConversation
-    from agent_comms.read_ledger import ReadDocument
-
     owner = RecordedThreadIncarnation("viewer", 1.0)
     conversation = DMConversation(participants=(owner,))
     document = ReadDocument(messages={owner: ReadCursor({conversation: ConversationCursor(2)})})
@@ -121,9 +118,15 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     assert second.read_marker_notice == NoReadNotice()
 
 
-def test_empty_notice_never_accesses_store_and_pending_notice_keeps_a_replacement(tmp_path):
-    from agent_comms.field_codec import FieldCodec
+@pytest.mark.parametrize("raw_notice, notice", [(None, NoReadNotice()), ("Earlier notice", PendingReadNotice("Earlier notice"))])
+def test_read_document_construction_owns_notice_decoding(raw_notice, notice):
+    document = ReadDocument(notice=raw_notice)
+    assert document.notice == notice
+    assert FieldCodec.encode(document)["notice"] == raw_notice
+    assert FieldCodec.decode(ReadDocument, FieldCodec.encode(document)) == document
 
+
+def test_empty_notice_never_accesses_store_and_pending_notice_keeps_a_replacement(tmp_path):
     assert NoReadNotice().take(object()) == NoReadNotice()
     assert FieldCodec.decode(ReadNotice, None) == NoReadNotice()
     assert FieldCodec.decode(ReadNotice, "reset") == PendingReadNotice("reset")
@@ -373,7 +376,6 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
 
 def test_recorded_bus_identity_is_one_member(tmp_path):
     from agent_comms.coordination_errors import DMScopeChanged
-    from agent_comms.field_codec import FieldCodec
     from agent_comms.private_path import FileIdentity, ObservedPath
     from agent_comms.read_ledger import ReadDocument
     from agent_comms.recorded_bus import NoRecordedBus, RecordedBus

@@ -102,6 +102,11 @@ class ReadDocument:
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: ReadNotice = field(default_factory=NoReadNotice)
 
+    def __post_init__(self) -> None:
+        # Published conversions construct documents from wire values too.
+        if not isinstance(self.notice, ReadNotice):
+            object.__setattr__(self, "notice", FieldCodec.decode(ReadNotice, self.notice))
+
     def cursors(self, viewer: str, snapshot: RegistryProvenance,
                 source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
         if self.bus_identity.matches(source):

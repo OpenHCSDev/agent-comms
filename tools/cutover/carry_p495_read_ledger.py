@@ -11,7 +11,7 @@ from .carry import Carried, Carry
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.read_basis import ChannelConversation, DMConversation, ConversationCursor, ReadCursor
-from agent_comms.read_ledger import ReadDocument, ReadLedger, ReadNotice
+from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
@@ -59,7 +59,7 @@ class ReadLedgerConversations(Carry):
             current = ReadDocument(
                 {owner: ReadCursor({key.current(): value for key, value in conversations.items()})
                  for owner, conversations in previous.messages.items()},
-                previous.bus_identity, previous.transcripts, FieldCodec.decode(ReadNotice, previous.notice),
+                previous.bus_identity, previous.transcripts, previous.notice,
             )
             if apply:
                 ledger._publish_unlocked(current)
