@@ -2368,3 +2368,8 @@
 @@ -170,1 +170,1 @@
 -    getSessionStats(): Promise<SessionStats>;
 +    getSessionStats(): Promise<Pick<SessionStats, "contextUsage">>;
+--- a/dist/modes/interactive/interactive-mode.js
++++ b/dist/modes/interactive/interactive-mode.js
+@@ -5203,1 +5203,1 @@
+-        let info = `${theme.bold("Session Info")}\n\n`;
++        let info = `${theme.bold("Session Info — Current Context")}\n\n`;
