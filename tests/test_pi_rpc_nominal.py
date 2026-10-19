@@ -278,7 +278,7 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
         awaiting_native_attestation=False,
         stats=SimpleNamespace(requested=False),
         prompt_state=SimpleNamespace(awaiting_start=True),
-        active_tools=set(),
+        tool_socket=SimpleNamespace(active_tools=set()),
     )
     watchdog.phase = ModelWaitPhase()
     wait = watchdog.wait_for(session)
@@ -288,5 +288,5 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     watchdog.progress()
     assert wait.timeout() == 180.0
     watchdog.phase = ModelWaitPhase().on(pi.ToolExecutionStart(), {"tool"})
-    session.active_tools = {"tool"}
+    session.tool_socket.active_tools = {"tool"}
     assert watchdog.wait_for(session).timeout() is None
