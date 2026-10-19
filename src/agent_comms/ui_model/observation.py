@@ -50,7 +50,7 @@ from agent_comms.revision_views import NotificationsView, RegistrationsView, Sid
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
-from agent_comms.view_unread import IdleReplyPreparation
+from agent_comms.view_unread import ReplyIndexResult
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -65,7 +65,6 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-    from agent_comms.view_unread import ReplyIndexBatch
 
 
 
@@ -655,12 +654,12 @@ class SidebarReading(Observation[ObserveSidebar]):
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SendState = NoSidebarSent()
         self.published: PublishState = NoSidebarResult()
-        self.reply_completion: Future[ReplyIndexBatch] = IdleReplyPreparation.future
+        self.reply_completion: frozenset[Future[ReplyIndexResult]] = frozenset()
 
     def after_read(self, service: ObservationService) -> None:
-        preparation = service.comms.views.transcript_reads.preparation
+        state = service.comms.views.transcript_reads
         loop = asyncio.get_running_loop()
-        self.reply_completion = preparation.watch(
+        self.reply_completion = state.watch(
             self.reply_completion, lambda _: loop.call_soon_threadsafe(self.prepared, service)
         )
 

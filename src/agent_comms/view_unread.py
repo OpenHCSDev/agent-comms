@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from multiprocessing.synchronize import Event
 from pathlib import Path
 from threading import RLock
@@ -29,7 +29,7 @@ from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 from .wire_watch import FileWatch, NativeFileWatch, WatchSource
-from .ui_model.unread import IndexingUnread, ReplyUnread, UnreadPresentation
+from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -75,7 +75,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
 
     def counted(self, total: int, seen: int) -> Counted:
         """Coverage, not the number found, determines whether this is a lower bound."""
-        return Counted(total, self.start > seen)
+        return CappedCount(total) if self.start > seen else Counted(total)
 
     def prepare(self, revision: FileRevision, seen: int, cancelled: Event) -> ReplyIndexResult:
         """Visit at most limit newest records, stopping earlier at the read mark."""
@@ -109,6 +109,19 @@ class ReplyRead:
     index: ReplyIndex
     revision: FileRevision
     seen: int
+    cancelled: ClassVar[Event]
+
+    @classmethod
+    def initialize_worker(cls, cancelled: Event) -> None:
+        ThreadLaunch.strip(os.environ)
+        cls.cancelled = cancelled
+
+    def prepare(self) -> ReplyIndexResult:
+        """One independently scheduled source read; no loop over other people's files."""
+        try:
+            return self.index.prepare(self.revision, self.seen, self.cancelled)
+        except FileNotFoundError:
+            return RevisionMoved()
 
 
 @dataclass(frozen=True)
@@ -146,7 +159,10 @@ class FileReplyCount(ABC):
     def __add__(self, other: FileReplyCount) -> FileReplyCount: ...
 
     @abstractmethod
-    def added(self, total: int, lower_bound: bool) -> FileReplyCount: ...
+    def added(self, total: int) -> FileReplyCount: ...
+
+    @abstractmethod
+    def capped(self, total: int) -> FileReplyCount: ...
 
     @abstractmethod
     def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None: ...
@@ -155,16 +171,27 @@ class FileReplyCount(ABC):
 @dataclass(frozen=True)
 class Counted(FileReplyCount):
     total: int
-    lower_bound: bool = False
 
     def __add__(self, other: FileReplyCount) -> FileReplyCount:
-        return other.added(self.total, self.lower_bound)
+        return other.added(self.total)
 
-    def added(self, total: int, lower_bound: bool) -> FileReplyCount:
-        return Counted(self.total + total, self.lower_bound or lower_bound)
+    def added(self, total: int) -> FileReplyCount:
+        return replace(self, total=self.total + total)
+
+    def capped(self, total: int) -> FileReplyCount:
+        return CappedCount(self.total + total)
 
     def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None:
-        counts[name] = ReplyUnread(self.total, self.lower_bound)
+        counts[name] = ReplyUnread(self.total)
+
+
+@dataclass(frozen=True)
+class CappedCount(Counted):
+    def __add__(self, other: FileReplyCount) -> FileReplyCount:
+        return other.capped(self.total)
+
+    def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None:
+        counts[name] = CappedReplyUnread.for_count(self.total)
 
 
 @dataclass(frozen=True)
@@ -172,7 +199,10 @@ class Indexing(FileReplyCount):
     def __add__(self, other: FileReplyCount) -> FileReplyCount:
         return self
 
-    def added(self, total: int, lower_bound: bool) -> FileReplyCount:
+    def added(self, total: int) -> FileReplyCount:
+        return self
+
+    def capped(self, total: int) -> FileReplyCount:
         return self
 
     def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None:
@@ -190,11 +220,11 @@ class ReplyIndexResult(ABC):
     """A prepared delta or the specific reason no delta could be prepared."""
 
     @abstractmethod
-    def collect(self, updates: list[ReplyIndexUpdate]) -> None: ...
+    def commit(self, database: sqlite3.Connection) -> None: ...
 
 
 class NoReplyUpdate(ReplyIndexResult):
-    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
+    def commit(self, database: sqlite3.Connection) -> None:
         pass
 
 
@@ -214,9 +244,6 @@ class ReplyIndexUpdate(ReplyIndexResult):
     after: ReplyIndex
     replies: tuple[TranscriptReply, ...]
 
-    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
-        updates.append(self)
-
     def commit(self, database: sqlite3.Connection) -> None:
         current = ReplyIndex.one(database, source=self.after.source) or ReplyIndex(
             source=self.after.source
@@ -232,39 +259,8 @@ class ReplyIndexUpdate(ReplyIndexResult):
         self.after.upsert(database)
 
 
-@dataclass(frozen=True)
-class ReplyIndexBatch:
-    """One record-capped read for every requested source, with no prefix-resume queue."""
-
-    updates: tuple[ReplyIndexUpdate, ...]
-    cancelled: ClassVar[Event]
-
-    @classmethod
-    def initialize_worker(cls, cancelled: Event) -> None:
-        ThreadLaunch.strip(os.environ)
-        cls.cancelled = cancelled
-
-    @classmethod
-    def prepare(cls, reads: tuple[ReplyRead, ...]) -> ReplyIndexBatch:
-        updates: list[ReplyIndexUpdate] = []
-        for read in reads:
-            if cls.cancelled.is_set():
-                break
-            try:
-                read.index.prepare(read.revision, read.seen, cls.cancelled).collect(updates)
-            except FileNotFoundError:
-                continue  # The next source observation sees the missing file.
-        return cls(tuple(updates))
-
-
 class ReplyPreparation:
-    """Own whether an index batch can start, publish or wake an observer."""
-
-    future: Future[ReplyIndexBatch]
-
-    @property
-    def pending(self) -> bool:
-        return not self.future.done()
+    """Own source reads, their publication and completion subscriptions."""
 
     def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> None:
         pass
@@ -290,27 +286,15 @@ class ReplyPreparation:
     ) -> ReplyPreparation:
         return self
 
-    def read_counts(
-        self, state: TranscriptReadState, viewer: str,
-        document: ReadDocument,
-    ) -> TranscriptUnread:
-        return state._counts_locked(viewer, document)
-
     def watch(
-        self, previous: Future[ReplyIndexBatch],
-        on_done: Callable[[Future[ReplyIndexBatch]], None],
-    ) -> Future[ReplyIndexBatch]:
-        return previous
-
-
-_EMPTY_REPLY_FUTURE: Future[ReplyIndexBatch] = Future()
-_EMPTY_REPLY_FUTURE.set_result(ReplyIndexBatch(()))
+        self, previous: frozenset[Future[ReplyIndexResult]],
+        on_done: Callable[[Future[ReplyIndexResult]], None],
+    ) -> frozenset[Future[ReplyIndexResult]]:
+        return frozenset()
 
 
 class IdleReplyPreparation(ReplyPreparation):
-    """A completed empty future, shared without creating a worker or a callback."""
-
-    future = _EMPTY_REPLY_FUTURE
+    """No authorized source reads and no worker-completion subscription."""
 
     def started(
         self, state: TranscriptReadState,
@@ -318,68 +302,79 @@ class IdleReplyPreparation(ReplyPreparation):
     ) -> ReplyPreparation:
         if not needed or not state._cleanup.alive:
             return self
-        return NativeReplyPreparation(
-            needed, state._pool.submit(ReplyIndexBatch.prepare, tuple(needed.values()))
-        )
+        return NativeReplyPreparation({}).started(state, needed)
+
+
+@dataclass(frozen=True)
+class ReplyReading:
+    """One authorized source and its independently completing reader."""
+
+    read: ReplyRead
+    future: Future[ReplyIndexResult]
+
+    def commit(self, database: sqlite3.Connection) -> None:
+        if self.future.cancelled():
+            return
+        expected = self.read.revision
+        revision = FileRevision.capture(Path(self.read.index.source))
+        if revision is not None and expected.holds_cut(revision, expected.size):
+            self.future.result().commit(database)
 
 
 @dataclass
 class NativeReplyPreparation(ReplyPreparation):
-    """The actual authorized work and future; deletion withdraws its original reads."""
+    """Publish completed sources without waiting for another source's reader."""
 
-    reads: dict[str, ReplyRead]
-    future: Future[ReplyIndexBatch]
+    readers: dict[str, ReplyReading]
+
+    def started(self, state: TranscriptReadState, needed: dict[str, ReplyRead]) -> ReplyPreparation:
+        if state._cleanup.alive:
+            for source, read in needed.items():
+                if source not in self.readers:
+                    self.readers[source] = ReplyReading(read, state._pool.submit(read.prepare))
+        return self
 
     def cancel(self) -> None:
-        self.future.cancel()
+        self.retire(tuple(self.readers))
 
     def retain(self, sources: Collection[str]) -> None:
-        self.retire(self.reads.keys() - set(sources))
+        self.retire(self.readers.keys() - set(sources))
 
     def retire(self, sources: Collection[str]) -> None:
         for source in sources:
-            self.reads.pop(source, None)
-        if not self.reads:
-            self.future.cancel()
+            if (reader := self.readers.pop(source, None)) is not None:
+                reader.future.cancel()
 
     def finished(
         self, state: TranscriptReadState, database: sqlite3.Connection,
         wanted: Collection[str],
     ) -> ReplyPreparation:
-        if self.pending:
+        self.retain(wanted)
+        completed = tuple(source for source, reader in self.readers.items() if reader.future.done())
+        if not completed:
             return self
-        # A busy writer retains this exact work; it does not invalidate other
-        # sources. The wire lock orders publication against source deletion.
+        # Publication stays under the existing deletion and SQLite owners.
+        # A busy writer leaves these exact completed readers for the next observation.
         try:
             with _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False):
-                self.commit(database, wanted)
+                with CoordinationReadUnavailable.checking(), database:
+                    database.execute("BEGIN IMMEDIATE")
+                    for source in completed:
+                        self.readers[source].commit(database)
         except (BlockingIOError, CoordinationReadUnavailable):
             return self
-        return state._idle
+        for source in completed:
+            del self.readers[source]
+        return self if self.readers else state._idle
 
     def watch(
-        self, previous: Future[ReplyIndexBatch],
-        on_done: Callable[[Future[ReplyIndexBatch]], None],
-    ) -> Future[ReplyIndexBatch]:
-        if self.future is not previous:
-            self.future.add_done_callback(on_done)
-        return self.future
-
-    def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> None:
-        if self.future.cancelled():
-            return
-        batch = self.future.result()
-        with CoordinationReadUnavailable.checking():
-            with database:
-                database.execute("BEGIN IMMEDIATE")
-                for update in batch.updates:
-                    source = update.after.source
-                    if source not in self.reads or source not in wanted:
-                        continue
-                    revision = FileRevision.capture(Path(source))
-                    expected = self.reads[source].revision
-                    if revision is not None and expected.holds_cut(revision, expected.size):
-                        update.commit(database)
+        self, previous: frozenset[Future[ReplyIndexResult]],
+        on_done: Callable[[Future[ReplyIndexResult]], None],
+    ) -> frozenset[Future[ReplyIndexResult]]:
+        current = frozenset(reader.future for reader in self.readers.values())
+        for future in current - previous:
+            future.add_done_callback(on_done)
+        return current
 
 
 @dataclass(frozen=True)
@@ -427,8 +422,8 @@ class TranscriptReadState(ThreadOwnedState):
         self._resources.callback(self._source_resources.close)
         # Constructing the executor does not start a worker; the first submit does.
         self._pool = ProcessPoolExecutor(
-            max_workers=1, mp_context=self._context,
-            initializer=ReplyIndexBatch.initialize_worker, initargs=(self._cancelled,),
+            max_workers=4, mp_context=self._context,
+            initializer=ReplyRead.initialize_worker, initargs=(self._cancelled,),
         )
         self._resources.callback(self._pool.shutdown, wait=True, cancel_futures=True)
         self._resources.callback(self._cancelled.set)
@@ -445,8 +440,15 @@ class TranscriptReadState(ThreadOwnedState):
 
     @property
     def preparation(self) -> ReplyPreparation:
-        """The authorized completion or its idle member for the observer's wakeup."""
+        """The source reads currently owned by this state."""
         return self._preparation
+
+    def watch(self, previous: frozenset[Future[ReplyIndexResult]],
+              on_done: Callable[[Future[ReplyIndexResult]], None]
+              ) -> frozenset[Future[ReplyIndexResult]]:
+        """Subscribe against one stable preparation while other readers may finish."""
+        with self._lock:
+            return self._preparation.watch(previous, on_done)
 
     def _close_database(self) -> None:
         self._database_resources.close()
@@ -588,12 +590,12 @@ class TranscriptReadState(ThreadOwnedState):
                 raise RuntimeError("Transcript reader is closed")
             visible = self._refresh_keys(visibility)
             try:
-                result = self._preparation.read_counts(self, viewer, document)
+                result = self._counts_locked(viewer, document, visible)
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
                     CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
-                result = self._preparation.read_counts(self, viewer, document)
+                result = self._counts_locked(viewer, document, visible)
             return TranscriptUnread(
                 {name: count for name, count in result.counts.items() if name in visible}
             )
@@ -601,12 +603,13 @@ class TranscriptReadState(ThreadOwnedState):
             self._lock.release()
 
     def _counts_locked(
-        self, viewer: str, document: ReadDocument
+        self, viewer: str, document: ReadDocument, visible: Collection[str]
     ) -> TranscriptUnread:
-        revisions = {source: revision for keys in self._thread_keys.values()
+        ordered = sorted(self._thread_keys.items(), key=lambda item: item[0] not in visible)
+        revisions = {source: revision for _, keys in ordered
                      for source, revision in keys.revisions.items()}
         if not revisions:
-            return TranscriptUnread({name: ReplyUnread(0, False) for name in self._thread_keys})
+            return TranscriptUnread({name: ReplyUnread(0) for name in self._thread_keys})
         per_file: dict[str, FileReplyCount] = {}
         seen = {}
         for source, revision in revisions.items():
