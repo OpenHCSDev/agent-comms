@@ -1,28 +1,28 @@
 """Todo creation and assignment retain exact owners, revisions and goal references."""
 
 from __future__ import annotations
-from contextlib import closing
-from dataclasses import replace
-from agent_comms.registration import Registration
 
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import closing
+from dataclasses import replace
 from multiprocessing import Manager
 from pathlib import Path
 
 import pytest
 
-from cutover.carry_todo_open_indexes import TodoOpenIndexes
-from agent_comms.coordination_database import CoordinationStore
-
 from agent_comms.change_report import FileLine
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment, ChangeTodoState, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
     BlockedTodoState, OperationDelivery, Todo, TodoConflict, TodoError, TodoState, TodoStore,
 )
+
+from cutover.carry_todo_open_indexes import TodoOpenIndexes
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -84,7 +84,6 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
 
 
 def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
-
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     first = store.create("P1", "org/repo", "Open order", creator=lead, owner=lead,
