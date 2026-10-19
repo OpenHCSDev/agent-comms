@@ -17,7 +17,6 @@ from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import SharedLock
-from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
 
@@ -25,16 +24,15 @@ def owner(path, registry):
     return registry.new_thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
 
 
-def test_document_owns_lifecycle_without_registration_or_io(tmp_path, *, thread_registration):
-    document = RegistryDocument()
-    document.prepare_registration(
-        owner(tmp_path, registry=thread_registration), RunningThreadStatus(), new_owner=False
-    ).apply(document)
-    before = document.snapshot().owner_identity("owner")
-    leased, generation = document.lease_turn(document.threads["owner"], "turn", None)
+def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_registration):
+    thread_registration.register(owner(tmp_path, registry=thread_registration))
+    before = thread_registration.snapshot().owner_identity("owner")
+    with thread_registration.store.editing() as edit:
+        leased, generation = edit.lease_turn(edit.document.threads["owner"], "turn", None)
     assert generation == before.generation
     assert leased.turn_generation == 1
-    document.release_turn(document.threads["owner"].turn_lease)[0]
+    thread_registration.release_turn(leased.turn_lease)
+    document = thread_registration.store.read().copy()
     document.rename("owner", "renamed")
     document.unregister("renamed")
     document.begin_delete("renamed")
@@ -135,6 +133,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.threads import Thread
 from agent_comms.registration import Registration
+from agent_comms.field_codec import FieldCodec
 import time
 time.time = lambda: 1000.0
 root=Path(sys.argv[1]);root.mkdir()
@@ -142,8 +141,10 @@ r=Registration(root/'registry.json')
 steps=[]
 def capture():
     row = json.loads(r.store.path.read_text().replace(str(root), '<root>'))
-    for thread in row['threads'].values():
-        if thread.get('active_turn'): thread['active_turn']['started_at'] = '<clock>'
+    row['turns'] = {name: FieldCodec.encode(thread.turn_state.active)
+                    for name, thread in r.snapshot().threads.items()}
+    for turn in row['turns'].values():
+        if turn is not None: turn['started_at'] = '<clock>'
     assert Registration(r.store.path).snapshot() == r.snapshot()
     steps.append(row)
 r.register(r.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
@@ -169,8 +170,8 @@ print(json.dumps(steps,sort_keys=True))
     steps = json.loads(result.stdout)
     assert len(steps) == 10
     assert steps[2]["threads"]["owner"]["title"] == "metadata"
-    assert steps[3]["threads"]["owner"]["active_turn"]["id"] == "first"
-    assert steps[4]["threads"]["owner"]["active_turn"] is None
+    assert steps[3]["turns"]["owner"]["id"] == "first"
+    assert steps[4]["turns"]["owner"] is None
     assert steps[5]["threads"]["renamed"]["created_at"] == 10.0
     assert steps[6]["statuses"]["renamed"]["kind"] == "stopped"
     assert "renamed" not in steps[-1]["threads"]
