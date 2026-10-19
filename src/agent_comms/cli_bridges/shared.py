@@ -220,20 +220,29 @@ BridgeOptions = TypeVar('BridgeOptions', bound=Options)
 OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 
 
+class DeclaredOptions:
+    """The CLI adapter consumes FieldCodec's existing field plans."""
+    help: ClassVar[str]
+
+    @classmethod
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        cls.add_arguments(subparsers.add_parser(field_codec.FieldCodec.encode(cls), help=cls.help))
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        field_codec.FieldCodec.add_arguments(cls, parser)
+
+    @classmethod
+    def from_arguments(cls, args: argparse.Namespace) -> Self:
+        return field_codec.FieldCodec.decode_arguments(cls, args)
+
+
 @dataclass(frozen=True)
-class Operation(ABC, Generic[OperationBridge]):
+class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
 
     def binding(self, arguments: argparse.Namespace) -> Binding | None:
         return Binding.from_arguments(arguments)
-
-    @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        """Declare the options only this command takes."""
-
-    @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Operation:
-        return field_codec.FieldCodec.decode_arguments(cls, arguments)
 
     @abstractmethod
     async def execute(self, bridge: OperationBridge) -> None: ...
@@ -371,15 +380,7 @@ class DeclaredOptions:
         return field_codec.FieldCodec.decode_arguments(cls, args)
 
 class SendArguments(argparse.Namespace):
-    """Raw send fields declared for argparse; Send owns their decoded values."""
-    sender: str
-    target: str
-    body: str
-    type: str
-    role: str
-    report: object
     command: str
-
 
 class SendReport(field_codec.SubclassUnion, affix=""):
     def send(self, ctx: Comms, request: Send) -> SendResult:
@@ -402,7 +403,7 @@ class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Send(DeclaredOptions, Operation):
+class Send(Operation):
     help = "Send to a thread (DM), #channel, or #all"
     sender: str = field_codec.FieldCodec.option("--from", default="")
     target: str = field_codec.FieldCodec.option("--to")
