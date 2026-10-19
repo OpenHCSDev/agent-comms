@@ -12,12 +12,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
+from . import activity
 from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import LiveTextTranscript, TranscriptEvent
+from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
@@ -139,7 +140,7 @@ class KeyedItem:
 
 
 @dataclass(frozen=True)
-class ThreadOutput:
+class ThreadOutput(activity.ThreadOutput):
     """Where a CLI's output lands in Core: finished items and current activity."""
 
     transcript: ExternalTranscript
@@ -179,9 +180,9 @@ class ThreadOutput:
     def end_all_turns(self) -> None:
         self.drafts.clear()
 
-    def enter(self, phase: TurnPhase) -> None:
-        detail = " ".join(phase.activity_detail.split())
-        self.agents.set_activity(self.transcript.incarnation.name, phase.activity_state, detail)
+    @property
+    def activity_thread(self) -> str:
+        return self.transcript.incarnation.name
 
 
 class ReadingPhase(ABC):

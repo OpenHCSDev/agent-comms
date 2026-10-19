@@ -43,22 +43,21 @@ class PiTurnPhase:
     _start_phases: ClassVar[dict[type[object], tuple[type[phases.TurnPhase], ...]]] = {}
     _end_events: ClassVar[dict[type[object], frozenset[type[object]]]] = {}
 
-    def on(self, current: phases.TurnPhase, active_tools: set[str]) -> phases.TurnPhase:
+    def on(self, current: phases.TurnPhase) -> phases.TurnPhase:
         for event_type in type(self).__mro__:
             for member in self._start_phases.get(event_type, ()):
-                return self.enter(member, current, active_tools)
-        return self.leave(current, active_tools) if self.matches_end(current) else current
+                return self.enter(member, current)
+        return self.leave(current) if self.matches_end(current) else current
 
-    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase,
-              active_tools: set[str]) -> phases.TurnPhase:
+    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return member()
 
     def matches_end(self, current: phases.TurnPhase) -> bool:
         return any(event_type in self._end_events.get(member, frozenset())
                    for member in type(current).__mro__ for event_type in type(self).__mro__)
 
-    def leave(self, current: phases.TurnPhase, active_tools: set[str]) -> phases.TurnPhase:
-        return phases.ModelWaitPhase() if current.may_finish(active_tools) else current
+    def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
+        return phases.ModelWaitPhase()
 
 
 @dataclass(frozen=True)
@@ -144,9 +143,6 @@ class PiEvent(PiTurnPhase, PiPayload, DeclaredFamily):
 
     def observe_abort(self, session: TurnSession) -> None:
         pass
-
-    def observed_phase(self, phase):
-        return phase
 
     def observe_request(self, observer: Callable[[RequestProgress], None]) -> bool:
         """A transport measurement is independent of turn-phase publication."""
@@ -433,8 +429,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionStart(ReasonedCompaction, starts=phases.CompactionPhase):
-    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase,
-              active_tools: set[str]) -> phases.TurnPhase:
+    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return current.compacting()
 
     reason: type[CompactionReason] = field(
@@ -747,10 +742,6 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
     def delta_progress(self) -> bool:
         return self.assistant_message_event is not None and self.assistant_message_event.progress
 
-    def observed_phase(self, phase):
-        delta = self.assistant_message_event
-        return phase.response_output() if delta is not None and delta.response_progress else phase
-
 
 @dataclass(frozen=True, kw_only=True)
 class Response(NativePiEvent, DurablePiEvent):
@@ -840,7 +831,7 @@ class SummarizationRetryScheduled(RetryAttemptEvent, starts=phases.Summarization
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPhase):
-    def leave(self, current: phases.TurnPhase, active_tools: set[str]) -> phases.TurnPhase:
+    def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return current.tool_ended(self.tool_call_id or self.tool_name or "tool")
 
     accepts_prompt = True
@@ -868,8 +859,7 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPha
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase):
-    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase,
-              active_tools: set[str]) -> phases.TurnPhase:
+    def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         name = self.tool_name or "tool"
         return current.tool_started(self.tool_call_id or name, name)
 

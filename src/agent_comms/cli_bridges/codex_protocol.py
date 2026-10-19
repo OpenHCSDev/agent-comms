@@ -17,7 +17,6 @@ from pydantic import (
     ValidateAs,
 )
 
-from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
@@ -48,6 +47,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 
 class UserInput(TaggedWire, ABC):
