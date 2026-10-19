@@ -21,8 +21,8 @@ def test_update_failure_restores_whole_document_not_just_mode(tmp_path):
         with pytest.raises(OSError, match="disk full"):
             comms.channels.set_channel_any_mode("api", True)
     assert comms.channels.catalog.path.read_bytes() == before
-    assert wire(tmp_path).channels.catalog.read().require_channel("#api").pinned
-    assert not comms.channels.catalog.read().require_channel("#api").any_mode
+    assert wire(tmp_path).bus.require_channel("#api").pinned
+    assert not comms.bus.require_channel("#api").any_mode
 
 
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
@@ -35,10 +35,13 @@ def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(create, range(8)))
-    document = wire(tmp_path).channels.catalog.read()
+    comms = wire(tmp_path)
+    document = comms.channels.catalog.read()
+    with comms.bus.opened_activity() as activity:
+        pass
     assert document.tags == {f"tag-{i}" for i in range(8)}
     assert all(
-        document.require_channel(f"#tag-{i}").pinned and document.require_channel(f"#tag-{i}").any_mode
+        document.require_channel(f"#tag-{i}", activity).pinned and document.require_channel(f"#tag-{i}", activity).any_mode
         for i in range(8)
     )
 
@@ -62,14 +65,13 @@ def test_message_decode_fields_are_declared_not_a_second_roster():
 
 
 def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeypatch):
-    import agent_comms.audience_manifest as audience_manifest
+    import agent_comms.publisher as publisher
     from agent_comms.errors import RelationViolationError
     from test_private_human_ingress import _root
 
     comms, _store, _root_id, _lookups = _root(tmp_path)
-    comms.channels.create_tag("team")
     sequence = comms.bus.log.latest_sequence()
-    original = audience_manifest.freeze_audience
+    original = publisher.freeze_audience
 
     def capture_then_change(*args, **kwargs):
         result = original(*args, **kwargs)
@@ -79,7 +81,7 @@ def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeyp
             document.list_order = CreatedChannelSort
         return result
 
-    monkeypatch.setattr(audience_manifest, "freeze_audience", capture_then_change)
+    monkeypatch.setattr(publisher, "freeze_audience", capture_then_change)
     with pytest.raises(RelationViolationError, match="registry/catalog revision changed"):
         comms.messaging.send_user_message("#team", "must not append", worktree=str(tmp_path))
     assert comms.bus.log.latest_sequence() == sequence
