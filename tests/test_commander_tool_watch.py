@@ -9,7 +9,6 @@ import pytest
 
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
-from agent_comms.todos import StorageStrikeTodo
 from test_commander_problem_orders import create
 
 
@@ -110,7 +109,7 @@ def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, co
     assert turns['worker'] == ['REFUSED write: Missing required fields for WriteTool: content', 'write b.py: body']
 
 
-def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, commander, monkeypatch):
+def test_storage_violation_keeps_orders_and_strikes_across_watch_restart(tool_watch, commander, monkeypatch, capsys):
     comms, _ = commander
     before = create(commander, 'P1')
     announcements = []
@@ -126,7 +125,7 @@ def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, comma
     restarted = importlib.reload(tool_watch)
     restarted.enforce_storage(comms.registry, 'worker', call)
     after = comms.goals.todos.get('P1')
-    assert after.revision == before.revision + 1
-    assert len(after.live_strikes('worker')) == 1
-    assert isinstance(after.live_strikes('worker')[0], StorageStrikeTodo)
-    assert len(announcements) == 1
+    assert after == before
+    assert after.live_strikes('worker') == ()
+    assert announcements == []
+    assert capsys.readouterr().out.count('VIOLATION storage worker:') == 3

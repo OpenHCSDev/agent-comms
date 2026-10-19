@@ -19,7 +19,7 @@ from .commander.send_guard import TacticalCommand
 from .declared_family import DeclaredFamily
 from .goals import OrderCheck
 from .standing_rules import BoardDisagrees, PlanIdle, StandingRule
-from .todos import PlainText, StorageStrikeTodo, Todo, TodoStore, VoidStrikeTodo
+from .todos import PlainText, Todo, TodoStore, VoidStrikeTodo
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"
 COMMANDER_SKILL = "../../src/agent_comms/skills/comms-commander/SKILL.md"
@@ -253,13 +253,9 @@ class UndeclaredAudiencePattern(BehaviourPattern):
 
 class RepeatedStrikePattern(BehaviourPattern):
     signature = (
-        "A second storage strike with the same actor, owner and reason as a live strike, or a"
-        " send-back strike on an order already struck since it was sent."
+        "A send-back strike on an order already struck since it was sent."
     )
-    checks = (
-        CallableCheck(StorageStrikeTodo.repeats),
-        CallableCheck(Todo.struck_on_order),
-    )
+    checks = (CallableCheck(Todo.struck_on_order),)
     sources = (ProblemFix("P184", "7af14a520"),)
 
 

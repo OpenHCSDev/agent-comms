@@ -1708,22 +1708,7 @@ class StrikeTodo(TodoOperation):
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
-        if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
-            return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
-
-    def repeats(self, recorded: StrikeTodo) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class StorageStrikeTodo(StrikeTodo):
-    """Repeated reports of one storage violation retain its recorded strike."""
-
-    def repeats(self, recorded: StrikeTodo) -> bool:
-        return (self.actor == recorded.actor and self.previous.owner == recorded.previous.owner
-                and self.reason == recorded.reason)
-
 
 @dataclass(frozen=True)
 class VerdictAudience:

@@ -7,7 +7,6 @@ from ..native_entries import NativeEntry
 from ..pi_payloads import PiMessage, TextContent
 from ..tool_declaration import one_line
 from ..registration import Registration
-from ..todos import StorageStrikeTodo
 
 def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""
@@ -16,18 +15,13 @@ def thread_names(registry: Registration) -> dict[str, str]:
 
 
 def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> None:
-    """Core judges its units and records each storage violation once."""
+    """Explain a refused storage operation without punishing its unit."""
     if thread not in order.units() or thread not in registry:
         return
     try:
         call.decide_storage(registry, thread)
     except SelectedToolDenied as violation:
         print(f'VIOLATION storage {thread}: {violation}', flush=True)
-        for todo in order.held_by(thread)[:1]:
-            order.strike(thread, todo.id,
-                         f'{todo.id} broke the storage rule at a tool call: {violation}; '
-                         'storage waste is banned outright', 'tool_watch at tool call',
-                         kind=StorageStrikeTodo)
 
 
 def emit(turns, thread, final=''):
