@@ -552,7 +552,6 @@ class NativePiRpcLaunch:
         session = (SavedSelectedSession(directory,
             identity=SessionIdentityHelper.locate(package, str(saved)))
             if saved is not None else SelectedSession(directory))
-        arguments = (*NativeExecutableTool.extension_arguments(package.path), *arguments)
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 
     @classmethod
@@ -563,7 +562,8 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
-        arguments += ("--session-dir", str(session.directory))
+        arguments = (*NativeExecutableTool.extension_arguments(package.path), *arguments,
+                     "--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))
@@ -583,9 +583,7 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         if saved != self.session.path:
             return None
-        arguments = (*NativeExecutableTool.extension_arguments(self.package.path),
-                     *NativeArguments.parse(arguments).rpc())
-        return self._managed(self.package, arguments,
+        return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
             worktree, environment, self.session, self.runtime, root)
 
     @classmethod
