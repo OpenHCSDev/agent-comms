@@ -7,7 +7,8 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from abc import abstractmethod
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,7 +16,7 @@ from typing import TYPE_CHECKING
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, NullMember, SubclassUnion
 from .store_files import SharedLock
 from .private_path import ObservedPath
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
@@ -41,12 +42,65 @@ if TYPE_CHECKING:
     from .wire_log import OpenedWireSource
 
 
+class ReadNotice(SubclassUnion, affix="ReadNotice"):
+    """A decoded notice owns consumption and whether it has anything to display."""
+
+    @abstractmethod
+    def take(self, ledger: ReadLedger) -> ReadNotice: ...
+
+    @abstractmethod
+    def notify_if_new(self, previous: ReadNotice, notify: Callable[[str], object]) -> None: ...
+
+
+@dataclass(frozen=True)
+class NoReadNotice(NullMember, ReadNotice):
+    def take(self, ledger: ReadLedger) -> ReadNotice:
+        return self
+
+    def notify_if_new(self, previous: ReadNotice, notify: Callable[[str], object]) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class PendingReadNotice(ReadNotice):
+    text: str
+    accepts_null = False
+
+    @classmethod
+    def from_wire(cls, data: object) -> PendingReadNotice:
+        return cls(FieldCodec.decode(str, data))
+
+    def to_wire(self) -> str:
+        return self.text
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
+
+    def take(self, ledger: ReadLedger) -> ReadNotice:
+        taken: ReadNotice = NoReadNotice()
+
+        def clear(document: ReadDocument) -> ReadDocument:
+            nonlocal taken
+            if document.notice != self:
+                return document
+            taken = self
+            return replace(document, notice=NoReadNotice())
+
+        ledger.update(clear)
+        return taken
+
+    def notify_if_new(self, previous: ReadNotice, notify: Callable[[str], object]) -> None:
+        if self != previous:
+            notify(self.text)
+
+
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
     messages: dict[RecordedThreadIncarnation, ReadCursor] = field(default_factory=dict)
     bus_identity: RecordedBusIdentity = field(default_factory=NoRecordedBus)
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
-    notice: str | None = None
+    notice: ReadNotice = field(default_factory=NoReadNotice)
 
     def cursors(self, viewer: str, snapshot: RegistryProvenance,
                 source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
@@ -70,7 +124,7 @@ class ReadDocument:
         )
 
 
-class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument], lock_rank=4):
+class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     filename = "read_ledger.json"
 
     @property
@@ -134,20 +188,6 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument], 
             )
 
         self.update(advance)
-
-    def take_notice(self, shown: str | None) -> str | None:
-        """Clear the stored notice once it has been shown; return it when this call cleared it."""
-        taken = None
-
-        def take(document: ReadDocument) -> ReadDocument:
-            nonlocal taken
-            if shown is None or document.notice != shown:
-                return document
-            taken = shown
-            return replace(document, notice=None)
-
-        self.update(take)
-        return taken
 
     def cursor(
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None

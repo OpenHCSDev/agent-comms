@@ -42,7 +42,7 @@ from .private_path import FileRevision
 from .ui_model.unread import UnreadPresentation, UnobservedUnread
 from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
                          NamedViewer)
-from .read_ledger import ReadLedger
+from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView,
@@ -440,7 +440,7 @@ class BusPresentation:
                 read_marker_notice=basis.document.notice,
             )
         return replace(
-            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice),
+            snapshot, read_marker_notice=basis.document.notice.take(self.bus.reads),
             unread_pending=frozenset(snapshot.threads.keys() | snapshot.channels.keys()),
         )
 
@@ -693,7 +693,7 @@ class CoordinationSnapshot:
     channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, UnreadPresentation] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
-    read_marker_notice: str | None = None
+    read_marker_notice: ReadNotice = field(default_factory=NoReadNotice)
 
     @classmethod
     def capture(
@@ -701,7 +701,7 @@ class CoordinationSnapshot:
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
-        visibility: RosterVisibility, read_marker_notice: str | None = None,
+        visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
         threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(

@@ -8,3 +8,6 @@ from .child_process import ChildLaunch
 from .runtime_info import RuntimeInfoStore
 
 ChildLaunch.runtime_info = RuntimeInfoStore
+
+# Every public entrypoint, including standalone stores, validates the full family.
+from . import comms, store_order

@@ -43,6 +43,9 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
   ownership decision implemented throughout the family, not work performed or
   a locally passing workaround. Apply steering immediately without expanding it
   into a new reporting, tooling or verification project.
+- Initialization facts belong at module load. Do not move a forbidden lazy import
+  into constructors, subclass hooks or lock acquisition; load the shared declaration
+  once from package initialization and fix any actual import cycle at its owners.
 - FieldCodec has one implementation owner. Extend its declared field capabilities;
   never subclass it outside `field_codec.py`.
 - Focused tests check the implementation. Before claiming usability, exercise the

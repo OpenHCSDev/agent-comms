@@ -161,7 +161,7 @@ class RetiredRuntimeChildren(RuntimeChildren):
 
 @dataclass(frozen=True)
 class RuntimeInfoDocument:
-    threads: dict[str, AgentRuntimeInfo] = field(default_factory=dict)
+    observations: dict[str, AgentRuntimeInfo] = field(default_factory=dict)
     children: RuntimeChildren = field(default_factory=AcceptingRuntimeChildren)
 
 
@@ -177,7 +177,7 @@ class RuntimeChildReservation:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(RootFile, ThreadOwnedState, ChildRegistration, LockedStore[RuntimeInfoDocument], lock_rank=6):
+class RuntimeInfoStore(RootFile, ThreadOwnedState, ChildRegistration, LockedStore[RuntimeInfoDocument]):
     """Bus-root observations; prefix-root child ownership uses the same owner.
 
     Child records live at the selected prefix so retirement includes every bus,
@@ -230,28 +230,44 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, ChildRegistration, LockedStor
         return self.for_threads((thread,))[thread]
 
     def for_threads(self, names: Iterable[str]) -> dict[str, RuntimeInfo]:
-        values = self.read().threads
-        return {name: values.get(name, UnobservedRuntimeInfo()) for name in names}
+        values = self.read().observations
+        resolved = {}
+        for name in names:
+            try:
+                resolved[name] = values[name]
+            except KeyError:
+                resolved[name] = UnobservedRuntimeInfo()
+        return resolved
 
     def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
         def apply(document: RuntimeInfoDocument) -> RuntimeInfoDocument:
-            current = document.threads.get(thread, AgentRuntimeInfo(thread=thread, timestamp=timestamp))
+            values = document.observations
+            current = values.get(thread)
+            if current is None:
+                current = AgentRuntimeInfo(thread=thread, timestamp=timestamp)
             observed = observation.project_runtime_info(replace(current, timestamp=timestamp))
-            return replace(document, threads={**document.threads, thread: observed})
+            return replace(document, observations={**values, thread: observed})
+
         self.update(apply)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         names = {thread.name for thread in threads}
-        self.update(lambda document: replace(document, threads={
-            name: value for name, value in document.threads.items() if name not in names
-        }))
+        self.update(
+            lambda document: (
+                replace(document, observations={name: value for name, value in document.observations.items() if name not in names})
+                if names & document.observations.keys()
+                else document
+            )
+        )
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
         def rename(document: RuntimeInfoDocument) -> RuntimeInfoDocument:
-            if old_name not in document.threads or old_name == new_name:
+            values = document.observations
+            if old_name not in values or old_name == new_name:
                 return document
-            return replace(document, threads={
-                **{name: value for name, value in document.threads.items() if name != old_name},
-                new_name: replace(document.threads[old_name], thread=new_name),
+            return replace(document, observations={
+                **{name: value for name, value in values.items() if name != old_name},
+                new_name: replace(values[old_name], thread=new_name),
             })
+
         self.update(rename)
