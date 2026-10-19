@@ -26,6 +26,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
     AnonymousViewer,
+    NamedViewer,
     DisplayViewer,
     ListedDeliveries,
     DisplayBasis,
@@ -236,11 +237,12 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
                               selection: CapturedSelection) -> Mapping[str, int]:
         """Borrow the caller's original source, namespace and sparse reads."""
         actor = selection.require_viewer()
+        seen = selection.seen(source)
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
         with self.projection(
             self.log.path, source, selection.registry, {actor: delivery}
         ) as index:
-            return index.unseen_counts({actor: selection.seen(source)})[actor]
+            return index.unseen_counts({actor: seen})[actor]
 
     def delivered(
         self, name: str, references: Sequence[MessageReference]
@@ -270,15 +272,22 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         self.reads.mark_displayed(basis.viewer, basis)
         return basis.message_count
 
-    def mark_delivered_through(self, name: str, sequence: int) -> None:
-        """Mark delivered inbox messages through the requested source sequence."""
-        snapshot = self._registry.snapshot()
-        canonical = snapshot.require(name).name
+    def mark_delivered_through(
+        self, name: str, sequence: int, *, target: CommandTarget = ANY_CHANNEL,
+    ) -> None:
+        """Mark the selected inbox through one captured cut, without loading its messages."""
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
-        batch = self.inbox_at(canonical, snapshot)
-        self.reads.mark_displayed(canonical, batch.displayed.through(sequence))
-        return
+        with self.snapshot(NamedViewer(name)) as (basis, source):
+            canonical = basis.require_viewer()
+            delivery = DeliveryScope.capture(canonical, basis.registry, basis.catalog)
+            scope = delivery.selection(target, basis.registry,
+                lambda channel: basis.catalog.require_channel(channel, basis.activity))
+            displayed = source.query_page_index(lambda index: scope.capture_deliveries(
+                self.reads, canonical, basis.registry, source, index,
+                document=basis.document, audience=delivery, through=sequence,
+            ))
+            self.reads.mark_displayed(canonical, displayed)
 
     def awareness_segments(
         self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
