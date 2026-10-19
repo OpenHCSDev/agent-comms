@@ -2197,8 +2197,8 @@ class Todo(TypedTable):
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
         """After assignment validation, fold its strike and release into the same row write."""
         owner, at = self.held(), RecordedEventTime(time.time())
-        reason = StrikeReason(f"Core reassigned stalled {self.id} from {owner.owner} "
-                              f"to {assigned.held().owner}.")
+        reason = StrikeReason(f"{owner.owner} stopped making progress on {self.id}; "
+                              f"Core reassigned the order to {assigned.held().owner}.")
         struck = StrikeTodo(self.revision, actor, owner, reason.text, at).apply(self)
         released = ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
         return replace(assigned, strikes=struck.strikes, released=released.released,

@@ -194,7 +194,7 @@ finally:
             await asyncio.Future()
 
     monkeypatch.setattr(standing.asyncio, 'sleep', between)
-    async with connector.watch_orders():
+    async with connector.watch_orders(connector.application()):
         await asyncio.wait_for(done.wait(), timeout=30)
     after = Comms(copied).goals.todos.get('P1')
     assert after.holder == 'spare' and len(after.strikes) == len(after.released) == 1

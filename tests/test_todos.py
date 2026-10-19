@@ -43,7 +43,7 @@ def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, st
     try:
         row = store.assign(
             "todo-1", expected_revision=1,
-            owner=thread(name, Path(root), created), assigner=thread("lead", Path(root), 1.0).incarnation, operation=AssignTodo,
+            owner=thread(name, Path(root), created), assigner=thread("lead", Path(root), 1.0).incarnation,
             generation=f"generation-{name}", goal=GoalRef("lead", 1.0, "goal-1"),
             deadline=RecordedEventTime(1000.0), order=order(Path(root)),
         )
