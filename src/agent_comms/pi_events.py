@@ -225,6 +225,18 @@ class AgentEnd(NativePiEvent):
         return self.will_retry is True
 
 
+@dataclass(frozen=True, kw_only=True)
+class NativeOperationError(NativePiEvent):
+    """The native run refused an operation after the prompt was acknowledged."""
+
+    error: str
+
+    async def act(self, session: TurnSession) -> None:
+        from .native_pi import NativePiUnavailable
+
+        raise NativePiUnavailable(self.error)
+
+
 class AgentSettled(NativePiEvent):
     def settles(self, session: TurnSession) -> bool:
         # A prior retained turn may finish while the new state query is

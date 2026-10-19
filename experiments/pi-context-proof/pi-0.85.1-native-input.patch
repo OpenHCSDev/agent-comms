@@ -271,9 +271,13 @@
          this._isAgentRunActive = true;
          try {
              await this.agent.prompt(messages);
-@@ -778,6 +938,11 @@
+@@ -778,6 +938,15 @@
              }
          }
++        catch (error) {
++            this._emit({ type: "native_operation_error", error: error instanceof Error ? error.message : String(error) });
++            throw error;
++        }
          finally {
 +            // Reset before the await in agent_settled: another explicit prompt
 +            // may start while extension observers are running.

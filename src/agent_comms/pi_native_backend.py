@@ -58,7 +58,7 @@ if TYPE_CHECKING:
 #   dist/modes/rpc/rpc-mode.js      output(): response, extension_ui_request, extension_error
 #   stack/patch-native-steering.py  steering_interrupt_started / _completed
 PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
-    "agent_start", "agent_end", "agent_settled",
+    "agent_start", "agent_end", "agent_settled", "native_operation_error",
     "turn_start", "turn_end",
     "message_start", "message_update", "message_end",
     "tool_execution_start", "tool_execution_update", "tool_execution_end",
