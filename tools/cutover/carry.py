@@ -236,9 +236,17 @@ class Step:
                      and [target.id for target in statement.targets
                           if isinstance(target, ast.Name)] == ["column"])
 
+    @staticmethod
+    def holds_carry(source: bytes) -> bool:
+        """Whether a module declares a Carry subclass, read without importing it."""
+        return any(isinstance(node, ast.ClassDef)
+                   and any(parent_name(base) in carry_parents() for base in node.bases)
+                   for node in ast.parse(source).body)
+
     @classmethod
-    def declared(cls, name: str, source: bytes, revision: str) -> Step | None:
-        """The step a module declares, read without importing it; None if it holds no Carry."""
+    def declared(cls, name: str, source: bytes, revision: str) -> Step:
+        """The step a module declares, read without importing it. A ``carry_*`` module
+        holding no Carry is refused: a conversion outside the chain never runs."""
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef) and any(
                 parent_name(base) in carry_parents() for base in node.bases
@@ -250,7 +258,7 @@ class Step:
                         return cls(name, ast.literal_eval(statement.value), revision,
                                    cls.declared_columns(source))
                 raise ValueError(f"{name} declares no step it runs after")
-        return None
+        raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
 
 def parent_name(base: ast.expr) -> str | None:
@@ -291,9 +299,8 @@ class CarryChain:
         for path in tree:
             if path.startswith("carry_") and path.endswith(".py"):
                 name = path.removesuffix(".py")
-                step = Step.declared(name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
-                if step is not None:
-                    known[name] = step
+                known[name] = Step.declared(
+                    name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
         # Only a declared predecessor can keep a historical step reachable.
         # Deleting a finished step and reconnecting its successor retires it.
         waiting = list(known.values())
@@ -301,8 +308,6 @@ class CarryChain:
             step = waiting.pop()
             if step.after is not None and step.after not in known:
                 predecessor = cls.deleted(repo, revision, step.after)
-                if predecessor is None:
-                    raise ValueError(f"Carry step {step.after} is in no revision of {revision}")
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
@@ -358,10 +363,9 @@ class CarryChain:
                          and path.endswith(".py")) - set(kept)
 
     @staticmethod
-    def deleted(repo: Path, revision: str, name: str) -> Step | None:
+    def deleted(repo: Path, revision: str, name: str) -> Step:
         """A step no longer in the tree, at the main-line revision that last wrote it: the
-        source it was written against, not the later source beside its deletion. None if
-        that revision held a plain script rather than a step."""
+        source it was written against, not the later source beside its deletion."""
         written, source = CarryChain.source(repo, revision, name)
         return Step.declared(name, source, written)
 

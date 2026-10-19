@@ -225,6 +225,15 @@ def test_steps_that_do_not_form_one_chain_are_refused(tmp_path, steps):
         CarryChain.at(tmp_path, "HEAD")
 
 
+def test_a_carry_module_outside_the_chain_is_refused(tmp_path):
+    """A conversion written as a standalone script would never run on an upgraded bus."""
+    repo = Repository(tmp_path)
+    repo.commit({"carry_a": step_source(None),
+                 "carry_script": "def carry(root):\n    pass\n"})
+    with pytest.raises(ValueError, match="carry_script holds no Carry step"):
+        CarryChain.at(tmp_path, "HEAD")
+
+
 def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
     ledger = CarryLedger(tmp_path)
     assert ledger.applied() == ()
