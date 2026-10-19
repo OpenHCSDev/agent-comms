@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from uuid import uuid4
 from typing import TYPE_CHECKING
 
 from .field_codec import MalformedRecord
@@ -207,6 +209,32 @@ class RecoveryMonitorCapability:
         if _grant is not _MONITOR_GRANT:
             raise PermissionError("recovery monitor requires trusted construction")
         self._store = store
+
+    @classmethod
+    def retire_check_root(cls, root: Path) -> None:
+        """Discard a stopped check, but keep uncertain new work for inspection.
+
+        The caller has stopped its private owners through their normal recovery.
+        Moving the small directory keeps sessions, diagnostics and SQLite/WAL
+        evidence together without copying a store or replaying an input.
+        """
+        from .input_disposition import InputDispositions
+        from .registration import Registration
+
+        uncertain = False
+        if (root / "coordination.sqlite3").is_file():
+            with Coordination(str(root / "coordination.sqlite3")) as store:
+                uncertain = any(attempt.lifecycle.preserve_check
+                                for attempt in AttemptRecord.select(store.session._connection))
+        inputs = InputDispositions(root)
+        if inputs.path.is_file():
+            names = frozenset(Registration(root / "registry.json").snapshot().threads)
+            uncertain = uncertain or bool(inputs.unresolved(names).rows)
+        if uncertain:
+            destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")
+            root.rename(destination)
+            raise RecoveryBlocked(f"Check directory removed; uncertain work kept at {destination}; do not replay")
+        shutil.rmtree(root)
 
     @classmethod
     def settle_stopped_owner(cls, root: Path, owner) -> None:
