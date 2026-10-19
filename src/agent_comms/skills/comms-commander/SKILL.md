@@ -85,7 +85,7 @@ Update the board row, move on. One line per unit touched.
 
 ## The public record
 
-- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically. Core's `Evidence` family (todos.py) refuses a strike or send-back whose why cites no state it can check, such as a commit or a session line; a board row, goal text or another agent's account is a report, not state, and the refusal lists the kinds.
+- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically. A strike, a send-back (`judge back`, or `order send` replacing an order without `--clean`) cites the state it stands on with `--commit SHA`, `--diff A..B`, `--turn THREAD:TURN_ID`, `--process PID:START` or `--runtime PATH`, each repeatable; every member of Core's `Evidence` family (todos.py) verifies itself and none is ever pulled from the why. A board row, goal text or another agent's account is a report, not state.
 - **Work lives on main or on a branch with a linked PR or issue.** The overdue loop lists branches ahead of main with no PR; each goes to its owner that tick.
 
 ## Orders

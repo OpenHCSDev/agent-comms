@@ -15,7 +15,7 @@ from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingR
                               UndatedStandingRule)
 from ..goals import Goal
 from ..threads import Thread
-from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
+from ..todos import CommitEvidence, FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
 from . import capacity, judge
 from .config import CommanderConfig, Repo
@@ -124,7 +124,7 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
             comms.goals.change_problem(todo.id, StrikeTodo(
                 todo.revision, comms.registry.require(commander).incarnation, held,
                 f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
-                f" across two readings, the last at {self.trend.commit}"), commander)
+                " across two readings", evidence=(CommitEvidence(self.trend.commit),)), commander)
         for unit in self.idle(comms, commander)[:1]:
             self.assign(comms, commander, unit)
 

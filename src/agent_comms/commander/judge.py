@@ -27,7 +27,7 @@ from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
 from ..cli_commands import option
-from .order import CommanderVerb, RuledVerb
+from .order import CitedState, CommanderVerb, RuledVerb
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
@@ -233,7 +233,7 @@ class OkUnownedVerb(OkVerb, declared_name="ok-unowned"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BackVerb(VerdictVerb):
+class BackVerb(VerdictVerb, CitedState):
     help = "send the edit back; the roast is posted to the verdict's audience"
     roast: str = option(help="blunt, why it is stupid, with because")
     fix: str = option(help="owner and replacing shape")
@@ -249,8 +249,8 @@ class BackVerb(VerdictVerb):
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
                                todo.held(), edit_id,
-                               reason=StrikeReason(
-                                   f'{todo.id} edit sent back: {self.why}; restated at {self.at}'))
+                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
+                               evidence=self.evidence())
 
     def check_edits(self, edits: list[Edit]) -> None:
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):

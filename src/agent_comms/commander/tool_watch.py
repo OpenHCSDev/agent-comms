@@ -16,7 +16,8 @@ from ..native_tools import CodingTool
 from ..pi_payloads import PiMessage, TextContent
 from ..tool_declaration import ToolDeclaration, one_line
 from ..registration import Registration
-from ..todos import StorageStrikeTodo
+from ..todos import StorageStrikeTodo, TurnEvidence
+from ..turn_digests import LastTurns, TurnDigestRead
 
 CONFIG = CommanderConfig.installed()
 B = str(CONFIG.root)
@@ -47,9 +48,9 @@ def digest_line(name: str, args: object, call: CodingCall) -> str:
     return ToolDeclaration.call_digest(name, tool, args)
 
 
-def enforce_storage(registry: Registration, thread: str, call: CodingCall, record: str) -> None:
-    """Core judges its units and records each storage violation once, citing the session
-    line ``record`` that made the call."""
+def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> None:
+    """Core judges its units and records each storage violation once, citing the unit's
+    current turn, the one that made the call."""
     if thread not in order.units() or thread not in registry:
         return
     try:
@@ -64,10 +65,11 @@ def enforce_storage(registry: Registration, thread: str, call: CodingCall, recor
         violation = str(denied)
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
     for todo in order.held_by(thread)[:1]:
+        (turn,) = TurnDigestRead(order.COMMS.root, registry.require(thread), LastTurns(1)).read().turns
         order.strike(thread, todo.id,
-                     f'{todo.id} broke the storage rule at the tool call in {record}: {violation}; '
+                     f'{todo.id} broke the storage rule at a tool call: {violation}; '
                      'storage waste is banned outright', 'tool_watch at tool call',
-                     kind=StorageStrikeTodo)
+                     evidence=(TurnEvidence(thread, turn.turn_id),), kind=StorageStrikeTodo)
 
 
 def emit(turns, thread, final=''):
@@ -96,11 +98,11 @@ def follow(registry: Registration, turns: dict[str, list[str]], thread: str, pat
             continue
         for message in entry.messages:
             if message.assistant:
-                walk(registry, turns, thread, message, f'{os.path.realpath(path)}@{at}')
+                walk(registry, turns, thread, message)
 
 
 def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
-         message: PiMessage, record: str) -> None:
+         message: PiMessage) -> None:
     for call in message.tool_calls:
         name, args = call.name, call.arguments
         tool = decoded(name, args, call.id)
@@ -108,7 +110,7 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
         with open(LOG, 'a') as log:
             log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
         turns[thread].append(digest)
-        enforce_storage(registry, thread, tool, record)
+        enforce_storage(registry, thread, tool)
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.successful:

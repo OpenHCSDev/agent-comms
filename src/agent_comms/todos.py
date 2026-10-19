@@ -15,7 +15,6 @@ import sqlite3
 import time
 import asyncio
 from abc import abstractmethod
-from contextlib import suppress
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -23,7 +22,7 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
 from .change_report import FileLine
-from .child_process import BoundedRun, ChildResult, ExitedOutcome, Platform
+from .child_process import BoundedRun, ChildResult, ExitedOutcome, Platform, ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import (
@@ -35,6 +34,7 @@ from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
+from .turn_digests import TurnDigestRead, TurnsSince
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
@@ -674,81 +674,108 @@ class PlainText(OrderWords):
     refusal = "Jargon {1} hides what happened; say it plainly."
 
 
+@dataclass(frozen=True)
 class Evidence(DeclaredFamily, affix="Evidence"):
-    """State a strike stands on, each kind recognising its citation and checking it exists. A
-    board row, goal text or another agent's account of the work is a report of state, not state."""
+    """State a strike stands on; each member verifies itself against the bus and the order's
+    checkout. A board row, goal text or another agent's account of the work is a report of
+    state, not state, and has no member."""
 
-    CITES: ClassVar[re.Pattern]
     form: ClassVar[str]
 
     @classmethod
-    def cited(cls, text: str, repository: str) -> tuple[str, ...]:
-        return tuple(found.group(0) for member in cls.members_with(cls)
-                     for found in member.CITES.finditer(text) if member.exists(found, repository))
+    def cited(cls, text: str) -> Self:
+        """The member its command-line option ``form`` names."""
+        return cls(text)
 
     @classmethod
+    def verified(cls, evidence: tuple[Evidence, ...], goals: Goals, current: Todo) -> None:
+        if not evidence:
+            raise ValueError(
+                "Cite the state the strike stands on: "
+                + ", ".join(member.form for member in cls.members_with(cls))
+                + "; a board row, goal text or another agent's account is a report, not state.")
+        for cited in evidence:
+            cited.verify(goals, current)
+
     @abstractmethod
-    def exists(cls, found: re.Match[str], repository: str) -> bool: ...
+    def verify(self, goals: Goals, current: Todo) -> None: ...
 
     @staticmethod
-    def git(repository: str, *args: str) -> int:
-        return subprocess.run(("git", "-C", repository, *args), capture_output=True,
-                              timeout=30).returncode
+    def git(current: Todo, *args: str) -> int:
+        return subprocess.run(("git", "-C", current.order.check.directory, *args),
+                              capture_output=True, timeout=30).returncode
 
 
+@dataclass(frozen=True)
 class CommitEvidence(Evidence):
-    CITES = re.compile(r"(?<![\w.])[0-9a-f]{7,40}(?![\w.])")
-    form = "a commit sha"
+    sha: str
+    form = "--commit SHA"
 
-    @classmethod
-    def exists(cls, found: re.Match[str], repository: str) -> bool:
-        return not cls.git(repository, "cat-file", "-e", f"{found.group(0)}^{{commit}}")
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if self.git(current, "cat-file", "-e", f"{self.sha}^{{commit}}"):
+            raise ValueError(f"{self.sha} is no commit of {current.order.check.directory}")
 
 
+@dataclass(frozen=True)
 class DiffEvidence(Evidence):
-    CITES = re.compile(r"\b([0-9a-f]{7,40})\.\.([0-9a-f]{7,40})\b")
-    form = "a diff range A..B that changes something"
+    a: str
+    b: str
+    form = "--diff A..B"
 
     @classmethod
-    def exists(cls, found: re.Match[str], repository: str) -> bool:
-        return cls.git(repository, "diff", "--quiet", found.group(1), found.group(2)) == 1
+    def cited(cls, text: str) -> Self:
+        a, b = text.split("..")
+        return cls(a, b)
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if self.git(current, "diff", "--quiet", self.a, self.b) != 1:
+            raise ValueError(f"{self.a}..{self.b} changes nothing in {current.order.check.directory}")
 
 
-class TurnRecordEvidence(Evidence):
-    """A session line, cited at the byte it starts as the tool watcher reads it."""
+@dataclass(frozen=True)
+class TurnEvidence(Evidence):
+    """A turn of a unit's own records since the order was sent."""
 
-    CITES = re.compile(r"(/\S+\.jsonl)@(\d+)\b")
-    form = "a turn record /path/session.jsonl@byte"
+    thread: str
+    turn_id: str
+    form = "--turn THREAD:TURN_ID"
 
     @classmethod
-    def exists(cls, found: re.Match[str], repository: str) -> bool:
-        record, at = Path(found.group(1)), int(found.group(2))
-        if not record.is_file() or at >= record.stat().st_size:
-            return False
-        with record.open("rb") as session:
-            session.seek(max(at - 1, 0))
-            return not at or session.read(1) == b"\n"
+    def cited(cls, text: str) -> Self:
+        thread, turn_id = text.split(":", 1)
+        return cls(thread, turn_id)
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        turns = TurnDigestRead(goals.root, goals.registry.require(self.thread),
+                               TurnsSince(current.order.at.recorded_at("An order"))).read().turns
+        if self.turn_id not in {turn.turn_id for turn in turns}:
+            raise ValueError(f"{self.thread} recorded no turn {self.turn_id} since order {current.order.id}")
 
 
+@dataclass(frozen=True)
 class ProcessEvidence(Evidence):
-    CITES = re.compile(r"\bpid (\d+)\b")
-    form = "a running process pid N"
+    pid: int
+    start: int
+    form = "--process PID:START"
 
     @classmethod
-    def exists(cls, found: re.Match[str], repository: str) -> bool:
-        with suppress(ProcessLookupError):
-            Platform.current().identity(int(found.group(1)))
-            return True
-        return False
+    def cited(cls, text: str) -> Self:
+        pid, start = text.split(":")
+        return cls(int(pid), int(start))
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if not Platform.current().matches(ProcessIdentity(self.pid, self.start)):
+            raise ValueError(f"No process {self.pid} started at {self.start} is running")
 
 
+@dataclass(frozen=True)
 class RuntimeEvidence(Evidence):
-    CITES = re.compile(r"(?<![\w/.~])/[^\s:`'\"“”,;()]+(?![^\s:`'\"“”,;()])")
-    form = "an existing runtime path"
+    path: str
+    form = "--runtime PATH"
 
-    @classmethod
-    def exists(cls, found: re.Match[str], repository: str) -> bool:
-        return Path(found.group(0)).exists()
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if not Path(self.path).is_absolute() or not Path(self.path).exists():
+            raise ValueError(f"{self.path} is no existing absolute runtime path")
 
 
 class StrikeReason(PlainText):
@@ -758,14 +785,6 @@ class StrikeReason(PlainText):
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
-
-    def require_evidence(self, repository: str) -> None:
-        """A strike stands on state the record can check, never on a report of it."""
-        if not Evidence.cited(self.text, repository):
-            raise ValueError(
-                "Cite the state the strike stands on: "
-                + ", ".join(member.form for member in Evidence.members_with(Evidence))
-                + "; a board row, goal text or another agent's account is a report, not state.")
 
     @classmethod
     def refused(cls, text: str) -> str | None:
@@ -1412,13 +1431,19 @@ class StrikeTodo(TodoOperation):
     previous: Assignment
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+    # Strikes recorded before evidence was required carry none; prepare refuses a new one without.
+    evidence: tuple[Evidence, ...] = field(default=(), metadata={"wire_omit_default": True})
+
+    def prepare(self, goals, current):
+        Evidence.verified(self.evidence, goals, current)
+        return self
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
-        StrikeReason(self.reason).require_evidence(current.order.check.directory)
+        StrikeReason(self.reason)
         if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
             return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
@@ -1493,14 +1518,19 @@ class AcceptedVerdict(OrderVerdict):
 class SendBackVerdict(OrderVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
+    evidence: tuple[Evidence, ...] = field(default=(), metadata={"wire_omit_default": True})
 
     @property
     def line(self) -> str:
         return f"Sent back: {self.reason.text}"
 
+    def prepare(self, goals, current):
+        Evidence.verified(self.evidence, goals, current)
+        return self
+
     def judged(self, current: Todo) -> Todo:
         strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                            self.at)
+                            self.at, self.evidence)
         return strike.apply(current)
 
     def record(self, goals: Goals, problem: str) -> Todo:

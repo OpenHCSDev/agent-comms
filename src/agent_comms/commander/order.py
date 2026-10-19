@@ -42,6 +42,8 @@ from ..tools import (CommsFireTool, CommsOrderCheckTool,
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
+                     CommitEvidence, DiffEvidence, Evidence, ProcessEvidence, RuntimeEvidence,
+                     TurnEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo)
 from . import capacity
 from .config import CommanderConfig, Repo
@@ -223,7 +225,8 @@ class Slop:
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 
-def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=None, new=None, traced=None):
+def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=None, new=None, traced=None,
+         evidence=()):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -337,6 +340,12 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
+    if replaces and not clean and not struck_already:
+        # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
+        # Done here so the commander cannot send work back and forget either; it is recorded
+        # against the order it judges, before this one replaces it.
+        verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
+        strike(unit, group[0], f'sent back on {group[0]}: {verdict}', evidence=evidence)
     common = dict(order=order, request=request, deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
@@ -356,11 +365,6 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     if replaces and not clean and struck_already:
         print(f'{unit} already struck on this order of {group[0]}; '
               'the send-back counts that one miss once')
-    elif replaces and not clean:
-        # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
-        # Done here so the commander cannot send work back and forget either.
-        verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
-        strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
 
 
 def importers(modules: set[str], check: OrderCheck) -> list[str]:
@@ -489,7 +493,7 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
 
 
 def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
-           kind: type[StrikeTodo] = StrikeTodo) -> None:
+           evidence: tuple[Evidence, ...], kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
 
     Core records the strike on the task's Todo; the strike is written to the narrative file and posted to
@@ -503,7 +507,8 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
     recorded = call(CommsTodoTool(id=task, operation=kind(
-        todo.revision, COMMS.registry.require(ME).incarnation, todo.held(), f'{why} (caught by {caught})')))
+        todo.revision, COMMS.registry.require(ME).incarnation, todo.held(), f'{why} (caught by {caught})',
+        evidence=evidence)))
     if recorded.todo.revision == todo.revision:
         return
     n = struck(COMMS.goals.todos.get(task), unit)
@@ -539,7 +544,8 @@ def done(pid, sha, delivered=None, screenshot=''):
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
-        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered or sha}')
+        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered or sha}',
+               evidence=(CommitEvidence(delivered or sha),))
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 
@@ -832,7 +838,27 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, LoadedVerb):
+class CitedState:
+    """The state a strike stands on, one option per Evidence member, each repeatable."""
+    commit: tuple[str, ...] = option("--commit", action="append", default=(),
+                                     parser_default_factory=list, metavar="SHA")
+    diff: tuple[str, ...] = option("--diff", action="append", default=(),
+                                   parser_default_factory=list, metavar="A..B")
+    turn: tuple[str, ...] = option("--turn", action="append", default=(),
+                                   parser_default_factory=list, metavar="THREAD:TURN_ID")
+    process: tuple[str, ...] = option("--process", action="append", default=(),
+                                      parser_default_factory=list, metavar="PID:START")
+    runtime: tuple[str, ...] = option("--runtime", action="append", default=(),
+                                      parser_default_factory=list, metavar="PATH")
+
+    def evidence(self) -> tuple[Evidence, ...]:
+        return (*map(CommitEvidence.cited, self.commit), *map(DiffEvidence.cited, self.diff),
+                *map(TurnEvidence.cited, self.turn), *map(ProcessEvidence.cited, self.process),
+                *map(RuntimeEvidence.cited, self.runtime))
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendVerb(OrderVerb, LoadedVerb, CitedState):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
@@ -846,11 +872,12 @@ class SendVerb(OrderVerb, LoadedVerb):
 
     def run(self) -> None:
         send(self.unit, self.due, self.body_file, self.request, clean=self.clean,
-             mechanical=self.mechanical, reassign=self.reassign, traced=self.traced)
+             mechanical=self.mechanical, reassign=self.reassign, traced=self.traced,
+             evidence=self.evidence())
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, RuledVerb):
+class StrikeVerb(OrderVerb, RuledVerb, CitedState):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
     pid: str = option("pid", help="the problem the strike is for; strikes count per problem")
@@ -858,7 +885,7 @@ class StrikeVerb(OrderVerb, RuledVerb):
     caught: str = option("--caught", default=f'{ME} at review', help='"WHO at STAGE"; stage is review/install/live/user')
 
     def run(self) -> None:
-        strike(self.unit, self.pid, self.why, self.caught)
+        strike(self.unit, self.pid, self.why, self.caught, evidence=self.evidence())
 
 
 @dataclass(frozen=True, kw_only=True)
