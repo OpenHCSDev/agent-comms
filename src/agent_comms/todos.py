@@ -43,11 +43,13 @@ from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
+from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from .commander.config import Repo
     from .comms import Comms
     from .goal_management import Goals
+    from .registration import Registration
 
 
 @dataclass(frozen=True)
@@ -87,9 +89,10 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
+    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
-        for each in (check, *deletes.checks):
+        check = todo.order.check
+        for each in (check, *todo.order.deletes.checks):
             await self.require_source(each)
             each.result.require(await self.checked(each))
         return replace(self, at=await self.delivery_time(check))
@@ -176,6 +179,95 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
             raise ValueError(
                 f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
+    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
+        merge = await self.merge_state(todo, registry)
+        verified = await super().verified(todo, registry)
+        return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
+                                     at=verified.at, evidence=self.evidence, merge=merge)
+
+    async def merge_state(self, todo: Todo, registry: Registration) -> DeliveryMerge:
+        """Observe integration, not merely publication, at the time of completion.
+
+        Git proves ordinary merges to main. The order's merged PR also proves squash merges
+        and names a non-main target. Otherwise the pushed source must still have an open link,
+        whose owner is WorkBranches, not a second branch policy in the delivery tool.
+        """
+        check = todo.order.check
+        branches = (await self.run(
+            check, "git", "for-each-ref", f"--contains={self.delivered}",
+            "--format=%(refname:strip=3)", "refs/remotes/origin/")).splitlines()
+        if WorkBranches.main in branches:
+            return MainDeliveryMerge()
+        requests = await asyncio.to_thread(PullRequests((todo,)).listed,
+                                           todo.repo, "merged", todo.order)
+        for request in requests:
+            if request.merge and await self.contains(check, request.head):
+                return (MainDeliveryMerge() if request.base == WorkBranches.main
+                        else BranchDeliveryMerge(request.base, request.merge))
+        linked = await asyncio.to_thread(
+            WorkBranches(Path(check.directory)).read, registry.snapshot())
+        sources = tuple(sorted(branch.name for branch in linked
+                               if branch.name in branches and branch.linked))
+        if not sources:
+            raise ValueError(
+                f"Delivered commit {self.delivered} is not merged and has no branch linked "
+                "to an open PR or issue.")
+        return UnmergedDeliveryMerge(sources)
+
+    async def contains(self, check: OrderCheck, head: str) -> bool:
+        if head == self.delivered:
+            return True
+        result = await BoundedRun.run(
+            ("git", "merge-base", "--is-ancestor", self.delivered, head),
+            cwd=check.directory, timeout=120)
+        if result.outcome not in (ExitedOutcome(0), ExitedOutcome(1)):
+            raise ValueError(result.stderr.decode(errors="replace") or
+                             "Could not check the delivered commit against its PR head.")
+        return result.outcome == ExitedOutcome(0)
+
+
+class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):
+    """The integration observed when Core checked a commit delivery; never a claim of install."""
+
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class MainDeliveryMerge(DeliveryMerge):
+    @property
+    def line(self) -> str:
+        return f"merged to {WorkBranches.main}"
+
+
+@dataclass(frozen=True)
+class BranchDeliveryMerge(DeliveryMerge):
+    branch: str
+    commit: str
+
+    @property
+    def line(self) -> str:
+        return f"merged to {self.branch} as {self.commit}"
+
+
+@dataclass(frozen=True)
+class UnmergedDeliveryMerge(DeliveryMerge):
+    branches: tuple[str, ...]
+
+    @property
+    def line(self) -> str:
+        return f"not merged; linked branches: {', '.join(self.branches)}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedCommitDelivery(CommitDelivery):
+    merge: DeliveryMerge
+
+    @property
+    def work(self) -> str:
+        return f"{super().work}; {self.merge.line}"
+
 
 @dataclass(frozen=True, kw_only=True)
 class OperationDelivery(OrderDelivery):
@@ -198,19 +290,44 @@ class PullRequest:
     merged_at: float | None = None
     updated_at: float = 0.0
     orders: tuple[str, ...] = ()
+    base: str = field(kw_only=True)
 
     @classmethod
     @boundary_decoder
     def listed(cls, number: int, branch: str, head: str, merge: str, merged: str,
-               updated: str, body: str) -> Self:
+               updated: str, body: str, base: str) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
         return cls(int(number), branch, head, merge or None,
                    _github_time(merged) if merged else None, _github_time(updated),
-                   ProblemOrder.pull_request_ids(body))
+                   ProblemOrder.pull_request_ids(body), base=base)
 
 
 def _github_time(text: str) -> float:
     return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
+
+
+@dataclass(frozen=True)
+class PullRequestCommit:
+    """GitHub's optional mergeCommit object, decoded at the query boundary."""
+    oid: str
+
+
+@dataclass(frozen=True)
+class ListedPullRequest:
+    """The external query row; conversion lives here, never in its consumers."""
+    number: int
+    branch: str
+    head: str
+    merge: PullRequestCommit | None
+    merged: str | None
+    updated: str
+    body: str
+    base: str
+
+    def parsed(self) -> PullRequest:
+        return PullRequest.listed(
+            self.number, self.branch, self.head, self.merge.oid if self.merge else "",
+            self.merged or "", self.updated, self.body, self.base)
 
 
 class PullRequests:
@@ -239,20 +356,19 @@ class PullRequests:
                                 f'"{candidate.pull_request_reference}" sort:updated-desc')
             selections.append(
                 f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
-                '... on PullRequest { number headRefName headRefOid body '
-                'mergeCommit { oid } mergedAt updatedAt } } }')
+                '... on PullRequest { number branch: headRefName head: headRefOid body '
+                'base: baseRefName merge: mergeCommit { oid } merged: mergedAt '
+                'updated: updatedAt } } }')
         listed = subprocess.run(
             ("gh", "api", "graphql", "-f", "query=query {" + " ".join(selections) + "}",
-             "--jq", '.data | map_values(.nodes | map([.number, .headRefName, .headRefOid,'
-             ' .mergeCommit.oid // "", .mergedAt // "", .updatedAt, .body]))'),
+             "--jq", '.data | map_values(.nodes)'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
             raise ValueError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
-        rows = FieldCodec.decode(dict[str, tuple[tuple[int, str, str, str, str, str, str], ...]],
+        rows = FieldCodec.decode(dict[str, tuple[ListedPullRequest, ...]],
                                  FieldCodec.parse(listed.stdout))
         for alias, candidate in aliases.items():
-            self._read[repo, state, candidate.id] = tuple(
-                PullRequest.listed(*row) for row in rows[alias])
+            self._read[repo, state, candidate.id] = tuple(row.parsed() for row in rows[alias])
         return self._read[repo, state, order.id]
 
 
@@ -1368,7 +1484,9 @@ class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
 class DeliveredProblemOrder(CheckedProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
-    line: ClassVar[str] = "Delivered, waiting on install"
+    @property
+    def line(self) -> str:
+        return f"Delivered: {self.delivery.work}, waiting on install"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
@@ -1962,7 +2080,7 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        verified = self.delivery.verified(current.order.check, current.order.deletes)
+        verified = self.delivery.verified(current, goals.registry)
         return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):
