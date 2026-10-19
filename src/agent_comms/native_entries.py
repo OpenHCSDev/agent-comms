@@ -313,12 +313,13 @@ class NativeEvidenceRead:
             # source owner's named unverified state. Reopen once and decode
             # from byte zero; no stale entry or offset survives the transition.
             return self._reverify()
-        except NativePiUnavailable:
-            self.close()
-            raise
         except MalformedRecord as error:
             self.close()
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
+        except BaseException:
+            # Any other failure retires the reader's bytes too; only data refusal is reworded.
+            self.close()
+            raise
         self.entries = entries
         return entries[0], entries
 

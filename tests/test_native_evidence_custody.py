@@ -92,7 +92,7 @@ def test_generic_observation_failure_does_not_reverify(tmp_path, monkeypatch, fa
         monkeypatch.setattr(
             evidence.source, "reverify_from_start", lambda: reverifications.append(True)
         )
-        with pytest.raises(NativePiUnavailable):
+        with pytest.raises(type(failure)):
             evidence.observe()
         assert not reverifications
         assert evidence.source.stream.closed and not evidence.entries
