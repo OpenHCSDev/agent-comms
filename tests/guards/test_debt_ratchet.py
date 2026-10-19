@@ -11,8 +11,8 @@ import pytest
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
-    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr, GitMeasure, NoneAbsence, UncarriedRecordFormat,
-    python_paths,
+    FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat,
+    ComparedKind, DeclaredSpellings, NamedAccess, NamedDeclaration, StringIdentity, python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
@@ -712,9 +712,66 @@ def test_local_import_scope_counts_nested_functions_and_classes_once():
     assert FunctionLocalImport.count(source, "imports.py") == 4
 
 
-def test_literal_getattr_does_not_count_dynamic_names_or_prose():
-    source = b'''getattr(peer, "model")\ngetattr(peer, name)\ntext = "getattr(peer, 'model')"\n'''
-    assert LiteralGetattr.count(source, "read.py") == 1
+def string_identity_readings(source: bytes) -> list[tuple[str, type]]:
+    declared = b"class CarryStep: pass\ndef carry_hunts(): pass\n"
+    spellings = DeclaredSpellings.read([("tools/carry_hunts.py", declared), ("src/pkg/__init__.py", b""),
+                                         ("src/pkg/route_table.py", b""), ("tools/use.py", source)])
+    return [(site.spelling, site.reading) for site in spellings.sites(source, "tools/use.py")]
+
+
+def test_string_identity_reads_declared_names_compared_kinds_and_named_access():
+    source = b'''after = "carry_hunts"
+step = "CarryStep"
+table = "pkg.route_table"
+if kind == "release": pass
+if mode in {"fast", "slow"}: pass
+match shape:
+    case "square": pass
+getattr(peer, "model")
+getattr(peer, name)
+importlib.import_module("pkg.plugin")
+Family.member_named("text")
+text = "getattr(peer, 'model')"
+word = "plain words here"
+'''
+    assert string_identity_readings(source) == [
+        ("carry_hunts", NamedDeclaration), ("CarryStep", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration), ("release", ComparedKind), ("fast", ComparedKind),
+        ("slow", ComparedKind), ("square", ComparedKind), ("model", NamedAccess),
+        ("pkg.plugin", NamedAccess), ("text", NamedAccess),
+    ]
+
+
+def test_string_identity_exempts_prose_interpolation_enum_bodies_class_options_and_entry_guard():
+    source = b'''"""carry_hunts is described here."""
+import enum
+class Wire(enum.StrEnum):
+    STEP = "carry_hunts"
+class Hook(Wire):
+    OTHER = "CarryStep"
+class Member(Base, declared_name="carry_hunts"):
+    """CarryStep docs."""
+label = f"{name} carry_hunts"
+if __name__ == "__main__": pass
+'''
+    assert string_identity_readings(source) == []
+
+
+def test_string_identity_measures_spellings_outside_root_and_skips_declared_tests(repo: Repository) -> None:
+    (repo.path / "pyproject.toml").write_text('[tool.pytest.ini_options]\ntestpaths = ["tests"]\n')
+    outside = {"tools/carry_other.py": "def run(): pass\n", "tools/step.py": "after = None\n",
+               "tests/test_step.py": "after = None\n"}
+    for name, source in outside.items():
+        (repo.path / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo.path / name).write_text(source)
+    base = repo.commit({"kept.py": "value = 1\n"})
+    for name in ("tools/step.py", "tests/test_step.py"):
+        (repo.path / name).write_text('after = "carry_other"\n')
+    head = repo.commit({})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert {key: value for key, value in report["delta"].items() if value} == {"StringIdentity:tools/step.py": 1}
+    assert "StringIdentity:tests/test_step.py" not in report["head"]
 
 
 def test_broad_suppress_is_counted_and_cannot_be_added(repo):
