@@ -6,9 +6,11 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+import math
 import re
 import types
 from abc import abstractmethod
+from decimal import Decimal
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
@@ -224,6 +226,16 @@ class PiCost(PiPayload):
     cache_write: float | None = wire_field("cacheWrite")
     total: float | None = wire_field("total")
 
+    @classmethod
+    def normalize_field(cls, target, key, value, record):
+        amount = super().normalize_field(target, key, value, record)
+        if type(amount) in (int, float) and not (math.isfinite(amount) and amount >= 0):
+            raise MalformedRecord(f"Pi cost {key} must be a finite nonnegative number.")
+        return amount
+
+    def charged(self) -> Decimal:
+        return Decimal(0) if self.total is None else Decimal(str(self.total))
+
 
 
 
@@ -240,13 +252,16 @@ class PiUsage(PiPayload):
     cache_read: NonnegativePiCount = wire_field("cacheRead", UnreportedCount())
     cache_write: NonnegativePiCount = wire_field("cacheWrite", UnreportedCount())
     total_tokens: PiCount = wire_field("totalTokens", UnreportedCount())
-    cost: PiCost | None = wire_field("cost")
+    cost: PiCost = wire_field("cost", PiCost())
     reasoning: NonnegativePiCount = wire_field("reasoning", UnreportedCount())
     cache_write_1h: NonnegativePiCount = wire_field("cacheWrite1h", UnreportedCount())
 
     @property
     def token_total(self) -> PiCount:
         return self.total_tokens
+
+    def charged(self) -> Decimal:
+        return self.cost.charged()
 
     def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
         return (account.charge(self),)
