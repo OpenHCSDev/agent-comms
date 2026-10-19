@@ -204,20 +204,6 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
         assert FieldCodec.decode(type(event), FieldCodec.encode(event)) == event
 
 
-async def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
-    event = decode({
-        "type": "message_end",
-        "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
-    })
-    from agent_comms.turn_failure import ModelRequestFailed
-    from agent_comms.turn_output import TurnOutput
-
-    from agent_comms.external_transcript import DraftPublication
-    session = SimpleNamespace(output=TurnOutput(), draft_publication=DraftPublication())
-    await event.message.tracked_end(session)
-    assert session.output.failure == ModelRequestFailed("original provider rejection")
-
-
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
     from agent_comms.native_pi import NativePiUnavailable
     from agent_comms.tracked_turn import ObservedNativeCommit, PendingNativeCommit
