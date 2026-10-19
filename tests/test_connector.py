@@ -25,6 +25,67 @@ from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
 
+@pytest.mark.parametrize("served_by,registered", [
+    ("installed", True), ("other", True), ("installed", False),
+])
+def test_connector_round_trip_owns_runtime_and_caller_validation(comms, tmp_path, served_by, registered):
+    import json
+    import os
+    import site
+    import socket
+    import subprocess
+    import sys
+
+    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
+    reviews = RuleReviews(comms.root)
+    reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
+    reviews.write("claude-ai", AnsweredRuleReviewEntry(
+        1, "connector.py:578 owns runtime validation; this test exercises it without imposing it on native-only upgrades."))
+    runtimes = {name: tmp_path / name / "bin/python" for name in ("installed", "other")}
+    for runtime in runtimes.values():
+        runtime.parent.mkdir(parents=True)
+        runtime.symlink_to(sys.executable)
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    environment = {**os.environ, "HOME": str(tmp_path / "home"), "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": os.pathsep.join((str(Path(__file__).resolve().parents[1] / "src"),
+                                       *site.getsitepackages()))}
+    command = "from agent_comms.connector import main; raise SystemExit(main())"
+    before = comms.bus.log.latest_sequence()
+    service = subprocess.Popen(
+        [runtimes[served_by], "-c", command, "serve", "--root", comms.root, "--port", str(port)],
+        env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    try:
+        started = ""
+        while "Running on" not in started:
+            line = service.stdout.readline()
+            assert line, started
+            started += line
+        if not registered:
+            comms.registry.unregister("claude-ai")
+            comms.registry.archive("claude-ai")
+            comms.registry.begin_delete("claude-ai")
+            comms.registry.remove("claude-ai")
+        result = subprocess.run(
+            [runtimes["installed"], "-c", command, "round_trip", comms.root,
+             runtimes["installed"], "--port", str(port)], env=environment,
+            capture_output=True, text=True, timeout=60)
+        if registered and served_by == "installed":
+            assert result.returncode == 0, result.stderr
+            assert json.loads(result.stdout) == {
+                "round_trip": f"comms_channels read alike through {runtimes['installed']}"}
+        else:
+            assert result.returncode != 0
+            expected = ("connector round trip was refused" if not registered
+                        else f"runs {runtimes['other']}, not the installed")
+            assert expected in result.stdout + result.stderr
+    finally:
+        service.terminate()
+        service.wait(timeout=30)
+    assert comms.bus.log.latest_sequence() == before
+
+
 @pytest.fixture
 def store(tmp_path: Path) -> ConnectorStore:
     return ConnectorStore.at(tmp_path)

@@ -164,6 +164,16 @@ class FieldPlan:
         return default
 
 
+class MissingNoneFieldPlan(FieldPlan):
+    """Wire absence is None, independently of the constructor's default factory."""
+
+    def omitted(self, value: object) -> bool:
+        return value is None or super().omitted(value)
+
+    def captured(self, data: object) -> dict[str, object]:
+        return {self.name: super().captured(data).get(self.name)}
+
+
 class ContextFieldPlan(FieldPlan):
     """A constructor value supplied by the caller, never by wire data."""
 
@@ -1032,6 +1042,8 @@ class FieldCodec(Sealed):
             return ContextFieldPlan
         if field.metadata.get("wire_bind"):
             return BoundFieldPlan
+        if field.metadata.get("wire_absent_none"):
+            return MissingNoneFieldPlan
         if not field.metadata.get("wire_inline"):
             return (cls._representation(annotation)[1] or FieldRepresentation).field_plan
         family = isinstance(annotation, type) and issubclass(annotation, DeclaredFamily)
