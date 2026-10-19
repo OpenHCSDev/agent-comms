@@ -63,7 +63,7 @@ Approved MCP server execution still has its independent trust/approval boundary.
 ## Fixture plan and current evidence
 
 `test-native-import-fence.mjs` currently runs **12 isolated module contracts**
-when `PI_NATIVE_PACKAGE_DIR` supplies the reviewed package's Jiti dependency.
+with the reviewed package argument supplying its Jiti dependency.
 The vendor is copied into a disposable directory; evaluator caches are disabled.
 An ancestor sentinel executes with the old no-global-search-paths flag alone,
 but not with the draft ESM/CJS/createRequire/absolute/data-URL boundary. An exact

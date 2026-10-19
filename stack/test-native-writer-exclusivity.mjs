@@ -10,8 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const packageDir = process.env.PI_NATIVE_PACKAGE_DIR;
-if (!packageDir) throw new Error('Explicit disposable PI_NATIVE_PACKAGE_DIR required');
+const packageDir = process.argv[2];
+assert.ok(packageDir, 'Explicit disposable package argument required');
 const probePath = new URL('./probe-native-session-writer.mjs', import.meta.url).pathname;
 const { SessionManager } = await import(pathToFileURL(join(packageDir, 'dist/index.js')).href);
 
@@ -31,8 +31,8 @@ try {
 
   const gate = join(root, 'burst-gate');
   const children = Array.from({ length: 4 }, (_, index) => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [probePath, 'append-burst', sessionFile], {
-      env: { ...process.env, PI_NATIVE_PACKAGE_DIR: packageDir, PR48_BURST_GATE: gate },
+    const child = spawn(process.execPath, [probePath, packageDir, 'append-burst', sessionFile], {
+      env: { ...process.env, PR48_BURST_GATE: gate },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';

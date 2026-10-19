@@ -8,9 +8,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 
-const mode=process.argv[2] ?? 'threshold';
+const pkg=process.argv[2];
+const mode=process.argv[3] ?? 'threshold';
 assert.ok(['threshold','overflow','manual','wip','cap','oversized'].includes(mode));
-const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(pkg,'Prepared native package required');
 const requests=[];
 let overflowSent=false;

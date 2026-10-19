@@ -105,10 +105,11 @@ assert.deepEqual(run(`import {loadApprovedExtension} from './agent-comms-import-
     try { await loadApprovedExtension(${JSON.stringify(entry)}); } catch(e) { console.log(e.code); }`),
     { output: 'NATIVE_FAILURE', executed: false });
 let cases = 16;
-if (process.env.PI_NATIVE_PACKAGE_DIR) {
+assert.ok(process.argv[2], 'Prepared native package argument required');
+{
     // Copy the pinned Jiti dependency; never let its evaluator/cache touch a frozen artifact.
     const vendor = join(base, 'old-jiti');
-    fs.cpSync(join(process.env.PI_NATIVE_PACKAGE_DIR, 'node_modules/jiti'), vendor,
+    fs.cpSync(join(process.argv[2], 'node_modules/jiti'), vendor,
         { recursive: true, dereference: true });
     for (const tryNative of [false, true]) {
         assert.deepEqual(run(`import {createJiti} from ${JSON.stringify(join(vendor, 'lib/jiti-static.mjs'))};

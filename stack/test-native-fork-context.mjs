@@ -5,10 +5,10 @@ import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-const mode=process.argv[2] ?? 'fork';
-const percent=Number(process.argv[3] ?? 24);
+const pkg=process.argv[2];
+const mode=process.argv[3] ?? 'fork';
+const percent=Number(process.argv[4] ?? 24);
 assert.ok(['fork','restore'].includes(mode));
-const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(pkg,'Matched installed native bundle required');
 const requests=[];
 const server=createServer(async(request,response)=>{

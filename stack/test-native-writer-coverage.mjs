@@ -8,8 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const packageDir = process.env.PI_NATIVE_PACKAGE_DIR;
-assert.ok(packageDir, 'provide disposable PI_NATIVE_PACKAGE_DIR');
+const packageDir = process.argv[2];
+assert.ok(packageDir, 'provide disposable package argument');
 const moduleURL = pathToFileURL(join(packageDir, 'dist/core/session-manager.js')).href;
 const { SessionManager, sessionEntryToContextMessages } = await import(moduleURL);
 const { DiskEntryStore } = await import(pathToFileURL(join(packageDir,"dist/core/session-entry-store.js")));

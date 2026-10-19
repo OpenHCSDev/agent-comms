@@ -330,4 +330,4 @@ def main(installed: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(os.environ["PI_NATIVE_PACKAGE_DIR"]).resolve(strict=True))
+    main(Path(sys.argv[1]).resolve(strict=True))

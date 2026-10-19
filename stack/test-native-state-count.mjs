@@ -5,8 +5,8 @@ import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-assert.ok(process.env.PI_NATIVE_PACKAGE_DIR, 'Prepared native package required');
-const pkg = resolve(process.env.PI_NATIVE_PACKAGE_DIR);
+assert.ok(process.argv[2], 'Prepared native package argument required');
+const pkg = resolve(process.argv[2]);
 const root = mkdtempSync(join(tmpdir(), 'native-state-count-'));
 const {MemoryEntryStore, DiskEntryStore} = await import(pathToFileURL(join(pkg, 'dist/core/session-entry-store.js')));
 const header = {type:'session', version:3, id:'state-count', cwd:root, timestamp:'2026-10-02T00:00:00Z'};

@@ -4,10 +4,9 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [mode, target] = process.argv.slice(2);
-const packageDir = process.env.PI_NATIVE_PACKAGE_DIR;
+const [packageDir, mode, target] = process.argv.slice(2);
 if (!packageDir || mode !== 'append-burst' || !target)
-  throw new Error('Provide PI_NATIVE_PACKAGE_DIR and append-burst <session-file>');
+  throw new Error('Provide <package> append-burst <session-file>');
 const { SessionManager } = await import(pathToFileURL(join(packageDir, 'dist/index.js')).href);
 const message = text => ({ role: 'user', content: [{ type: 'text', text }], timestamp: Date.now() });
 

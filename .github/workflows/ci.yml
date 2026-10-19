@@ -52,7 +52,7 @@ jobs:
           stack/bin/prepare-pi-native
           package=$(ls -d stack/.pi-native-*/node_modules/@earendil-works/pi-coding-agent)
           for mode in threshold overflow manual; do
-            PI_COMPACTION_TEST_PACKAGE="$PWD/$package" node stack/test-native-pi-compaction.mjs "$mode"
+            node stack/test-native-pi-compaction.mjs "$PWD/$package" "$mode"
           done
 
       - name: Check native RPC compaction against localhost provider
