@@ -46,6 +46,9 @@ def test_present_session_rejects_a_read_past_its_cut(tmp_path):
         cut.mark_read(reads, "viewer", str(source), 3)
 
 
+STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records
+
+
 def encoded(value):
     return json.dumps(value).encode() + b"\n"
 
@@ -71,8 +74,8 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
     assert normalized["kind"] == "message" and normalized["message"]["kind"] == "user"
     assert "type" not in normalized and "role" not in normalized["message"]
     assert entry.events(TranscriptProjection()) == [
-        UserTranscript("look"),
-        UserTranscript("[Image attachment: image/png]"),
+        UserTranscript("look", timestamp=STAMPED),
+        UserTranscript("[Image attachment: image/png]", timestamp=STAMPED),
     ]
     assert entry.message.parts[1].data == "aGVsbG8="
 
@@ -131,7 +134,7 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     assert forward == list(reversed(reverse))
     assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
     assert forward[0].entry.events(TranscriptProjection()) == []
-    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
+    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid", timestamp=STAMPED)]
     assert forward[-1].entry is None and not forward[-1].complete
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
 
@@ -258,5 +261,6 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     assert walks == [tuple(record.entry.id for record in records)] and headers == [path]
     assert not active
     assert tuple(event for _, events in projected for event in events) == (
-        UserTranscript("request", native_id="a" * 32), AssistantTranscript("answer"),
+        UserTranscript("request", timestamp=STAMPED, native_id="a" * 32),
+        AssistantTranscript("answer", timestamp=STAMPED),
     )
