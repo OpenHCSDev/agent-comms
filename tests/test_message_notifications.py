@@ -14,7 +14,7 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     assert acknowledgement.message.target == '#team'
     assert replace(acknowledgement, message=None) in per_message[(message.seq, message.message_id)]
     assert acknowledgement.label == acknowledgement.timed_state('Sent', acknowledgement.state.sent_at_ms)
-    assert not comms.registry.require('beta').active_turn.executing
+    assert not comms.registry.require('beta').executing
 
 
 def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
