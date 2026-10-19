@@ -544,12 +544,12 @@ class NativePiRpcLaunch:
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         from .selected_session import SelectedSession, SavedSelectedSession
-        from .native_session_reopen import SessionIdentityHelper
+        from .native_session_reopen import NativeSessionIdentity
 
         saved = Path(session_file).absolute() if session_file is not None else None
         directory = saved.parent if saved is not None else cwd
         session = (SavedSelectedSession(directory,
-            identity=SessionIdentityHelper.locate(package, str(saved)))
+            identity=NativeSessionIdentity.locate(str(saved)))
             if saved is not None else SelectedSession(directory))
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 

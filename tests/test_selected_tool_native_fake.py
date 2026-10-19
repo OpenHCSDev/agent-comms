@@ -31,7 +31,7 @@ INPUT_ID = "a" * 32
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("variant", ["success", "tamper", "denied", "badproof", "forged_terminal"])
-async def test_fake_rpc_tool_event_and_terminal_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, selected_model, *, native_runtime_package) -> None:
+async def test_fake_rpc_tool_event_and_terminal_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, selected_model, *, native_runtime_package, cursor_delivery) -> None:
     fake = tmp_path / "fake_selected_rpc.py"
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist/selected_claimed_write.mjs").write_bytes(
@@ -112,7 +112,7 @@ send({'type':'agent_settled'})
         prompt="Selected request",
         worktree=tmp_path,
         session=SelectedSession(tmp_path / "sessions"),
-        execution=IndependentExecution(),
+        execution=IndependentExecution( cursor_delivery=cursor_delivery),
         startup=NativeStartup(tmp_path),
         selected_tool_mode=SelectedToolMode(owner_action),
         model_wait=ModelWait(15),

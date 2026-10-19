@@ -36,7 +36,7 @@ from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
-from .native_session_reopen import SessionIdentityHelper
+from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .selected_session import SavedSelectedSession
 from .unstarted_runtime import UnstartedRuntime
@@ -85,7 +85,9 @@ class PiSessionFile(RuntimeLocation):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
-                    SessionIdentityHelper.locate(execution.native_package, str(path)))
+                    NativeSessionIdentity.from_evidence(
+                        execution.cursor_delivery.source_reads.for_source(path)
+                    ))
         return SavedSelectedSession(directory, identity=identity)
 
     def history_source(self, root, incarnation):

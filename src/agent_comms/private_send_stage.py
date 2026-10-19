@@ -25,7 +25,7 @@ from .private_send_rules import (
 from .native_input_owner import ParticipantOwner
 from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
 from .native_pi import NativeContextProof
-from .native_entries import NativeEntry
+from .native_entries import NativeEvidenceScope
 from .native_prompt_binding import (
     PromptBinding,
     expected_prompt_matches_journal,
@@ -141,10 +141,12 @@ class NativeSendStage(ABC):
         *,
         wire_root_id: str,
         prompt: str,
+        source_reads: NativeEvidenceScope,
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
-        with NativeEntry.open_input_evidence(context.session_file) as evidence:
+        with source_reads.borrow():
+            evidence = source_reads.for_source(context.session_file)
             if not context.corroborates_input(input_id, evidence=evidence):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"

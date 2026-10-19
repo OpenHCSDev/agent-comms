@@ -57,7 +57,8 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
             "content": [{"type": "text", "text": "restored sou"}],
         }},
     ))
-    with NativeEntry.open_input_evidence(session) as evidence:
+    with NativeEvidenceScope() as scope:
+        evidence = scope.for_source(session)
         header, entries = evidence.observe()
         assert header.id == "sid" and tuple(evidence.inputs) == (INPUT_ID,)
         if rewrite == "in_place":
@@ -110,7 +111,8 @@ def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatc
         return original(raw)
 
     monkeypatch.setattr(PrivateEvidenceRead, "_decode_row", staticmethod(counted))
-    with NativeEntry.open_input_evidence(session) as evidence:
+    with NativeEvidenceScope() as scope:
+        evidence = scope.for_source(session)
         evidence.observe()
         assert len(decoded) == 2
         evidence.observe()
