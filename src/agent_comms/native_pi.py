@@ -542,7 +542,7 @@ class NativePiRpcLaunch:
             session = SelectedSession(cwd)
         else:
             identity = NativeSessionIdentity.locate(str(saved))
-            directory = root / "native-sessions" / identity.session_id
+            directory = root / "native-sessions" / identity.lookup
             _durable_private_session_dir(directory)
             session = SavedSelectedSession(directory, identity=identity)
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
