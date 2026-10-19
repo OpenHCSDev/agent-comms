@@ -12,16 +12,21 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Generic, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .child_process import join_retirement
 from .field_codec import MalformedRecord, Token256Text
-from .native_tool_call import NativeToolCall, OwnerToolConnection, SelectedToolDenied, DuplicateToolCallIdentity
+from .native_tool_call import (
+    DuplicateToolCallIdentity,
+    NativeToolCall,
+    OwnerToolConnection,
+    SelectedToolDenied,
+)
 from .pi_payloads import PiContent, ToolCallContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 
 if TYPE_CHECKING:
-    from .pi_events import ToolExecutionStart, ToolExecutionEnd
+    from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
 _LOG = logging.getLogger(__name__)
 

@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
-from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
-from .private_path import NativeSessionFileRole
+from .native_session_reopen import NativeSessionIdentity
 from .pi_vocabulary import ThinkingChoice
+from .private_path import NativeSessionFileRole
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant

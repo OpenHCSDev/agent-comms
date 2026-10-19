@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
-from dataclasses import dataclass, replace
 from abc import abstractmethod
 from collections.abc import Callable
 from contextlib import aclosing
+from dataclasses import dataclass
 from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
@@ -15,29 +14,29 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 from acp import Client, RequestError
 from acp.schema import (
     ConfigOptionUpdate,
-    SessionConfigOptionSelect,
     SessionConfigOptionBoolean,
+    SessionConfigOptionSelect,
     SessionConfigSelectOption,
     SetSessionConfigOptionResponse,
 )
 
-from .pi_vocabulary import ThinkingChoice
-from .comms import Comms
 from .agent_backend import UseSettings
+from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .native_arguments import NativeArguments
-from .native_pi import NativePiUnavailable, NativePiRpcLaunch
-from .native_package import VerifiedNativePackage
 from .launch_runtime import LaunchRecord
+from .native_arguments import NativeArguments
+from .native_package import VerifiedNativePackage
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .pi_vocabulary import ThinkingChoice
 from .threads import Thread
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
+    from .pi_commands import SettingCommand
     from .runtime import RuntimeServer, SocketClient
     from .session_effects import SessionEffects
-    from .pi_commands import SettingCommand
     from .session_lifecycle import SessionLifecycle
 
 

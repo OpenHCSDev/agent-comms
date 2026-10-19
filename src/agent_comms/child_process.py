@@ -19,7 +19,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator

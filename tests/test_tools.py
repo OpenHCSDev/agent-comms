@@ -128,14 +128,14 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_threads", {"active_only": "yes"}, caller=NoThreadCaller())
 
     def test_operator_threads_query_does_not_weaken_actions(self, comms, monkeypatch):
-        from agent_comms.launch_runtime import CallingThreadUnavailable
+        from agent_comms.launch_runtime import CallingThreadUnavailableError
 
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         comms.registry.declare(comms.registry.new_thread(name='listed', tags=frozenset(), worktree='/wt'))
         result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())
         assert [thread["name"] for thread in result["threads"]] == ["listed"]
         assert result["sent_notifications"] == []
-        with pytest.raises(CallingThreadUnavailable):
+        with pytest.raises(CallingThreadUnavailableError):
             invoke_tool(comms, "comms_set_goal", {"text": "not authorized"}, caller=NoThreadCaller())
 
     def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):

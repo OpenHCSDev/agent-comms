@@ -13,26 +13,27 @@ from acp.schema import (
     RequestPermissionResponse,
 )
 
-from .image_inputs import prompt_images
-from .following_inputs import OwnerFollowingInputs
-from .queued_input import InitialInput
-from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .agent_backend import AgentBackend, TurnInbox
 from .channels import AllChannel
 from .comms import Comms
 from .coordinator import Coordination
 from .errors import RelationViolationError
+from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
+from .image_inputs import prompt_images
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
 from .native_input_owner import RegistryOwner
+from .pi_payloads import StateData
+from .queued_input import InitialInput
 from .routing import TurnRouting
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
@@ -40,7 +41,6 @@ from .runtime import (
     SocketClient,
     SubscriberClosed,
 )
-from .pi_payloads import StateData
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects

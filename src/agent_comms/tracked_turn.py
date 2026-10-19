@@ -5,12 +5,11 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack, ExitStack
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from . import pi_commands as commands
@@ -19,9 +18,10 @@ from .agent_events import AgentEvent
 from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text, MalformedRecord
 from .external_transcript import DraftRow
+from .field_codec import Id128Text, MalformedRecord
 from .following_inputs import FollowingInputs
+from .launch_runtime import LaunchRecord
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import handles
 from .native_arguments import SelectedModel
@@ -277,7 +277,7 @@ class TrackedTurnSession(TurnSession):
         session: SelectedSession,
         model: SelectedModel,
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
-        environment: Mapping[str, str] = MappingProxyType({}),
+        environment: LaunchRecord,
         model_wait: TurnWait = DEFAULT_MODEL_WAIT,
         prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,
         ingress: MaintenanceIngress = UNCOORDINATED_INGRESS,

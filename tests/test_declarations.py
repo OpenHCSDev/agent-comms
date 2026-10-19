@@ -17,7 +17,7 @@ from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
-from agent_comms.launch_runtime import CallingThreadUnavailable
+from agent_comms.launch_runtime import CallingThreadUnavailableError
 from agent_comms.message_bus import MessageBus
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import HandoffKind, InfoKind, Message
@@ -647,7 +647,7 @@ class TestSharedLedger:
 class TestCurrentThread:
     def test_fail_closed_without_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-        with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
+        with pytest.raises(CallingThreadUnavailableError, match="AGENT_COMMS_THREAD"):
             current_thread(None)
 
     def test_owner_launch_environment_declares_the_same_thread(

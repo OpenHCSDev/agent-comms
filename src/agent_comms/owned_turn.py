@@ -14,16 +14,16 @@ from acp import RequestError
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
+from .coordinator import Coordination
 from .field_codec import Id128Text
 from .goal_attempts import GoalTurnPermit, NoLaunchPermit
 from .goals import Goal
-from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
-from .owned_send import OwnedSend
+from .messages import Message
 from .native_input_owner import RegistryOwner
 from .native_pi import NativeRequestFailure
-from .coordinator import Coordination
+from .owned_send import OwnedSend
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
 from .store_files import _store_lock
@@ -40,8 +40,8 @@ from .turn_input_source import (
     RoutedOriginalInput,
     ScheduledOriginalInput,
 )
-from .turn_progress import TurnProgress
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
+from .turn_progress import TurnProgress
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
@@ -206,11 +206,11 @@ class OwnedTurn:
             self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
         )
         from .turn_context import (
-            TurnContext,
             AutomaticTitleSegment,
-            ReplyRouteSegment,
             OwnerProvenance,
             RecordedContextTurn,
+            ReplyRouteSegment,
+            TurnContext,
         )
 
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)

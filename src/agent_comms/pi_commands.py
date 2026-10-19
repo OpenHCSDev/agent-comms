@@ -16,9 +16,10 @@ from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
+from .native_package import VerifiedNativePackage
 from .native_session_reopen import NativeSessionIdentity
-from .native_turn_context import NativeContextData
 from .native_tool_call import OwnerToolConnection
+from .native_turn_context import NativeContextData
 from .pi_payloads import (
     CompactionData,
     EmptyData,
@@ -32,8 +33,6 @@ from .pi_payloads import (
     UnknownData,
 )
 from .turn_context import InputContributionCoordinates, SegmentManifest
-
-from .native_package import VerifiedNativePackage
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -239,10 +238,11 @@ class CatalogQuery(NativeQuery):
                 worktree=Path.cwd() if worktree is None else worktree,
                 root=root,
             )
-            with launch.record.arguments() as arguments:
+            with launch.record.arguments() as launch_arguments:
                 async with BoundedRun.session(
-                    (*launch.argv, *arguments), cwd=launch.cwd, env=launch.env,
-                    timeout=CATALOG_TIMEOUT, runtime=launch.record.runtime, pass_fds=arguments.pass_fds,
+                    (*launch.argv, *launch_arguments), cwd=launch.cwd, env=launch.env,
+                    timeout=CATALOG_TIMEOUT, runtime=launch.record.runtime,
+                    pass_fds=launch_arguments.pass_fds,
                 ) as child:
                     yield PiRpcChannel(child.stdout), child.stdin
         except TimeoutError as error:

@@ -19,9 +19,8 @@ from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .launch_runtime import LaunchRecord
-from dataclasses import replace
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
+from .launch_runtime import LaunchRecord
 from .maintenance_barrier import MaintenanceBarrier
 from .route_selection import RouteSelection
 

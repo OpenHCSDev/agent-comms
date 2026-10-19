@@ -7,38 +7,44 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import re
-import subprocess
 import sqlite3
+import subprocess
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from .change_report import FileLine
+from .channel_targets import CommandTarget
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
     boundary_decoder,
 )
-from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .standing_rules import UndatedStandingRule
+from .storage_rules import StorageRule
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
-from .standing_rules import UndatedStandingRule
-from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
     from .comms import Comms

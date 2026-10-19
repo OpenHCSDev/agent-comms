@@ -1,30 +1,40 @@
 """Typed launch facts, decoded once from the explicitly selected process record."""
+
 from __future__ import annotations
 
+import asyncio
 import json
-from abc import abstractmethod
+import logging
 import os
 import sys
-from contextlib import contextmanager
-from tempfile import TemporaryFile
-from collections.abc import Callable, Mapping, MutableMapping
+import traceback
+from abc import abstractmethod
+from collections.abc import Awaitable, Callable, Iterator, Mapping, MutableMapping, Sequence
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, Self
+from tempfile import TemporaryFile
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Self
 
 from pydantic import JsonValue
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText
-from .message_reference import MessageReference
+from .private_path import PrivateSocketRole
+from .working_memory_policy import AnnotationPolicy, DisabledAnnotationPolicy
+
+if TYPE_CHECKING:
+    from acp.connection import StreamObserver
+
+    from .active_route import CommsRoute
 
 
-class CallingThreadUnavailable(RelationViolationError):
+class CallingThreadUnavailableError(RelationViolationError):
     """The selected launch does not declare an owner thread."""
 
 
-class LaunchRecordUnavailable(RelationViolationError):
+class LaunchRecordUnavailableError(RelationViolationError):
     """No explicit launch record was supplied to this process."""
 
 
@@ -45,9 +55,13 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def project(self, configuration: RestartEnvironment) -> RestartEnvironment:
-        return replace(configuration, pythonpath=NoImportPath(), virtual_env=str(self.prefix)).for_interpreter(self.interpreter)
+        return replace(
+            configuration, pythonpath=NoImportPath(), virtual_env=str(self.prefix)
+        ).for_interpreter(self.interpreter)
 
-    def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
+    def environment(
+        self, source: Mapping[str, str], *, configuration: RestartEnvironment
+    ) -> dict[str, str]:
         return self.project(configuration).apply_runtime(source)
 
     def require_available(self) -> None:
@@ -56,20 +70,26 @@ class LaunchRuntime:
 
 
 class RestoredRuntime(LaunchRuntime):
-    def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
-        return {name: value for name, value in source.items()
-                if not name.startswith("AGENT_COMMS_")}
+    def environment(
+        self, source: Mapping[str, str], *, configuration: RestartEnvironment
+    ) -> dict[str, str]:
+        return {
+            name: value for name, value in source.items() if not name.startswith("AGENT_COMMS_")
+        }
 
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
     """An inherited Python search path or its explicit removal."""
+
+    @abstractmethod
+    def apply(self, environment: MutableMapping[str, str]) -> None: ...
 
 
 @dataclass(frozen=True)
 class NoImportPath(ImportPath, JsonShapeMember):
     value: None = None
 
-    def apply(self, environment) -> None:
+    def apply(self, environment: MutableMapping[str, str]) -> None:
         environment.pop("PYTHONPATH", None)
 
 
@@ -77,7 +97,7 @@ class NoImportPath(ImportPath, JsonShapeMember):
 class SpecifiedImportPath(ImportPath, JsonShapeMember):
     value: str
 
-    def apply(self, environment) -> None:
+    def apply(self, environment: MutableMapping[str, str]) -> None:
         environment["PYTHONPATH"] = self.value
 
 
@@ -91,7 +111,9 @@ class EnvironmentRecord:
 
     @classmethod
     def strip[Environment: MutableMapping[str, str]](
-        cls, environment: Environment, *names: str,
+        cls,
+        environment: Environment,
+        *names: str,
     ) -> Environment:
         for declaration in fields(cls):
             if not names or declaration.name in names:
@@ -100,22 +122,37 @@ class EnvironmentRecord:
 
     def encode(self) -> dict[str, str]:
         encoded = FieldCodec.encode(self)
-        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
-                for declaration in fields(self) if "wire_name" in declaration.metadata
-                and FieldCodec.wire_key(declaration) in encoded}
+        return {
+            FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+            for declaration in fields(self)
+            if "wire_name" in declaration.metadata and FieldCodec.wire_key(declaration) in encoded
+        }
 
 
 @dataclass(frozen=True)
 class RestartEnvironment(EnvironmentRecord):
     """Retained external directories and import settings selected by the launch."""
 
-    home: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"})
-    path: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True})
-    pythonpath: ImportPath = field(default_factory=NoImportPath, metadata={"wire_omit_default": True})
-    virtual_env: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True})
-    config: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"})
+    home: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"}
+    )
+    path: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True}
+    )
+    pythonpath: ImportPath = field(
+        default_factory=NoImportPath, metadata={"wire_omit_default": True}
+    )
+    virtual_env: str | None = field(
+        default=None,
+        metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True},
+    )
+    config: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"}
+    )
     native_config: Annotated[Path, PathText] = field(kw_only=True)
-    agent_directory: Annotated[Path, PathText] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True})
+    agent_directory: Annotated[Path, PathText] = field(
+        kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True}
+    )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.native_config.expanduser().resolve())
@@ -135,22 +172,27 @@ class RestartEnvironment(EnvironmentRecord):
     def for_interpreter(self, interpreter: Path) -> RestartEnvironment:
         directory = str(interpreter.parent)
         inherited = os.defpath if self.path is None else self.path
-        path = os.pathsep.join((directory, *(part for part in inherited.split(os.pathsep)
-                                             if part != directory)))
+        path = os.pathsep.join(
+            (directory, *(part for part in inherited.split(os.pathsep) if part != directory))
+        )
         return replace(self, path=path)
 
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
-        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
-                for declaration in fields(self) if declaration.metadata.get("native")}
+        return {
+            FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+            for declaration in fields(self)
+            if declaration.metadata.get("native")
+        }
 
     def auth_revision(self) -> tuple[int, int]:
         info = (self.native_config / "auth.json").stat()
         return info.st_mtime_ns, info.st_size
 
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
-        result = {name: value for name, value in source.items()
-                  if not name.startswith("AGENT_COMMS_")}
+        result = {
+            name: value for name, value in source.items() if not name.startswith("AGENT_COMMS_")
+        }
         encoded = self.encode()
         for declaration in fields(self):
             if declaration.metadata.get("runtime"):
@@ -194,19 +236,19 @@ class LaunchRoot(DeclaredFamily, affix="LaunchRoot"):
             raise ValueError("A launch requires an absolute root")
 
     @abstractmethod
-    def route(self): ...
+    def route(self) -> CommsRoute: ...
 
     @abstractmethod
-    def write_scope(self): ...
+    def write_scope(self) -> AbstractContextManager[None]: ...
 
 
 class ExplicitLaunchRoot(LaunchRoot):
-    def write_scope(self):
-        from contextlib import nullcontext
+    def write_scope(self) -> AbstractContextManager[None]:
         return nullcontext()
 
-    def route(self):
+    def route(self) -> CommsRoute:
         from .active_route import resolve_comms_route
+
         return resolve_comms_route(self.path)
 
 
@@ -214,19 +256,22 @@ class CurrentLaunchRoot(LaunchRoot):
     @classmethod
     def capture(cls) -> CurrentLaunchRoot:
         from .active_route import CommsRoute
+
         return cls(CommsRoute.current().observe_root())
 
     @contextmanager
-    def write_scope(self):
+    def write_scope(self) -> Iterator[None]:
         from .active_route import guard_default_route_write
         from .route_selection import RouteChanged
+
         with guard_default_route_write(self.path):
             if self.route().observe_root() != self.path:
                 raise RouteChanged("default Comms route changed before write")
             yield
 
-    def route(self):
+    def route(self) -> CommsRoute:
         from .active_route import CommsRoute
+
         return CommsRoute.current()
 
 
@@ -252,10 +297,10 @@ class LaunchDebug(DeclaredFamily, affix="LaunchDebug"):
     def append(self, text: str) -> None:
         pass
 
-    def connection_options(self, observer):
+    def connection_options(self, observer: StreamObserver) -> dict[str, list[StreamObserver]]:
         return {}
 
-    async def serve(self, operation):
+    async def serve[Result](self, operation: Callable[[], Awaitable[Result]]) -> Result:
         return await operation()
 
 
@@ -268,21 +313,21 @@ class FileLaunchDebug(LaunchDebug):
     path: Annotated[Path, PathText]
 
     def configure(self) -> None:
-        import logging
-        logging.basicConfig(level=logging.DEBUG, filename=str(self.path) + ".log",
-                            format="%(asctime)s %(name)s %(levelname)s %(message)s")
+        logging.basicConfig(
+            level=logging.DEBUG,
+            filename=str(self.path) + ".log",
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        )
 
     def append(self, text: str) -> None:
         with self.path.open("a") as output:
             output.write(text)
 
-    def connection_options(self, observer):
+    def connection_options(self, observer: StreamObserver) -> dict[str, list[StreamObserver]]:
         return {"observers": [observer]}
 
-    async def serve(self, operation):
-        import asyncio
-        import traceback
-        async def watchdog():
+    async def serve[Result](self, operation: Callable[[], Awaitable[Result]]) -> Result:
+        async def watchdog() -> None:
             while True:
                 await asyncio.sleep(5)
                 rows = [f"=== watchdog: {len(asyncio.all_tasks())} tasks ===\n"]
@@ -291,6 +336,7 @@ class FileLaunchDebug(LaunchDebug):
                     for frame in task.get_stack():
                         rows.extend(traceback.format_stack(frame))
                 self.append("".join(rows))
+
         task = asyncio.create_task(watchdog())
         try:
             return await operation()
@@ -304,7 +350,7 @@ class LaunchArguments:
     argv: tuple[str, str]
     pass_fds: tuple[int, ...]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self.argv)
 
 
@@ -320,7 +366,9 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
     agent_models: tuple[str, ...]
     debug: LaunchDebug = field(default_factory=DisabledLaunchDebug, kw_only=True)
     origin: NativeOriginPolicy = field(default_factory=UnrestrictedNativeOriginPolicy, kw_only=True)
-    annotation: AnnotationPolicy = field(default_factory=lambda: DisabledAnnotationPolicy(), kw_only=True)
+    annotation: AnnotationPolicy = field(
+        default_factory=lambda: DisabledAnnotationPolicy(), kw_only=True
+    )
 
     argument: ClassVar[str] = "--comms-launch"
     _current: ClassVar[LaunchRecord]
@@ -329,7 +377,7 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
         return replace(self, root_selection=ExplicitLaunchRoot(Path(path).resolve()))
 
     @classmethod
-    def from_record(cls, record: LaunchRecord, **specific):
+    def from_record(cls, record: LaunchRecord, **specific: Any) -> Self:
         values = {item.name: getattr(record, item.name) for item in fields(LaunchRecord)}
         values.update(specific)
         return cls(**values)
@@ -339,7 +387,9 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
         try:
             return cls._current
         except AttributeError as error:
-            raise LaunchRecordUnavailable("No launch record was supplied at startup") from error
+            raise LaunchRecordUnavailableError(
+                "No launch record was supplied at startup"
+            ) from error
 
     @classmethod
     def install(cls, record: LaunchRecord) -> None:
@@ -350,39 +400,50 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
         return FieldCodec.decode(LaunchRecord, json.loads(path.read_text()))
 
     @classmethod
-    def argument_path(cls, arguments) -> Path:
+    def argument_path(cls, arguments: Sequence[str]) -> Path:
         try:
             index = arguments.index(cls.argument)
             return Path(arguments[index + 1])
         except (ValueError, IndexError) as error:
-            raise LaunchRecordUnavailable("An explicit --comms-launch FILE is required") from error
+            raise LaunchRecordUnavailableError(
+                "An explicit --comms-launch FILE is required"
+            ) from error
 
     @classmethod
     def startup(cls, argv: list[str] | None = None) -> LaunchRecord:
         arguments = sys.argv if argv is None else argv
         record = cls.read(cls.argument_path(arguments))
         index = arguments.index(cls.argument)
-        del arguments[index:index + 2]
+        del arguments[index : index + 2]
         cls.install(record)
         return record
 
     @classmethod
-    def client_startup(cls, arguments: list[str]) -> LaunchRecord:
+    def client_startup(cls, arguments: list[str], *, root: str = "") -> LaunchRecord:
         """Install a frontend's launch before any route consumer is constructed."""
         if cls.argument in arguments:
             return cls.startup(arguments)
-        record = CommandLineLaunchRecord.entrypoint(CurrentLaunchRoot.capture())
+        selection = (
+            ExplicitLaunchRoot(Path(root).expanduser().resolve())
+            if root
+            else CurrentLaunchRoot.capture()
+        )
+        record = CommandLineLaunchRecord.entrypoint(selection)
         cls.install(record)
         return record
 
     @classmethod
     def for_process(cls, pid: int) -> LaunchRecord:
-        arguments = [os.fsdecode(item) for item in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0") if item]
+        arguments = [
+            os.fsdecode(item)
+            for item in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+            if item
+        ]
         path = Path(f"/proc/{pid}/fd") / cls.argument_path(arguments).name
         return cls.read(path)
 
     @contextmanager
-    def arguments(self):
+    def arguments(self) -> Iterator[LaunchArguments]:
         """One writer; the inherited descriptor keeps the unlinked file until child exit."""
         directory = self.root_selection.path / "runtime"
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -392,16 +453,16 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
             descriptor = stream.fileno()
             yield LaunchArguments((self.argument, f"/dev/fd/{descriptor}"), (descriptor,))
 
-    def route(self):
+    def route(self) -> CommsRoute:
         return self.root_selection.route()
 
     def require_thread(self) -> ThreadLaunch:
-        raise CallingThreadUnavailable("This launch has no owner thread")
+        raise CallingThreadUnavailableError("This launch has no owner thread")
 
     def take_startup_input(self) -> str | None:
-        raise CallingThreadUnavailable("This launch has no startup input")
+        raise CallingThreadUnavailableError("This launch has no startup input")
 
-    def prepare(self, resources) -> Self:
+    def prepare(self, resources: ExitStack) -> Self:
         return self
 
 
@@ -409,10 +470,19 @@ class CommandLineLaunchRecord(LaunchRecord):
     @classmethod
     def entrypoint(cls, root: LaunchRoot) -> CommandLineLaunchRecord:
         directory = Path.home() / ".pi" / "agent"
-        return cls(root, LaunchRuntime(Path(sys.executable)),
-                   RestartEnvironment(home=str(Path.home()), path=os.environ.get("PATH"),
-                                      native_config=directory, agent_directory=directory),
-                   "pi", (), ())
+        return cls(
+            root,
+            LaunchRuntime(Path(sys.executable)),
+            RestartEnvironment(
+                home=str(Path.home()),
+                path=os.environ.get("PATH"),
+                native_config=directory,
+                agent_directory=directory,
+            ),
+            "pi",
+            (),
+            (),
+        )
 
 
 @dataclass(frozen=True)
@@ -433,8 +503,7 @@ class ProjectLaunchRecord(OwnerLaunchRecord):
     project_socket: Annotated[Path, PathText]
     project_request: dict[str, JsonValue]
 
-    def prepare(self, resources) -> ProjectLaunchRecord:
-        from .private_path import PrivateSocketRole
+    def prepare(self, resources: ExitStack) -> ProjectLaunchRecord:
         address = resources.enter_context(PrivateSocketRole.address(self.project_socket))
         return replace(self, project_socket=address)
 
@@ -450,6 +519,3 @@ class AcpLaunchRecord(LaunchRecord):
 
 class RestartQueueLaunchRecord(LaunchRecord):
     pass
-
-
-from .working_memory_policy import AnnotationPolicy, DisabledAnnotationPolicy

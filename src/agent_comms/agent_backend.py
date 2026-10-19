@@ -34,7 +34,7 @@ from .tool_result import DeclaredReply
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
-    from .launch_runtime import LaunchRuntime
+    from .launch_runtime import LaunchRecord, LaunchRuntime
     from .native_tool_call import NativeToolMode
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
@@ -293,7 +293,7 @@ class TurnDelivery:
     """
 
     worktree: str
-    environment: dict[str, str]
+    environment: LaunchRecord
     inbox: TurnInbox
     finish_event: asyncio.Event
     send_boundary: SendBoundary

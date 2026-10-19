@@ -9,32 +9,30 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from agent_comms.coordinator import Coordination
 
+from .comms import Comms
+from .envelope_claim_transitions import (
+    ClaimOwner,
+    WakeClaim,
+)
+from .field_codec import FieldCodec
+from .native_arguments import NativeArguments
+from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
+from .native_tool_transport import ToolTransport
+from .native_tools import NativeToolDeclaration
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
 )
-from .comms import Comms
-from .field_codec import FieldCodec
-from .envelope_claim_transitions import (
-    ClaimOwner,
-    FileClaimPath,
-    WakeClaim,
-)
-from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
-from .native_arguments import NativeArguments
-from .storage_room import NoRoomNeeded, RoomReservation
-from .native_tools import NativeToolDeclaration
-from .native_tool_transport import ToolTransport
 from .selected_tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
 )
+from .storage_room import NoRoomNeeded, RoomReservation
 
 
 @dataclass(frozen=True, kw_only=True)

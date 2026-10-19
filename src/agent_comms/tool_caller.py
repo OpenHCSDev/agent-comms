@@ -5,9 +5,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
-from .cli_result import ToolCatalogResult, ThreadToolCatalogResult
-from .launch_runtime import CallingThreadUnavailable
+from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .field_codec import WireForm
+from .launch_runtime import CallingThreadUnavailableError
 from .presentation import MessageNotification, ThreadRecord
 from .tool_result import ToolResult
 
@@ -65,7 +65,7 @@ class NoThreadCaller(ToolCaller):
         return ToolCatalogResult(tools)
 
     def refuse_thread(self) -> NoReturn:
-        raise CallingThreadUnavailable("This tool requires a thread caller.")
+        raise CallingThreadUnavailableError("This tool requires a thread caller.")
 
     def subject(self, named: str) -> str:
         if not named:
