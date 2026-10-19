@@ -8,8 +8,10 @@ from agent_comms.comms import wire
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.historical_views import DMDisplayHistory
+from agent_comms.message_bus import MessageBus
 from agent_comms.store_files import SharedLock, StoreLock
 from agent_comms.threads import Thread
+from agent_comms.wire_log import WireLog
 
 
 def test_undeclared_store_rank_is_rejected_before_acquisition():
@@ -18,12 +20,13 @@ def test_undeclared_store_rank_is_rejected_before_acquisition():
             pytest.fail("Unranked owner was authorized")
 
 
-def test_concrete_store_cannot_inherit_or_omit_its_rank():
+@pytest.mark.parametrize("owner_type", [MessageBus, WireLog, ChannelCatalog])
+def test_concrete_store_cannot_inherit_or_omit_its_rank(owner_type):
     with pytest.raises(TypeError, match="own lock_rank"):
-        class UnrankedCatalog(ChannelCatalog):
+        class UnrankedOwner(owner_type):
             pass
     with pytest.raises(TypeError, match="own lock_rank"):
-        class MissingRankCatalog(ChannelCatalog):
+        class MissingRankOwner(owner_type):
             lock_rank = None
 
 
