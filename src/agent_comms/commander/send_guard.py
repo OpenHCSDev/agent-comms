@@ -17,11 +17,13 @@ import shlex
 import sys
 from abc import abstractmethod
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import ClassVar
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
+from ..todos import TodoError
 from . import order
 
 Words = tuple[str, ...]
@@ -77,16 +79,17 @@ class GuardedCommand(DeclaredFamily, affix='Command'):
 
 @dataclass(frozen=True)
 class RawSendCommand(GuardedCommand):
-    """`send --from <commander> --to <unit>` outside the commander's order tool, from any session."""
+    """`send --from <commander> --to <unit>` outside the commander's order tool, in any session."""
 
     @classmethod
     def refused(cls, words: Words, session: CommanderSession) -> tuple[str, ...]:
-        flags = dict(zip(words, words[1:]))
-        targets = {value for flag, value in zip(words, words[1:]) if flag == '--to'}
-        raw = ('send' in words and flags.get('--from') == order.ME
-               and 'agent-comms-commander' not in {Path(word).name for word in words})
-        return (("Raw send to a unit. Use agent-comms-commander order send "
-                 "(orders, with deadline) or order say (no work)."),) if raw and targets & order.units() else ()
+        pairs = set(pairwise(words))
+        targets = {value for flag, value in pairs if flag == '--to'}
+        if not ('send' in words and ('--from', order.ME) in pairs and targets & order.units()
+                and 'agent-comms-commander' not in {Path(word).name for word in words}):
+            return ()
+        return ('Raw send to a unit. Use agent-comms-commander order send '
+                '(orders, with deadline) or order say (no work).',)
 
 
 @dataclass(frozen=True)
@@ -113,10 +116,11 @@ class TacticalCommand(GuardedCommand):
 
     @classmethod
     def refusal(cls) -> str:
-        owner = order.COMMS.goals.todos.get(cls.problem).holder
-        if owner is None:
-            return (f'{cls.work.capitalize()} is the work of whoever holds {cls.problem}, and nobody '
-                    f'does. Order {cls.problem} to a unit instead of running it.')
+        try:
+            owner = order.COMMS.goals.todos.get(cls.problem).held().owner
+        except TodoError as error:
+            return (f'{cls.work.capitalize()} belongs to the holder of {cls.problem}, and there is '
+                    f'none ({error}). Order {cls.problem} to a unit instead of running it.')
         return (f"{cls.work.capitalize()} is {owner}'s work, as holder of {cls.problem}, not "
                 f"{order.ME}'s. Send it as an order: agent-comms-commander order send --to "
                 f'{owner}, naming the {cls.work} to run.')
