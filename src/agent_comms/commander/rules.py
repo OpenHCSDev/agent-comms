@@ -26,7 +26,7 @@ from .order import COMMS, CommanderVerb
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
-SKILL = str(CONFIG.skill)
+SKILL = str(CommanderConfig.packaged_skill())
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
 # Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
