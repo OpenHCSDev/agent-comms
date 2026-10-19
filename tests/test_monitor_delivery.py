@@ -20,7 +20,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 
 def notification(line, record_id='notification-record'):
     return CLAUDE_RECORD.validate_python(dict(
-        type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
+        type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z', position=0,
         sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
                      '</event></task-notification>')))
@@ -28,7 +28,7 @@ def notification(line, record_id='notification-record'):
 
 def attachment_notification(line, record_id='notification-record'):
     return CLAUDE_RECORD.validate_python(dict(
-        type='attachment', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
+        type='attachment', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z', position=0,
         attachment=dict(type='queued_command', commandMode='task-notification',
             origin=dict(kind='task-notification', producer='session-task'),
             prompt='<task-notification><event>'+escape(line)+'</event></task-notification>')))
@@ -95,14 +95,14 @@ def test_frame_cap_and_exact_reconstruction(body, sender):
 
 
 def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails():
-    record=CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+    record=CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z', position=0,
         sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
         message=dict(content='Another task producer')))
     assert isinstance(record.message.content[0].text,ForeignTaskNotification)
     assert record.updates(ClaudeSession())==()
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
-        CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+        CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z', position=0,
             sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
             message=dict(content='<task-notification>')))
     assert isinstance(ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event'),ForeignMonitorFrame)
@@ -110,7 +110,7 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
 
 
 def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
-    record=CLAUDE_RECORD.validate_python(dict(type='attachment', uuid='foreign-record',
+    record=CLAUDE_RECORD.validate_python(dict(type='attachment', uuid='foreign-record', position=0,
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
         origin=dict(kind='peer'), prompt='Not a Monitor notification')))
     assert isinstance(record.attachment, ForeignAttachment)
