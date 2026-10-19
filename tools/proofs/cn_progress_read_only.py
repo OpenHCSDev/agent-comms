@@ -8,7 +8,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
 from agent_comms.todos import CorrectCheckTodo, PushedProgress
 from agent_comms.tools import CommsTodoListTool, CommsTodoTool, TodoList
-from tools.proofs.cn_phase3_record import CHECKOUT, ROOT, cli, create_order
+from proofs.cn_phase3_record import CHECKOUT, ROOT, cli, create_order
 
 MARKER = ROOT / 'explicit-check-count'
 MARKER_CONTENT = b'x'
