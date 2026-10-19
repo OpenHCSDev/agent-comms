@@ -72,9 +72,9 @@ def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, co
     seen = []
     parse = ToolDeclaration.parse_arguments.__func__
 
-    def counted(cls, arguments):
+    def counted(cls, arguments, *, call_id):
         seen.append(cls.declared_name)
-        return parse(cls, arguments)
+        return parse(cls, arguments, call_id=call_id)
 
     monkeypatch.setattr(ToolDeclaration, 'parse_arguments', classmethod(counted))
     calls = [('bad', {'path': 'a.py'}), ('good', {'path': 'b.py', 'content': 'body'})]

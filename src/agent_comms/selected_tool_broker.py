@@ -8,6 +8,8 @@ claim append or file mutation, and UNKNOWN is never retried automatically.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import logging
 import os
 import re
@@ -118,7 +120,7 @@ class SelectedWriteArguments:
             raise SelectedToolDenied("Selected tool contents exceed 128 KiB")
 
 
-@dataclass
+@dataclass(frozen=True)
 class SelectedToolRequest(NativeToolCall):
     arguments: SelectedWriteArguments
 
@@ -126,9 +128,7 @@ class SelectedToolRequest(NativeToolCall):
         if not _CALL_ID.fullmatch(self.call_id):
             raise SelectedToolDenied("Selected tool call identity is invalid")
 
-    @property
-    def name(self) -> str:
-        return "selected_claimed_write"
+    declared_name: ClassVar[str] = "selected_claimed_write"
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int

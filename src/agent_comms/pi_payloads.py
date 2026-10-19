@@ -348,7 +348,7 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 
         return [
             ToolStartTranscript(position=position, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
-                                tool=ToolDeclaration.record(self.name, self.arguments))
+                                tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
         ]
 
     id: str

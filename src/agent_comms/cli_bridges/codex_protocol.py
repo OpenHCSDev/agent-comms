@@ -375,7 +375,7 @@ class ToolItem(Item, ABC):
     @property
     def call(self) -> ToolCall:
         return ToolCall(self.id, self.tool_name, self.arguments,
-                        tool=ToolDeclaration.record(self.tool_name, self.arguments))
+                        tool=ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id))
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded, self.id)
