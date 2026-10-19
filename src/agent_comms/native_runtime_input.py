@@ -310,7 +310,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
 @dataclass(frozen=True)
 class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
-
     @property
     def context_anchor(self) -> str | None:
         return self.session_id

@@ -236,7 +236,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
     ).run()
     assert result is not None and result.cursor_status == "proven"
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
-    original = SourceCoverage.since
+    original = SourceCoverage.recorded_witness
 
     def advance_generation(*args, **kwargs):
         coverage = original(*args, **kwargs)
@@ -245,7 +245,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
         args[0].store.participants.advance_generation(lookup, "alpha", expected_generation=1)
         return coverage
 
-    monkeypatch.setattr(SourceCoverage, "since", advance_generation)
+    monkeypatch.setattr(SourceCoverage, "recorded_witness", advance_generation)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(StaleFence, match="participant generation changed"):
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
@@ -256,7 +256,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
             f"SELECT owner_generation,input_id FROM {CurrentNativeCursor.declared_name}"
         ).fetchall()
         assert [tuple(row) for row in retained] == [(1, result.input_id)]
-    monkeypatch.setattr(SourceCoverage, "since", original)
+    monkeypatch.setattr(SourceCoverage, "recorded_witness", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         assert (
             NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
