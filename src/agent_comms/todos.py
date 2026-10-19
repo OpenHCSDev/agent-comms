@@ -575,15 +575,15 @@ class LocalProgressSource(ProgressSource):
             f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())]
         points = [ProgressPoint(base, self.since), *commits][-DistanceReadings.window:]
         return DistanceReadings(tuple(
-            DistanceReading(point.at, self.distance(base, point.sha)) for point in points))
+            reading for point in points for reading in self.recorded_distances(base, point)))
 
-    def distance(self, base: str, sha: str) -> int:
-        """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
-        ``base`` has not touched."""
+    def recorded_distances(self, base: str, point: ProgressPoint) -> Iterator[DistanceReading]:
+        """Only explicit check receipts supply a distance; no receipt means unknown."""
         check = self.todo.order.check
-        touched = self.git("diff", "--name-only", base, sha).split()
-        run = check.at(sha, str(self.checkout))
-        return check.result.distance(run) + self.todo.order.untouched(touched)
+        for run in check.recorded(point.sha, str(self.checkout)):
+            touched = self.git("diff", "--name-only", base, point.sha).split()
+            yield DistanceReading(point.at, check.result.distance(run) +
+                                  self.todo.order.untouched(touched))
 
 
 @dataclass(frozen=True)

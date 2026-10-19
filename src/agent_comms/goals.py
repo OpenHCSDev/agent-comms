@@ -318,13 +318,16 @@ class OrderCheck:
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout)
 
+    def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
+        """Read an explicit run's receipt; absent evidence never starts the check."""
+        return tuple(checked.result for checked in CheckedCommit.stored(repository, sha)
+                     if checked.command == self.command)[:1]
+
     def at(self, revision: str, repository: str) -> ChildResult:
-        """The check on ``revision``: the result a git note on the commit records, or one run in
-        a throwaway detached checkout and recorded there for every later reader."""
+        """The check on ``revision``: a recorded result, or an explicit run in a detached checkout."""
         sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
-        for checked in CheckedCommit.stored(repository, sha):
-            if checked.command == self.command:
-                return checked.result
+        for result in self.recorded(sha, repository):
+            return result
         with tempfile.TemporaryDirectory(prefix="order-check-") as scratch:
             tree = str(Path(scratch) / "tree")
             CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)
