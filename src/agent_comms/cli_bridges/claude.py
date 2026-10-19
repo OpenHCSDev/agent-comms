@@ -6,12 +6,12 @@ import argparse
 import asyncio
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import aclosing
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import AsyncIterator, BinaryIO, Self
+from typing import BinaryIO, Self
 
 from agent_comms.child_process import AttachedChild, StreamingChildStdio
 from agent_comms.cli_protocol import WireModel, raise_child_exit
@@ -214,7 +214,8 @@ class Run(Operation[ClaudeBridge]):
                     break
         reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))
         try:
-            writer.write((AttachInput(owner=child.identity).model_dump_json() + "\n").encode())
+            request = AttachInput.model_validate(dict(owner=child.identity))
+            writer.write((request.model_dump_json() + "\n").encode())
             await writer.drain()
             REPLIES.validate_json(await reader.readline()).require()
             print(
@@ -242,7 +243,7 @@ class Run(Operation[ClaudeBridge]):
                 for event in program.events
             }
         )
-        stdio = StreamingChildStdio(limit=8 * 1024 * 1024, stderr=sys.stderr)
+        stdio = StreamingChildStdio(limit=8 * 1024 * 1024, stderr=sys.stderr.fileno())
         child = await AttachedChild.start(
             ClaudeInputFrame.command(
                 self.claude,

@@ -34,9 +34,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from pydantic import ConfigDict, TypeAdapter
+
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion, boundary_decoder
+from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 from .launch_runtime import LaunchRuntime
 from .sealed import Sealed
 
@@ -1364,13 +1366,14 @@ class StreamingChildStdio(ChildStdio):
     limit: int = 65536
     stderr: int | io.IOBase = subprocess.PIPE
 
-    @staticmethod
-    @boundary_decoder
-    def output(process: asyncio.subprocess.Process) -> asyncio.StreamReader:
+    _output: ClassVar[TypeAdapter[asyncio.StreamReader]] = TypeAdapter(
+        asyncio.StreamReader, config=ConfigDict(arbitrary_types_allowed=True)
+    )
+
+    @classmethod
+    def output(cls, process: asyncio.subprocess.Process) -> asyncio.StreamReader:
         """Decode the external subprocess result against this declared PIPE contract."""
-        if process.stdout is None:
-            raise RuntimeError("A streaming child was launched without its stdout pipe")
-        return process.stdout
+        return cls._output.validate_python(process.stdout)
 
     @property
     def options(self) -> dict:
