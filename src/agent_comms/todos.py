@@ -8,6 +8,7 @@ collaboration edges and thread goals remain separate authorities.
 from __future__ import annotations
 
 import calendar
+import json
 import re
 import subprocess
 import sqlite3
@@ -26,7 +27,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from .recorded_time import EventTime, UnrecordedEventTime
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
@@ -280,6 +281,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """An open pull request nobody has touched for five minutes."""
         return False
 
+    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
+        """The held order this progress leaves waiting on the fleet's install."""
+        return ()
+
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -398,6 +403,53 @@ class MergedProgress(FoundProgress):
     @property
     def line(self) -> str:
         return f"merged as {self.sha}, record done"
+
+    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
+        return (todo,)
+
+
+class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
+    """The fleet's next install: one time for the bus, set by the commander when it plans an
+    upgrade. Merged and delivered orders wait on it; none of them carries it as its own deadline."""
+
+    @staticmethod
+    def path_in(root: Path) -> Path:
+        return root / "install-deadline.json"
+
+    @classmethod
+    def read(cls, root: Path) -> InstallDeadline:
+        path = cls.path_in(root)
+        if not path.exists():
+            return UnplannedInstallDeadline()
+        return PlannedInstallDeadline(RecordedEventTime(**json.loads(path.read_text())))
+
+    @abstractmethod
+    def alarm(self, waiting: list[str], now: float) -> list[str]:
+        """One INSTALL line for every order waiting on install; it strikes nobody."""
+
+
+class UnplannedInstallDeadline(InstallDeadline):
+    def alarm(self, waiting: list[str], now: float) -> list[str]:
+        return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
+
+
+@dataclass(frozen=True)
+class PlannedInstallDeadline(InstallDeadline):
+    at: RecordedEventTime
+
+    def plan(self, root: Path) -> None:
+        path = self.path_in(root)
+        staged = path.with_suffix(".tmp")
+        staged.write_text(json.dumps({"at": self.at.at}))
+        staged.replace(path)
+
+    def alarm(self, waiting: list[str], now: float) -> list[str]:
+        if not waiting:
+            return []
+        due = time.strftime("%H:%M", time.localtime(self.at.at))
+        if now > self.at.at:
+            return [f"INSTALL LATE (due {due}), not the orders; waiting: {', '.join(waiting)}"]
+        return [f"INSTALL due {due}; waiting: {', '.join(waiting)}"]
 
 
 @dataclass(frozen=True)
@@ -733,6 +785,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         """How this order retired its problem without delivery, as the record and board say."""
         return ()
 
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        """The order waiting on the fleet's install to record it working."""
+        return ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
@@ -740,6 +796,10 @@ class PendingProblemOrder(ProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         pass
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        """An undelivered order waits on install once its PR merged."""
+        return read[todo.id].waiting_on_install(todo)
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
@@ -767,6 +827,9 @@ class DeliveredProblemOrder(ProblemOrder):
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return (todo,)
+
 
 @dataclass(frozen=True, kw_only=True)
 class InstalledProblemOrder(DeliveredProblemOrder):
@@ -785,6 +848,9 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
     def require_close(self):
         pass
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
