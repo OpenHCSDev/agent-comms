@@ -287,6 +287,11 @@ class CheckedRead:
         self.require_open_prefix()
         ClaimCommits.prepare(self.connection, transition)
 
+    def claims_for(self, resources: tuple[str, ...]) -> ClaimProjection:
+        """Inspect only requested current claims under this checked prefix."""
+        self.require_open_prefix()
+        return ResourceClaims.claims_for(self.connection, resources)
+
     def claim_projection(self) -> ClaimProjection:
         """Explicit current-claim inspection; no historical bus rows are decoded."""
         self.require_open_prefix()
