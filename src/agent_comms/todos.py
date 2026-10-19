@@ -897,6 +897,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
     line: ClassVar[str]
+
+    def progress_line(self) -> str:
+        """This order's state on the board."""
+        return self.line
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
@@ -1022,10 +1026,10 @@ class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     printed: str = ""  # what the order's Check printed when Core verified the delivery
     pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Delivered, waiting on install"
 
-    @property
-    def line(self) -> str:
-        return f"Delivered, waiting on install · Check printed {self.printed!r}"
+    def progress_line(self) -> str:
+        return f"{self.line} · Check printed {self.printed!r}"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
