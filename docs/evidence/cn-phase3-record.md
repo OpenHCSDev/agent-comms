@@ -12,7 +12,8 @@ Baseline: 5cdac561d498ece25142a8d2e5cf9b06002b6c8a.
 - [x] Confirm real scratch-bus order, verdict, strikes, explicit fire and void through Core tools.
 - [x] Confirm main/unmerged delivery and unlinked refusal through the CLI.
 - [x] Pass the bounded record/codec checks and real missing-checkout board read.
-- [ ] Finish the single-worker pytest run; the unrelated post-commit correction failure is assigned for overlap settlement.
+- [x] Pass 38 owned checks in one bounded worker, including the four missing-checkout cases.
+- [ ] The broader post-commit correction failure remains with #1878; review comment posted as directed.
 - [x] Publish draft PR #1935; do not merge or install.
 - [ ] Automatic firing at the strike limit, with all strike sources in the same write.
 - [ ] Retain original typed transitions and the state each operation replaces.
@@ -121,9 +122,10 @@ Core AST pass parsed 384 modules with zero omissions.
   Reproducer: `test_committed_send_reports_correction_failure_to_tool_and_cli`. Recent #1878
   (toad-theme-2) changes that same method/class. claude-code has the exact overlap and the proposed
   CorrectionResult-owned outcome capture; no Messaging code is edited here.
-- New #1938 (P710) requires every delivered commit to be on origin/main. That conflicts with the
-  explicit delivered-but-not-merged workflow in phase 3. claude-code has this product decision;
-  the two branches must not silently overwrite each other's policy.
+- claude-code resolved the #1938 policy overlap: delivered, merged, installed and working remain
+  separate states; the desktop moves main ancestry onto the merged state. CommitDelivery here is
+  unchanged. The #1878 review comment is
+  https://github.com/OpenHCSDev/agent-comms/pull/1878#issuecomment-6274426175.
 - pi-cn-phase5 owns SendBackVerdict/Goals.send_back publication, OrderPost rows/insertion and the
   canonical order channel. Those changes must remain in the same transaction as retained operations;
   this checkpoint does not edit their classes or TodoStore.rows/apply. Their exact published commit
@@ -141,7 +143,10 @@ The existing ProgressSource now owns remote facts and the absence of local evide
 checkout directory is available. The local subtype owns commits, Git and distance reads.
 Its Git mechanism reuses CheckedCommit.git, rather than another subprocess/error path;
 commits no longer suppress arbitrary Git errors. A broken existing checkout remains an
-actual GitCommandFailed, not a fabricated no-commit or unread-PR result.
+actual GitCommandFailed, not a fabricated no-commit or unread-PR result. Local Git is bound to
+that checkout's own `.git`, so an empty directory cannot silently borrow a parent repository.
+The real development worktree's gitfile was also exercised. DistanceReadings owns its two-point
+window, which now bounds the Git log request instead of reading all commits and discarding them.
 
 ProgressPoint owns the log-row format and decode used by both commit and distance reads.
 CommittedProgress and PushedProgress consume those named records; the raw sha/time tuples
@@ -161,3 +166,9 @@ The real TodoStore.board_disagreements read also passed. The temporary reference
 in finally while preserving other PR text. No fixture Comms, events or replacement Git runner
 were used. Driver/logs remain in the owned proof root and `.proof-board-read.log`; the complete
 CLI response is the fifteenth result in the retained receipt.
+
+Final owned check: `test_delivery_merge.py`, `test_order_progress.py` and the four standing-rule
+missing-checkout cases: **38 passed**, single worker, 32.57 seconds, `OWNED_PYTEST_EXIT=0`.
+The shared interpreter warns that pytest-timeout is absent; the outer timeout remains 300 seconds.
+A broader intermediate run gave 126 passed and two failures: the remaining #1878 correction
+failure, and the empty-directory/parent-repository defect that this final owned run confirms fixed.

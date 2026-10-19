@@ -400,6 +400,7 @@ class DistanceReadings:
     """The order's last two distance readings, oldest first: its base at the order, then its
     newest commit. Fewer than two read, or a last reading at done, project nothing."""
     readings: tuple[DistanceReading, ...] = ()
+    window: ClassVar[int] = 2
 
     @property
     def trend(self) -> DistanceTrend:
@@ -562,16 +563,17 @@ class LocalProgressSource(ProgressSource):
         return (ProgressPoint.listed(line) for line in log.splitlines())
 
     def git(self, *args: str) -> str:
-        return CheckedCommit.git(str(self.checkout), *args)
+        return CheckedCommit.git(
+            str(self.checkout), f"--git-dir={(self.checkout / '.git').absolute()}", *args)
 
     def readings(self) -> DistanceReadings:
         """The order's base, then each branch commit since the order; the last two are read."""
         base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
         after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
         commits = [ProgressPoint.listed(line) for line in reversed(self.git(
-            "log", "--first-parent", f"--since={after}", f"--format={ProgressPoint.format}",
-            "HEAD", "--not", base).splitlines())]
-        points = [ProgressPoint(base, self.since), *commits][-2:]
+            "log", f"--max-count={DistanceReadings.window}", "--first-parent", f"--since={after}",
+            f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())]
+        points = [ProgressPoint(base, self.since), *commits][-DistanceReadings.window:]
         return DistanceReadings(tuple(
             DistanceReading(point.at, self.distance(base, point.sha)) for point in points))
 
