@@ -225,7 +225,12 @@ class SourceCoverage:
 
     def prefix(self, *, through_seq: int | None = None,
                source_reads: NativeEvidenceScope) -> ProvenSourceCoverage:
-        """Rescan the whole activation prefix; no persisted high-water is trusted."""
+        """Prove the first cursor from the activation floor."""
+        return self.since(covered_seq=0, through_seq=through_seq, source_reads=source_reads)
+
+    def since(self, *, covered_seq: int, through_seq: int | None = None,
+              source_reads: NativeEvidenceScope) -> ProvenSourceCoverage:
+        """Verify the sealed bus and prove only sources beyond its durable cursor."""
         with source_reads.borrow():
             with self.bus.log.checked_read(
                 blocking=False, contention=self.contention
@@ -234,9 +239,12 @@ class SourceCoverage:
                 if marker.root_id != self.wire_root_id:
                     raise IdentityConflict("current source claim_scope root changed")
                 floor = marker.claimed_after_seq
+                witness = source.witness
+                if covered_seq and not floor <= covered_seq <= witness.latest_source_seq:
+                    raise IdentityConflict("current source coverage regressed or exceeds the bus")
             if through_seq is not None and 0 < through_seq <= floor:
                 raise IdentityConflict("current source proof precedes this activation")
-            covered, inputs, no_wake, witness = floor, [], [], None
+            covered, inputs, no_wake = max(floor, covered_seq), [], []
             for _ in range(self.page_budget):
                 page = self.read(after_seq=covered, partial=True, source_reads=source_reads)
                 if page.covered_seq < covered:

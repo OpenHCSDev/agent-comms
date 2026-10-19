@@ -8,6 +8,7 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from functools import partial
 
@@ -127,7 +128,12 @@ class NativeSourceCursor:
         contention: StoreLockContention | None,
     ) -> CurrentNativeCursor | None:
         sources = self._coverage(identity.lookup, contention)
-        coverage = sources.prefix(source_reads=source_reads)
+        with self.store.session.read():
+            prior = identity.cursor(self.store.session._connection)
+            if prior is not None:
+                identity.require_recorded_input(self.store.session._connection, prior)
+        coverage = (sources.prefix(source_reads=source_reads) if prior is None else
+                    sources.since(covered_seq=prior.covered_seq, source_reads=source_reads))
         proof = coverage.last_proof(
             coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
         )
@@ -143,8 +149,10 @@ class NativeSourceCursor:
                 self.bus, registry, "current cursor owner or private root changed"
             )
             identity.require_participant(self.store, "current cursor recipient generation changed")
-            prior = identity.cursor(db)
-            injected = coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0
+            if identity.cursor(db) != prior:
+                raise StaleFence("current cursor SQL row changed during source verification")
+            injected = (coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else
+                        prior.injected_seq if prior is not None else 0)
             if prior is None and coverage.covered_seq == 0:
                 return None  # A blocked first source is not a zero-valued cursor.
             if prior is not None and (
@@ -159,7 +167,7 @@ class NativeSourceCursor:
             ):
                 cursor = self._publish(db, identity, prior, coverage, proof)
             if cursor is not None:
-                identity.require_coverage(db, cursor, coverage)
+                identity.require_coverage(db, cursor, coverage, prior=prior)
             return cursor
 
     @staticmethod
@@ -170,7 +178,7 @@ class NativeSourceCursor:
         coverage: ProvenSourceCoverage,
         proof: HistoricalNativeInput | None,
     ) -> CurrentNativeCursor:
-        cursor = CurrentNativeCursor(
+        cursor = replace(prior, covered_seq=coverage.covered_seq) if proof is None and prior is not None else CurrentNativeCursor(
             wire_root_id=owner.wire_root_id,
             recipient_lookup=owner.lookup,
             owner_thread=owner.thread.name,
@@ -265,8 +273,8 @@ class NativeSourceCursor:
         self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,
         source_reads: NativeEvidenceScope,
     ) -> ProvenSourceCoverage:
-        coverage = sources.prefix(through_seq=cursor.covered_seq, source_reads=source_reads)
+        coverage = sources.since(covered_seq=cursor.covered_seq, source_reads=source_reads)
         with self.store.session.read():
             assert_native_runtime_schema(self.store.session._connection)
-            owner.require_coverage(self.store.session._connection, cursor, coverage)
+            owner.require_coverage(self.store.session._connection, cursor, coverage, prior=cursor)
         return coverage

@@ -81,7 +81,7 @@ class CursorOwner(RegistryOwner):
 
     def require_coverage(
         self, db: sqlite3.Connection, cursor: CurrentNativeCursor,
-        coverage: ProvenSourceCoverage,
+        coverage: ProvenSourceCoverage, *, prior: CurrentNativeCursor | None = None,
     ) -> None:
         """Validate the exact SQL row against this operation's original proof.
 
@@ -91,18 +91,22 @@ class CursorOwner(RegistryOwner):
         """
         if cursor.owner_identity != self.participant_identity:
             raise IdentityConflict("current native cursor owner identity differs")
-        if cursor.covered_seq > coverage.covered_seq or (
-            cursor.injected_seq > 0 and cursor.injected_seq not in coverage.injected_source_seqs
-        ):
+        if cursor.covered_seq > coverage.covered_seq:
             raise IdentityConflict("current native cursor exceeds canonical source proof")
         if not self.matches_prefix(db, coverage.evidence(through_seq=cursor.covered_seq)):
             raise IdentityConflict("current cursor borrows historical owner source proof")
-        proof = coverage.last_proof(cursor.injected_seq)
-        expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
-        if cursor.reference != expected:
-            raise IdentityConflict("current native cursor proof differs from journal")
-        if proof is not None and proof.owner_identity != self.participant_identity:
-            raise IdentityConflict("current native cursor proof belongs to another owner")
+        if prior is not None and cursor.injected_seq == prior.injected_seq:
+            if (prior.owner_identity != self.participant_identity
+                or cursor.covered_seq < prior.covered_seq
+                or cursor.reference != prior.reference):
+                raise IdentityConflict("current native cursor regresses its durable proof")
+        else:
+            proof = coverage.last_proof(cursor.injected_seq)
+            expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
+            if cursor.reference != expected:
+                raise IdentityConflict("current native cursor proof differs from journal")
+            if proof is not None and proof.owner_identity != self.participant_identity:
+                raise IdentityConflict("current native cursor proof belongs to another owner")
         self.require_recorded_input(db, cursor)
 
     def require_recorded_reference(self, db: sqlite3.Connection, reference: NativeInputReference) -> None:
