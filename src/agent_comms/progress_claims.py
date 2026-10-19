@@ -11,7 +11,7 @@ import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 
@@ -30,27 +30,31 @@ class ProgressClaim(DeclaredFamily, affix="Claim"):
         for claim in claims:
             claim.verify(comms, worktree)
 
+    @classmethod
+    def require_claimed(cls, claims: tuple[ProgressClaim, ...], report: str) -> None:
+        """A done or delivered report stands only on an attached claim, never on its prose."""
+        if not claims:
+            raise ValueError(f"A {report} report needs a claim with its artifact: merged (a commit "
+                             "on origin), installed (a recorded check) or working (a screenshot).")
+
 
 @dataclass(frozen=True)
 class MergedClaim(ProgressClaim):
     commit: str
 
+    timeout: ClassVar[float] = 30.0
+
     def verify(self, comms: Comms, worktree: Path) -> None:
-        listed = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(worktree),
-                "branch",
-                "--remotes",
-                "--contains",
-                self.commit,
-                "--list",
-                "origin/*",
-            ],
-            capture_output=True,
-            text=True,
-        )
+        command = ["git", "-C", str(worktree), "branch", "--remotes", "--contains", self.commit]
+        try:
+            listed = subprocess.run(
+                [*command, "--list", "origin/*"], capture_output=True, text=True, timeout=self.timeout
+            )
+        except subprocess.TimeoutExpired as expired:
+            raise ValueError(
+                f"A merged claim needs a commit sha that resolves on origin; looking up "
+                f"{self.commit!r} took longer than {expired.timeout:g}s."
+            ) from expired
         if not self.commit.strip() or listed.returncode or not listed.stdout.strip():
             raise ValueError(
                 f"A merged claim needs a commit sha that resolves on origin; "

@@ -32,6 +32,7 @@ from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
+from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
@@ -516,7 +517,7 @@ def strike(unit: str, why: str, caught: str = f'{ME} at review', *,
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
-def done(pid, sha, delivered=None):
+def done(pid, sha, delivered=None, screenshot=''):
     """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
@@ -537,7 +538,8 @@ def done(pid, sha, delivered=None):
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
-    call(CommsOrderDoneTool(problem=pid, delivery=delivery))
+    claim = WorkingClaim(screenshot) if operation else MergedClaim(delivered)
+    call(CommsOrderDoneTool(problem=pid, delivery=delivery, claims=(claim,)))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
@@ -928,9 +930,11 @@ class DoneVerb(OrderVerb, RuledVerb):
     sha: str = option("--sha", help="the checked commit (the check runs on it) or op")
     delivered: str | None = option("--delivered", default=None, metavar="SHA",
                                    help="the unit's pushed ancestor of --sha; lateness reads its time")
+    screenshot: str = option("--screenshot", default="", metavar="PATH",
+                             help="for an op: the screenshot the working claim stands on")
 
     def run(self) -> None:
-        done(self.pid, self.sha, self.delivered)
+        done(self.pid, self.sha, self.delivered, self.screenshot)
 
 
 @dataclass(frozen=True, kw_only=True)

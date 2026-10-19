@@ -663,10 +663,12 @@ class CommsGoalTool(ThreadToolRequest):
         default=None,
     )
     claims: tuple[ProgressClaim, ...] = tool_field(
-        "Merged, installed or working claims, each with the artifact Core verifies", default=())
+        "Merged, installed or working claims, each with the artifact Core verifies; "
+        "a completed report needs at least one")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
+        self.status.require_claims(self.claims)
         ProgressClaim.require_all(self.claims, comms, Path(comms.registry.require(name).worktree))
         command = replace(
             self.status(progress=self.progress),
@@ -887,9 +889,10 @@ class CommsOrderDoneTool(ThreadToolRequest):
     problem: str = tool_field("Problem ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
     claims: tuple[ProgressClaim, ...] = tool_field(
-        "Merged, installed or working claims, each with the artifact Core verifies", default=())
+        "Merged, installed or working claims, each with the artifact Core verifies; at least one")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
+        ProgressClaim.require_claimed(self.claims, "delivered")
         ProgressClaim.require_all(
             self.claims, comms, Path(comms.registry.require(caller.name).worktree))
         todo = comms.goals.todos.get(self.problem)
