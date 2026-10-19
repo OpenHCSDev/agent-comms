@@ -795,11 +795,11 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
 
     The reason goes on the public record and to the unit that held it."""
     todo = COMMS.goals.todos.get(pid)
-    unit = todo.held().owner
     refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
     call(CommsTodoTool(id=pid, operation=WithdrawTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, why,
         superseded_by)))
+    unit = todo.held().owner
     withdrawal, = COMMS.goals.todos.get(pid).order.withdrawals(todo)
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
               VerdictAudience.of(unit, todo.goal))
