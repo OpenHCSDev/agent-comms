@@ -6,12 +6,13 @@ from agent_comms.view_unread import TranscriptReadState
 
 
 def native_reader(path):
-    return TranscriptReadState(path, wire(path.parent).registry)
+    return TranscriptReadState(path)
 
 
 def completed_counts(state, viewer):
     for _ in range(50):
-        result = state.counts(viewer, document=state.reads.read(), visibility=DEFAULT_ROSTER)
+        result = state.counts(viewer, registry=wire(state.path.parent).registry.snapshot(),
+                              document=state.reads.read(), visibility=DEFAULT_ROSTER)
         if state.preparation is state._idle:
             return result
         futures = state.watch(frozenset(), lambda _: None)

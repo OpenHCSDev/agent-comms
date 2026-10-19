@@ -358,7 +358,7 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
             snapshot, self.agents, GoalWaits.at(self.root),
-            DEFAULT_ROSTER, names=names,
+            RosterVisibility(archived=True), names=names,
         )
         return ThreadPresentations(
             snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
