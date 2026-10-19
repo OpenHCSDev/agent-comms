@@ -68,11 +68,6 @@ class JsonDocument(ABC, Generic[T]):
         )
 
     def _write_unlocked(self, text: str) -> None:
-        from .active_route import CommsRoute
-        CommsRoute.current().require_current_writer(self.path)
-        self._replace_unlocked(text)
-
-    def _replace_unlocked(self, text: str) -> None:
         """Stage before publication; retain the old inode until directory sync.
 
         A reported staging/publication/fsync failure restores the old bytes and
