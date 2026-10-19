@@ -886,8 +886,7 @@ class CommsOrderDoneTool(ThreadToolRequest):
         assignment = todo.assignment
         goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
             expect=GoalPrecondition(goal_id=assignment.generation), problem=self.problem,
-            operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery),
-            progress="The problem's own delivery check passed."))
+            operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery)))
         return GoalRead(goal)
 
 
