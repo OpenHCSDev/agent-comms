@@ -1,7 +1,14 @@
 """A new history declaration crosses real current and retained-source boundaries."""
 
+import json
+
+import pytest
+
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
+from agent_comms.history_result import (ChannelHistoryPageResult, DmHistoryPageResult,
+                                        EverythingHistoryPageResult, HistoryPageResult)
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.read_basis import ChannelDisplayScope, NoDisplaySelection
 from agent_comms.threads import Thread
@@ -15,6 +22,9 @@ class ReviewHistory(HistoryView):
         return MessagePageRequest(
             self.capture(presentation.registry.snapshot()), bounds
         ).read(presentation.bus.log)
+
+    def page_result(self, page):
+        return ChannelHistoryPageResult.for_target("#review", page.messages, page.has_older)
 
 
 def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path, *, thread_registration):
@@ -92,3 +102,15 @@ def test_joined_declarations_decode_one_sql_snapshot_and_reject_foreign_columns(
         ):
             with pytest.raises((TypeError, ValueError)):
                 Label.joined(connection.execute(query), Ready)
+
+
+@pytest.mark.parametrize("result", [HistoryPageResult, DmHistoryPageResult, EverythingHistoryPageResult,
+                                    ChannelHistoryPageResult])
+def test_each_history_page_result_decodes_the_page_it_encoded(result, tmp_path, *, thread_registration):
+    comms = Comms(tmp_path)
+    comms.registry.declare(thread_registration.new_thread("writer", frozenset({"review"}), str(comms.root)))
+    for number in range(2):
+        comms.messaging.send("writer", "#review", f"review {number}")
+    page = result.for_target("#review", comms.views.history_page(CommandTarget.named("#review")).messages, True)
+    decoded = result.decode(json.loads(json.dumps(page.encoded())))
+    assert decoded == page and [m.body for m in decoded.messages] == ["review 0", "review 1"]
