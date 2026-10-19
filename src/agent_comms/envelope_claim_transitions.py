@@ -9,19 +9,19 @@ fsync before any reader observes it. Parsed rows alone are NOT durable proof.
 
 from __future__ import annotations
 
-import os
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
 from .message_reference import MessageReference
-from .field_codec import FieldCodec, Id128Text, Sha256Text
+from .field_codec import (BoundedText, EnvelopeSequence, FieldCodec, Id128Text, ProjectionSequence,
+                          ResourcePathText, Sha256Text)
 from .thread_identity import GenerationCounter, TurnId
 
 
@@ -101,41 +101,18 @@ class WritableFileClaim(FileClaimPath):
         self.validate_regular(info)
 
 
-def _text(value: object, label: str) -> str:
-    if type(value) is not str or not value or len(value) > 4096:
-        raise ClaimTransitionError(f"{label} must be a bounded nonempty string.")
-    return value
-
-
-def _generation(value: object) -> str:
-    try:
-        return Id128Text.decode(value)
-    except ValueError as error:
-        raise ClaimTransitionError("Generation must be a lowercase 128-bit hex value.") from error
-
-
-def _resource(value: object) -> str:
-    path = _text(value, "Resource")
-    if not Path(path).is_absolute() or os.path.normpath(path) != path:
-        raise ClaimTransitionError("Resource must already be a canonical absolute path.")
-    return path
-
-
 @dataclass(frozen=True, slots=True)
 class AssignmentBinding:
     """The selected claim's revision and source, used for permission checks and its SQL row."""
 
-    assignment_id: str
+    assignment_id: Annotated[str, BoundedText]
     revision: int
-    recipient_lookup: str
+    recipient_lookup: Annotated[str, BoundedText]
     source: MessageReference
-    execution_id: str
+    execution_id: Annotated[str, BoundedText]
 
     def __post_init__(self) -> None:
-        _text(self.assignment_id, "Assignment ID")
-        _text(self.recipient_lookup, "Recipient lookup")
-        _text(self.source.message_id, "Source message ID")
-        _text(self.execution_id, "Execution ID")
+        FieldCodec.require_fields(self)
         if ":" in self.execution_id:
             raise ClaimTransitionError("Execution ID cannot contain a colon.")
         if FieldCodec.decode(int, self.source.seq) <= 0:
@@ -150,12 +127,12 @@ class WakeClaim:
 
     wire_root_id: str
     source_seq: int
-    source_message_id: str
-    wake_assignment_id: str = field(metadata={"wire_name": "wake_claim_id"})
+    source_message_id: Annotated[str, BoundedText]
+    wake_assignment_id: Annotated[str, BoundedText] = field(metadata={"wire_name": "wake_claim_id"})
     wake_revision: int
     recipient_lookup: str
-    execution_id: str
-    operation_id: str
+    execution_id: Annotated[str, BoundedText]
+    operation_id: Annotated[str, Id128Text]
     owner_claimed_generation: int = field(metadata={"wire_name": 'owner_admission_generation'})
     turn_id: str
     participant_generation: int
@@ -179,7 +156,6 @@ class WakeClaim:
     def __post_init__(self) -> None:
         Id128Text.decode(self.wire_root_id)
         Id128Text.decode(self.recipient_lookup)
-        _generation(self.operation_id)
         try:
             FieldCodec.decode(Literal[1], self.version)
             AssignmentBinding(
@@ -207,12 +183,11 @@ class WakeClaim:
 
 @dataclass(frozen=True, slots=True)
 class ClaimRelease:
-    resource: str
-    generation: str
+    resource: Annotated[str, ResourcePathText]
+    generation: Annotated[str, Id128Text]
 
     def __post_init__(self) -> None:
-        _resource(self.resource)
-        _generation(self.generation)
+        FieldCodec.require_fields(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,11 +196,12 @@ class ClaimTransition:
 
     max_resources: ClassVar[int] = 32
 
-    owner: str
-    incarnation: str
-    seq: int
-    message_id: str
-    claims: tuple[str, ...] = field(default=(), metadata={"wire_required": True})
+    owner: Annotated[str, BoundedText]
+    incarnation: Annotated[str, BoundedText]
+    seq: Annotated[int, EnvelopeSequence]
+    message_id: Annotated[str, BoundedText]
+    claims: tuple[Annotated[str, ResourcePathText], ...] = field(
+        default=(), metadata={"wire_required": True})
     releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
     generation: str | None = field(default=None, metadata={"wire_required": True})
     claim_scope: WakeClaim | None = field(
@@ -233,29 +209,17 @@ class ClaimTransition:
     )
 
     def __post_init__(self) -> None:
-        _text(self.owner, "Owner")
-        _text(self.incarnation, "Incarnation")
-        _text(self.message_id, "Message ID")
-        if type(self.seq) is not int or self.seq <= 0:
-            raise ClaimTransitionError("Sequence must be a positive exact integer.")
-        if type(self.claims) is not tuple or type(self.releases) is not tuple:
-            raise ClaimTransitionError("Claims and releases must be tuples.")
+        FieldCodec.require_fields(self)
         if not self.claims and not self.releases:
             raise ClaimTransitionError("Empty claim transitions are not meaningful.")
-        if any(type(release) is not ClaimRelease for release in self.releases):
-            raise ClaimTransitionError("Releases must carry exact generation records.")
-        resources = [*self.claims, *(release.resource for release in self.releases)]
-        for resource in resources:
-            _resource(resource)
-        if len(set(resources)) != len(resources):
+        if len(set(self.resources)) != len(self.resources):
             raise ClaimTransitionError("Duplicate or overlapping resources are not supported.")
         if self.claims:
-            _generation(self.generation)
+            Id128Text.decode(self.generation)
         elif self.generation is not None:
             raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
         if self.claim_scope is not None and (
-            type(self.claim_scope) is not WakeClaim or not self.claims or self.releases
-        ):
+                not self.claims or self.releases):
             raise ClaimTransitionError("Wake claim_scope requires a claim-only transition.")
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
@@ -303,40 +267,30 @@ class ClaimTransition:
 
 @dataclass(frozen=True, slots=True)
 class ClaimOwner:
-    resource: str
-    owner: str
-    incarnation: str
-    generation: str
-    seq: int
-    message_id: str
+    resource: Annotated[str, ResourcePathText]
+    owner: Annotated[str, BoundedText]
+    incarnation: Annotated[str, BoundedText]
+    generation: Annotated[str, Id128Text]
+    seq: Annotated[int, EnvelopeSequence]
+    message_id: Annotated[str, BoundedText]
     claim_scope: WakeClaim | None = field(default=None, metadata={"wire_name": 'admission'})
 
     def __post_init__(self) -> None:
-        _resource(self.resource)
-        _text(self.owner, "Owner")
-        _text(self.incarnation, "Incarnation")
-        _generation(self.generation)
-        _text(self.message_id, "Message ID")
-        if type(self.seq) is not int or self.seq <= 0:
-            raise ClaimTransitionError("Claim sequence must be a positive exact integer.")
-        if self.claim_scope is not None and type(self.claim_scope) is not WakeClaim:
-            raise ClaimTransitionError("Claim owner requires a typed wake claim_scope.")
+        FieldCodec.require_fields(self)
 
 
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner]):
     """Immutable sorted claim table plus the last processed envelope sequence."""
 
-    last_seq: int = 0
-    _claims: Mapping[str, ClaimOwner] = field(default_factory=dict)
+    last_seq: Annotated[int, ProjectionSequence] = 0
+    # Built from a dict, which the codec checks; held afterwards as a read-only view.
+    _claims: dict[str, ClaimOwner] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if type(self.last_seq) is not int or self.last_seq < 0:
-            raise ClaimTransitionError("Projection sequence must be a nonnegative exact integer.")
-        if not isinstance(self._claims, Mapping) or any(
-            type(value) is not ClaimOwner or value.resource != key or value.seq > self.last_seq
-            for key, value in self._claims.items()
-        ):
+        FieldCodec.require_fields(self)
+        if any(value.resource != key or value.seq > self.last_seq
+               for key, value in self._claims.items()):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))
 
