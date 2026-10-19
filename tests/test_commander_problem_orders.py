@@ -434,7 +434,7 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
-    script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
+    script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed', 'lead at review')
     script.send('worker', '23:59', body, 'request')
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
     script.send('worker', '23:59', body, 'request')
@@ -449,7 +449,7 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
     (repo / 'count.txt').write_text('0\n')
     problem(script, order_body(repo))
     create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
-    script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed')
+    script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed', 'lead at review')
     assert [script.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
     script.hunt(f'{__file__}:1', 'P2', 'P1 rereads the counter per event; this read of the P2 path found it clean', None)
     assert [len(comms.goals.todos.get(pid).hunts) for pid in ('P1', 'P2')] == [0, 1]
@@ -464,8 +464,9 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
-    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={'repos': (
-        script.Repo(checkout=toad, github='OpenHCSDev/toad'),)}))
+    CommanderConfig.installed().model_copy(update={'repos': (
+        script.Repo(checkout=toad, github='OpenHCSDev/toad'),)}).write(Path.home())
+    CommanderConfig.installed.cache_clear()
     (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
     edit = 'Delete src/agent_comms/acp_ingress.py.'
     with pytest.raises(SystemExit, match=rf"\['{toad}'\] import"):
@@ -502,7 +503,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
+    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected', 'lead at review')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
@@ -603,7 +604,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     create(commander, 'P1')
     posted = []
     monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
-    script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit')
+    script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit', 'lead at review')
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and script.struck(current, 'worker') == 0
@@ -1088,7 +1089,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
-    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+    assert not (CommanderConfig.installed().state / 'verdicts.jsonl').exists()
 
 
 def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_script, monkeypatch):
@@ -1117,7 +1118,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     assert judge.Edit.unjudged(comms, 'lead') == []
     audience = SendBackVerdict.audience.of('worker', saved.goal)
     assert [to for to, _ in posted] == [audience, audience]
-    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+    assert not (CommanderConfig.installed().state / 'verdicts.jsonl').exists()
 
 
 @pytest.mark.parametrize('kind', [AcceptedVerdict, SendBackVerdict])

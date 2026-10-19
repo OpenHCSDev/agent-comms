@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -386,8 +387,9 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)}))
+    CommanderConfig.installed().model_copy(update={"repos": (
+        Repo(checkout=checkout, github="fleet/growth"),)}).write(Path.home())
+    CommanderConfig.installed.cache_clear()
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "
