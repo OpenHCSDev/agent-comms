@@ -30,7 +30,7 @@ from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_arguments import NativeArguments
 from .storage_room import NoRoomNeeded, RoomReservation
 from .native_tools import NativeToolDeclaration
-from .native_tool_transport import ToolTransport, ToolCallIdentity
+from .native_tool_transport import ToolTransport
 from .selected_tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
@@ -141,7 +141,6 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
         super().__init__(directory, token)
         self.owner = owner
-        self.reservations: dict[ToolCallIdentity, RoomReservation] = {}
         self.completions = set()
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
@@ -165,23 +164,20 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         reservation = await self.owner.allow(self.turn, round_number, call)
         async with reservation.checking():
             call.progress.observation.require_executing()
-            self.reservations[ToolCallIdentity(round_number, call.call_id)] = reservation
+            call.progress.room = reservation
 
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
-        identity, _ = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
-        # A refused native call can end before the owner grants any room.
-        reservation = self.reservations.pop(identity, NoRoomNeeded())
-        task = asyncio.create_task(asyncio.to_thread(reservation.finish))
+        _, call = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
+        task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 
     async def close(self):
         await super().close()
         if self.completions:
             await asyncio.gather(*tuple(self.completions))
-        for reservation in self.reservations.values():
-            await asyncio.to_thread(reservation.abandon)
-        self.reservations.clear()
+        for call in self.calls.values():
+            await asyncio.to_thread(call.progress.room.abandon)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}
