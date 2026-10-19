@@ -199,6 +199,13 @@ class Step:
                      and [target.id for target in statement.targets
                           if isinstance(target, ast.Name)] == ["column"])
 
+    @staticmethod
+    def holds_carry(source: bytes) -> bool:
+        """Whether a module declares a Carry subclass, read without importing it."""
+        return any(isinstance(node, ast.ClassDef)
+                   and any(parent_name(base) in carry_parents() for base in node.bases)
+                   for node in ast.parse(source).body)
+
     @classmethod
     def declared(cls, name: str, source: bytes, revision: str) -> Step:
         """The step a module declares, read without importing it. A ``carry_*`` module
