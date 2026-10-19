@@ -17,10 +17,13 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
+from functools import cache
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
+from . import skills
 from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
@@ -804,8 +807,8 @@ class FairText(OrderWords):
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Name the restated fact in a Slop: line (identity, membership, "
-               "implementation or state) and the declaration that derives it.")
+    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID in a Slop: line, "
+               "name the restated fact and the declaration that derives it.")
 
 
 class HierarchyText(OrderWords):
@@ -837,24 +840,25 @@ class DefectText(BluntWords, OrderWords):
         return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
-class SlopKind(DeclaredFamily, affix="SlopKind"):
-    sentence: ClassVar[str]
+class PatternCatalog:
+    """Valid citations come only from headings in the packaged, pinned skill."""
 
+    ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
 
-class IdentitySlopKind(SlopKind):
-    sentence = "which meaning this is"
+    @classmethod
+    @cache
+    def ids(cls) -> frozenset[str]:
+        root = files(skills) / 'refactor-audit' / 'references' / 'patterns'
+        ids = frozenset(found[1] for source in root.iterdir() if source.name.endswith('.md')
+                        for found in cls.ENTRY.finditer(source.read_text(encoding='utf-8')))
+        if not ids:
+            raise ValueError('The pinned refactor-audit pattern catalog is empty.')
+        return ids
 
-
-class MembershipSlopKind(SlopKind):
-    sentence = "which contract or set it belongs to"
-
-
-class ImplementationSlopKind(SlopKind):
-    sentence = "which implementation it gets"
-
-
-class StateSlopKind(SlopKind):
-    sentence = "a second writable copy of one value"
+    @classmethod
+    def require(cls, cited: str) -> None:
+        if cited not in cls.ids():
+            raise ValueError(f'Unknown refactor-audit pattern ID {cited!r}.')
 
 
 class Derivation(DeclaredFamily, affix="Derivation"):
@@ -895,15 +899,18 @@ class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
 
 @dataclass(frozen=True)
 class Slop:
-    kind: type[SlopKind]
+    pattern: str
     fact: str
     at: FileLine
     derive: type[Derivation]
     by: FileLine
+    USAGE: ClassVar[str] = ('An order naming slop needs Slop: PATTERN-ID; fact WORDS; '
+                            'at PATH:LINE; derive MECHANISM on PATH:LINE')
     LINE: ClassVar[re.Pattern] = re.compile(
-        r'^Slop: (?P<kind>\w+); fact (?P<fact>.+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)\s*$', re.M)
+        r'Slop: (?P<pattern>\S+); fact (?P<fact>.+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)\s*')
 
     def __post_init__(self):
+        PatternCatalog.require(self.pattern)
         if len(self.fact.split()) < 4:
             raise ValueError('The duplicated fact needs 4+ words.')
         self.at.require_exists()
@@ -911,13 +918,18 @@ class Slop:
 
     @classmethod
     def from_order(cls, body):
-        found = [FieldCodec.decode(cls, m.groupdict()) for m in cls.LINE.finditer(body)]
+        found = []
+        for line in re.findall(r'(?m)^Slop:.*$', body):
+            cited = cls.LINE.fullmatch(line)
+            if cited is None:
+                raise ValueError(cls.USAGE)
+            found.append(FieldCodec.decode(cls, cited.groupdict()))
         if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
-            raise ValueError('An order naming slop needs Slop: KIND; fact WORDS; at PATH:LINE; derive MECHANISM on PATH:LINE')
+            raise ValueError(cls.USAGE)
         return found
 
     def render(self):
-        return (f'{self.at.to_wire()} restates a {self.kind.declared_name} fact ({self.kind.sentence}): {self.fact}. '
+        return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
                 f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
 
 
