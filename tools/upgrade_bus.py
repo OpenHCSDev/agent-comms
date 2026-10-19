@@ -232,7 +232,7 @@ def carry_all(
 def copy_bus(root: Path, copy: Path) -> None:
     """Copy under the bus's wire lock so no writer tears the copy; sockets and maintenance files are skipped."""
     # The maintenance files describe the live root; a copy is a new root and starts open.
-    held = set(MaintenanceBarrier(root / "registry.json").witness_paths())
+    held = set(MaintenanceBarrier(root / "registry.json").witness_paths)
 
     def skipped(directory: str, names: list[str]) -> set[str]:
         return {name for name in names
