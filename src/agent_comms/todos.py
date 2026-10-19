@@ -719,9 +719,9 @@ class Evidence(DeclaredFamily, affix="Evidence"):
     form: ClassVar[str]
 
     @classmethod
+    @abstractmethod
     def cited(cls, text: str) -> Self:
         """The member its command-line option ``form`` names."""
-        return cls(text)
 
     @classmethod
     def verified(cls, evidence: tuple[Evidence, ...], goals: Goals, current: Todo) -> None:
@@ -747,6 +747,10 @@ class CommitEvidence(Evidence):
     sha: str
     form = "--commit SHA"
 
+    @classmethod
+    def cited(cls, text: str) -> Self:
+        return cls(text)
+
     def verify(self, goals: Goals, current: Todo) -> None:
         if self.git(current, "cat-file", "-e", f"{self.sha}^{{commit}}"):
             raise ValueError(f"{self.sha} is no commit of {current.order.check.directory}")
@@ -765,7 +769,8 @@ class DiffEvidence(Evidence):
 
     def verify(self, goals: Goals, current: Todo) -> None:
         if self.git(current, "diff", "--quiet", self.a, self.b) != 1:
-            raise ValueError(f"{self.a}..{self.b} changes nothing in {current.order.check.directory}")
+            raise ValueError(
+                f"{self.a}..{self.b} changes nothing in {current.order.check.directory}")
 
 
 @dataclass(frozen=True)
@@ -785,7 +790,8 @@ class TurnEvidence(Evidence):
         turns = TurnDigestRead(goals.root, goals.registry.require(self.thread),
                                TurnsSince(current.order.at.recorded_at("An order"))).read().turns
         if self.turn_id not in {turn.turn_id for turn in turns}:
-            raise ValueError(f"{self.thread} recorded no turn {self.turn_id} since order {current.order.id}")
+            raise ValueError(
+                f"{self.thread} recorded no turn {self.turn_id} since order {current.order.id}")
 
 
 @dataclass(frozen=True)
@@ -808,6 +814,10 @@ class ProcessEvidence(Evidence):
 class RuntimeEvidence(Evidence):
     path: str
     form = "--runtime PATH"
+
+    @classmethod
+    def cited(cls, text: str) -> Self:
+        return cls(text)
 
     def verify(self, goals: Goals, current: Todo) -> None:
         if not Path(self.path).is_absolute() or not Path(self.path).exists():
@@ -1478,7 +1488,7 @@ class StrikeTodo(TodoOperation):
     # Strikes recorded before evidence was required carry none; prepare refuses a new one without.
     evidence: tuple[Evidence, ...] = field(default=(), metadata={"wire_omit_default": True})
 
-    def prepare(self, goals, current):
+    def prepare(self, goals: Goals, current: Todo) -> Self:
         Evidence.verified(self.evidence, goals, current)
         return self
 
@@ -1568,7 +1578,7 @@ class SendBackVerdict(OrderVerdict):
     def line(self) -> str:
         return f"Sent back: {self.reason.text}"
 
-    def prepare(self, goals, current):
+    def prepare(self, goals: Goals, current: Todo) -> Self:
         Evidence.verified(self.evidence, goals, current)
         return self
 

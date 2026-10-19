@@ -65,7 +65,8 @@ def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> No
         violation = str(denied)
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
     for todo in order.held_by(thread)[:1]:
-        (turn,) = TurnDigestRead(order.COMMS.root, registry.require(thread), LastTurns(1)).read().turns
+        (turn,) = TurnDigestRead(order.COMMS.root, registry.require(thread),
+                                 LastTurns(1)).read().turns
         order.strike(thread, todo.id,
                      f'{todo.id} broke the storage rule at a tool call: {violation}; '
                      'storage waste is banned outright', 'tool_watch at tool call',
