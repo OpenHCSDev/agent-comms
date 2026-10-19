@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, SingleFieldValue
 from .locked_store import LockedStore, RootFile
 from .pi_counts import PiCount, UnreportedCount
 from .thread_owned_state import ThreadOwnedState
@@ -69,18 +69,10 @@ class AgentRuntimeInfo(RuntimeInfo):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoDocument(WireValue):
+class RuntimeInfoDocument(SingleFieldValue):
     """Typed observations with the existing flat root-name wire form."""
 
     observations: dict[str, AgentRuntimeInfo] = field(default_factory=dict)
-    external_json_shape = True
-
-    @classmethod
-    def from_wire(cls, data: object) -> RuntimeInfoDocument:
-        return cls(FieldCodec.decode_document(dict[str, AgentRuntimeInfo], data))
-
-    def to_wire(self) -> object:
-        return FieldCodec.encode_document(self.observations, dict[str, AgentRuntimeInfo])
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,9 +82,7 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[RuntimeInfoDocume
     filename: ClassVar[str] = "runtime_info.json"
     json_indent = 2
 
-    @property
-    def record_type(self) -> type[RuntimeInfoDocument]:
-        return RuntimeInfoDocument
+    record_type = RuntimeInfoDocument
 
     def empty(self) -> RuntimeInfoDocument:
         return RuntimeInfoDocument()

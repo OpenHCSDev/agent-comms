@@ -304,6 +304,30 @@ class WireValue(WireForm):
         return cls.from_wire(value)
 
 
+class SingleFieldValue(WireValue):
+    """One declared field is the whole wire value, not an object envelope."""
+
+    external_json_shape = True
+
+    @classmethod
+    def wire_field(cls):
+        entry, = FieldCodec._record_plan(cls).fields
+        return entry
+
+    @classmethod
+    def from_wire(cls, data):
+        entry = cls.wire_field()
+        return cls(**{entry.name: FieldCodec.decode_document(entry.annotation, data)})
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(cls.wire_field().annotation)
+
+    def to_wire(self):
+        entry = self.wire_field()
+        return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
+
+
 class SubclassUnion(DeclaredFamily, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
 
@@ -664,10 +688,6 @@ class FieldCodec(Sealed):
             return None, None
         if annotation is object:
             return Any, _JsonValueRepresentation
-        if isinstance(annotation, type):
-            # A class has no Annotated metadata. Its live capability still
-            # determines representation, including inherited/virtual members.
-            return annotation, annotation if issubclass(annotation, WireValue) else None
         if get_origin(annotation) is Annotated:
             target, *metadata = get_args(annotation)
         else:
@@ -685,6 +705,8 @@ class FieldCodec(Sealed):
                 return Any, representations[0] if representations else _JsonValueRepresentation
         if representations:
             return target, representations[0]
+        if target is Any:
+            return target, _AnyDecoder
         if isinstance(target, type) and issubclass(target, WireValue):
             return target, target
         return target, None
@@ -1265,13 +1287,14 @@ class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[Any]):
     def accepts_value(self, value: object) -> bool:
         return True
 
-    def encode(self, value: object) -> object:
+    @classmethod
+    def encode(cls, value: object) -> object:
         if isinstance(value, type) and issubclass(value, DeclaredFamily):
             return value.declared_name
         if type(value) is dict:
             if all(type(key) is str for key in value):
-                return {key: self.encode(item) for key, item in value.items()}
-            return [[self.encode(key), self.encode(item)] for key, item in value.items()]
+                return {key: cls.encode(item) for key, item in value.items()}
+            return [[cls.encode(key), cls.encode(item)] for key, item in value.items()]
         return compile_decoder(type(value)).encode(value)
 
 

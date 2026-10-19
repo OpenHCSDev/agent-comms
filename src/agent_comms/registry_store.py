@@ -133,9 +133,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
     def __post_init__(self) -> None:
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
 
-    @property
-    def record_type(self) -> type[RegistryDocument]:
-        return RegistryDocument
+    record_type = RegistryDocument
 
     def empty(self) -> RegistryDocument:
         return RegistryDocument()
