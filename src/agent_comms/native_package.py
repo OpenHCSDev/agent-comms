@@ -385,6 +385,9 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
             temporary.unlink(missing_ok=True)
 
 
+AMBIENT_NODE = frozenset({"NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"})
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedNativePackage:
     """The immutable artifact acquired for one process; never a readiness proof."""
@@ -416,10 +419,8 @@ class VerifiedNativePackage:
     @staticmethod
     def node_environment(environment: dict[str, str]) -> dict[str, str]:
         """Node reads no ambient options, module paths or compile cache."""
-        env = {name: value for name, value in environment.items()
-               if name not in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE")}
-        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        return env
+        return {**{name: value for name, value in environment.items() if name not in AMBIENT_NODE},
+                "NODE_DISABLE_COMPILE_CACHE": "1"}
 
     @classmethod
     def from_environment(cls, cache: Path) -> VerifiedNativePackage:
