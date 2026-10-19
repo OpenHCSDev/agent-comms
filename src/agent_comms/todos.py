@@ -273,6 +273,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        """Linked merges this progress incorrectly reports as no commit."""
+        return ()
+
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -309,6 +313,9 @@ class Moving(Stalling):
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        return tuple(MergedProgress.found(source))
+
     @property
     def line(self) -> str:
         return "no commit since the order"
@@ -729,6 +736,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         self.first_call_deadline.require_deadline()
 
     pending: ClassVar[bool]
+    line: ClassVar[str]
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
@@ -810,6 +818,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
+    line: ClassVar[str] = "Open"
 
     def require_transfer(self, todo: Todo) -> None:
         pass
@@ -827,6 +836,7 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Delivered, waiting on install"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
@@ -852,6 +862,7 @@ class DeliveredProblemOrder(ProblemOrder):
 class InstalledProblemOrder(DeliveredProblemOrder):
     works: str
     artifact: str
+    line: ClassVar[str] = "Installed"
 
     def __post_init__(self):
         super().__post_init__()
@@ -878,6 +889,7 @@ class WithdrawnProblemOrder(ProblemOrder):
     why: str
     superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
     pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Withdrawn"
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
@@ -1591,13 +1603,17 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
-    def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
-        """Each pending problem's progress and latest verdict, as its Goal shows them."""
+    def board_disagreements(
+        self, commander: ThreadIncarnation, storage: StorageRule,
+    ) -> Iterator[tuple[Todo, MergedProgress]]:
+        """Open orders whose progress misses a linked merge, sharing one PR read cache."""
+        todos = self.held_for_commander(commander)
         pulls = PullRequests(todos)
-        return "\n".join(
-            " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
-                        *(verdict.line for verdict in todo.verdicts[-1:])))
-            for todo in todos if todo.pending)
+        for todo in todos:
+            progress = OrderProgress.read(todo, storage, pulls)
+            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            for merged in progress.missing_merges(source):
+                yield todo, merged
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
@@ -1625,6 +1641,14 @@ class TodoStore(TypedStore):
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+
+    def units(self, commander: ThreadIncarnation) -> frozenset[str]:
+        """The threads this commander gives orders to: everyone who holds or held one of its
+        problems."""
+        return frozenset(
+            assignment.owner for todo in self.history_for_commander(commander)
+            for assignment in (todo.assignment, *(release.previous for release in todo.released))
+            if assignment)
 
     def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         states = TodoState.open_names()

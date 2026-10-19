@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, ClassVar, TextIO
 
 from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
@@ -39,7 +39,7 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay | None: ...
+    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> SelectedDisplay: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document, source) -> ReadCursor: ...
@@ -59,8 +59,8 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> None:
-        return None
+    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> NoDisplaySelection:
+        return NoDisplaySelection()
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return ReadCursor()
@@ -72,7 +72,7 @@ class AnonymousViewer(DisplayViewer):
         raise ValueError("Viewer metrics require a named viewer")
 
     def read_page(self, scope, bounds, basis, source) -> MessagePage:
-        return replace(bounds.conversation(scope).read_opened(source), display_scope=scope)
+        return bounds.conversation(scope).read_opened(source)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,11 +82,11 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay:
+    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalSelection:
         historical.validate()
-        return HistoricalDisplay(historical, presentation.bus.reads.capture_indexed(
+        return HistoricalSelection(HistoricalDisplay(historical, presentation.bus.reads.capture_indexed(
             self.resolve(snapshot).name, page.messages, snapshot, source, index,
-            conversation_snapshot=historical.provenance, document=document))
+            conversation_snapshot=historical.provenance, document=document)))
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return document.cursor(self.name, snapshot, source)
@@ -101,60 +101,26 @@ class NamedViewer(DisplayViewer):
         result = bounds.conversation(scope).displayed(
             basis.reads, basis.document, self.name, basis.registry, basis.registry, source,
         )
-        return replace(result.page, display_scope=replace(scope, displayed=result.displayed))
-
-
-class DisplaySelection(ABC):
-    """The conversation selected by an original page or store observation."""
-
-    __slots__ = ()
-
-    @property
-    @abstractmethod
-    def has_evidence(self) -> bool: ...
-
-    def select(self, page, sequences):
-        selected = frozenset(sequences)
-        return self.select_evidence(replace(page,
-            messages=tuple(message for message in page.messages if message.seq in selected),
-            source_pages=tuple(source.select(selected) for source in page.source_pages)), selected)
-
-    @abstractmethod
-    def select_evidence(self, page, selected): ...
+        return replace(result.page, selection=ChannelSelection(
+            replace(scope, displayed=result.displayed)))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SelectedDisplay(DisplaySelection):
+class DisplayIdentity:
+    """The scope observation compared between pages, independent of paint evidence."""
+
     viewer: ThreadIncarnation
     history_revision: FileRevision | None
 
-    @property
-    def has_evidence(self) -> bool:
-        return True
-
 
 @dataclass(frozen=True, slots=True)
-class NoDisplaySelection(DisplaySelection):
-    def select_evidence(self, page, selected):
-        return page
-
-    @property
-    def has_evidence(self) -> bool:
-        return False
-
-
-@dataclass(frozen=True, slots=True)
-class ChannelSelection(SelectedDisplay):
+class ChannelDisplayIdentity(DisplayIdentity):
     bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
 
-    def select_evidence(self, page, selected):
-        return replace(page, display_scope=replace(self.scope,
-            displayed=self.scope.require_displayed().select(selected)))
-
 
 @dataclass(frozen=True, slots=True)
-class DMSelection(SelectedDisplay):
+class DMDisplayIdentity(DisplayIdentity):
     root_identity: tuple[int, int]
     bus_identity: RecordedBusIdentity
     worktree: str
@@ -162,28 +128,107 @@ class DMSelection(SelectedDisplay):
     peer: ThreadIncarnation
     scope: DMDisplayScope
 
-    def select_evidence(self, page, selected):
-        basis = page.display_basis
-        return replace(page, display_basis=replace(basis, displayed=basis.displayed.select(selected)))
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SelectedDisplay(ABC):
+    """The builder's declared read proof; never recovered from a page's fields."""
+
+    history_revision: FileRevision | None = None
+    has_evidence: ClassVar[bool] = True
+
+    @property
+    @abstractmethod
+    def identity(self) -> DisplayIdentity | NoDisplaySelection: ...
+
+    @abstractmethod
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None: ...
+
+    def select(self, page, sequences):
+        selected = frozenset(sequences)
+        return replace(page,
+            messages=tuple(message for message in page.messages if message.seq in selected),
+            source_pages=tuple(source.select(selected) for source in page.source_pages),
+            selection=self.select_evidence(selected))
+
+    @abstractmethod
+    def select_evidence(self, selected) -> SelectedDisplay: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NoDisplaySelection(SelectedDisplay):
+    has_evidence: ClassVar[bool] = False
+
+    @property
+    def identity(self):
+        return self
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        raise DMPaintedBoundChanged()
+
+    def select_evidence(self, selected):
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelSelection(SelectedDisplay):
+    scope: ChannelDisplayScope
+
+    @property
+    def identity(self):
+        return self.scope.identity(self.history_revision)
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        from .presentation import ReadThrough
+
+        views.presentation.mark_channel_read(
+            self.scope.channel, viewer=views.messaging.user_identity(worktree).name,
+            mark=ReadThrough(page.newest_seq, self.scope),
+        )
+
+    def select_evidence(self, selected):
+        return replace(self, scope=replace(self.scope,
+            displayed=self.scope.require_displayed().select(selected)))
+
+
+@dataclass(frozen=True, slots=True)
+class DMSelection(SelectedDisplay):
+    basis: DMDisplayBasis
+
+    @property
+    def identity(self):
+        return self.basis.identity(self.history_revision)
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        self.basis.acknowledge(
+            views.bus, views.registry, views.root, self.basis.requested_peer,
+            worktree=worktree, through=page.newest_seq,
+        )
+
+    def select_evidence(self, selected):
+        return replace(self, basis=replace(self.basis,
+            displayed=self.basis.displayed.select(selected)))
 
 
 @dataclass(frozen=True, slots=True)
 class HistoricalSelection(SelectedDisplay):
-    """The original viewer and attached-source revision select an archive page."""
+    displayed: HistoricalDisplay
 
-    def select_evidence(self, page, selected):
-        return replace(page, historical_display=page.historical_display.select(selected))
+    @property
+    def identity(self):
+        return DisplayIdentity(viewer=self.displayed.displayed.viewer_identity,
+                               history_revision=self.history_revision)
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        self.displayed.acknowledge(views.bus.history, views.registry)
+
+    def select_evidence(self, selected):
+        return replace(self, displayed=self.displayed.select(selected))
 
 
 @dataclass(frozen=True, slots=True)
 class HistoricalDisplay:
     source: HistorySource
     displayed: DisplayBasis
-
-    def selection(self, history_revision: FileRevision | None) -> HistoricalSelection:
-        return HistoricalSelection(
-            viewer=self.displayed.viewer_identity, history_revision=history_revision,
-        )
 
     def select(self, sequences) -> HistoricalDisplay:
         return HistoricalDisplay(self.source, self.displayed.select(sequences))
@@ -248,6 +293,7 @@ if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
     from .channels import TagChannel
     from .historical_views import HistoryArchive, HistorySource
+    from .history_views import HistoryViews
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .channels import Channels
@@ -607,10 +653,10 @@ class DMDisplayBasis:
             )
             with registry.store.locked(mode=SharedLock()):
                 basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path))
-            return replace(page, display_basis=basis)
+            return replace(page, selection=DMSelection(basis))
 
-    def selection(self, history_revision: FileRevision | None) -> SelectedDisplay:
-        return DMSelection(
+    def identity(self, history_revision: FileRevision | None) -> DMDisplayIdentity:
+        return DMDisplayIdentity(
             root_identity=self.root_identity, bus_identity=self.bus_identity,
             worktree=self.worktree, requested_peer=self.requested_peer,
             viewer=self.viewer_identity, peer=self.peer_identity,
@@ -841,11 +887,10 @@ class ChannelDisplayScope(MessageDisplayScope):
                   if (row := index.latest_target(target, source.boundary)) is not None),
             source.bus_identity)
 
-    def selection(self, history_revision: FileRevision | None) -> DisplaySelection:
-        if self.displayed is None:
-            return NoDisplaySelection()
-        return ChannelSelection(
-            viewer=self.displayed.viewer_identity, bus_identity=self.displayed.bus_identity,
+    def identity(self, history_revision: FileRevision | None) -> ChannelDisplayIdentity:
+        displayed = self.require_displayed()
+        return ChannelDisplayIdentity(
+            viewer=displayed.viewer_identity, bus_identity=displayed.bus_identity,
             scope=self, history_revision=history_revision,
         )
 

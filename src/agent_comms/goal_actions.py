@@ -99,6 +99,11 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
     @classmethod
+    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+        """What the unit's own goal tool expects before this action: its active goal."""
+        return GoalPrecondition(goal_id=goal_id, expected_state=ActiveGoal())
+
+    @classmethod
     async def submit_control(
         cls,
         observe: Callable[[], Awaitable[GoalSnapshot]],
@@ -168,7 +173,7 @@ class TransitionGoalAction(GoalAction[Goal]):
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_order(goal, ctx.goals, ctx.thread.incarnation)
         state = self.next_state(goal, ctx)
-        goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
+        self.require_transition(goal, state, ctx)
         self.before_transition(goal, ctx)
         changed = replace(
             goal,
@@ -179,6 +184,10 @@ class TransitionGoalAction(GoalAction[Goal]):
         )
         self.before_goal_publish(changed, ctx)
         return changed
+
+    def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+        """The goal's own state machine allows this transition."""
+        goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
 
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
         pass
@@ -565,8 +574,13 @@ def required_block_reason(reason: str | None) -> str:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryGoalAction(GoalAction[Goal], OwnerInvocable):
-    """Explicit owner retry; existing store grants still fence every attempt."""
+class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+    """Retry a blocked goal: the unit itself, its commander or the owner; authorize_retry fences
+    every attempt against the unresolved one."""
+
+    @classmethod
+    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+        return GoalPrecondition(goal_id=goal_id)
 
     @classmethod
     async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
@@ -578,12 +592,13 @@ class RetryGoalAction(GoalAction[Goal], OwnerInvocable):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
-    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        if self.expect.expected_owner is None:
-            raise ValueError("Retry requires the executing owner's private goal authority.")
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        return ActiveGoal()
+
+    def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+        """A blocked goal leaves its state machine only through the attempt ledger's retry."""
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
-        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)

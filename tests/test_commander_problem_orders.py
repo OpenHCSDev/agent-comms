@@ -1107,7 +1107,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
         todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
-    assert progress.startswith('P2: ') and progress.endswith(f'Sent back: {why}') and 'P1' not in progress
+    assert progress.splitlines() == ['P1: Delivered, waiting on install', f'P2: Open · Sent back: {why}']
     assert (worker.goal.text, worker.goal.progress) == (ProblemGoalOrder.text, '')
     with pytest.raises(ValueError, match='block the problem.s Todo, or standby with wait_for'):
         comms.goals.update_goal('worker', BlockedGoalAction(block_reason='Waiting on lead.'), actor=ModelInvocable)
@@ -1185,3 +1185,22 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     callers.write_text('def read(v):\n    return int(v is not None)\n')
     CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
     assert not comms.goals.todos.get('P520').pending
+
+
+def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, commander_script, monkeypatch, capsys):
+    """worker holds one of lead's problems, so it is reached through orders; the owner, claude-ai
+    and a peer commander hold none and are messaged directly."""
+    import io
+    from agent_comms.commander import send_guard
+    create(commander, 'P1')
+
+    def guarded(*targets):
+        command = 'agent-comms send --from lead ' + ' '.join(f'--to {target}' for target in targets) + ' --body hi'
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
+        send_guard.main([])
+        return capsys.readouterr().out
+
+    assert '"deny"' in guarded('worker')
+    assert '"deny"' in guarded('user', 'worker')
+    for target in ('user', 'claude-ai', 'desktop-claude-code'):
+        assert guarded(target) == ''

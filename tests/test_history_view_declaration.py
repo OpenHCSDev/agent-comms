@@ -3,7 +3,7 @@
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import MessagePageRequest, PageBounds
-from agent_comms.read_basis import ChannelDisplayScope
+from agent_comms.read_basis import ChannelDisplayScope, NoDisplaySelection
 from agent_comms.threads import Thread
 
 
@@ -44,7 +44,7 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
             break
         cursor = page.newest_cursor
     assert [m.view_key for m in forward] == [m.view_key for m in backwards[1:]]
-    assert page.historical_display is None
+    assert isinstance(page.selection, NoDisplaySelection)
     assert prior.bus.log.path.read_bytes() == original
     assert current.bus.log.latest_sequence() == 6
     assert not (prior.root / "read_ledger.json").exists()

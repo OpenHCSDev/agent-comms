@@ -2,7 +2,6 @@
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
-from agent_comms.presentation import ReadThrough
 from dataclasses import replace
 
 import pytest
@@ -20,10 +19,7 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send("worker", "#team", "painted").message
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
-    comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path),
-        mark=ReadThrough(page.newest_seq, page.display_scope),
-    )
+    comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert message.seq in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     original = comms.registry.require(viewer)
     comms.registry.unregister(viewer)
@@ -31,15 +27,9 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     comms.registry.register(replace(original, created_at=original.created_at + 1))
     assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     with pytest.raises(ValueError):
-        comms.views.mark_channel_view_read(
-            "#team", worktree=str(tmp_path),
-            mark=ReadThrough(page.newest_seq, page.display_scope),
-        )
+        comms.views.mark_page_read(page, worktree=str(tmp_path))
     refreshed = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
-    comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path),
-        mark=ReadThrough(refreshed.newest_seq, refreshed.display_scope),
-    )
+    comms.views.mark_page_read(refreshed, worktree=str(tmp_path))
     assert message.seq in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
 
 
@@ -67,10 +57,7 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
         assert completed_counts(rebuilt, viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.reads.read() == document
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
-        comms.views.mark_channel_view_read(
-            "#team", worktree=str(tmp_path),
-            mark=ReadThrough(page.newest_seq, page.display_scope),
-        )
+        comms.views.mark_page_read(page, worktree=str(tmp_path))
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         assert comms.bus.reads.read().transcripts == document.transcripts

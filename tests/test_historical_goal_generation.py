@@ -50,9 +50,6 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
         assert comms.registry.require(thread.name).goal == goal
         assert store.require_generation(goal.id).number == 1
 
-    for actor in (ModelInvocable, RuntimeInvocable):
-        with pytest.raises(ValueError, match='cannot take goal action'):
-            comms.goals.update_goal(thread.name, RetryGoalAction(expect=expect), actor=actor)
     with pytest.raises(ValueError, match='owner changed'):
         stale = replace(expect, expected_owner=replace(
             thread.process_identity, start_time=thread.process_identity.start_time + 1))

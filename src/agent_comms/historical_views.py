@@ -28,8 +28,8 @@ from .messages import Message
 from .private_path import FileIdentity, FileRevision, PresentPath
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
-    AnonymousViewer, ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection, DisplayViewer,
-    DMDisplayScope, DMSelection, MessageDisplayScope, NamedViewer,
+    AnonymousViewer, ChannelDisplayScope, ChannelDisplayIdentity, DisplayBasis, DisplayIdentity, DisplayViewer,
+    DMDisplayScope, DMDisplayIdentity, MessageDisplayScope, NamedViewer, NoDisplaySelection,
 )
 from .registration import Registration
 from .read_ledger import ReadLedger
@@ -37,6 +37,7 @@ from .recorded_bus import RecordedBusIdentity
 from .registry_provenance import RegistryProvenance
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
+from .revision_views import BusSourceView
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
@@ -74,11 +75,11 @@ class ConversationRevision:
     """Core's captured selection and original store observation for one view."""
 
     stores: WireRevision
-    selection: DisplaySelection
+    selection: DisplayIdentity
 
     def display_changed_since(self, earlier: ConversationRevision) -> bool:
         return (self.selection != earlier.selection
-                or self.stores.bus_source_changed_since(earlier.stores))
+                or self.stores.changed_since(BusSourceView(), earlier.stores))
 
 
 class ConversationHistoryView:
@@ -87,7 +88,7 @@ class ConversationHistoryView:
     @classmethod
     def same_display(cls, page: MessagePage, earlier: MessagePage) -> bool:
         """Read-scope safety uses the original pages, never a client identity copy."""
-        return page.selection == earlier.selection
+        return page.selection.identity == earlier.selection.identity
 
     @classmethod
     def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
@@ -105,7 +106,7 @@ class ConversationHistoryView:
     @abstractmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
-                   history_revision: FileRevision | None) -> DisplaySelection: ...
+                   history_revision: FileRevision | None) -> DisplayIdentity: ...
 
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
         return ConversationMessagePageRequest(scope, bounds)
@@ -127,10 +128,10 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
-                   history_revision: FileRevision | None) -> ChannelSelection:
+                   history_revision: FileRevision | None) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
             channel = catalog.require_channel(target, activity)
-        return ChannelSelection(
+        return ChannelDisplayIdentity(
             viewer=snapshot.require(viewer).incarnation,
             bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
             scope=channel.display_scope(snapshot), history_revision=history_revision,
@@ -159,13 +160,13 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
-                   history_revision: FileRevision | None) -> DMSelection:
+                   history_revision: FileRevision | None) -> DMDisplayIdentity:
         try:
             peer = snapshot.participant(target).incarnation
         except UnregisteredThreadError:
             peer = UnrecordedThreadIncarnation(snapshot.canonical_name(target))
         root = views.root.stat()
-        return DMSelection(
+        return DMDisplayIdentity(
             root_identity=(root.st_dev, root.st_ino),
             bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
             worktree=worktree, requested_peer=target,
@@ -182,7 +183,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
         bus = presentation.bus
         if self.second not in presentation.registry and bus.history.threads(self.second):
-            return MessagePage((), False, False)
+            return MessagePage((), False, False, NoDisplaySelection())
         return DMDisplayBasis.fetch_page(
             bus,
             presentation.registry,
@@ -495,7 +496,7 @@ class HistoryArchive(RootFile):
                     projected = replace(raw, messages=tuple(
                         HistoricalMessage.project(message, source, index, snapshot)
                         for message in raw.messages))
-                    return replace(projected, historical_display=view.viewer.display_evidence(
+                    return replace(projected, selection=view.viewer.historical_selection(
                         projected, presentation, source, opened, page_index, document, current_snapshot))
                 page = opened.query_page_index(read)
             if page.messages:
@@ -504,7 +505,7 @@ class HistoryArchive(RootFile):
                     has_older=page.has_older or index > 0,
                     has_newer=page.has_newer or index < len(sources) - 1,
                 )
-        return MessagePage((), False, False)
+        return MessagePage((), False, False, NoDisplaySelection())
 
     def integrated_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
@@ -513,7 +514,7 @@ class HistoryArchive(RootFile):
         pages = deque((page,))
         while (following := bounds.after(page)) is not None:
             part = self._source_page(view, presentation, following)
-            if part.history_revision != page.history_revision:
+            if part.selection.history_revision != page.selection.history_revision:
                 raise HistoricalSourceChanged("Historical sources changed; reload history")
             if not bounds.fits(len(page.messages) + len(part.messages),
                                  page.bytes_read + part.bytes_read):
@@ -535,7 +536,7 @@ class HistoryArchive(RootFile):
                 return replace(
                     page,
                     has_older=page.has_older or bool(self.sources()),
-                    history_revision=history_revision,
+                    selection=replace(page.selection, history_revision=history_revision),
                 )
         history = self.page(
             view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
@@ -544,15 +545,14 @@ class HistoryArchive(RootFile):
             latest = view.live_page(presentation, PageBounds(limit=1))
             return replace(
                 history,
-                history_revision=history_revision,
+                selection=replace(history.selection, history_revision=history_revision),
                 has_newer=history.has_newer or bool(latest.messages),
             )
         if historical and isinstance(bounds.traversal, NewerTraversal):
-            return replace(
-                view.live_page(presentation, replace(bounds, traversal=NewerTraversal())),
-                history_revision=history_revision,
-            )
-        return replace(history if historical else page, history_revision=history_revision)
+            live = view.live_page(presentation, replace(bounds, traversal=NewerTraversal()))
+            return replace(live, selection=replace(live.selection, history_revision=history_revision))
+        selected = history if historical else page
+        return replace(selected, selection=replace(selected.selection, history_revision=history_revision))
 
     def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
         result = []
