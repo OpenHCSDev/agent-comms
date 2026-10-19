@@ -159,8 +159,8 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     goal = Goal("Recorded scope", "original-goal", published_seq=0, revision=4, state=state)
     comms.registry.register(replace(owner, goal=goal))
     present = capture(comms)
-    assert present.goal == PresentGoalCheckpoint(goal.checkpoint)
-    assert comms.registry.require("beta").goal.require_checkpoint(goal.checkpoint) == goal
+    assert present.goal == PresentGoalCheckpoint(goal.revision_key)
+    assert comms.registry.require("beta").goal.require_checkpoint(goal.revision_key) == goal
     assert FieldCodec.encode(GoalRevision(goal.id, goal.revision)) == {
         "id": "original-goal", "revision": 4,
     }
@@ -195,7 +195,7 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     comms.registry.register(replace(comms.registry.require("beta"), goal=NoGoal()))
     assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     with pytest.raises(ValueError, match="goal changed"):
-        comms.registry.require("beta").goal.require_checkpoint(goal.checkpoint)
+        comms.registry.require("beta").goal.require_checkpoint(goal.revision_key)
 
 
 async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tmp_path):
