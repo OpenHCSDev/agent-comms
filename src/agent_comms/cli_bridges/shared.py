@@ -363,21 +363,6 @@ class CatalogTargetField(ChoiceTargetField):
 
 
 
-class DeclaredOptions:
-    """The CLI adapter consumes FieldCodec's existing field plans."""
-    help: ClassVar[str]
-
-    @classmethod
-    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-        cls.add_arguments(subparsers.add_parser(field_codec.FieldCodec.encode(cls), help=cls.help))
-
-    @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        field_codec.FieldCodec.add_arguments(cls, parser)
-
-    @classmethod
-    def from_arguments(cls, args: argparse.Namespace) -> Self:
-        return field_codec.FieldCodec.decode_arguments(cls, args)
 
 class SendArguments(argparse.Namespace):
     command: str
