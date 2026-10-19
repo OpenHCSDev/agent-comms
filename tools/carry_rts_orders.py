@@ -144,8 +144,11 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     todo.require_commander(actor)
                     todo.state.require_open(todo)
                 else:
-                    print(f"{pid} order {row.msg}: Owner repository {order.owner.file}",
-                          file=sys.stderr, flush=True)
+                    print(
+                        f"{pid} order {row.msg}: Owner repository {order.owner.file}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     repo = Repo.of(Path(order.owner.file).parent)
                     text = problems[pid].text
                     todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
