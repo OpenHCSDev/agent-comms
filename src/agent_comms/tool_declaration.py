@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import Mapping
 from typing import ClassVar, Self
 
@@ -14,6 +14,22 @@ from .native_tool_call import SelectedToolDenied
 
 def one_line(text: str, limit: int) -> str:
     return ' '.join(text.split())[:limit]
+
+
+@dataclass(frozen=True)
+class ReplacementEdit:
+    old_text: str = field(metadata={"wire_name": "oldText"})
+    new_text: str = field(metadata={"wire_name": "newText"})
+
+
+@dataclass(frozen=True)
+class EditCall:
+    id: str
+    at: float | None
+    thread: str
+    path: str
+    hunks: tuple[ReplacementEdit, ...]
+    problem: str
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
@@ -53,6 +69,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return cls.for_name(name).parse_arguments(decoded)
         except (MalformedRecord, SelectedToolDenied):
             return None
+
+    def edit_calls(self, call_id: str, at: float | None, thread: str, problem: str) -> tuple[EditCall, ...]:
+        return ()
 
     def reads(self) -> str:
         """What the call names after its label: nothing unless the tool says."""
