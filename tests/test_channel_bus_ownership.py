@@ -46,7 +46,7 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     observer = comms.registry.require("alpha")
     assert any(isinstance(decision, NoWakeDecision) for decision in initial.decisions)
     for number in range(6):
-        message = comms.messaging.send_message("sender", "#team", f"@beta review {number}")
+        message = comms.messaging.send("sender", "#team", f"@beta review {number}").message
     assert not comms.registry.require("alpha").active_turn.executing
     references = tuple(message.reference for message in comms.bus.inbox("alpha", CommandTarget.named("#team")))
     comms.messaging.acknowledge("alpha", references)

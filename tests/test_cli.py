@@ -572,9 +572,9 @@ class TestSelectedTargetActions:
         comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=str(source)))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
         viewer = comms.messaging.user_identity(str(tmp_path)).name
-        comms.messaging.send('alpha', 'beta', 'Executor message')
-        comms.messaging.send('alpha', viewer, 'Human DM')
-        comms.messaging.send('alpha', '#team', 'Channel message')
+        comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id
+        comms.messaging.send('alpha', viewer, 'Human DM').message.message_id
+        comms.messaging.send('alpha', '#team', 'Channel message').message.message_id
         before = completed_snapshot(comms, str(tmp_path))
         assert before.thread_unread['alpha'] == before.unread['alpha'] == 1
         # The canonical tag change also publishes its membership notification.

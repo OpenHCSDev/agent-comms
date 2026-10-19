@@ -68,6 +68,7 @@ from .native_tools import NativeExecutableTool, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
+from .send_result import CorrectionResult, SendResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -212,14 +213,20 @@ class MessagePublished(ToolResult):
     """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
     id: str
     message: SentTranscript
+    correction: CorrectionResult
     agent_comms_kind: Literal["published_message"] = field(
         default="published_message", metadata={"wire_name": "agentCommsKind"})
+
+    @classmethod
+    def from_send(cls, result: SendResult) -> MessagePublished:
+        return cls(result.message.message_id, SentTranscript.from_message(result.message), result.correction)
 
 
 @dataclass(frozen=True)
 class TaskPublished(ToolResult):
     reference: MessageReference
     task: TaskAttachment
+    correction: CorrectionResult
 
 
 @dataclass(frozen=True)
@@ -786,11 +793,11 @@ class CommsCorrectWordingTool(ThreadToolRequest):
             raise ValueError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
             raise ValueError(f"Message {self.message_id} is plain; there is nothing to correct.")
-        message = comms.messaging.send_message(
+        result = comms.messaging.send(
             caller.name, self.unit,
             f"Correction, no strike, on {', '.join(orders)}: message {self.message_id} used "
             f"{', '.join(words)}. Say what you did and what broke in plain words from now on.")
-        return MessagePublished(message.message_id, SentTranscript.from_message(message))
+        return MessagePublished.from_send(result)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1037,10 +1044,10 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        message = comms.messaging.send_message(
+        result = comms.messaging.send(
             self.sender, self.target, self.body, self.type, report=self.report
         )
-        return MessagePublished(message.message_id, SentTranscript.from_message(message))
+        return MessagePublished.from_send(result)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1062,10 +1069,10 @@ class CommsAuthoredTaskTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> TaskPublished:
         owner = comms.registry.require(caller.name)
         declaration = self.declaration(owner)
-        message = comms.messaging.send_message(
+        result = comms.messaging.send(
             owner.name, self.target, self.original_body(declaration),
             role=NoticeRole(), task=declaration)
-        return TaskPublished(message.reference, message.task)
+        return TaskPublished(result.message.reference, result.message.task, result.correction)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -32,7 +32,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [
-        comms.messaging.send_message("parent", "worker", text)
+        comms.messaging.send("parent", "worker", text).message
         for text in ("Set standby", "Yes wait")
     ]
     ledger = InputDispositions(comms.root)
@@ -75,7 +75,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         report.invoke(comms, {**args, "reviewed_inputs": keys[1:]}, caller=ThreadCaller("worker"))
     assert ledger.path.read_bytes() == before  # Failed partial review commits nothing.
-    unrelated = comms.messaging.send_message("other", "worker", "Not a declared dependency")
+    unrelated = comms.messaging.send("other", "worker", "Not a declared dependency").message
     ledger.record(
         f"bus:{unrelated.seq}",
         seq=unrelated.seq,
@@ -110,7 +110,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     reopened.goals.update_goal(
         "worker", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
     )
-    fresh = comms.messaging.send_message("parent", "worker", "New result")
+    fresh = comms.messaging.send("parent", "worker", "New result").message
     assert reopened.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == (
         f"bus:{fresh.seq}",
     )
@@ -129,7 +129,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-    old = comms.messaging.send_message("parent", "worker", "Old incarnation")
+    old = comms.messaging.send("parent", "worker", "Old incarnation").message
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
     comms.registry.declare(
@@ -140,7 +140,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     assert comms.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == ()
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
     comms.goals.update_goal("worker", action)
-    current = comms.messaging.send_message("parent", "worker", "Current incarnation")
+    current = comms.messaging.send("parent", "worker", "Current incarnation").message
     comms.registry.rename("parent", "renamed-parent")
     review = comms.goals.goal_input_review("worker", goal.id, ["renamed-parent"])
     assert review.reviewed_inputs == (f"bus:{current.seq}",)
@@ -150,7 +150,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
 def test_inbox_standby_is_one_record(wired, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
     goal = wired.goals.update_goal("fixer", SetGoalAction(text="Wait for the parent"))
-    wired.messaging.send_message("PR111", "fixer", "Reply")
+    wired.messaging.send("PR111", "fixer", "Reply").message
     standby = {"goal_id": goal.id, "wait_for": ["PR111"]}
     for half in ({"goal_id": goal.id}, {"wait_for": ["PR111"]}):
         with pytest.raises(MalformedRecord, match="comms_inbox"):

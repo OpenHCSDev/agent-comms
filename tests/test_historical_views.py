@@ -45,8 +45,8 @@ def setup(root, count=5):
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(root)).name
     for i in range(count):
-        comms.messaging.send("alice", "#team", f"{root.name} channel {i}")
-        comms.messaging.send("alice", viewer, f"{root.name} direct {i}")
+        comms.messaging.send("alice", "#team", f"{root.name} channel {i}").message.message_id
+        comms.messaging.send("alice", viewer, f"{root.name} direct {i}").message.message_id
     return comms
 
 

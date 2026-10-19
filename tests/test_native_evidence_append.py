@@ -153,7 +153,7 @@ async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend,
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
-        comms.messaging.send_message("sender", session, "Read the fixture and reply once.")
+        comms.messaging.send("sender", session, "Read the fixture and reply once.").message
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 40)
         assert len(starts) == len(verified) == 1

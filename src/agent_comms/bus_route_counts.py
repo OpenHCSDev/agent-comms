@@ -7,24 +7,21 @@ projections, advances across complete appended rows, and is reset at migration.
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from contextlib import closing
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, NoReturn
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .private_path import FileRevision
 from .read_basis import ReadCursor
-from .private_path import FileIdentity, FileRevision
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
 from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
@@ -566,40 +563,41 @@ class OpenedRouteCounts(BusRouteCounts):
 
     def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
         return RouteUnread.read(self.connection.execute(
-            f'''WITH {self._requests}, actors AS MATERIALIZED (
-                SELECT key AS actor, json_extract(value,'$.high_water') AS high_water,
-                    json_extract(value,'$.exceptions') AS exceptions FROM json_each(:seen)
-            ), painted AS (
-                SELECT request.actor,request.root,count(*) AS count
-                FROM actors AS owner,json_each(owner.exceptions) AS seen
-                JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
-                JOIN requests AS request ON request.actor=owner.actor
-                    AND request.target=row.target AND request.sender=row.sender
-                    AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
-                WHERE row.seq<=:through GROUP BY request.actor,request.root
-            ) SELECT request.actor,request.target,request.sender,request.since,full.node AS full,
-                prefix.node AS prefix,coalesce(painted.count,0) AS painted
-            FROM requests AS request JOIN actors AS owner ON owner.actor=request.actor
-            JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
-            LEFT JOIN "{RouteTimeRow.declared_name}" AS prefix ON prefix.id=(
-                SELECT time_root FROM "{RouteEntryRow.declared_name}"
-                WHERE target=request.target AND sender=request.sender AND sender_lookup=request.sender_lookup
-                    AND seq<=min(owner.high_water,:through) ORDER BY seq DESC LIMIT 1)
-            LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
-            self._request_bindings(self.deliveries) | {
-                "seen": json.dumps({actor: FieldCodec.encode(cursor) for actor,cursor in seen.items()})}))
+                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")},
+                {ReadCursor.joined_sql}, painted AS (
+                    SELECT request.actor,request.root,count(*) AS count
+                    FROM cursors AS request,json_each(request.exceptions) AS seen
+                    JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
+                        AND request.target=row.target AND request.sender=row.sender
+                        AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
+                    WHERE row.seq<=:through GROUP BY request.actor,request.root
+                ) SELECT request.actor,request.target,request.sender,request.since,full.node AS full,
+                    prefix.node AS prefix,coalesce(painted.count,0) AS painted
+                FROM cursors AS request
+                JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
+                LEFT JOIN "{RouteTimeRow.declared_name}" AS prefix ON prefix.id=(
+                    SELECT time_root FROM "{RouteEntryRow.declared_name}"
+                    WHERE target=request.target AND sender=request.sender AND sender_lookup=request.sender_lookup
+                        AND seq<=min(request.high_water,:through)
+                    ORDER BY seq DESC LIMIT 1)
+                LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
+                self._request_bindings(self.deliveries) | ReadCursor.sql_bindings(self.registry,
+                    {actor: cursor.counted(self.deliveries[actor], self.registry)
+                     for actor, cursor in seen.items()})))
 
     def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
         return UnseenDelivery.read(self.connection.execute(
-            f'''WITH {self._requests} SELECT row.seq,row.target
-            FROM requests AS request JOIN "{RouteEntryRow.declared_name}" AS row
-                ON row.target=request.target AND row.sender=request.sender
-                AND row.sender_lookup=request.sender_lookup
-            WHERE request.actor=:actor AND row.timestamp>=request.since
-                AND row.seq>max(:high_water,:after) AND row.seq<=:through
-                AND row.seq NOT IN (SELECT value FROM json_each(:exceptions)) ORDER BY row.seq''',
-            self._request_bindings((actor,)) | {"actor":actor,"high_water":seen.high_water,"after":after,
-                "exceptions":json.dumps(seen.exceptions)}))
+                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")},
+                {ReadCursor.joined_sql} SELECT row.seq,row.target
+                FROM cursors AS request JOIN "{RouteEntryRow.declared_name}" AS row
+                    ON row.target=request.target AND row.sender=request.sender
+                    AND row.sender_lookup=request.sender_lookup
+                WHERE request.actor=:actor AND row.timestamp>=request.since
+                    AND row.seq>:after AND row.seq<=:through
+                    AND {ReadCursor.unread_sql} ORDER BY row.seq''',
+                self._request_bindings((actor,)) | {"actor":actor,"after":after}
+                | ReadCursor.sql_bindings(self.registry,
+                    {actor: seen.counted(self.deliveries[actor], self.registry)})))
 
 
 class CompletingRouteCounts(OpenedRouteCounts):

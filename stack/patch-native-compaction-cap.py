@@ -9,9 +9,9 @@ per-thread ``compaction.enabled: false`` cannot bypass the Core policy.
 
 Pi still owns when and how compaction runs: ``shouldCompact`` is its existing
 threshold decision, and AgentSession invokes it only at completed input/tool
-boundaries or after a completed response. A completed response crossing the
-budget uses Pi's standard threshold reason; overflow remains the interrupted
-request recovery path. Manual compaction remains unchanged. Model metadata
+boundaries before the next prompt. A completed answer settles before threshold
+compaction, so its publisher cannot be held behind summary generation. Overflow
+still recovers the interrupted request. Manual compaction remains unchanged. Model metadata
 keeps reporting each provider's actual advertised window.
 """
 
@@ -245,6 +245,36 @@ SUCCESSFUL_OVERFLOW_OWNED = """            // A completed response is retained c
             }"""
 
 
+POST_RUN_OVERFLOW_STOCK = '''        const msg = this._lastAssistantMessage;
+        this._lastAssistantMessage = undefined;
+        if (!msg) {
+            return false;
+        }'''
+POST_RUN_OVERFLOW_OWNED = POST_RUN_OVERFLOW_STOCK + '''
+        const overflow = msg.stopReason === "error" &&
+            isContextOverflow(msg, this.model?.contextWindow ?? 0);'''
+TRACKED_COMPACTION_STOCK = '''            const overflow = msg.stopReason === "error" &&
+                isContextOverflow(msg, this.model?.contextWindow ?? 0);
+            if (msg.stopReason !== "stop" && !overflow) return false;
+            if (await this._checkCompaction(msg)) return true;'''
+TRACKED_COMPACTION_OWNED = '''            if (msg.stopReason !== "stop" && !overflow) return false;
+            if (overflow && await this._checkCompaction(msg)) return true;'''
+UNTRACKED_COMPACTION_STOCK = '''        if (await this._checkCompaction(msg)) {
+            return true;
+        }'''
+UNTRACKED_COMPACTION_OWNED = '''        if (overflow && await this._checkCompaction(msg)) {
+            return true;
+        }'''
+COMPACTION_FAILURE_STOCK = '''            return false;
+        }
+        finally {
+            this._autoCompactionAbortController = undefined;'''
+COMPACTION_FAILURE_OWNED = '''            throw error;
+        }
+        finally {
+            this._autoCompactionAbortController = undefined;'''
+
+
 def replace_once(path: Path, old: str, new: str) -> None:
     source = path.read_text()
     if source.count(old) != 1:
@@ -268,6 +298,12 @@ def main(package: Path) -> None:
     replace_once(compaction, SUMMARY_JS_STOCK, SUMMARY_JS_OWNED)
     replace_once(compaction, TURN_PREFIX_JS_STOCK, TURN_PREFIX_JS_OWNED)
     replace_once(session, SUCCESSFUL_OVERFLOW_STOCK, SUCCESSFUL_OVERFLOW_OWNED)
+    # AgentSession.prompt already checks the threshold before the next input.
+    # Post-run work owns recovery/queued continuation, not withholding a final answer.
+    replace_once(session, POST_RUN_OVERFLOW_STOCK, POST_RUN_OVERFLOW_OWNED)
+    replace_once(session, TRACKED_COMPACTION_STOCK, TRACKED_COMPACTION_OWNED)
+    replace_once(session, UNTRACKED_COMPACTION_STOCK, UNTRACKED_COMPACTION_OWNED)
+    replace_once(session, COMPACTION_FAILURE_STOCK, COMPACTION_FAILURE_OWNED)
 
 
 if __name__ == "__main__":

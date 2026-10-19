@@ -1,5 +1,7 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
+from agent_comms.wire_log import WireLog
+
 from conftest import publish_initial
 from dataclasses import replace
 from pathlib import Path
@@ -16,7 +18,7 @@ from agent_comms.assignment_states import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
-from agent_comms.read_basis import HistoricalDisplay
+from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.threads import Thread
@@ -67,10 +69,11 @@ def test_recorded_notifications_do_not_decode_registry_or_acquire_activity(archi
 
 def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification):
     _old, live, source, messages, _root_id = archived_notification
-    basis = live.bus.reads.capture(
-        "reader", messages[1:], live.registry.snapshot(), Path(source.root) / "bus.jsonl",
-        conversation_snapshot=source.provenance,
-    )
+    document = live.bus.reads.read()
+    with WireLog(Path(source.root) / 'bus.jsonl').opened_wire_snapshot() as opened:
+        basis = opened.query_page_index(lambda index: live.bus.reads.capture_indexed(
+            'reader', messages[1:], live.registry.snapshot(), opened, index,
+            document=document, conversation_snapshot=source.provenance))
     HistoricalDisplay(source, basis.select((messages[1].seq,))).acknowledge(live.bus.history, live.registry)
     with live.bus.history.read_sources() as sources:
         results = source.notification_references(sources, tuple(message.reference for message in messages[1:]))
@@ -78,7 +81,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     unpainted, = results[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
-    assert not live.bus.reads.cursor("reader", live.registry.snapshot())
+    assert live.bus.reads.cursor("reader", live.registry.snapshot()) == ReadCursor()
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
     reused = replace(basis, viewer_created_at=111.0)
@@ -276,7 +279,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
             DeliveredAssignment,
             expected_revision=paused.revision,
         )
-    unrelated = old.messaging.send_message("agent", "sender", "unrelated later message")
+    unrelated = old.messaging.send("agent", "sender", "unrelated later message").message
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
     )[original.seq, original.message_id]
@@ -322,7 +325,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     assert inputs.started(
         key, turn_id=lease.turn_id, native_id=native_id, text=source_text
     )
-    response = old.messaging.send_message("agent", "sender", "recorded reply")
+    response = old.messaging.send("agent", "sender", "recorded reply").message
 
     notification, = old.views.message_notifications_for_references(
         (original.reference,)

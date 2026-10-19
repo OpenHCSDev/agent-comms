@@ -38,6 +38,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tools import (
     BashTool, EditTool, GlobTool, GrepTool, ReadTool, ReplacementEdit, WriteTool)
 from agent_comms.messages import Message, MessageKind, InfoKind
+from agent_comms.send_result import SendResult
 from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceHeldError
@@ -777,7 +778,7 @@ class Send(Operation):
     async def run(self, bridge: CliBridge) -> None:
         result = await asyncio.to_thread(bridge.comms.messaging.send, bridge.binding.bus,
                                          self.target, self.body, self.kind)
-        await bridge.show_sent(result, self.target, self.body)
+        await bridge.show_sent(result)
 
 
 class Inbox(Operation[OperationBridge]):
@@ -844,16 +845,17 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         """Return harness evidence; the shared watch owns completion."""
 
     @abstractmethod
-    async def show_sent(self, result: str, target: str, body: str) -> None:
+    async def show_sent(self, result: SendResult) -> None:
         """Display a completed send without publishing it again."""
 
     @abstractmethod
     async def report_failure(self, text: str) -> None:
         """Report a bridge failure through the CLI's visible output."""
 
-    def sent_text(self, result: str, target: str, body: str) -> str:
-        return (f'Comms out · {self.binding.bus} → {target}\n'
-                f'{body}\nMessage ID: {result}')
+    def sent_text(self, result: SendResult) -> str:
+        message = result.message
+        return '\n'.join((f'Comms out · {message.sender} → {message.target}',
+                          message.body, f'Message ID: {message.message_id}', *result.notices))
 
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
@@ -1074,8 +1076,8 @@ class LineMonitorBridge(TranscriptBridge[Options]):
                 self.write_line(line)
         return EmittedOutcome
 
-    async def show_sent(self, result: str, target: str, body: str) -> None:
-        self.write_line(self.encode(self.sent_text(result, target, body)))
+    async def show_sent(self, result: SendResult) -> None:
+        self.write_line(self.encode(self.sent_text(result)))
 
     async def report_failure(self, text: str) -> None:
         self.write_line(self.encode(text))

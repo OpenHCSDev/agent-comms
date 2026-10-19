@@ -17,11 +17,13 @@ from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import MembershipChange
+from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .threads import Thread
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .registry_document import RosterVisibility
+    from .registry_provenance import RegistryProvenance
 
 
 class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
@@ -101,9 +103,11 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     @abstractmethod
     def require_routable(self) -> None: ...
 
-    @property
     @abstractmethod
-    def history_targets(self) -> frozenset[str] | None: ...
+    def history_scope(self) -> ChannelDisplayScope: ...
+
+    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+        return self.history_scope()
 
     @abstractmethod
     def require_metadata(self) -> None: ...
@@ -124,8 +128,7 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
 
     def pending_count(self, counts: dict[str, int]) -> int:
-        targets = self.history_targets
-        return sum(count for scope, count in counts.items() if targets is None or scope in targets)
+        return sum(self.history_scope().target_values(counts))
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -148,9 +151,16 @@ class PredicateChannel:
 
 
 class GroupedChannel:
-    """Tag and saved-view declarations share editable presentation metadata."""
+    """Tag and saved-view declarations share finite history and presentation metadata."""
 
     __slots__ = ()
+
+    @property
+    @abstractmethod
+    def history_targets(self) -> frozenset[str]: ...
+
+    def history_scope(self) -> ChannelDisplayScope:
+        return ChannelDisplayScope(self.name, self.history_targets)
 
     def can_set_archived(self, archived: bool) -> bool:
         return self.archived != archived
@@ -221,9 +231,10 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel):
         if self.aggregate:
             raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
 
-    @property
-    def history_targets(self) -> frozenset[str] | None:
-        return self.builtin.history_targets
+    def history_scope(self) -> ChannelDisplayScope:
+        if self.aggregate:
+            return AllChannelDisplayScope(self.name)
+        return ChannelDisplayScope(self.name, frozenset((self.name,)))
 
     def require_metadata(self) -> None:
         raise ValueError("Built-in channels cannot be grouped or archived.")
@@ -273,6 +284,11 @@ class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
 
 @dataclass(frozen=True, slots=True)
 class TagChannel(GroupedChannel, MembershipChannel, Channel):
+    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+        if self.any_mode:
+            return MemberActivityDisplayScope.capture(self, snapshot)
+        return self.history_scope()
+
     def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
         return index[self.name.removeprefix("#")]
 

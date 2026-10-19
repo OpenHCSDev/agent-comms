@@ -48,7 +48,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         assert await owner.inputs.drain_inbox("beta") == 1
         await reply_turn_finished(owner, "beta")
         assert len(alpha_calls) == 1 and len(beta_calls) == 2
-        second = comms.messaging.send_message("sender", "#team", "A distinct source")
+        second = comms.messaging.send("sender", "#team", "A distinct source").message
         monkeypatch.setattr(TrackedTurnSession, "execute", alpha)
         # Beta's prior reply is passive context, not another model request.
         assert await owner.inputs.drain_inbox("alpha") == 1
@@ -239,9 +239,9 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             assert isinstance(working[0].state, SentProgress)
             assert working[0].state.detail == "" and working[0].state.working
 
-            held = comms.messaging.send_message(
+            held = comms.messaging.send(
                 "sender", "beta", "wait behind the recipient's unresolved turn"
-            )
+            ).message
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 accepted = accept_delivery_cohort(comms.bus, root_id, held.seq, store)
                 assert accepted.value.member_count == 1

@@ -25,19 +25,17 @@ from .message_page import (
     PageBounds,
 )
 from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
-from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileIdentity, FileRevision, PresentPath
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
     AnonymousViewer, ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection, DisplayViewer,
-    DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope, NamedViewer,
+    DMDisplayScope, DMSelection, MessageDisplayScope, NamedViewer,
 )
 from .registration import Registration
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
 from .registry_provenance import RegistryProvenance
-from .response_policy import InformationalPolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
 from .wire_log import WireLog
@@ -114,14 +112,13 @@ class ConversationHistoryView:
 
 @dataclass(frozen=True, slots=True)
 class ChannelHistory(HistoryView):
-    target: str
-    targets: frozenset[str] | None
+    scope: ChannelDisplayScope
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
-        return presentation.bus.channel_history_page(ChannelTarget(self.target), bounds)
+        return presentation.bus.channel_history_page(ChannelTarget(self.scope.channel), bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
-        return ChannelDisplayScope(self.target, self.targets)
+        return self.scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,14 +134,14 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
         return ChannelSelection(
             viewer=snapshot.require(viewer).incarnation,
             bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
-            scope=ChannelDisplayScope.capture(channel, snapshot), history_revision=history_revision,
+            scope=channel.display_scope(snapshot), history_revision=history_revision,
         )
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         return presentation.channel_page(self.channel.name, viewer=self.viewer, bounds=bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
-        return ChannelDisplayScope.capture(self.channel, snapshot)
+        return self.channel.display_scope(snapshot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -479,7 +476,7 @@ class HistoryArchive(RootFile):
                 shutil.rmtree(stage)
                 raise
 
-    def page(self, view: HistoryView, bounds: PageBounds) -> MessagePage:
+    def page(self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         traversal = bounds.traversal
         sources = self.sources()
         start = next(
@@ -494,14 +491,17 @@ class HistoryArchive(RootFile):
             snapshot = source.provenance
             current = replace(bounds, traversal=traversal.for_source(index == start))
             request = view.page_request(view.capture(snapshot), current)
-            page = request.read(WireLog(Path(source.root) / "bus.jsonl"))
-            page = replace(
-                page,
-                messages=tuple(
-                    HistoricalMessage.project(message, source, index, snapshot)
-                    for message in page.messages
-                ),
-            )
+            current_snapshot = presentation.registry.snapshot()
+            document = presentation.bus.reads.read()
+            with WireLog(Path(source.root) / "bus.jsonl").opened_wire_snapshot() as opened:
+                def read(page_index):
+                    raw = request.indexed(page_index, opened)
+                    projected = replace(raw, messages=tuple(
+                        HistoricalMessage.project(message, source, index, snapshot)
+                        for message in raw.messages))
+                    return replace(projected, historical_display=view.viewer.display_evidence(
+                        projected, presentation, source, opened, page_index, document, current_snapshot))
+                page = opened.query_page_index(read)
             if page.messages:
                 return replace(
                     page,
@@ -542,14 +542,12 @@ class HistoryArchive(RootFile):
                     history_revision=history_revision,
                 )
         history = self.page(
-            view, bounds if historical else replace(bounds, traversal=OlderTraversal())
+            view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
         )
         if history.messages:
-            evidenced = view.viewer.with_display_evidence(
-                history, presentation.bus, presentation.registry)
             latest = view.live_page(presentation, PageBounds(limit=1))
             return replace(
-                evidenced,
+                history,
                 history_revision=history_revision,
                 has_newer=history.has_newer or bool(latest.messages),
             )

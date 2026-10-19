@@ -94,6 +94,19 @@ def test_generated_claim_clock_collision_preserves_allocated_names_and_identitie
     assert first.incarnation != second.incarnation
 
 
+def test_project_round_trip_excludes_current_project_from_history(tmp_path):
+    first, second = tmp_path / 'a', tmp_path / 'b'
+    first.mkdir()
+    second.mkdir()
+    comms = wire(tmp_path / 'wire')
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(first)))
+    comms.threads.set_project('owner', str(second))
+    comms.threads.set_project('owner', str(first))
+    current = comms.registry.require('owner')
+    assert current.worktree == str(first)
+    assert current.earlier_projects == (second,)
+
+
 def test_project_change_retains_executing_source_but_refuses_another_input(tmp_path):
     import os
     import pytest

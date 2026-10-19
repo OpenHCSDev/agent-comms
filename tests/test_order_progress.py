@@ -179,7 +179,7 @@ def test_overdue_is_announced_once_per_crossing(commander, commander_script):
     for _ in range(3):
         polls, since = polls + deadline_lines(script, since), time.time()
     assert len(polls) == 1 and polls[0].startswith('OVERDUE: worker (due ')
-    comms.messaging.send_message('worker', 'lead', 'on it', InfoKind)
+    comms.messaging.send('worker', 'lead', 'on it', InfoKind).message
     replied = deadline_lines(script, since)
     assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
     assert deadline_lines(script, time.time()) == []

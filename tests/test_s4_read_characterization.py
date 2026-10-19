@@ -18,7 +18,7 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('worker', frozenset({'team'}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    message = comms.messaging.send_message("worker", "#team", "painted")
+    message = comms.messaging.send("worker", "#team", "painted").message
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path),
@@ -52,7 +52,7 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     shown = comms.transcripts.transcript_checkpoint("worker")
     append(source, content="unpainted reply")
-    message = comms.messaging.send_message("worker", "#team", "unpainted bus row")
+    message = comms.messaging.send("worker", "#team", "unpainted bus row").message
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
