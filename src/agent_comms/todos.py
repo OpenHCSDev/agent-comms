@@ -1313,7 +1313,6 @@ class LocatedProblemFinding(ProblemFinding):
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
-    accepted: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
@@ -1337,6 +1336,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     def for_phase(self, phase: type[OrderPhase]) -> ProblemOrder:
         raise ValueError("Only a checked order can declare a plan phase.")
+
+    @property
+    def accepted(self) -> bool:
+        return False
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
@@ -1634,8 +1637,11 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 class InstalledProblemOrder(DeliveredProblemOrder):
     works: str
     artifact: str
-    accepted: ClassVar[bool] = True
     line: ClassVar[str] = "Installed"
+
+    @property
+    def accepted(self) -> bool:
+        return True
 
     def __post_init__(self):
         super().__post_init__()

@@ -4,10 +4,11 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import DoneTodoState, OperationDelivery, StrikeReason
+from agent_comms.todos import DoneTodoState, OperationDelivery, ProblemOrder, StrikeReason
 from agent_comms.phase_tasks import UnspecifiedPhaseTask
 from agent_comms.work_dispatch import CheckedPhaseTask, WorkDispatch
 
@@ -27,6 +28,9 @@ def test_phase_task_accepts_only_its_full_problem_with_installed_evidence(comman
     assert not task.done((replace(full, order=accepted),))
     assert task.done((replace(full, state=DoneTodoState, order=accepted),))
     assert not UnspecifiedPhaseTask().done((replace(full, state=DoneTodoState, order=accepted),))
+    for original, expected in ((full.order, False), (accepted, True)):
+        merged = FieldCodec.decode(ProblemOrder, FieldCodec.encode(original.merged("a" * 40)))
+        assert task.done((replace(full, state=DoneTodoState, order=merged),)) is expected
 
 
 @pytest.mark.parametrize("interval", [0, -1, float("nan"), float("inf")])
