@@ -40,7 +40,7 @@ from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
-                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
+                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, TodoList)
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
@@ -295,7 +295,7 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
     sent = post(VerdictAudience((unit,)), message)
     # The message is each order's recorded link; a verdict citing it lands on that order.
     for pid in group:
-        call(CommsTodoTool(id=pid, operation=OrderMessage(
+        call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
             COMMS.goals.todos.get(pid).revision, COMMS.registry.require(ME).incarnation, sent)))
     for other, text in taken.items():
         post(VerdictAudience((other,)), text)
@@ -449,7 +449,7 @@ def recorded(unit: str, todo: Todo, strike: StrikeTodo) -> None:
     """Core records the strike on the task's Todo; it is written to the narrative file and posted
     to #comms in the same step."""
     refuse(strike.reason, *OUTGOING)  # posted to #comms, so refused before Core records the strike
-    if call(CommsTodoTool(id=todo.id, operation=strike)).todo.revision == todo.revision:
+    if call(CommsChangeProblemTool(problem=todo.id, operation=strike)).todo.revision == todo.revision:
         return
     posted(unit, COMMS.goals.todos.get(todo.id), strike)
 
@@ -523,7 +523,7 @@ def first_calls(held, activity):
         if not acted and time.time() < order.first_call_deadline.at:
             continue
         event = ObservedFirstCallEvent if acted else NotifiedFirstCallEvent
-        call(CommsTodoTool(id=todo.id, operation=RecordFirstCallTodo(
+        call(CommsChangeProblemTool(problem=todo.id, operation=RecordFirstCallTodo(
             todo.revision, COMMS.registry.require(ME).incarnation, event)))
         if not acted and COMMS.goals.todos.get(todo.id).revision != todo.revision:
             missing.append(f'{unit} (order {order.id}, sent {hhmm(order.at)})')
@@ -706,7 +706,7 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
         sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
     voided = live[-1]
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the void
-    call(CommsTodoTool(id=task, operation=VoidStrikeTodo(
+    call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, voided, why)))
     unit = voided.previous.owner
     n = struck(COMMS.goals.todos.get(task), unit)
@@ -725,7 +725,7 @@ def due(pid: str, at: str, why: str) -> None:
         sys.exit('Refused: --why says why the deadline moves (8+ words)')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
     moved = deadline(at)
-    call(CommsTodoTool(id=pid, operation=AssignTodo(
+    call(CommsChangeProblemTool(problem=pid, operation=AssignTodo(
         todo.revision, todo.assignment, moved, todo.order, todo.goal)))
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
               f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline',
@@ -739,7 +739,7 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
     The reason goes on the public record and to the unit that held it."""
     todo = COMMS.goals.todos.get(pid)
     refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
-    call(CommsTodoTool(id=pid, operation=WithdrawTodo(
+    call(CommsChangeProblemTool(problem=pid, operation=WithdrawTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, why,
         superseded_by)))
     unit = todo.held().owner

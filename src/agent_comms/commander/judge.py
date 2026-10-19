@@ -180,7 +180,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
             self.operation(todo, i).prepare(order.COMMS.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
-            result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
+            result = order.call(CommsVerdictTool(problem=todo.id, operation=self.operation(current[todo.id], i)))
             current[todo.id] = result.todo
         left = len(Edit.unjudged(order.COMMS, ME))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
