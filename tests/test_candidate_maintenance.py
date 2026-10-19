@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from bus_history import read_history
 from conftest import publish_initial
 from agent_comms.read_basis import NamedViewer
 import os
@@ -140,7 +139,7 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
         # keep going until the index is caught up, not stop at its old
         # per-delivery batch budget.
         for number in range(40):
-            publish_initial(comms, 
+            last = publish_initial(comms,
                 "sender", "beta", f"{number:04d} " + "x" * (300 * 1024)
             )
         assert comms.bus.log.path.stat().st_size > 40 * 256 * 1024
@@ -161,7 +160,7 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
             root_id=root_id,
             recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
             after_seq=0,
-            required_through_seq=read_history(comms)[-1].seq,
+            required_through_seq=last.seq,
             limit=100,
         )
         assert len(page.entries) >= 1 and not page.has_more

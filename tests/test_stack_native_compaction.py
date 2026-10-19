@@ -213,7 +213,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                         root=Path(str(project)), env_extra=child_env, session_file=str(session),
                         native_start=lambda *_: True,
                         persistent_session=pi_session,
-                    ):
+                     session_directory=Path(str(project))):
                         events.append(event)
             finally:
                 await pi_session.close()

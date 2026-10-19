@@ -757,6 +757,64 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         assert outcome.value.replay == revoked
 
 
+def test_repeated_replay_fact_does_not_rewrite_its_durable_assessment(db_path: Path) -> None:
+    with ready(db_path) as db:
+        connection = db.session._connection
+        ReplayAssessments.accumulate(connection, "exec", ReplayFact.ASSISTANT_OUTPUT)
+        before = ReplayAssessments.one(connection, execution_id="exec")
+        changes = connection.total_changes
+        for _ in range(100):
+            ReplayAssessments.accumulate(connection, "exec", ReplayFact.ASSISTANT_OUTPUT)
+        assert connection.total_changes == changes
+        assert ReplayAssessments.one(connection, execution_id="exec") == before
+        ReplayAssessments.accumulate(connection, "exec", ReplayFact.THINKING_OUTPUT)
+        after = ReplayAssessments.one(connection, execution_id="exec")
+        assert after.facts == ReplayFact.ASSISTANT_OUTPUT | ReplayFact.THINKING_OUTPUT
+        assert after.revision == before.revision + 1
+        assert not after.allows_retry
+
+
+def test_concurrent_replay_observations_join_without_erasing_either_fact(db_path: Path, monkeypatch) -> None:
+    with ready(db_path):
+        pass
+    barrier = threading.Barrier(2)
+    exists = ReplayAssessments.exists
+    errors = []
+
+    def captured(cls, connection, **query):
+        result = exists(connection, **query)
+        barrier.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(ReplayAssessments, "exists", classmethod(captured))
+
+    def accumulate(fact):
+        try:
+            with store(db_path) as db:
+                ReplayAssessments.accumulate(db.session._connection, "exec", fact)
+        except BaseException as error:
+            errors.append(error)
+
+    workers = [threading.Thread(target=accumulate, args=(fact,)) for fact in
+               (ReplayFact.ASSISTANT_OUTPUT, ReplayFact.THINKING_OUTPUT)]
+    try:
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=10)
+        assert not any(worker.is_alive() for worker in workers)
+        assert not errors
+    finally:
+        barrier.abort()
+        for worker in workers:
+            worker.join(timeout=10)
+    with store(db_path) as db:
+        assessment = ReplayAssessments.one(db.session._connection, execution_id="exec")
+        assert assessment.facts == ReplayFact.ASSISTANT_OUTPUT | ReplayFact.THINKING_OUTPUT
+        assert assessment.revision == 2
+        assert not assessment.allows_retry
+
+
 def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path) -> None:
     with ready(db_path, max_attempts=3) as db:
         _, first = started(db)
