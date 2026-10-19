@@ -129,6 +129,10 @@ def test_retirement_requires_every_retained_bus_to_have_applied_the_step(tmp_pat
     repo.commit({"carry_a": None, "carry_b": step_source(None)})
     with pytest.raises(ValueError, match="desktop.*carry_a"):
         CarryChain.at(tmp_path, "HEAD")
+    repo.commit({"carry_b": step_source("carry_a")})
+    restored = CarryChain.at(tmp_path, "HEAD")
+    assert [step.name for step in restored.pending(("carry_b",))] == ["carry_a"]
+    repo.commit({"carry_b": step_source(None)})
     buses[1]["applied"] = ["carry_a"]
     buses[0]["applied"] = []
     declarations.write_text(json.dumps(buses))
