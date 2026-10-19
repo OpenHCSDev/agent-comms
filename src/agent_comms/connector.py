@@ -376,14 +376,13 @@ class Connector:
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """The running Core service advances stalled orders without a commander call."""
-        with self.opened_wire() as comms:
-            task = asyncio.create_task(UnownedWheelSpin.watch(comms))
-            try:
-                yield
-            finally:
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
+        task = asyncio.create_task(UnownedWheelSpin.watch(self.opened_wire))
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(

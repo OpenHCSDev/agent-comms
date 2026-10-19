@@ -646,11 +646,6 @@ class RegisteredResult(CliResult):
 
 
 @dataclass(frozen=True)
-class ParkedResult(CliResult):
-    parked: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class HeartbeatResult(CliResult):
     heartbeat: str
 
@@ -1481,21 +1476,6 @@ class InstallCliCommand(CliCommand):
         return InstallResult(str(config.write(home)), {
             type(harness).declared_name: harness.install(ctx, self.commander, project)
             for harness in Harness.present(home)})
-
-
-@dataclass(frozen=True, kw_only=True)
-class ParkCliCommand(CliCommand):
-    help = "Keep Core's stall watcher from giving orders to a thread, or allow it again with --off"
-    name: str = option("--name")
-    off: bool = option("--off", default=False)
-
-    def apply(self, ctx: Comms) -> CliResult:
-        todos = ctx.goals.todos
-        if self.off:
-            todos.unpark(self.name)
-        else:
-            todos.park(ctx.registry.require(self.name).name)
-        return ParkedResult(tuple(sorted(todos.parked())))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -40,13 +40,7 @@ from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .todos import (
-    GoalRef,
-    PendingProblemOrder,
-    SendBackVerdict,
-    Todo,
-    TodoOperation,
-)
+from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
     from .goal_management import Goals

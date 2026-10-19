@@ -72,6 +72,7 @@ class CommanderConfig(CommanderRole, BaseModel):
     worktrees: Path
     scratch: Path
     disk: Path
+    parked: frozenset[str] = frozenset()
 
     @staticmethod
     def path(home: Path | None = None) -> Path:

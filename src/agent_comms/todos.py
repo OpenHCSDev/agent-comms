@@ -1550,19 +1550,6 @@ class HuntRecord(TypedTable):
     hunt: Hunt
 
 
-@dataclass(frozen=True)
-class ParkedThread(TypedTable):
-    """A thread Core's stall watcher never gives an order to."""
-    name: str = field(metadata={"sql": Column(primary_key=True)})
-
-
-@dataclass(frozen=True)
-class StallPassFailed(TypedTable):
-    """A stall watcher pass that raised; the board shows it until a later pass succeeds."""
-    at: float = field(metadata={"sql": Column(primary_key=True)})
-    error: str
-
-
 class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
@@ -2322,31 +2309,7 @@ class TodoStore(TypedStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ParkedThread, StallPassFailed)
-
-    def park(self, name: str) -> None:
-        with self.writing() as db:
-            ParkedThread(name).upsert(db)
-
-    def unpark(self, name: str) -> None:
-        with self.writing() as db:
-            ParkedThread.delete(db, name=name)
-
-    def parked(self) -> frozenset[str]:
-        with self.snapshot() as db:
-            return frozenset(row.name for row in ParkedThread.select(db))
-
-    def stall_pass_failed(self, failed: StallPassFailed) -> None:
-        with self.writing() as db:
-            failed.upsert(db)
-
-    def stall_pass_succeeded(self) -> None:
-        with self.writing() as db:
-            StallPassFailed.delete(db)
-
-    def stall_pass_failures(self) -> tuple[StallPassFailed, ...]:
-        with self.snapshot() as db:
-            return tuple(StallPassFailed.select(db))
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -2442,8 +2405,9 @@ class TodoStore(TypedStore):
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
     def advance_stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
-        """Observe outside SQLite, then atomically strike and release the same assignment."""
-        held = tuple(todo for todo in self._open("assignment IS NOT NULL", ()) if todo.pending)
+        """Advance active orders; retry only rows released by this watcher, never other backlog."""
+        held = tuple(todo for todo in self._open(
+            "assignment IS NOT NULL", (), OpenTodoState) if todo.pending)
         pulls = PullRequests(held)
         for todo in held:
             observed_at = time.time()
@@ -2459,7 +2423,11 @@ class TodoStore(TypedStore):
             except TodoConflict:
                 # A concurrent order change owns the row; observe its new assignment next pass.
                 continue
-        return self._open("assignment IS NULL", ())
+        watcher = StallWatcherIncarnation.watcher()
+        return self._open(
+            "assignment IS NULL AND json_extract(released,'$[#-1].actor.name')=? "
+            "AND json_extract(released,'$[#-1].actor.created_at')=?",
+            (watcher.name, watcher.wire_birth), OpenTodoState)
 
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:
@@ -2528,8 +2496,9 @@ class TodoStore(TypedStore):
             for assignment in (todo.assignment, *(release.previous for release in todo.released))
             if assignment)
 
-    def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        states = TodoState.open_names()
+    def _open(self, where: str, parameters: tuple,
+              state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
+        states = state.open_names()
         selected = ','.join('?' for state in states)
         return self._select(f"state IN ({selected}) AND ({where})", (*states, *parameters))
 

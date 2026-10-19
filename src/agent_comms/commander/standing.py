@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import subprocess
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import ClassVar
 
 from ..comms import Comms
 from ..coordinator import Coordination
@@ -23,7 +25,7 @@ from ..standing_rules import (
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
 from ..todos import (
-    FlatTrend, OrderProgress, PullRequests, StallPassFailed, StrikeTodo, Todo, TodoConflict,
+    FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo, TodoConflict,
 )
 from ..tools import CommsUnjudgedTool
 from ..turn_digests import TurnDigestRead, TurnsSince
@@ -81,11 +83,11 @@ class WheelSpin(StandingRule, declared_name=None):
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
         """Units with a recent turn in their own transcript and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
-        excluded = held | comms.goals.todos.parked() | {commander, ""}
+        excluded = held | CommanderConfig.installed().parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((thread for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
-                       and TurnDigestRead(comms.root, thread, bound).native()),
+                       and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
     def assign(self, comms: Comms, commander: str, unit: Thread,
@@ -182,35 +184,22 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
                                 StallWatcherIncarnation.watcher())
                 except TodoConflict:
                     continue  # A concurrent order change owns the row.
-        comms.goals.todos.stall_pass_succeeded()
 
     @classmethod
-    async def watch(cls, comms: Comms) -> None:
-        """Run a pass each minute, recording failures without abandoning the watcher."""
+    def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        """The worker borrows the root for this pass, never while the timer is idle."""
+        with opened_wire() as comms:
+            cls.after_stall(comms)
+
+    @classmethod
+    async def watch(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        """Run a pass each minute; failures go to the existing service log."""
         while True:
-            (outcome,) = await asyncio.gather(
-                Coordination.run_worker(lambda: cls.after_stall(comms)), return_exceptions=True)
-            match outcome:
-                case Exception() as failure:
-                    comms.goals.todos.stall_pass_failed(
-                        StallPassFailed(time.time(), f"{type(failure).__name__}: {failure}"))
+            try:
+                await Coordination.run_worker(lambda: cls.watch_pass(opened_wire))
+            except Exception:
+                logging.exception("Stall watcher pass failed")
             await asyncio.sleep(60)
-
-
-@dataclass(frozen=True)
-class StallWatcherFailed(UndatedStandingRule):
-    """A stall watcher pass raised and no pass has succeeded since."""
-
-    failed: StallPassFailed
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(map(cls, comms.goals.todos.stall_pass_failures()))
-
-    def line(self) -> str:
-        at = time.strftime("%H:%M", time.localtime(self.failed.at))
-        return (f"STALL WATCHER FAILED at {at}: {self.failed.error} -> fix the cause; the next"
-                " pass runs within a minute")
 
 
 @dataclass(frozen=True)
