@@ -1067,7 +1067,7 @@ class NoIntegerPrinted(CheckPrinted):
         return self
 
     def require(self, expected: object) -> None:
-        raise ValueError(f"The order check printed no integer; cannot prove {expected}.")
+        raise ValueError(f"The order check cannot prove {expected}: it printed no integer.")
 
     def project[T](self, counted: Callable[[int], T], uncounted: Callable[[], T]) -> T:
         return uncounted()
