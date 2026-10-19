@@ -6,7 +6,7 @@ from agent_comms.catalog_document import CatalogDocument
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_store import RegistryStore
-from cutover.carry import Carried, Carry
+from agent_comms.carry import Carried, Carry
 
 
 class CatalogTags(Carry):

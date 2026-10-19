@@ -16,7 +16,7 @@ import pytest
 from contextlib import closing
 from dataclasses import replace
 
-from cutover.carry import CarryChain
+from agent_comms.carry import CarryChain
 
 from agent_comms.change_report import FileLine
 from agent_comms.channel_targets import CommandTarget
@@ -981,7 +981,7 @@ def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
     import json
     import sqlite3
     from contextlib import closing
-    from cutover.carry_order_run import OrderRuns
+    from tools.cutover.carry_order_run import OrderRuns
     from agent_comms.todos import MechanicalOrderRun, TodoStore
     comms, _caller = commander
     saved = create(commander, 'P1')

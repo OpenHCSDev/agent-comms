@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from cutover.carry import Carried, Carry
+from agent_comms.carry import Carried, Carry
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.read_basis import ChannelConversation, DMConversation, ConversationCursor, ReadCursor

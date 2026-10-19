@@ -10,7 +10,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from cutover.carry import Carried, Carry
+from agent_comms.carry import Carried, Carry
 
 from agent_comms.goal_mentions import bind_goal_mentions
 from agent_comms.goals import Goal, ProblemGoalOrder
