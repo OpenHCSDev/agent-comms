@@ -1,123 +1,51 @@
-"""Publish a reviewed, wire-compatible runtime and queue idle worker reloads.
+"""Core's idle publication transaction, called by the qualified runtime builder.
 
-Run with the target runtime's Python. The caller must review protocol and store
-compatibility first: this command performs no schema migration. Incompatible
-changes belong to the existing stopped-owner installation workflow.
-
-Command names come from installed package declarations. Publication records the
-new installation; ordinary launches keep their caller's runtime. Existing owners
-retain their code until Core's restart queue can stop them while idle.
+Core owns maintenance, exact worker selection, stopped cutover and recovery.
+The frontend supplies a context owning its readers; it enters only after drain.
 """
 from __future__ import annotations
 
 import argparse
-from contextlib import suppress
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-from importlib.metadata import distribution
-import os
 import hashlib
+import importlib
+from importlib.metadata import distribution
+import json
+import os
 from pathlib import Path
-import signal
+import sqlite3
 import subprocess
 import sys
 import time
-from typing import ClassVar
 
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
-from agent_comms.child_process import LinuxPlatform, ProcessIdentity, ProcessState
+from agent_comms.child_process import ProcessState
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.harness_install import Harness, replace_link
-from agent_comms.owner_restart import OwnerRestartRequest
-from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.restart_queue import enqueue
-from agent_comms.maintenance_barrier import MaintenanceOperator, DrainingPhase, ReadyPhase
+from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState, DrainingPhase, ReadyPhase
+from agent_comms.owner_cutover import StoppedOwnerInstallation, MaintainedOwnerCutover
+from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_restart import OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.restart_refusals import OwnerBusyRefusal
+from agent_comms.store_files import _atomic_write_text, _store_lock
 
 
 @dataclass(frozen=True)
-class RunningProcess:
-    """One /proc entry: its exact identity, its parent, and the executables it started from.
+class PublicationIntent:
+    """Exact installation selection, durable before stopping; not current worker state.
 
-    A venv's bin/python resolves to the base interpreter, so the launched argv[0] counts with only
-    its directory resolved; /proc/<pid>/exe counts when this user may read it."""
+    This receipt is necessary after publisher death loses its in-memory handoff.
+    The registry still owns current incarnations, processes, turns and inputs.
+    """
+    runtime: str
+    previous: str
+    owners: tuple[OwnerRestartSelection, ...]
 
-    identity: ProcessIdentity
-    parent: int
-    executables: tuple[Path, ...]
-
-    @classmethod
-    def all(cls) -> tuple[RunningProcess, ...]:
-        """Every process, read once from /proc; one that exits during the read is left out."""
-        running = []
-        for entry in Path('/proc').iterdir():
-            if entry.name.isdecimal():
-                with suppress(FileNotFoundError, ProcessLookupError):
-                    running.append(cls.read(entry))
-        return tuple(running)
-
-    @classmethod
-    def read(cls, entry: Path) -> RunningProcess:
-        # Fields after comm's final ')' start at field 3: ppid is 4, pgrp 5, starttime 22.
-        fields = (entry / 'stat').read_text().rsplit(') ', 1)[1].split()
-        if fields[0] in {'Z', 'X'}:
-            raise ProcessLookupError(entry.name)
-        argv0 = Path(os.fsdecode((entry / 'cmdline').read_bytes().split(b'\0', 1)[0]))
-        launched: tuple[Path, ...] = ((argv0.parent.resolve() / argv0.name,)
-                                      if argv0.is_absolute() else ())
-        with suppress(PermissionError):
-            launched += (Path(os.readlink(entry / 'exe')),)
-        identity = ProcessIdentity.in_group(int(entry.name), int(fields[19]), int(fields[2]))
-        return cls(identity, int(fields[1]), launched)
-
-    def runs_from(self, runtime: Path) -> bool:
-        return any(path.is_relative_to(runtime) for path in self.executables)
-
-
-@dataclass(frozen=True)
-class RetiredRuntime:
-    """The runtime publication replaced: its processes, Toad views too, end after the links move,
-    except an owner waiting for its idle reload, its descendants and the publisher's ancestors."""
-
-    path: Path
-    grace: ClassVar[float] = 5.0
-
-    def processes(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
-        running = {process.identity.pid: process for process in RunningProcess.all()}
-
-        def lineage(pid: int) -> tuple[ProcessIdentity, ...]:
-            line: dict[int, ProcessIdentity] = {}
-            while pid in running and pid not in line:
-                line[pid] = running[pid].identity
-                pid = running[pid].parent
-            return tuple(line.values())
-
-        publisher = lineage(os.getpid())
-        return tuple(process for process in running.values()
-                     if process.runs_from(self.path) and process.identity not in publisher
-                     and not any(identity in owners for identity in lineage(process.identity.pid)))
-
-    def end(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
-        """SIGTERM each exact process, one shared wait, then SIGKILL any still running."""
-        platform = LinuxPlatform()
-        signalled: list[tuple[RunningProcess, int]] = []
-        for process in self.processes(owners):
-            with suppress(ProcessLookupError):
-                descriptor = platform.open_pidfd(process.identity.pid)
-                try:
-                    platform.require(process.identity)
-                    platform.signal_pidfd(descriptor, signal.SIGTERM)
-                except ProcessLookupError:
-                    os.close(descriptor)
-                    continue
-                signalled.append((process, descriptor))
-        deadline = time.monotonic() + self.grace
-        for _, descriptor in signalled:
-            try:
-                platform.watch_deadline(descriptor, deadline)
-            finally:
-                os.close(descriptor)
-        return tuple(process for process, _ in signalled)
+    def save(self, path: Path) -> None:
+        _atomic_write_text(path, json.dumps(FieldCodec.encode(self)) + '\n', fsync_parent=True)
 
 
 @dataclass(frozen=True)
@@ -151,100 +79,169 @@ class RuntimePublication:
                 f'Runtime CLI refused publication (exit {result.returncode}): {result.stdout}{result.stderr}'
             )
 
-    def publish(self, root: Path, owners: tuple[ProcessState, ...], *, timeout: float = 1200) -> tuple[RunningProcess, ...]:
-        """Hold new turns, wait for Core's idle proof, and release our hold on exit."""
-        self.require_cli(root)
+    def publish(self, root: Path, owners: tuple[ProcessState, ...], *, timeout: float = 1200,
+                resources: AbstractContextManager = nullcontext()) -> tuple[str, ...]:
+        """Wait, stop, switch, resume, and release maintenance on every normal exit.
+
+        Re-entry reads our existing hold and exact interrupted selection. No
+        input is resubmitted. Unrelated maintenance and changed incarnations
+        are refused rather than guessed.
+        """
         path = active_route_path()
-        previous_route = read_active_route(path)
-        if previous_route is None or previous_route.root != root.resolve():
+        route = read_active_route(path)
+        if route is None or route.root != root.resolve():
             raise ValueError('Publication requires the selected active root')
-        comms = wire(previous_route)
+        comms = wire(route)
         barrier = comms.owners.maintenance
         operator = MaintenanceOperator('runtime-publication:' + hashlib.sha256(
             os.fsencode(self.runtime.resolve())).hexdigest())
-        current = barrier.read()
-        if current.phase is ReadyPhase:
-            hold = barrier.begin(operator)
-        elif current.phase is DrainingPhase and current.operator == operator:
-            hold = current
-        else:
-            raise ValueError('Another maintenance operation holds this root')
-        try:
-            deadline = time.monotonic() + timeout
-            while True:
-                busy = []
-                snapshot = comms.registry.snapshot()
-                for thread in OwnerRestartRequest().threads(snapshot):
-                    try:
-                        comms.owners.require_restart_idle(thread)
-                    except OwnerBusyRefusal:
-                        busy.append(thread.name)
-                if not busy:
-                    break
-                if time.monotonic() >= deadline:
-                    raise TimeoutError('Active turns still running: ' + ', '.join(busy))
-                time.sleep(min(0.25, max(0, deadline - time.monotonic())))
-            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        intent_path = root / 'runtime-publication.json'
+        with _store_lock(root / 'runtime-publication'):
+            previous = StoppedOwnerInstallation.current_pointer().resolve(strict=True)
+            intent = (FieldCodec.decode(PublicationIntent, FieldCodec.parse(intent_path.read_bytes()))
+                      if intent_path.exists() else None)
+            if intent is not None and (intent.runtime != str(self.runtime) or
+                    previous not in (Path(intent.previous), self.runtime)):
+                raise ValueError('An unfinished publication belongs to another runtime')
+            if intent is None and previous == self.runtime:
+                raise ValueError('Runtime is already current')
+            current = barrier.read()
+            if current.phase is ReadyPhase:
+                self.require_cli(root)
+                hold = barrier.begin(operator)
+            elif current.phase is DrainingPhase and current.operator == operator:
+                hold = current
+            else:
+                raise ValueError('Another maintenance operation holds this root')
             try:
-                acquire_exclusive_route_lock(directory)
-                if read_active_route(path) != previous_route:
-                    raise ValueError('Active route changed during idle wait')
-                return self.publish_links(owners)
+                deadline = time.monotonic() + timeout
+                previous_busy = ()
+                while True:
+                    snapshot = comms.registry.snapshot()
+                    selected = tuple(thread for thread in OwnerRestartRequest().threads(snapshot)
+                                     if thread.process_identity in owners)
+                    busy = []
+                    for thread in selected:
+                        try:
+                            comms.owners.require_restart_idle(thread)
+                        except OwnerBusyRefusal:
+                            busy.append(thread.name)
+                    if not busy:
+                        break
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Active turns still running: ' + ', '.join(busy))
+                    if tuple(busy) != previous_busy:
+                        print('Waiting for active turns: ' + ', '.join(busy), flush=True)
+                        previous_busy = tuple(busy)
+                    time.sleep(min(0.25, max(0, deadline - time.monotonic())))
+                if intent is None:
+                    intent = PublicationIntent(str(self.runtime), str(previous), tuple(
+                        OwnerRestartSelection.capture(snapshot, thread.name) for thread in selected))
+                    intent.save(intent_path)
+                snapshot = comms.registry.snapshot()
+                remaining = []
+                for original in intent.owners:
+                    thread = snapshot.threads[original.name]
+                    if thread.incarnation != original.identity.incarnation:
+                        raise ValueError('Selected owner incarnation changed: ' + original.name)
+                    if thread.process_identity == original.process and thread.process_alive:
+                        remaining.append(original.name)
+                request = OwnerRestartRequest(names=tuple(remaining),
+                    source_interpreter=intent.previous + '/bin/python')
+                with resources:
+                    HeldRuntimePublication(self.runtime, self.links, hold).restart(comms.owners, request)
+                    # Re-entering after process death has no in-memory handoff.
+                    # Start only recorded, idle, stopped incarnations through Core.
+                    for original in intent.owners:
+                        thread = comms.registry.snapshot().threads[original.name]
+                        if not thread.process_alive:
+                            thread.turn_record.read().require_idle()
+                            result = comms.owners.start(original.name)
+                            print(f'Resumed {result.thread}: {result.pid}', flush=True)
+                intent_path.unlink()
+                return tuple(original.name for original in intent.owners)
             finally:
-                os.close(directory)
-        finally:
-            if barrier.read() == hold:
-                barrier.clear(hold)
+                if barrier.read() == hold:
+                    barrier.clear(hold)
 
-    def publish_links(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
+    def carry_orders(self, root: Path) -> None:
+        """Apply declared carries under the stopped-batch protocol's wire lock."""
+        from tools.cutover.carry import CarryChain, CarryLedger, TodoColumnCarry
+        from agent_comms.todos import TodoStore
+        store = TodoStore.path_in(root)
+        if not store.exists():
+            return
+        checkout = Path(__file__).resolve().parents[1]
+        chain = CarryChain.at(checkout, 'HEAD')
+        ledger = CarryLedger(root)
+        pending = chain.pending(ledger.applied())
+        if not pending:
+            return
+        backup = root / 'runtime-publication-todos.sqlite3'
+        if not backup.exists():
+            with sqlite3.connect(store.as_uri() + '?mode=ro', uri=True) as source:
+                with sqlite3.connect(backup) as target:
+                    source.backup(target)
+            backup.chmod(0o600)
+        for step in pending:
+            chain.require_next(step.name, ledger.applied())
+            if step.columns:
+                TodoColumnCarry.carry_step(root, step, chain, apply=True)
+            else:
+                if step.revision != step.chain_revision:
+                    raise ValueError('Historical carry requires tools/upgrade_bus.py: ' + step.name)
+                member = getattr(importlib.import_module('tools.cutover.' + step.name), step.declaration)
+                member.carry(root, apply=True)
+            ledger.record(step.name)
+
+    def publish_links(self) -> None:
+        """Move declarations and the pointer, without killing unrelated processes."""
         current = StoppedOwnerInstallation.current_pointer()
-        if not current.is_symlink():
-            if current.exists():
-                raise FileExistsError(current)
-            previous = (Path.home() / '.local/bin/toad').resolve(strict=True).parent.parent
-            # Initial conversion leaves every command on the same old runtime.
-            # A process exit midway therefore leaves usable, coherent links.
-            for link, target in self.links.items():
-                if link.resolve(strict=True) != previous / target.relative_to(self.runtime):
-                    raise ValueError(f'Existing runtime links disagree: {link}')
-            replace_link(current, previous)
-        retired = RetiredRuntime(current.resolve(strict=True))
-        if retired.path == self.runtime.resolve():
+        if current.resolve(strict=True) == self.runtime.resolve():
             raise ValueError(f'Publication would retire the runtime it publishes: {self.runtime}')
         for link, target in self.links.items():
             replace_link(link, current / target.relative_to(self.runtime))
         replace_link(current, self.runtime)
-        return retired.end(owners)
+
+
+@dataclass(frozen=True)
+class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
+    """Existing cutover behavior owns fencing, stopped writer proof and launches."""
+    maintenance_hold: MaintenanceState
+
+    def require_restart_phase(self, lifecycle) -> None:
+        super().require_restart_phase(lifecycle)
+        self.carry_orders(lifecycle.root)
+
+    def complete(self, stopped: StoppedOwnerBatch):
+        path = active_route_path()
+        descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            acquire_exclusive_route_lock(descriptor)
+            route = read_active_route(path)
+            if route is None or route.root != stopped.lifecycle.root.resolve():
+                raise ValueError('Active route changed during publication')
+            if StoppedOwnerInstallation.current_pointer().resolve(strict=True) != self.runtime:
+                self.publish_links()
+        finally:
+            os.close(descriptor)
+        stopped.lifecycle.maintenance.clear_stopped(self.maintenance_hold, stopped.wire_descriptor)
+        return stopped.launch(LaunchRuntime(self.runtime / 'bin/python'))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--check', action='store_true', help='Inspect publication without changing links or queueing restarts')
+    parser.add_argument('--check', action='store_true')
     options = parser.parse_args()
+    if not options.check:
+        parser.error('Publish through the qualified tools/build_runtime.py --publish-runtime entrypoint')
     publication = RuntimePublication.installed()
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
-    comms = wire(route)
-    snapshot = comms.registry.snapshot()
-    owners = tuple(OwnerRestartRequest().threads(snapshot))
-    if options.check:
-        publication.require_cli(route.root)
-        print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
-        return
-    registered = tuple(thread.process_identity for thread in snapshot.threads.values())
-    ended = publication.publish(route.root, registered)
-    print(f'Published {publication.runtime}', flush=True)
-    for process in ended:
-        print(f'Ended {process.identity.pid} from the retired runtime: {process.executables[0]}',
-              flush=True)
-    # Queue requests keep original process identity and session settings. A
-    # pending or uncertain previous request is handled by that existing owner.
-    os.environ['VIRTUAL_ENV'] = str(publication.runtime)
-    selected = LaunchRuntime(publication.runtime / 'bin/python')
-    for owner in owners:
-        request = enqueue(comms, owner.name, launch_runtime=selected)
-        print(f'{owner.name}: {request.state.declared_name} ({request.id})', flush=True)
+    publication.require_cli(route.root)
+    owners = OwnerRestartRequest().threads(wire(route).registry.snapshot())
+    print(f'{publication.runtime}: {len(owners)} native workers selected for idle publication')
 
 
 if __name__ == '__main__':
