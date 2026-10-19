@@ -7,8 +7,9 @@ import logging
 import os
 import socket
 import struct
+from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, ExitStack
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -26,6 +27,42 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 
 Call = TypeVar("Call", bound=NativeToolCall)
+
+
+class ToolConnectionOutcome(ABC):
+    """One response attempt decides whether the owner still has a writer to close."""
+
+    @classmethod
+    async def send(cls, writer: asyncio.StreamWriter, response: dict[str, object],
+                   answer: str) -> ToolConnectionOutcome:
+        try:
+            writer.write((json.dumps(response) + "\n").encode("ascii"))
+            await writer.drain()
+        except ConnectionError:
+            return ToolChildGone(answer)
+        return ToolAnswerSent()
+
+    @abstractmethod
+    def close(self, ownership: ExitStack) -> None: ...
+
+
+class ToolAnswerSent(ToolConnectionOutcome):
+    def close(self, ownership: ExitStack) -> None:
+        ownership.close()
+
+
+@dataclass(frozen=True)
+class ToolChildGone(ToolConnectionOutcome):
+    answer: str
+
+    def close(self, ownership: ExitStack) -> None:
+        # asyncio has already closed the failed transport. Do not close it or
+        # await its failed close future a second time.
+        ownership.pop_all()
+        _LOG.warning(
+            "The Pi child stopped waiting for a tool check before its answer "
+            "(%s) could be sent", self.answer,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,37 +318,35 @@ class ToolTransport(Generic[Call]):
         assert task is not None
         self._handlers.add(task)
         try:
-            try:
-                if not self._server.is_serving():
-                    raise SelectedToolDenied("Owner tool socket is closed")
-                sock = writer.get_extra_info("socket")
-                if sock is None or self.expected_pid is None:
-                    raise SelectedToolDenied("Selected tool child is not bound")
-                pid, uid, _gid = struct.unpack(
-                    "3i", sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-                )
-                if pid != self.expected_pid or uid != os.geteuid():
-                    raise SelectedToolDenied("Selected tool peer is not the launched Pi child")
-                raw = await asyncio.wait_for(reader.readline(), timeout=10)
-                response = await self.handle_request(raw)
-                answer = "allowed"
-            except (ValueError, TimeoutError) as error:
-                # SelectedToolDenied (a ValueError) is every typed denial and
-                # UNKNOWN outcome; ValueError also covers the untrusted child's
-                # undecodable request. Any other failure is a defect: it
-                # propagates and the child sees a closed socket, never a reply.
-                response = self.failure_response(error)
-                answer = "refused"
-            try:
-                writer.write((json.dumps(response) + "\n").encode("ascii"))
-                await writer.drain()
-            except ConnectionError:
-                # Not an owner failure: the child gave up and told the model
-                # so. Whatever the owner did for this call stays recorded.
-                _LOG.warning(
-                    "The Pi child stopped waiting for a tool check before its answer "
-                    "(%s) could be sent", answer,
-                )
+            with ExitStack() as connection:
+                connection.callback(writer.close)
+                outcome = await self._reply(reader, writer)
+                outcome.close(connection)
         finally:
-            writer.close()
             self._handlers.discard(task)
+
+    async def _reply(self, reader: asyncio.StreamReader,
+                     writer: asyncio.StreamWriter) -> ToolConnectionOutcome:
+        try:
+            if not self._server.is_serving():
+                raise SelectedToolDenied("Owner tool socket is closed")
+            sock = writer.get_extra_info("socket")
+            if sock is None or self.expected_pid is None:
+                raise SelectedToolDenied("Selected tool child is not bound")
+            pid, uid, _gid = struct.unpack(
+                "3i", sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+            )
+            if pid != self.expected_pid or uid != os.geteuid():
+                raise SelectedToolDenied("Selected tool peer is not the launched Pi child")
+            try:
+                raw = await asyncio.wait_for(reader.readline(), timeout=10)
+            except ConnectionError:
+                return ToolChildGone("unanswered")
+            response = await self.handle_request(raw)
+            answer = "allowed"
+        except (ValueError, TimeoutError) as error:
+            # Only declared denials and malformed child input become a refusal.
+            # Owner defects propagate; they never become a successful answer.
+            response = self.failure_response(error)
+            answer = "refused"
+        return await ToolConnectionOutcome.send(writer, response, answer)
