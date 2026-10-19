@@ -515,7 +515,6 @@ def done(pid, sha, screenshot='', seen='', repo=''):
 
 
 def first_calls(held, activity):
-    """The pass's one read per unit supplies every order's first-call clock."""
     missing = []
     for todo in held:
         unit, order = todo.assignment.owner, todo.order

@@ -411,7 +411,6 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         return database, database.with_name(database.name + "-wal")
 
     def last_tool_call(self) -> EventTime:
-        """One indexed newest-first event read; absence remains explicitly unrecorded."""
         with self.snapshot() as connection:
             timestamp = connection.execute(
                 f'SELECT (SELECT timestamp FROM "{ExternalEventRow.declared_name}" '

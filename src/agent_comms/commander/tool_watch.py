@@ -42,7 +42,6 @@ def emit(turns, thread, final=''):
 
 
 def follow(registry: Registration, turns: dict[str, list[str]], thread: str, data: bytes) -> None:
-    """Decode each complete native line once; digest and judge its tool calls."""
     for line in data.splitlines(keepends=True):
         entry = NativeEntry.read(line)
         for message in entry.messages:
