@@ -82,20 +82,26 @@ class ReviewQueuePhase(PlanPhase):
     after = (RecordPlanePhase,)
 
 
-class StoryPhase(PlanPhase):
-    after = (ReviewQueuePhase,)
-
-
-class CommanderPagePhase(PlanPhase):
-    after = (StoryPhase,)
-
-
 class ControlPlanePhase(PlanPhase):
     after = (RecordPlanePhase,)
 
 
 class CutoverPhase(PlanPhase):
-    after = (ReviewQueuePhase, ControlPlanePhase)
+    # The parity gate in the Markdown plan has no executable declaration yet.
+    # These dependencies do not establish parity or authorize deleting scripts.
+    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase)
+
+
+class StoryPhase(PlanPhase):
+    """A view of the native records, not a prerequisite for their cutover."""
+
+    after = (CutoverPhase,)
+
+
+class CommanderPagePhase(PlanPhase):
+    """A view of the native records and control plane after their cutover."""
+
+    after = (CutoverPhase,)
 
 
 class SkillPhase(PlanPhase):
