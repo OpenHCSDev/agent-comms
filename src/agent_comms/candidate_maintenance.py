@@ -96,7 +96,9 @@ def _drain_candidate(root: Path) -> None:
                             cleanup.pop_all()
                             _pending.pop(root)
                             return
-        except (OSError, ValueError, sqlite3.Error, CoordinationError, ProjectionUnavailableError) as error:
+        except (
+            OSError, ValueError, sqlite3.Error, CoordinationError, ProjectionUnavailableError,
+        ) as error:
             failure = CandidateMaintenanceFailed(root)
             _LOG.exception("%s", failure)
             raise failure from error

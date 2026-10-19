@@ -57,7 +57,9 @@ class DrawnRuleReviewEntry(RuleReviewEntry):
 
     def __post_init__(self) -> None:
         if not self.drawn or not 0 <= self.cited <= len(self.drawn):
-            raise ToolRefusedError("A review draws at least one rule and cites at most every drawn rule.")
+            raise ToolRefusedError(
+                "A review draws at least one rule and cites at most every drawn rule."
+            )
 
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
         DrawnRule.delete(db, reviewer=reviewer)

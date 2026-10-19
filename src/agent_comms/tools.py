@@ -336,7 +336,9 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         try:
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except MalformedRecord as error:
-            raise ToolArgumentsRefusedError(f"Invalid {cls.declared_name} arguments: {error}") from error
+            raise ToolArgumentsRefusedError(
+                f"Invalid {cls.declared_name} arguments: {error}"
+            ) from error
         return FieldCodec.encode(caller.invoke(request, comms).to_wire())
 
     @abstractmethod
@@ -749,7 +751,9 @@ class CommsUnjudgedTool(ThreadReadTool):
             assignment = todo.held()
             holder = comms.registry.require(assignment.owner)
             if holder.incarnation != assignment.owner_identity:
-                raise ToolRefusedError(f"Order {todo.id} holder incarnation no longer exists")
+                raise ToolRefusedError(
+                    f"Order {todo.id} holder incarnation no longer exists"
+                )
             yield read_type(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")), todo)
 
     @classmethod
@@ -789,7 +793,9 @@ class CommsCorrectWordingTool(ThreadToolRequest):
         if not orders:
             raise ToolRefusedError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
-            raise ToolRefusedError(f"Message {self.message_id} is plain; there is nothing to correct.")
+            raise ToolRefusedError(
+                f"Message {self.message_id} is plain; there is nothing to correct."
+            )
         result = comms.messaging.send(
             caller.name, self.unit,
             f"Correction, no strike, on {', '.join(orders)}: message {self.message_id} used "
