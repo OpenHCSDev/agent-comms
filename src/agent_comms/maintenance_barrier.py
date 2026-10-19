@@ -73,6 +73,11 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     new_sends = running_sends = HeldSends
 
     @classmethod
+    def hold_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
+                 operator: MaintenanceOperator) -> MaintenanceState:
+        raise MaintenanceHeldError('Another maintenance operation holds this root')
+
+    @classmethod
     def send_new(cls, delegate, *args):
         return cls.new_sends.open(delegate, *args)
 
@@ -83,6 +88,13 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
 
 class DrainingPhase(MaintenancePhase):
     running_sends = GrantedSends
+
+    @classmethod
+    def hold_for(cls, barrier: MaintenanceBarrier, state: MaintenanceState,
+                 operator: MaintenanceOperator) -> MaintenanceState:
+        if state.operator != operator:
+            raise MaintenanceHeldError('Another maintenance operation holds this root')
+        return state
 
     @classmethod
     def successors(cls):
@@ -105,6 +117,11 @@ class InstallingPhase(MaintenancePhase):
 
 class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
+
+    @classmethod
+    def hold_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
+                 operator: MaintenanceOperator) -> MaintenanceState:
+        return barrier.begin(operator)
 
     @classmethod
     def successors(cls):

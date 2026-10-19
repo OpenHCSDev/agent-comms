@@ -8,13 +8,12 @@ from __future__ import annotations
 import argparse
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
+from abc import abstractmethod
 import hashlib
-import importlib
 from importlib.metadata import distribution
 import json
 import os
 from pathlib import Path
-import sqlite3
 import subprocess
 import sys
 import time
@@ -22,10 +21,10 @@ import time
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
 from agent_comms.child_process import ProcessState
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, SubclassUnion, NullMember, RecordMember
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState, DrainingPhase, ReadyPhase
+from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.owner_cutover import StoppedOwnerInstallation, MaintainedOwnerCutover
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartRequest, StoppedOwnerBatch
@@ -33,19 +32,52 @@ from agent_comms.restart_refusals import OwnerBusyRefusal
 from agent_comms.store_files import _atomic_write_text, _store_lock
 
 
-@dataclass(frozen=True)
-class PublicationIntent:
-    """Exact installation selection, durable before stopping; not current worker state.
+class PublicationIntent(SubclassUnion, affix=''):
+    """A new publication selects workers; an interrupted one keeps its exact selection."""
 
-    This receipt is necessary after publisher death loses its in-memory handoff.
-    The registry still owns current incarnations, processes, turns and inputs.
-    """
+    @classmethod
+    def read(cls, path: Path) -> PublicationIntent:
+        try:
+            payload = path.read_bytes()
+        except FileNotFoundError:
+            return NoPublicationIntent()
+        return FieldCodec.decode(SavedPublicationIntent, FieldCodec.parse(payload))
+
+    @abstractmethod
+    def require_target(self, runtime: Path, previous: Path) -> None: ...
+
+    @abstractmethod
+    def select(self, snapshot, selected, runtime: Path, previous: Path,
+               path: Path) -> SavedPublicationIntent: ...
+
+
+class NoPublicationIntent(NullMember, PublicationIntent):
+    def require_target(self, runtime: Path, previous: Path) -> None:
+        if previous == runtime:
+            raise ValueError('Runtime is already current')
+
+    def select(self, snapshot, selected, runtime: Path, previous: Path,
+               path: Path) -> SavedPublicationIntent:
+        intent = SavedPublicationIntent(str(runtime), str(previous), tuple(
+            OwnerRestartSelection.capture(snapshot, thread.name) for thread in selected))
+        _atomic_write_text(path, json.dumps(FieldCodec.encode(intent)) + '\n', fsync_parent=True)
+        return intent
+
+
+@dataclass(frozen=True)
+class SavedPublicationIntent(RecordMember, PublicationIntent):
+    """Installation witnesses, not current process/turn state or permission to replay."""
     runtime: str
     previous: str
     owners: tuple[OwnerRestartSelection, ...]
 
-    def save(self, path: Path) -> None:
-        _atomic_write_text(path, json.dumps(FieldCodec.encode(self)) + '\n', fsync_parent=True)
+    def require_target(self, runtime: Path, previous: Path) -> None:
+        if self.runtime != str(runtime) or previous not in (Path(self.previous), runtime):
+            raise ValueError('An unfinished publication belongs to another runtime')
+
+    def select(self, snapshot, selected, runtime: Path, previous: Path,
+               path: Path) -> SavedPublicationIntent:
+        return self
 
 
 @dataclass(frozen=True)
@@ -87,6 +119,7 @@ class RuntimePublication:
         input is resubmitted. Unrelated maintenance and changed incarnations
         are refused rather than guessed.
         """
+        self.require_cli(root)
         path = active_route_path()
         route = read_active_route(path)
         if route is None or route.root != root.resolve():
@@ -98,21 +131,10 @@ class RuntimePublication:
         intent_path = root / 'runtime-publication.json'
         with _store_lock(root / 'runtime-publication'):
             previous = StoppedOwnerInstallation.current_pointer().resolve(strict=True)
-            intent = (FieldCodec.decode(PublicationIntent, FieldCodec.parse(intent_path.read_bytes()))
-                      if intent_path.exists() else None)
-            if intent is not None and (intent.runtime != str(self.runtime) or
-                    previous not in (Path(intent.previous), self.runtime)):
-                raise ValueError('An unfinished publication belongs to another runtime')
-            if intent is None and previous == self.runtime:
-                raise ValueError('Runtime is already current')
+            intent = PublicationIntent.read(intent_path)
+            intent.require_target(self.runtime, previous)
             current = barrier.read()
-            if current.phase is ReadyPhase:
-                self.require_cli(root)
-                hold = barrier.begin(operator)
-            elif current.phase is DrainingPhase and current.operator == operator:
-                hold = current
-            else:
-                raise ValueError('Another maintenance operation holds this root')
+            hold = current.phase.hold_for(barrier, current, operator)
             try:
                 deadline = time.monotonic() + timeout
                 previous_busy = ()
@@ -134,10 +156,7 @@ class RuntimePublication:
                         print('Waiting for active turns: ' + ', '.join(busy), flush=True)
                         previous_busy = tuple(busy)
                     time.sleep(min(0.25, max(0, deadline - time.monotonic())))
-                if intent is None:
-                    intent = PublicationIntent(str(self.runtime), str(previous), tuple(
-                        OwnerRestartSelection.capture(snapshot, thread.name) for thread in selected))
-                    intent.save(intent_path)
+                intent = intent.select(snapshot, selected, self.runtime, previous, intent_path)
                 snapshot = comms.registry.snapshot()
                 remaining = []
                 for original in intent.owners:
@@ -149,7 +168,7 @@ class RuntimePublication:
                 request = OwnerRestartRequest(names=tuple(remaining),
                     source_interpreter=intent.previous + '/bin/python')
                 with resources:
-                    HeldRuntimePublication(self.runtime, self.links, hold).restart(comms.owners, request)
+                    HeldRuntimePublication(self.runtime, self.links, hold, intent.owners).restart(comms.owners, request)
                     # Re-entering after process death has no in-memory handoff.
                     # Start only recorded, idle, stopped incarnations through Core.
                     for original in intent.owners:
@@ -163,36 +182,6 @@ class RuntimePublication:
             finally:
                 if barrier.read() == hold:
                     barrier.clear(hold)
-
-    def carry_orders(self, root: Path) -> None:
-        """Apply declared carries under the stopped-batch protocol's wire lock."""
-        from tools.cutover.carry import CarryChain, CarryLedger, TodoColumnCarry
-        from agent_comms.todos import TodoStore
-        store = TodoStore.path_in(root)
-        if not store.exists():
-            return
-        checkout = Path(__file__).resolve().parents[1]
-        chain = CarryChain.at(checkout, 'HEAD')
-        ledger = CarryLedger(root)
-        pending = chain.pending(ledger.applied())
-        if not pending:
-            return
-        backup = root / 'runtime-publication-todos.sqlite3'
-        if not backup.exists():
-            with sqlite3.connect(store.as_uri() + '?mode=ro', uri=True) as source:
-                with sqlite3.connect(backup) as target:
-                    source.backup(target)
-            backup.chmod(0o600)
-        for step in pending:
-            chain.require_next(step.name, ledger.applied())
-            if step.columns:
-                TodoColumnCarry.carry_step(root, step, chain, apply=True)
-            else:
-                if step.revision != step.chain_revision:
-                    raise ValueError('Historical carry requires tools/upgrade_bus.py: ' + step.name)
-                member = getattr(importlib.import_module('tools.cutover.' + step.name), step.declaration)
-                member.carry(root, apply=True)
-            ledger.record(step.name)
 
     def publish_links(self) -> None:
         """Move declarations and the pointer, without killing unrelated processes."""
@@ -208,10 +197,13 @@ class RuntimePublication:
 class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
     """Existing cutover behavior owns fencing, stopped writer proof and launches."""
     maintenance_hold: MaintenanceState
+    selection: tuple[OwnerRestartSelection, ...]
 
-    def require_restart_phase(self, lifecycle) -> None:
-        super().require_restart_phase(lifecycle)
-        self.carry_orders(lifecycle.root)
+    def require_selection(self, snapshot, owners) -> None:
+        expected = {original.name: original for original in self.selection}
+        for thread in owners:
+            original = expected[thread.name]
+            snapshot.require_owner_process(original.identity, original.process)
 
     def complete(self, stopped: StoppedOwnerBatch):
         path = active_route_path()

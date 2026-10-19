@@ -37,7 +37,7 @@ def test_cli_failure_leaves_links_untouched(tmp_path, monkeypatch, command):
     assert (link.lstat(), current.lstat()) == before
 
 
-def test_publication_ends_retired_runtime_processes_and_keeps_the_new_runtimes(
+def test_pointer_publication_does_not_kill_unselected_runtime_processes(
         tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     runtimes = {name: tmp_path / name for name in ("previous-runtime", "runtime")}
@@ -50,12 +50,11 @@ def test_publication_ends_retired_runtime_processes_and_keeps_the_new_runtimes(
     retired, kept = (subprocess.Popen([runtime / "bin/python", "-c", "import time; time.sleep(60)"])
                      for runtime in runtimes.values())
     try:
-        ended = RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links(())
-        assert [process.identity.pid for process in ended] == [retired.pid]
-        assert retired.wait(timeout=10) == -signal.SIGTERM
+        RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links()
+        assert retired.poll() is None
         assert kept.poll() is None and current.readlink() == runtimes["runtime"].resolve()
         with pytest.raises(ValueError, match="would retire the runtime it publishes"):
-            RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links(())
+            RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links()
     finally:
         for child in (retired, kept):
             child.kill()
