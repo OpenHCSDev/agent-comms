@@ -26,7 +26,7 @@ from agent_comms.tools import (
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
     CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool, CommsVerdictTool,
-    CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
+    CommsUnjudgedTool, CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
 )
 from agent_comms.work_branches import WorkBranches
 
@@ -76,6 +76,7 @@ def scenario(comms: Comms, project, monkeypatch):
         problem="P1", order=order, request="request", deadline=RecordedEventTime(1000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P1"))}, lead
     yield CommsTodoListTool, {"thread": "lead"}, lead
+    yield CommsUnjudgedTool, {"thread": "lead"}, lead
     yield CommsCorrectWordingTool, {"unit": "worker", "message_id": "m1",
                                     "text": "The canonical ownership changed"}, lead
     todo = comms.goals.todos.get("P1")
