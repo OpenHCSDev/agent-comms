@@ -636,8 +636,13 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
     current = json.loads(checkpoint.read_text())
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.read_basis import MemberActivityDisplayScope
+    with comms.views.presentation.snapshot(viewer=NamedViewer(viewer)) as (basis, _):
+        expected_scope = basis.scope('#team')
+    assert isinstance(expected_scope, MemberActivityDisplayScope)
     assert next(scope for scope in current['scopes']
-                if scope['channel'] == '#team')['any_mode'] is True
+                if scope['channel'] == '#team') == FieldCodec.encode(expected_scope)
 
 
 def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, thread_registration):
@@ -662,7 +667,7 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
         assert type(source) is OpenedWireSnapshot
         assert list(source.public_records()) == []
     log.path.write_text(json.dumps({'observation': {'kind': 'unknown'}}) + '\n')
-    with pytest.raises(StoredHistoryUnreadable, match='unknown'):
+    with pytest.raises(StoredHistoryUnreadable, match='Stored bus history cannot be decoded'):
         with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()):
             pytest.fail('Unknown observations must be rejected before exposing a history cut')
 
