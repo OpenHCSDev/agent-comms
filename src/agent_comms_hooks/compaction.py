@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.thread_status import CompactingThreadStatus, ConnectedThreadStatus
+from agent_comms.registration import Registration
+from agent_comms.thread_status import CompactingThreadStatus, ConnectedThreadStatus, ThreadStatus
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram, HookValue
-from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
+
+def observe(record: WatchRecord, *, status: ThreadStatus) -> None:
+    registry = Registration(Path(record.root) / "registry.json")
+    original = registry.entry(record.bus).entry
+    registry.observe_external_status(
+        original.owner_identity, original.thread.require_process(), status
+    )
 
 
 class BeforeCompaction(ClaudeHookProgram):
@@ -52,7 +63,7 @@ class CompactedSource(SessionSource):
     name: ClassVar[str] = "compact"
 
     def observe(self, claim: WatchClaim) -> None:
-        claim.state().observe_compaction(ConnectedThreadStatus())
+        claim.state().observe_compaction(partial(observe, status=ConnectedThreadStatus()))
 
 
 @dataclass(frozen=True)
@@ -62,7 +73,9 @@ class SessionStartHook(ClaudeHook):
 
 def starting() -> None:
     hook = ClaudeHook.read()
-    WatchClaim(hook.session_id).state().observe_compaction(CompactingThreadStatus())
+    WatchClaim(hook.session_id).state().observe_compaction(
+        partial(observe, status=CompactingThreadStatus())
+    )
 
 
 def finished() -> None:

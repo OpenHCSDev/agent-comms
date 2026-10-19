@@ -11,14 +11,13 @@ import fcntl
 import hashlib
 import json
 import shlex
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent_comms.thread_status import ThreadStatus
     from agent_comms_hooks.session import SessionHook
 
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
@@ -115,7 +114,7 @@ class WatchState:
     def end_session(self, hook: SessionHook) -> None:
         """An absent or lapsed bridge has nothing to stop."""
 
-    def observe_compaction(self, status: ThreadStatus) -> None:
+    def observe_compaction(self, observe: Callable[[WatchRecord], None]) -> None:
         """An absent watch never acquires bridge presence from a hook."""
 
     def report(self, event: str) -> None:
@@ -164,20 +163,10 @@ class LiveWatch(RecordedWatch):
                 f"{shlex.join(self.record.command)}",
             )
 
-    def observe_compaction(self, status: ThreadStatus) -> None:
-        # Hooks on every prompt keep their stdlib-only import path. Only an
-        # actual compaction observation needs the registry transaction owner.
-        from agent_comms.registration import Registration
-
-        registry = Registration(Path(self.record.root) / "registry.json")
-        original = registry.entry(self.record.bus).entry
-        # The watch must still be the one read before importing Core. Its claim
-        # is held inside its registered endpoint lifetime; the transaction then
-        # fences that exact incarnation, generation and process, not a name.
+    def observe_compaction(self, observe: Callable[[WatchRecord], None]) -> None:
+        # Keep prompt/tool hooks stdlib-only; compaction supplies its own observer.
         if self.claim.state() == self:
-            registry.observe_external_status(
-                original.owner_identity, original.thread.require_process(), status
-            )
+            observe(self.record)
 
 
 class LapsedWatch(RecordedWatch):
