@@ -67,7 +67,7 @@ publish() {
     if [[ -e "$deployment" ]]; then
         verify "$deployment"
         native \
-            install-sources "$deployment_package" "$repo_root"
+            install_sources "$deployment_package" "$repo_root"
     else
         deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
         trap 'rm -rf -- "$deployment_stage"' RETURN
@@ -76,7 +76,7 @@ publish() {
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
         verify "$deployment_stage"
         native \
-            install-sources \
+            install_sources \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent" "$repo_root"
         mv -- "$deployment_stage" "$deployment"
         trap - RETURN
@@ -169,10 +169,10 @@ patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
 "$python" "$stack_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent" \
     ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
-native share-resources \
+native share_resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
 if [[ "$update_pins" == true ]]; then
-    native write-manifest "$native_package"
+    native write_manifest "$native_package"
     build_id=$(sha256sum "$manifest" | cut -c1-16)
     target="$stack_root/.pi-native-$build_id"
 fi

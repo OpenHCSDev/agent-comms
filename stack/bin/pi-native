@@ -27,7 +27,7 @@ export NODE_DISABLE_COMPILE_CACHE=1
 native verify "${cli%/dist/cli.js}"
 # Each launch derives the installed extension sources from the verified
 # declaration; sources whose bytes already match are not written.
-native install-sources "${cli%/dist/cli.js}" "$repo_root"
+native install_sources "${cli%/dist/cli.js}" "$repo_root"
 exec node --no-global-search-paths \
     --import "${cli%/cli.js}/agent-comms-import-fence.mjs" \
     --import "${cli%/cli.js}/agent-comms-project-bootstrap.mjs" "$cli" "$@"
