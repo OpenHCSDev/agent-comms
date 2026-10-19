@@ -157,7 +157,7 @@ class WireSnapshot(ObservedPath):
             lines.pop(0)
         for line in reversed(lines):
             if line.endswith(b"\n") and line.strip():
-                yield from self.messages(json.loads(line))
+                yield from reversed(self.messages(json.loads(line)))
 
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
