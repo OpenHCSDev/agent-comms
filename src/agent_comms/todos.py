@@ -17,7 +17,6 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
-from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 
@@ -25,7 +24,10 @@ from .change_report import FileLine
 from .child_process import BoundedRun, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue
+from .field_codec import (
+    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    boundary_decoder,
+)
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -142,43 +144,16 @@ class PullRequest:
     merge: str | None = None
     merged_at: float | None = None
     updated_at: float = 0.0
+    orders: tuple[str, ...] = ()
 
     @classmethod
-    def listed(cls, number: str, branch: str, head: str, merge: str, merged: str,
-               updated: str) -> Self:
+    @boundary_decoder
+    def listed(cls, number: int, branch: str, head: str, merge: str, merged: str,
+               updated: str, body: str) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
         return cls(int(number), branch, head, merge or None,
-                   _github_time(merged) if merged else None, _github_time(updated))
-
-
-@dataclass(frozen=True)
-class OrderBranch(DeclaredFamily, affix="Branch"):
-    """The branch an order's checkout works on: the one link from an order to its pull requests."""
-
-    @classmethod
-    def checked_out(cls, checkout: Path) -> OrderBranch:
-        named = subprocess.run(("git", "-C", str(checkout), "symbolic-ref", "--short", "-q",
-                                "HEAD"), capture_output=True, text=True, timeout=30)
-        return NoOrderBranch() if named.returncode else CheckedOutBranch(named.stdout.strip())
-
-    @abstractmethod
-    def carries(self, pr: PullRequest) -> bool: ...
-
-
-@dataclass(frozen=True)
-class CheckedOutBranch(OrderBranch):
-    name: str
-
-    def carries(self, pr: PullRequest) -> bool:
-        return pr.branch == self.name
-
-
-@dataclass(frozen=True)
-class NoOrderBranch(OrderBranch):
-    """No checkout, or one with a detached HEAD: no pull request is the order's."""
-
-    def carries(self, pr: PullRequest) -> bool:
-        return False
+                   _github_time(merged) if merged else None, _github_time(updated),
+                   ProblemOrder.pull_request_ids(body))
 
 
 def _github_time(text: str) -> float:
@@ -186,26 +161,46 @@ def _github_time(text: str) -> float:
 
 
 class PullRequests:
-    """A repository's pull requests, read from GitHub once and shared by every order on a board."""
+    """Pull requests queried by immutable order identity, cached within one board read."""
 
-    def __init__(self) -> None:
-        self._read: dict[tuple[str, str], tuple[PullRequest, ...]] = {}
+    def __init__(self, todos: Sequence[Todo] = ()) -> None:
+        self._read: dict[tuple[str, str, str], tuple[PullRequest, ...]] = {}
+        self._orders: dict[str, dict[str, ProblemOrder]] = {}
+        for todo in todos:
+            if todo.holder:
+                self._orders.setdefault(todo.repo, {})[todo.order.id] = todo.order
 
-    def listed(self, repo: str, state: str) -> tuple[PullRequest, ...]:
-        if (repo, state) not in self._read:
-            self._read[repo, state] = self.read(repo, state)
-        return self._read[repo, state]
+    def listed(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+        key = (repo, state, order.id)
+        if key not in self._read:
+            self._read[key] = self.read(repo, state, order)
+        return self._read[key]
 
-    def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
+    def read(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+        orders = self._orders.setdefault(repo, {})
+        orders[order.id] = order
+        aliases = {f"o{index}": candidate for index, candidate in enumerate(orders.values())}
+        selections = []
+        for alias, candidate in aliases.items():
+            search = json.dumps(f'repo:{repo} is:pr is:{state} in:body '
+                                f'"{candidate.pull_request_reference}" sort:updated-desc')
+            selections.append(
+                f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
+                '... on PullRequest { number headRefName headRefOid body '
+                'mergeCommit { oid } mergedAt updatedAt } } }')
         listed = subprocess.run(
-            ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
-             "--json", "number,headRefName,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
-             '.[] | [.number, .headRefName, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
-             " .updatedAt] | @tsv"),
+            ("gh", "api", "graphql", "-f", "query=query {" + " ".join(selections) + "}",
+             "--jq", '.data | map_values(.nodes | map([.number, .headRefName, .headRefOid,'
+             ' .mergeCommit.oid // "", .mergedAt // "", .updatedAt, .body]))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
-            raise ValueError(listed.stderr.strip() or f"gh pr list -R {repo} failed.")
-        return tuple(PullRequest.listed(*line.split("\t")) for line in listed.stdout.splitlines())
+            raise ValueError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
+        rows = FieldCodec.decode(dict[str, tuple[tuple[int, str, str, str, str, str, str], ...]],
+                                 FieldCodec.parse(listed.stdout))
+        for alias, candidate in aliases.items():
+            self._read[repo, state, candidate.id] = tuple(
+                PullRequest.listed(*row) for row in rows[alias])
+        return self._read[repo, state, order.id]
 
 
 def _clock(at: float) -> str:
@@ -223,19 +218,16 @@ class ProgressSource:
     def since(self) -> float:
         return self.todo.order.at.recorded_at("An order")
 
-    @cached_property
-    def branch(self) -> OrderBranch:
-        return OrderBranch.checked_out(self.checkout)
-
     def requests(self, state: str) -> list[PullRequest]:
-        """PRs from the order's branch touched since the order; older ones served an earlier one."""
-        return [pr for pr in self.pulls.listed(self.todo.repo, state)
-                if self.branch.carries(pr) and pr.updated_at >= self.since]
+        """The order's explicit PR references survive checkout removal or branch reuse."""
+        return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
+                if self.todo.order.id in pr.orders and pr.updated_at >= self.since]
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
         log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.since)}",
+            ("git", "-C", str(self.checkout), "log", "-1", f"--since={after}",
              "--format=%H %ct", "HEAD", "--not", *excluded),
             capture_output=True, text=True, timeout=30)
         for line in log.stdout.splitlines() if not log.returncode else ():
@@ -248,7 +240,6 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     """Where an order's work stands, derived on each read from its unit's checkout and PRs.
 
     Never stored: the checkout and GitHub are its owners."""
-    strikes: ClassVar[bool] = True
 
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
@@ -272,9 +263,6 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     def stalled_between(self, ordered: float, since: float, now: float) -> bool:
         """Whether this work entered its stall after ``since`` and before ``now``."""
-        return False
-
-    def moved_after(self, since: float) -> bool:
         return False
 
     def untouched(self, now: float) -> bool:
@@ -317,9 +305,6 @@ class Moving(Stalling):
 
     def stall_at(self, ordered: float) -> float:
         return self.at + 900
-
-    def moved_after(self, since: float) -> bool:
-        return self.at > since
 
 
 @dataclass(frozen=True)
@@ -390,9 +375,8 @@ class OpenPrProgress(Moving, FoundProgress):
 
 @dataclass(frozen=True)
 class MergedProgress(FoundProgress):
-    """Merged work is done; its deadline no longer draws a strike."""
+    """A merge awaits its order record; its alarm does not itself draw a strike."""
     precedence: ClassVar[int] = 1
-    strikes: ClassVar[bool] = False
     sha: str
 
     @classmethod
@@ -402,7 +386,7 @@ class MergedProgress(FoundProgress):
 
     @property
     def line(self) -> str:
-        return f"merged as {self.sha}, record done"
+        return f"merged as {self.sha}, awaiting record"
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
@@ -752,9 +736,42 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
+    pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
+
+    @classmethod
+    def pull_request_ids(cls, body: str) -> tuple[str, ...]:
+        return tuple(line.removeprefix(cls.pull_request_label).strip()
+                     for line in body.splitlines() if line.startswith(cls.pull_request_label))
+
+    @property
+    def pull_request_reference(self) -> str:
+        return f"{self.pull_request_label} {self.id}"
+
+    def pull_request_body(self, body: str) -> str:
+        declared = self.pull_request_ids(body)
+        if any(order != self.id for order in declared):
+            raise ValueError("The pull request body names a different order.")
+        content = "\n".join(line for line in body.splitlines()
+                            if not line.startswith(self.pull_request_label))
+        return f"{content.rstrip()}\n\n{self.pull_request_reference}\n"
+
+    def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str) -> str:
+        """The order creates its PR with the immutable identity every progress reader uses."""
+        created = subprocess.run(
+            ("gh", "pr", "create", "-R", todo.repo, "--title", title, "--body-file", "-"),
+            input=self.pull_request_body(body), cwd=checkout,
+            capture_output=True, text=True, timeout=60)
+        if created.returncode:
+            raise ValueError(created.stderr.strip() or "Order pull request creation failed.")
+        return created.stdout.strip()
+
+    def pull_request_instruction(self, problem: str) -> str:
+        return (f"Open the PR with agent-comms-commander order pr {problem} "
+                "--title '<title>' --body-file <file>; Core writes its required order identity.")
+
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
-            f"Owner: {self.owner.to_wire()}",
+            f"Owner: {self.owner.to_wire()}", self.pull_request_instruction(todo.id),
             f"Check: {self.check.directory} :: {self.check.command}",
             *self.deletes.instructions(),
             *self.run.instructions(),
@@ -1391,11 +1408,9 @@ class Todo(TypedTable):
     def pending(self):
         return self.order.pending
 
-    def late_since(self, now: float) -> float | None:
-        """When this order crossed its deadline undelivered: the moment it became late, or None
-        while it can still arrive on time or is delivered."""
-        deadline = self.deadline.recorded_at("An order deadline")
-        return deadline if self.pending and deadline < now else None
+    def overdue(self, now: float) -> bool:
+        """An undelivered order remains past due until its result is recorded."""
+        return self.pending and self.deadline.recorded_at("An order deadline") < now
 
     @property
     def creator_identity(self) -> ThreadIncarnation:
@@ -1578,7 +1593,7 @@ class TodoStore(TypedStore):
 
     def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
         """Each pending problem's progress and latest verdict, as its Goal shows them."""
-        pulls = PullRequests()
+        pulls = PullRequests(todos)
         return "\n".join(
             " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
                         *(verdict.line for verdict in todo.verdicts[-1:])))
