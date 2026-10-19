@@ -475,8 +475,11 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
             return self.create(ctx)
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
+        revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
-                       revision=goal.revision + 1)
+                       revision=revision, mention_source=bind_goal_mentions(
+                           ProblemGoalOrder.text, goal.id, revision, ctx.thread,
+                           ctx.goals.registry.snapshot()))
 
     def request_ref(self, ctx: GoalActionContext) -> GoalRef:
         """Refuse invalid orders before reserving their Todo."""
