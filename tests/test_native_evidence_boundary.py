@@ -30,7 +30,7 @@ def test_original_header_preserves_project_and_fork_lineage(tmp_path):
         encoded = header.to_wire()
         assert all(encoded[name] == value for name, value in raw.items())
     assert file.read_bytes() == before
-    incomplete = NativeEntry.from_evidence({"type": "session", "id": "unrecorded"})
+    incomplete = NativeEntry.from_evidence({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "unrecorded"})
     assert incomplete.cwd is None and incomplete.parent_session is None
 
 
@@ -45,7 +45,7 @@ def test_original_header_preserves_project_and_fork_lineage(tmp_path):
 def test_unrepresented_content_is_preserved_but_cannot_match_started_text(part):
     entry = NativeEntry.from_evidence(
         {
-            "type": "message",
+            "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
             "id": "entry",
             "message": {
                 "role": "user",
@@ -63,7 +63,7 @@ def test_unrepresented_content_is_preserved_but_cannot_match_started_text(part):
 
 @pytest.mark.parametrize("role", ["assistant", "toolResult", "extension"])
 def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
-    raw = {"type": "message", "id": "entry", "message": {
+    raw = {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "entry", "message": {
         "role": role, "content": [], "inputId": "a" * 32,
     }}
     # Pi requires assistant content; omission fails before tracked-role ownership.
@@ -81,8 +81,8 @@ def test_duplicate_input_ids_are_not_silently_projected_away(tmp_path):
     sessions = tmp_path / "sessions"
     sessions.mkdir(mode=0o700)
     session = sessions / "s.jsonl"
-    rows = [{"type": "session", "id": "sid", "version": 3}] + [
-        {"type": "message", "id": entry_id, "message": {"role": "user", "inputId": "a" * 32, "inputDigest": "b" * 64}}
+    rows = [{"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid", "version": 3}] + [
+        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": entry_id, "message": {"role": "user", "inputId": "a" * 32, "inputDigest": "b" * 64}}
         for entry_id in ("first", "second")]
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     session.chmod(0o600)
