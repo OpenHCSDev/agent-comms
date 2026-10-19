@@ -1094,7 +1094,7 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
 def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
     """A wire name the family does not declare is malformed data."""
     try:
-        return family.decode(name)
+        return family.member_named(name)
     except ValueError as error:
         raise MalformedRecord(str(error)) from error
 

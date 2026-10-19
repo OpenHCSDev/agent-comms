@@ -24,7 +24,9 @@ from agent_comms.maintenance_barrier import (
     MaintenanceHeldError,
     MaintenanceOperator,
 )
-from agent_comms.read_basis import Conversation, ReadCursor
+from agent_comms.read_basis import (
+    ChannelConversation, ConversationCursor, DMConversation, ReadCursor,
+)
 from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
@@ -190,6 +192,15 @@ def test_steps_that_do_not_form_one_chain_are_refused(tmp_path, steps):
         CarryChain.at(tmp_path, "HEAD")
 
 
+def test_a_carry_module_outside_the_chain_is_refused(tmp_path):
+    """A conversion written as a standalone script would never run on an upgraded bus."""
+    repo = Repository(tmp_path)
+    repo.commit({"carry_a": step_source(None),
+                 "carry_script": "def carry(root):\n    pass\n"})
+    with pytest.raises(ValueError, match="carry_script holds no Carry step"):
+        CarryChain.at(tmp_path, "HEAD")
+
+
 def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
     ledger = CarryLedger(tmp_path)
     assert ledger.applied() == ()
@@ -318,8 +329,8 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 
 
 def todos_before_order_runs(root: Path, scratch: Path) -> None:
-    """A todo store as the first pending todo step found it: its order declares no run (before
-    P511), and it lacks only the messages column; corrections/releases/verdicts are already carried."""
+    """A todo store as the live bus held it: its order declares no run (before P511), and it
+    lacks the verdicts, corrections and messages columns; releases are already carried."""
     lead = thread("lead", scratch, 1)
     todo = TodoStore(scratch).create("one", "OpenHCSDev/agent-comms", "Repair the thread list",
         creator=lead, owner=lead, generation="one", deadline=RecordedEventTime(1000),
@@ -328,7 +339,8 @@ def todos_before_order_runs(root: Path, scratch: Path) -> None:
         db.execute(Todo.schema_objects()[Todo.declared_name])
         todo.upsert(db)
         db.execute("""UPDATE todo SET "order" = json_remove("order", '$.run')""")
-        db.execute("ALTER TABLE todo DROP COLUMN messages")
+        for column in ("messages", "corrections", "verdicts"):
+            db.execute(f"ALTER TABLE todo DROP COLUMN {column}")
         db.commit()
 
 
@@ -342,9 +354,10 @@ def run_step(name: str, root: Path, *flags: str) -> dict:
 def retained_read_ledger(root: Path) -> None:
     """The earlier bus already ran the retired read-key step."""
     user = RecordedThreadIncarnation("user", 1.5)
-    direct = Conversation("", (RecordedThreadIncarnation("alice", 2.5), user))
+    direct = DMConversation((RecordedThreadIncarnation("alice", 2.5), user))
     ReadLedger.at(root).replace(ReadDocument(
-        messages={user: {Conversation("#comms"): ReadCursor(2, (4,)), direct: ReadCursor(0, (3,))}},
+        messages={user: ReadCursor({ChannelConversation("#comms"): ConversationCursor(2, (4,)),
+                            direct: ConversationCursor(0, (3,))})},
         bus_identity=RecordedBus(FileIdentity(66308, 6861023)),
         transcripts={("user", "/sessions/a.jsonl", 6860966): 4881511},
     ))
@@ -394,9 +407,10 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.earlier_projects == (Path("/earlier/project"),)
     user = RecordedThreadIncarnation("user", 1.5)
-    direct = Conversation("", (RecordedThreadIncarnation("alice", 2.5), user))
+    direct = DMConversation((RecordedThreadIncarnation("alice", 2.5), user))
     reads = ReadLedger.at(root).read()
-    assert reads.messages == {user: {Conversation("#comms"): ReadCursor(2, (4,)), direct: ReadCursor(0, (3,))}}
+    assert reads.messages == {user: ReadCursor({ChannelConversation("#comms"): ConversationCursor(2, (4,)),
+                            direct: ConversationCursor(0, (3,))})}
     assert reads.transcripts == {("user", "/sessions/a.jsonl", 6860966): 4881511}
     assert json.loads(route.read_text()) == {"version": 2, "root": str(root), "wire_root_id": root_id}
     assert route.stat().st_mode & 0o777 == 0o600

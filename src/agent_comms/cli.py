@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
-        command = CliCommand.decode(args.command).from_namespace(args)
+        command = CliCommand.member_named(args.command).from_namespace(args)
         with client_wire(Path(args.root).expanduser() if args.root else None) as comms:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:

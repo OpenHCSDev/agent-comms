@@ -8,12 +8,14 @@ collaboration edges and thread goals remain separate authorities.
 from __future__ import annotations
 
 import calendar
+import json
 import re
 import subprocess
 import sqlite3
 import time
 import asyncio
 from abc import abstractmethod
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -25,7 +27,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from .recorded_time import EventTime, UnrecordedEventTime
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
@@ -230,16 +232,15 @@ class ProgressSource:
         return [pr for pr in self.pulls.listed(self.todo.repo, state)
                 if self.branch.carries(pr) and pr.updated_at >= self.since]
 
-    def commit(self, *excluded: str) -> tuple[str, float] | None:
+    def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
         log = subprocess.run(
             ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.since)}",
              "--format=%H %ct", "HEAD", "--not", *excluded),
             capture_output=True, text=True, timeout=30)
-        if log.returncode or not log.stdout.strip():
-            return None
-        sha, at = log.stdout.split()
-        return sha, float(at)
+        for line in log.stdout.splitlines() if not log.returncode else ():
+            sha, at = line.split()
+            yield sha, float(at)
 
 
 @dataclass(frozen=True)
@@ -257,8 +258,8 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
-            found = (progress for member in members if (progress := member.found(source)))
-            return next(found, NoCommitProgress())
+            return next((progress for member in members for progress in member.found(source)),
+                        NoCommitProgress())
         except (ValueError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
@@ -267,19 +268,22 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def line(self) -> str: ...
 
     def stalled(self, ordered: float, now: float) -> bool:
-        return (since := self.stalled_since(ordered)) is not None and now > since
+        return False
 
-    def stalled_since(self, ordered: float) -> float | None:
-        """Work stalls 15 minutes after ``moved`` with no commit, push or PR change."""
-        return None if self.moved is None else self.moved + 900
+    def stalled_between(self, ordered: float, since: float, now: float) -> bool:
+        """Whether this work entered its stall after ``since`` and before ``now``."""
+        return False
 
-    @property
-    def moved(self) -> float | None:
-        return None
+    def moved_after(self, since: float) -> bool:
+        return False
 
     def untouched(self, now: float) -> bool:
         """An open pull request nobody has touched for five minutes."""
         return False
+
+    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
+        """The held order this progress leaves waiting on the fleet's install."""
+        return ()
 
 
 @dataclass(frozen=True)
@@ -289,16 +293,42 @@ class FoundProgress(OrderProgress):
 
     @classmethod
     @abstractmethod
-    def found(cls, source: ProgressSource) -> Self | None: ...
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        """Each member of this class the source holds."""
+
+
+class Stalling:
+    """Work that stalls at a time its own class declares."""
+
+    @abstractmethod
+    def stall_at(self, ordered: float) -> float: ...
+
+    def stalled(self, ordered: float, now: float) -> bool:
+        return now > self.stall_at(ordered)
+
+    def stalled_between(self, ordered: float, since: float, now: float) -> bool:
+        return since < self.stall_at(ordered) < now
 
 
 @dataclass(frozen=True)
-class NoCommitProgress(OrderProgress):
+class Moving(Stalling):
+    """Work last moved ``at``; it stalls 15 minutes later with no commit, push or PR change."""
+    at: float = field(kw_only=True)
+
+    def stall_at(self, ordered: float) -> float:
+        return self.at + 900
+
+    def moved_after(self, since: float) -> bool:
+        return self.at > since
+
+
+@dataclass(frozen=True)
+class NoCommitProgress(Stalling, OrderProgress):
     @property
     def line(self) -> str:
         return "no commit since the order"
 
-    def stalled_since(self, ordered: float) -> float | None:
+    def stall_at(self, ordered: float) -> float:
         """No first commit within 10 minutes of the order."""
         return ordered + 600
 
@@ -313,19 +343,13 @@ class UnreadProgress(OrderProgress):
 
 
 @dataclass(frozen=True)
-class CommittedProgress(FoundProgress):
+class CommittedProgress(Moving, FoundProgress):
     precedence: ClassVar[int] = 3
     sha: str
-    at: float
-
-    @property
-    def moved(self) -> float | None:
-        return self.at
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        commit = source.commit("--remotes")
-        return None if commit is None else cls(commit[0][:9], commit[1])
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(sha[:9], at=at) for sha, at in source.commits("--remotes"))
 
     @property
     def line(self) -> str:
@@ -338,9 +362,8 @@ class PushedProgress(CommittedProgress):
     precedence: ClassVar[int] = 4
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        commit = source.commit("origin/HEAD")
-        return None if commit is None else cls(commit[0][:9], commit[1])
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(sha[:9], at=at) for sha, at in source.commits("origin/HEAD"))
 
     @property
     def line(self) -> str:
@@ -348,20 +371,14 @@ class PushedProgress(CommittedProgress):
 
 
 @dataclass(frozen=True)
-class OpenPrProgress(FoundProgress):
+class OpenPrProgress(Moving, FoundProgress):
     precedence: ClassVar[int] = 2
     number: int
     head: str
-    at: float
-
-    @property
-    def moved(self) -> float | None:
-        return self.at
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        return next((cls(pr.number, pr.head[:9], pr.updated_at)
-                     for pr in source.requests("open")), None)
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(pr.number, pr.head[:9], at=pr.updated_at) for pr in source.requests("open"))
 
     @property
     def line(self) -> str:
@@ -379,13 +396,60 @@ class MergedProgress(FoundProgress):
     sha: str
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        return next((cls(pr.merge[:9]) for pr in source.requests("merged")
-                     if pr.merge and (pr.merged_at or 0) >= source.since), None)
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(pr.merge[:9]) for pr in source.requests("merged")
+                if pr.merge and (pr.merged_at or 0) >= source.since)
 
     @property
     def line(self) -> str:
         return f"merged as {self.sha}, record done"
+
+    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
+        return (todo,)
+
+
+class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
+    """The fleet's next install: one time for the bus, set by the commander when it plans an
+    upgrade. Merged and delivered orders wait on it; none of them carries it as its own deadline."""
+
+    @staticmethod
+    def path_in(root: Path) -> Path:
+        return root / "install-deadline.json"
+
+    @classmethod
+    def read(cls, root: Path) -> InstallDeadline:
+        path = cls.path_in(root)
+        if not path.exists():
+            return UnplannedInstallDeadline()
+        return PlannedInstallDeadline(RecordedEventTime(**json.loads(path.read_text())))
+
+    @abstractmethod
+    def alarm(self, waiting: list[str], now: float) -> list[str]:
+        """One INSTALL line for every order waiting on install; it strikes nobody."""
+
+
+class UnplannedInstallDeadline(InstallDeadline):
+    def alarm(self, waiting: list[str], now: float) -> list[str]:
+        return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
+
+
+@dataclass(frozen=True)
+class PlannedInstallDeadline(InstallDeadline):
+    at: RecordedEventTime
+
+    def plan(self, root: Path) -> None:
+        path = self.path_in(root)
+        staged = path.with_suffix(".tmp")
+        staged.write_text(json.dumps({"at": self.at.at}))
+        staged.replace(path)
+
+    def alarm(self, waiting: list[str], now: float) -> list[str]:
+        if not waiting:
+            return []
+        due = time.strftime("%H:%M", time.localtime(self.at.at))
+        if now > self.at.at:
+            return [f"INSTALL LATE (due {due}), not the orders; waiting: {', '.join(waiting)}"]
+        return [f"INSTALL due {due}; waiting: {', '.join(waiting)}"]
 
 
 @dataclass(frozen=True)
@@ -721,6 +785,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         """How this order retired its problem without delivery, as the record and board say."""
         return ()
 
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        """The order waiting on the fleet's install to record it working."""
+        return ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
@@ -728,6 +796,10 @@ class PendingProblemOrder(ProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         pass
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        """An undelivered order waits on install once its PR merged."""
+        return read[todo.id].waiting_on_install(todo)
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
@@ -755,6 +827,9 @@ class DeliveredProblemOrder(ProblemOrder):
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return (todo,)
+
 
 @dataclass(frozen=True, kw_only=True)
 class InstalledProblemOrder(DeliveredProblemOrder):
@@ -773,6 +848,9 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
     def require_close(self):
         pass
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -836,6 +914,9 @@ class GoalReference(SubclassUnion):
     def require_reference(self) -> None:
         pass
 
+    def threads(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class NoGoalReference(NullMember, GoalReference):
@@ -863,6 +944,9 @@ class GoalRef(RecordMember, GoalReference):
     @property
     def incarnation(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.owner, self.owner_created)
+
+    def threads(self) -> tuple[str, ...]:
+        return (self.owner,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1029,9 +1113,17 @@ class StrikeTodo(TodoOperation):
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
+class VerdictAudience:
+    """The order's unit and its goal's thread; no verdict kind today concerns every unit."""
+    @staticmethod
+    def targets(todo: Todo) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((todo.held().owner, *todo.goal.threads())))
+
+
 @dataclass(frozen=True)
 class OrderVerdict(TodoOperation, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+    audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
     tool_call_id: str
@@ -1039,6 +1131,10 @@ class OrderVerdict(TodoOperation, declared_name=None):
 
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
+
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
@@ -1053,6 +1149,7 @@ class OrderVerdict(TodoOperation, declared_name=None):
 class AcceptedVerdict(OrderVerdict):
     """The tool call carries out the order clause it quotes."""
     quote: str
+    line = "Accepted"
 
     def judged(self, current: Todo) -> Todo:
         quoted = " ".join(self.quote.split())
@@ -1066,6 +1163,10 @@ class AcceptedVerdict(OrderVerdict):
 class SendBackVerdict(OrderVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
+
+    @property
+    def line(self) -> str:
+        return f"Sent back: {self.reason.text}"
 
     def judged(self, current: Todo) -> Todo:
         strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
@@ -1474,6 +1575,14 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
+        """Each pending problem's progress and latest verdict, as its Goal shows them."""
+        pulls = PullRequests()
+        return "\n".join(
+            " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
+                        *(verdict.line for verdict in todo.verdicts[-1:])))
+            for todo in todos if todo.pending)
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""

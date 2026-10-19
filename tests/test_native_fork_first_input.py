@@ -104,7 +104,7 @@ class ForkOwnerCase(OwnerClaimCase):
         super().verify_relationships(comms, thread)
         parent = comms.registry.require(thread.parent)
         assert parent.name == "physical-parent"
-        edge = comms.relationships.edit(parent.name, RelationshipEdit.decode('add'), thread.name, "Actual native fork")
+        edge = comms.relationships.edit(parent.name, RelationshipEdit.member_named('add'), thread.name, "Actual native fork")
         assert edge.pair_identity == frozenset((parent.incarnation, thread.incarnation))
         for owner, peer in ((parent, thread), (thread, parent)):
             saved = comms.relationships.collaborations(owner.name)

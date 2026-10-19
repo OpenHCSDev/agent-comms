@@ -511,7 +511,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         Schema owners load their row modules before querying capabilities. A
         checkpoint read must not import unrelated application modules while
         holding its bus lock. External table-name decoding still uses the
-        registry's complete lazy discovery through DeclaredFamily.decode.
+        registry's complete lazy discovery through DeclaredFamily.member_named.
         """
         return tuple(dict.values(cls.__registry__))
 

@@ -38,15 +38,15 @@ class CustomCase(SampleFamily, declared_name="external-v1"):
 
 def test_golden_names_decode_capability_and_slots_identity():
     assert SampleFamily.names() == ("http_ready", "external-v1")
-    assert SampleFamily.decode("http_ready") is HTTPReadyCase
+    assert SampleFamily.member_named("http_ready") is HTTPReadyCase
     assert SampleFamily.members_with(Capability) == (HTTPReadyCase,)
     assert HTTPReadyCase(3).execute() == 3
     with pytest.raises(TypeError):
         AbstractCase()
     with pytest.raises(ValueError):
-        SampleFamily.decode("missing")
+        SampleFamily.member_named("missing")
     with pytest.raises(ValueError):
-        HTTPReadyCase.decode("external-v1")
+        HTTPReadyCase.member_named("external-v1")
 
 
 def test_explicit_unnamed_concrete_state_uses_existing_registry_exclusion():
@@ -59,7 +59,7 @@ def test_explicit_unnamed_concrete_state_uses_existing_registry_exclusion():
     assert UnnamedCase().execute() == 2
     assert SampleFamily.names() == ("http_ready", "external-v1")
     with pytest.raises(ValueError):
-        SampleFamily.decode("unnamed")
+        SampleFamily.member_named("unnamed")
 
 
 def test_slots_root_keeps_its_declared_affix():
@@ -75,7 +75,7 @@ def test_slots_root_keeps_its_declared_affix():
             return self.value
 
     assert Limits.names() == ("byte",)
-    assert Limits.decode("byte") is ByteLimit
+    assert Limits.member_named("byte") is ByteLimit
     assert ByteLimit(4).amount() == 4
 
 
@@ -103,7 +103,7 @@ def test_child_roots_share_behavior_not_membership_and_survive_slots():
     assert Left._family_root is Left and Right._family_root is Right
     assert Left.members_with(Left) == (left,)
     assert Right.members_with(Right) == (right,)
-    assert Left.decode("value") is left and Right.decode("value") is right
+    assert Left.member_named("value") is left and Right.member_named("value") is right
     assert left().answer() == right().answer() == 7
 
 
@@ -114,7 +114,7 @@ def test_collisions_fail_without_replacing_owner():
             def execute(self):
                 return 0
 
-    assert SampleFamily.decode("http_ready") is HTTPReadyCase
+    assert SampleFamily.member_named("http_ready") is HTTPReadyCase
 
 
 def test_independent_families_and_inherited_names_are_derived():
@@ -128,7 +128,7 @@ def test_independent_families_and_inherited_names_are_derived():
         pass
 
     assert Other.names() == ("http_ready", "child")
-    assert Other.decode("http_ready") is HTTPReady
+    assert Other.member_named("http_ready") is HTTPReady
     assert Child.declared_name == "child"
     with pytest.raises(TypeError, match="two families"):
 
@@ -158,7 +158,7 @@ def test_checkpoint_schema_query_stays_local_but_external_names_still_discover()
 
             # Schema-report's external-name boundary still acquires the full
             # distributed family; this change must not hide unloaded tables.
-            row = TypedTable.decode('native_runtime_input')
+            row = TypedTable.member_named('native_runtime_input')
             assert row.declared_name == 'native_runtime_input'
         """)],
         capture_output=True, text=True, timeout=30,

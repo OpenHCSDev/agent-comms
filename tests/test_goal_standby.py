@@ -209,7 +209,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     # enforced. Both turns subsequently finish without any dependency reply.
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
-    GoalWaits(tmp_path / "goal_waits.json").record(
+    GoalWaits(tmp_path / "goal_waits.sqlite3").record(
         RecordedGoalWait(
             bob.id,
             "bob-wait",
@@ -254,7 +254,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     )
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
-    GoalWaits(tmp_path / "goal_waits.json").record(
+    GoalWaits(tmp_path / "goal_waits.sqlite3").record(
         RecordedGoalWait(
             bob.id,
             "bob-wait",
@@ -292,7 +292,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
     comms.goals.update_goal(
         "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
     )
-    GoalWaits(tmp_path / "goal_waits.json").record(
+    GoalWaits(tmp_path / "goal_waits.sqlite3").record(
         RecordedGoalWait(
             bob.id,
             "bob-wait",
