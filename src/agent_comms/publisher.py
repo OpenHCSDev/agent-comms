@@ -78,12 +78,12 @@ class Publisher:
         """A publisher that only reads leaves its root as it finds it."""
 
     def _validate_publish_request(
-        self, message: Message, *, registry_snapshot: RegistrySnapshot | None = None,
+        self, message: Message, *, registry_snapshot: RegistrySnapshot,
         catalog: CatalogDocument, activity: ActivityClocks,
     ) -> tuple[str, NamedTarget, Callable[[str], Channel]]:
-        """Resolve the public route from the acquired declarations when supplied."""
+        """Resolve the public route from the caller's acquired declarations."""
 
-        snapshot = self._registry.snapshot() if registry_snapshot is None else registry_snapshot
+        snapshot = registry_snapshot
         sender = snapshot.canonical_name(message.sender)
         if sender not in snapshot.threads:
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
@@ -245,7 +245,8 @@ class InitialWrites(PrivateWrites):
                 # Refuse invalid input before creating a protocol on a fresh
                 # root. Established roots validate against the same guarded
                 # snapshot that selects the audience below.
-                self._validate_publish_request(message, catalog=self._channels.read(), activity=activity)
+                self._validate_publish_request(message, registry_snapshot=self._registry.snapshot(),
+                                               catalog=self._channels.read(), activity=activity)
                 self._initialize_private_protocol_unlocked()
             return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 

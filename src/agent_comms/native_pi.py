@@ -81,6 +81,25 @@ class NativeInputUncommitted(NativePiUnavailable):
         return PendingStopReason
 
 
+class InputCommitment:
+    """What the observed session durably committed for one input, asked for a prompt digest."""
+
+    def matches(self, digest: str) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class CommittedInput(InputCommitment):
+    digest: str
+
+    def matches(self, digest: str) -> bool:
+        return self.digest == digest
+
+
+class UncommittedInput(InputCommitment):
+    """No entry commits the input, so no expected digest can equal it."""
+
+
 class NativePiInputNotSent(NativePiUnavailable):
     """The input never entered its prompt writer; this does not permit replay."""
 
@@ -989,13 +1008,12 @@ def _session_location(directory: Path, candidate: str) -> Path:
     return path
 
 
-def read_tracked_input_digest(
+def read_tracked_input_commitment(
     session_file: Path, input_id: str, *, evidence: NativeEvidenceRead | None = None
-) -> str | None:
-    """Corroborating digest only; this cannot authorize recovery or input replay.
+) -> InputCommitment:
+    """Corroborating commitment only; this cannot authorize recovery or input replay.
 
-    ``None`` means the journal holds no durable commit of this input. An
-    unreadable or malformed journal is not absence and raises.
+    An unreadable or malformed journal is not an uncommitted input and raises.
     """
     Id128Text.decode(input_id)
     session_file = Path(session_file).absolute()
@@ -1004,9 +1022,9 @@ def read_tracked_input_digest(
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
         evidence.observe()
         try:
-            return evidence.tracked(input_id).message.input_digest
+            return CommittedInput(evidence.tracked(input_id).message.input_digest)
         except NativeInputUncommitted:
-            return None
+            return UncommittedInput()
 
 
 def _verify_context(

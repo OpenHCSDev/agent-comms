@@ -75,6 +75,7 @@ def project_array(value, target):
 
 class PiPayload:
     wire_tag: ClassVar[str | None] = None
+    opaque: ClassVar[bool] = False
     strict_fields: ClassVar[bool] = False
 
     @classmethod
@@ -85,8 +86,6 @@ class PiPayload:
         data = {}
         if issubclass(cls, DeclaredFamily):
             member = cls.wire_member(value)
-            if member.opaque:
-                return {"kind": member.declared_name, "payload": value}
             data["kind"] = member.declared_name
         declared = FieldCodec.record_fields(member)
         names = {key for _, key in declared}
@@ -97,6 +96,9 @@ class PiPayload:
             # Native null means omitted where the declaration names its not-reported member.
             if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
                 data[key] = member.normalize_field(hints[f.name], key, value[key], value)
+        if member.opaque:
+            # An opaque member keeps the whole record beside the fields it declares.
+            data.update(payload=value)
         return data
 
     @classmethod
@@ -122,8 +124,6 @@ class PiPayload:
 
 @dataclass(frozen=True)
 class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
-    opaque = False
-
     @classmethod
     def wire_member(cls, value):
         try:
@@ -269,14 +269,13 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
         return self if self.to_wire() == raw else UnknownContent(raw)
 
-    def user_transcript(self):
+    def user_transcript(self, position: int):
         return []
 
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         return []
 
     wire_tag = "type"
-    opaque: ClassVar[bool] = False
     text: ClassVar[str] = ""
     tool_round_allowed: ClassVar[bool] = False
 
@@ -296,15 +295,15 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
 
 @dataclass(frozen=True)
 class TextContent(PiContent):
-    def user_transcript(self):
+    def user_transcript(self, position: int):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(self.text)]
+        return [UserTranscript(self.text, position=position)]
 
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         from .transcript_events import AssistantTranscript
 
-        return [AssistantTranscript(self.text)]
+        return [AssistantTranscript(self.text, position=position)]
 
     text: str = field()
     text_signature: str | None = wire_field("textSignature")
@@ -317,10 +316,10 @@ class TextContent(PiContent):
 
 @dataclass(frozen=True)
 class ThinkingContent(PiContent):
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         from .transcript_events import ThinkingTranscript
 
-        return [ThinkingTranscript(self.thinking)]
+        return [ThinkingTranscript(self.thinking, position=position)]
 
     thinking: str = ""
     thinking_signature: str | None = wire_field("thinkingSignature")
@@ -336,11 +335,11 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return (self,)
 
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         from .transcript_events import ToolStartTranscript
 
         return [
-            ToolStartTranscript(tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
+            ToolStartTranscript(position=position, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
                                 tool=ToolDeclaration.record(self.name, self.arguments))
         ]
 
@@ -352,10 +351,10 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 
 @dataclass(frozen=True)
 class ImageContent(PiContent):
-    def user_transcript(self):
+    def user_transcript(self, position: int):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]")]
+        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position)]
 
     data: str
     mime_type: str = wire_field("mimeType")
@@ -471,7 +470,6 @@ class ProviderTransportDetails(PiPayload):
 @dataclass(frozen=True)
 class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     wire_tag = "type"
-    opaque = False
     provider_connection_failure: ClassVar[bool] = False
 
     @classmethod
@@ -544,7 +542,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         return []
 
     wire_tag = "role"
-    opaque: ClassVar[bool] = False
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
@@ -618,7 +615,6 @@ class AbsentMessage(PiMessage):
 
 @dataclass(frozen=True)
 class AssistantMessage(PiMessage):
-
     def annotation_disclosure(self):
         from .working_memory_disclosure import PublicInstructionDisclosure
 
@@ -673,22 +669,21 @@ class AssistantMessage(PiMessage):
         return tuple(updates)
 
     @property
-    def unread_reply(self) -> bool:
-        from .transcript_events import AssistantTranscript, NoticeTranscript
+    def error_notice(self) -> str:
+        return self.stop_reason.error_notice(self)
 
-        return any(
-            isinstance(event, (AssistantTranscript, NoticeTranscript)) and event.text.strip()
-            for event in self.transcript_events(None)
-        )
+    @property
+    def unread_reply(self) -> bool:
+        return bool(self.text.strip() or self.error_notice)
 
     def transcript_events(self, context):
         from .transcript_events import AssistantTranscript, NoticeTranscript
 
-        if self.stop_reason.failed and self.error_message and self.error_message.strip():
-            return [NoticeTranscript(f"[agent error] {self.error_message.strip()}")]
+        if notice := self.error_notice:
+            return [NoticeTranscript(f"[agent error] {notice}", position=context.position)]
         events = []
         for part in self.parts:
-            for event in part.assistant_transcript():
+            for event in part.assistant_transcript(context.position):
                 if (
                     isinstance(event, AssistantTranscript)
                     and events
@@ -731,7 +726,7 @@ class UserMessage(PiMessage):
         events = []
         if display is not None:
             if raw_text and raw_text != display.text:
-                events.append(ContextTranscript(raw_text))
+                events.append(ContextTranscript(raw_text, position=context.position))
             if display.text is None:
                 return events
             parts = (
@@ -739,7 +734,7 @@ class UserMessage(PiMessage):
                 *(part for part in parts if not isinstance(part, TextContent)),
             )
         for part in parts:
-            events.extend(part.user_transcript())
+            events.extend(part.user_transcript(context.position))
         return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
@@ -770,6 +765,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
+                position=context.position,
                 text=output,
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,
@@ -790,7 +786,6 @@ class UnknownMessage(PiMessage):
 @dataclass(frozen=True)
 class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     wire_tag = "type"
-    opaque: ClassVar[bool] = False
     progress: ClassVar[bool] = False
     response_progress: ClassVar[bool] = False
 
@@ -869,7 +864,6 @@ class UnknownDelta(PiDelta):
 @dataclass(frozen=True)
 class PiModel(PiPayload, DeclaredFamily, affix="Model"):
     wire_tag = None
-    opaque: ClassVar[bool] = False
     display_name: ClassVar[str | None] = None
     context_window: ClassVar[PiCount] = UnreportedCount()
 
@@ -936,7 +930,6 @@ class PiContextUsage(PiPayload):
 @dataclass(frozen=True)
 class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
     wire_tag = None
-    opaque: ClassVar[bool] = False
 
     @property
     def session_busy(self) -> bool:
@@ -1102,7 +1095,6 @@ class UnknownData(PiResponseData):
 @dataclass(frozen=True)
 class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
     wire_tag = None
-    opaque: ClassVar[bool] = False
 
     @classmethod
     def normalize_wire(cls, value):
@@ -1179,7 +1171,6 @@ class NativeEditDetails(PiPayload):
 @dataclass(frozen=True)
 class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
     """Decode the original owned result once; other extension details stay opaque."""
-    opaque: ClassVar[bool] = False
     wire_tag = "agentCommsKind"
 
     @classmethod

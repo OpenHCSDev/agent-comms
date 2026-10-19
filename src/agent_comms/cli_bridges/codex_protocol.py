@@ -311,7 +311,7 @@ class TextBody(WireModel):
     text: str
 
     def accumulator(self, started_at: EventTime) -> TextDraft:
-        return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at)
+        return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at, self.id)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.accumulator(UnrecordedEventTime()).events
@@ -334,7 +334,7 @@ class ReasoningItem(Item):
 
     def accumulator(self, started_at: EventTime) -> ParagraphDraft:
         # Only public summaries; private/raw reasoning is never projected.
-        return ParagraphDraft.from_parts(ThinkingTranscript, self.summary, started_at)
+        return ParagraphDraft.from_parts(ThinkingTranscript, self.summary, started_at, self.id)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.accumulator(UnrecordedEventTime()).events
@@ -346,7 +346,7 @@ class UserItem(Item):
     clientId: str | None = None
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (UserTranscript('\n'.join(part.display for part in self.content)),)
+        return (UserTranscript('\n'.join(part.display for part in self.content), position=self.id),)
 
     def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> TranscriptUpdate:
         # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
@@ -378,7 +378,7 @@ class ToolItem(Item, ABC):
                         tool=ToolDeclaration.record(self.tool_name, self.arguments))
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.call.finished(self.output, self.succeeded)
+        return self.call.finished(self.output, self.succeeded, self.id)
 
     @property
     def activity_detail(self) -> str:
@@ -530,7 +530,7 @@ class FunctionOutputItem(Item):
     output: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (ToolEndTranscript(tool_call_id=self.id, tool_name=self.name, text=self.output),)
+        return (ToolEndTranscript(position=self.id, tool_call_id=self.id, tool_name=self.name, text=self.output),)
 
 
 class SendOutputItem(FunctionOutputItem):
@@ -546,7 +546,7 @@ class CompactionItem(Item):
     doing = 'Compacting context'
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript('Context compacted.'),)
+        return (NoticeTranscript('Context compacted.', position=self.id),)
 
 
 class HookPromptItem(Item):
@@ -561,7 +561,7 @@ class ReviewBody(WireModel):
     review: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(self.review),)
+        return (NoticeTranscript(self.review, position=self.id),)
 
 
 class EnteredReviewItem(ReviewBody, Item):
@@ -577,7 +577,7 @@ class SleepItem(Item):
     durationMs: int
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).'),)
+        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).', position=self.id),)
 
     @property
     def activity_detail(self) -> str:
@@ -589,7 +589,7 @@ class ImageViewItem(Item):
     path: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Image: {self.path}'),)
+        return (NoticeTranscript(f'Image: {self.path}', position=self.id),)
 
 
 class ImageGenerationItem(Item):
@@ -600,7 +600,7 @@ class ImageGenerationItem(Item):
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'Image generation: {self.status}' +
-                                 (f' — {self.savedPath}' if self.savedPath else '')),)
+                                 (f' — {self.savedPath}' if self.savedPath else ''), position=self.id),)
 
 
 class WebSearchItem(Item):
@@ -611,7 +611,7 @@ class WebSearchItem(Item):
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         # Search status carries no success flag. Do not invent a successful end.
-        return (NoticeTranscript(f'Web search: {self.query}'),)
+        return (NoticeTranscript(f'Web search: {self.query}', position=self.id),)
 
     @property
     def activity_detail(self) -> str:
@@ -659,7 +659,7 @@ class FileChange(WireModel):
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
         return ToolCall(call_id, 'edit', {'path': self.path}, self.kind.patch(self.path, self.diff),
-                        FilePatchTool(path=self.path)).finished('', ok)
+                        FilePatchTool(path=self.path)).finished('', ok, call_id)
 
 
 class FileChangeItem(Item):
@@ -690,7 +690,7 @@ class AgentToolItem(Item):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'{self.tool}: {self.status}\n' + '\n'.join(
             f'{name}: {state.status}' + (f' — {state.message}' if state.message else '')
-            for name, state in self.agentsStates.items())),)
+            for name, state in self.agentsStates.items()), position=self.id),)
 
 
 class AgentActivityItem(Item):
@@ -700,7 +700,7 @@ class AgentActivityItem(Item):
     kind: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'{self.agentPath}: {self.kind}'),)
+        return (NoticeTranscript(f'{self.agentPath}: {self.kind}', position=self.id),)
 
 
 # The existing registration owner derives this wire grammar from declarations.

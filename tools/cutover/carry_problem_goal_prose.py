@@ -21,7 +21,7 @@ from agent_comms.registry_store import RegistryStore
 class ProblemGoalProse(Carry):
     """Each problem goal stores the fixed problem text and no progress."""
 
-    after = "carry_p495_read_ledger"
+    after = "carry_goal_wait_targets"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

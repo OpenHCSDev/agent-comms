@@ -9,7 +9,7 @@ import pytest
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import ActivityState
-from agent_comms.channel_targets import BuiltinChannel
+from agent_comms.channels import BuiltinChannelView
 from agent_comms.channels import AllOfMatch, AnyOfMatch, ChannelMemberIndex, RetiredTagChannel, TagChannel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.channel_management import (
@@ -502,7 +502,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
 
     def names(client):
         ordered = [view.channel.name for view in client.views.channel_views()]
-        prefix = [builtin.value for builtin in BuiltinChannel]
+        prefix = list(BuiltinChannelView.names())
         assert ordered[:len(prefix)] == prefix
         return ordered[len(prefix):]
 

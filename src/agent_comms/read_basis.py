@@ -128,10 +128,6 @@ class SelectedDisplay(DisplaySelection):
     viewer: ThreadIncarnation
     history_revision: FileRevision | None
 
-    def page_selection(self) -> SelectedDisplay:
-        return (HistoricalSelection(viewer=self.viewer, history_revision=self.history_revision)
-                if self.history_revision is not None else self)
-
     @property
     def has_evidence(self) -> bool:
         return True
@@ -620,7 +616,7 @@ class DMDisplayBasis:
             viewer=self.viewer_identity, peer=self.peer_identity,
             scope=DMDisplayScope(self.viewer_names, self.peer_names),
             history_revision=history_revision,
-        ).page_selection()
+        )
 
     @property
     def viewer(self) -> str:
@@ -851,7 +847,7 @@ class ChannelDisplayScope(MessageDisplayScope):
         return ChannelSelection(
             viewer=self.displayed.viewer_identity, bus_identity=self.displayed.bus_identity,
             scope=self, history_revision=history_revision,
-        ).page_selection()
+        )
 
     def require_displayed(self) -> DisplayBasis:
         if self.displayed is None:

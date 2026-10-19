@@ -458,16 +458,35 @@ class PathText(TextRepresentation[Path]):
         return Path(value)
 
 
-class TimestampText(TextRepresentation[datetime]):
-    @classmethod
-    def encode(cls, value: object) -> str:
-        if not isinstance(value, datetime):
-            raise MalformedRecord("Expected a datetime")
-        return value.isoformat()
+@dataclass(frozen=True)
+class RecordedTimestamp:
+    """A time as its writer spelled it; the text round-trips byte for byte."""
+
+    text: str
 
     @classmethod
-    def from_text(cls, value: str) -> datetime:
-        return datetime.fromisoformat(value)
+    def written(cls, moment: datetime) -> RecordedTimestamp:
+        """A time Core writes itself, spelled once in ISO 8601."""
+        return cls(moment.isoformat())
+
+    @cached_property
+    def at(self) -> datetime:
+        return datetime.fromisoformat(self.text)
+
+
+class TimestampText(TextRepresentation[RecordedTimestamp]):
+    @classmethod
+    def encode(cls, value: object) -> str:
+        if not isinstance(value, RecordedTimestamp):
+            raise MalformedRecord("Expected a recorded timestamp")
+        return value.text
+
+    @classmethod
+    def from_text(cls, value: str) -> RecordedTimestamp:
+        recorded = RecordedTimestamp(value)
+        if not recorded.at.tzinfo:
+            raise ValueError("A recorded time must name its UTC offset")
+        return recorded
 
 
 class Id128Text(SpelledText):

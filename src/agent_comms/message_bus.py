@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import ANY_CHANNEL, BuiltinChannel, ChannelTarget, CommandTarget
+from .channel_targets import CommandTarget
+from .channels import ANY_CHANNEL
 from .errors import UnregisteredThreadError
-from .maintenance_barrier import MaintenanceBarrier
+from .coordinator import Coordination
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .historical_views import HistoryArchive
 from .message_page import (
-    NEWEST_PAGE, DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
+    DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
@@ -24,8 +27,6 @@ from .messages import Message
 from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
-    AllChannelDisplayScope, ChannelDisplayScope,
-    DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
     WatchAcknowledgment,
@@ -172,6 +173,28 @@ class MessageBus[Writes: Publisher]:
                     acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
                     after = message.reference
 
+    async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
+        """Wait out a hold without replaying an admitted synchronous write.
+
+        Synchronous callbacks run under ingress in a worker, so refusal precedes
+        even in-memory mutation and maintenance cannot split a publication batch.
+        An async callback only creates its coroutine under ingress; its stream
+        runs unlocked and retains its own delivery cursor across held attempts.
+        No other failure is retried.
+        """
+        maintenance = MaintenanceBarrier(self._registry.store.path)
+
+        def admitted():
+            with maintenance.allow_input():
+                return operation()
+
+        while True:
+            try:
+                result = await Coordination.run_worker(admitted)
+                return await result if inspect.isawaitable(result) else result
+            except MaintenanceHeldError:
+                await self.resumed()
+
     async def resumed(self) -> None:
         """Return once maintenance has cleared; each change to its state wakes the check."""
         maintenance = MaintenanceBarrier(self._registry.store.path)
@@ -306,27 +329,6 @@ class MessageBus[Writes: Publisher]:
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         return self.log.read_page(MessagePageRequest(delivery, PageBounds(NewerTraversal(after))))
-
-    def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Return one bounded page between two threads, either possibly deleted."""
-        snapshot = self._registry.snapshot()
-        scope = DMDisplayScope.capture(
-            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
-        )
-        return self.log.read_page(MessagePageRequest(scope, bounds))
-
-    def channel_history_page(
-        self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
-    ) -> MessagePage:
-        """Return one bounded page from a channel in ascending order."""
-        channel = self.require_channel(target.name)
-        scope = channel.history_scope()
-        return self.log.read_page(MessagePageRequest(scope, bounds))
-
-    def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Bounded combined view of explicit channel and direct wire messages."""
-        scope = AllChannelDisplayScope(BuiltinChannel.ANY.value)
-        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())
