@@ -6,11 +6,12 @@ from dataclasses import dataclass
 
 from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from .external_transcript import ExternalTranscript
+from .agent_runtime import ReadsToolActivity
 from .selected_session import SelectedSession
 
 
 @dataclass(frozen=True)
-class UnstartedRuntime(RuntimeLocation):
+class UnstartedRuntime(ReadsToolActivity, RuntimeLocation):
     owner: type[AgentBackend]
     resumable = False
 
@@ -53,6 +54,9 @@ class UnstartedRuntime(RuntimeLocation):
 
     def history_source(self, root, incarnation):
         return ExternalTranscript(root, incarnation)
+
+    def last_tool_call(self, root, incarnation):
+        return self.history_source(root, incarnation).last_tool_call()
 
     def storage_files(self):
         return ()
