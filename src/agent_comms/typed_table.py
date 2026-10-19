@@ -879,14 +879,25 @@ class TypedStore(RootFile):
             raise self.schema_error(f"{self.filename} differs from its declaration")
 
     @contextmanager
-    def writing(self) -> Iterator[sqlite3.Connection]:
+    def writer_connection(self) -> Iterator[sqlite3.Connection]:
+        """Own attachment and validate its schema once for this writer lifetime."""
         with self._attached(lambda: closing(self._open_writer())) as connection:
-            try:
-                connection.execute("BEGIN IMMEDIATE")
-                self.require_schema(self._schema(connection))
-                yield connection
-                connection.execute("COMMIT")
-            except BaseException:
-                if connection.in_transaction:
-                    connection.execute("ROLLBACK")
-                raise
+            self.require_schema(self._schema(connection))
+            yield connection
+
+    @staticmethod
+    @contextmanager
+    def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            yield connection
+            connection.execute("COMMIT")
+        except BaseException:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        with self.writer_connection() as connection, self.transaction(connection):
+            yield connection

@@ -231,7 +231,7 @@ class ExternalEventRow(TypedTable):
 
 
 @dataclass(frozen=True)
-class DraftRow(TypedTable, TranscriptDraft):
+class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
     """The assigned transcript's current message, shared by native and CLI writers."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
@@ -243,52 +243,34 @@ class DraftRow(TypedTable, TranscriptDraft):
         return self
 
     @classmethod
-    def current(cls, root: Path, thread: str) -> TranscriptDraft:
-        from .coordination_database import CoordinationStore
-        with CoordinationStore.observed(root / 'coordination.sqlite3').observing(cls, thread) as draft:
-            return draft
-
-    @classmethod
-    def capture(cls, connection, thread):
-        return (cls.one(connection, thread=thread) if cls.present(connection) else None) or NoDraft()
-
-    @classmethod
-    def missing_store(cls, store):
-        return NoDraft()
-
-    @classmethod
-    def invalid_store(cls, store):
-        raise ValueError('Draft source is not a valid coordinator')
-
-    @classmethod
-    def for_input(cls, root: Path, input_id: str) -> TranscriptDraft:
+    @contextmanager
+    def publication(cls, root: Path, input_id: str):
         from .native_runtime_input import NativeRuntimeInput
         from .transcripts import TranscriptRead
         with TranscriptRead.publication_source(root) as connection:
             original = NativeRuntimeInput.one(connection, input_id=input_id) if connection is not None else None
-        return (cls(original.owner_lookup, input_id, uuid4().hex, ())
-                if original is not None else NoDraft())
-
-    def publish(self, root: Path, events: tuple[TranscriptEvent, ...]) -> None:
-        from dataclasses import replace
-        from .coordination_database import CoordinationStore
-        with closing(CoordinationStore.writer(root / 'coordination.sqlite3')) as connection:
-            with connection:
-                self.create(connection, if_not_exists=True)
-                replace(self, events=events).upsert(connection)
-
-    def publish_text(self, root: Path, text: str, timestamp: float) -> None:
-        from .transcript_events import AssistantTranscript
-        self.publish(root, (AssistantTranscript(text, timestamp=timestamp, position=self.item_id),))
-
-    def end_turn(self, root: Path) -> None:
-        from .coordination_database import CoordinationStore
-        if not (root / 'coordination.sqlite3').exists():
+        if original is None:
+            yield DraftPublication()
             return
-        with closing(CoordinationStore.writer(root / 'coordination.sqlite3')) as connection:
-            with connection:
-                if self.present(connection):
-                    self.delete(connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
+        transcript = ExternalTranscript(root, original.owner_lookup)
+        with transcript.writer_connection() as connection:
+            publication = TurnDraftPublication(root, original.owner_lookup, connection, input_id)
+            try:
+                yield publication
+            finally:
+                publication.retire_message()
+
+    def append_text(self, text: str):
+        from dataclasses import replace
+        return replace(self, events=tuple(replace(event, text=event.text + text) for event in self.events))
+
+    def publish(self, transcript: TypedStore) -> None:
+        with transcript.writing() as connection:
+            self.upsert(connection)
+
+    def end_turn(self, transcript: TypedStore) -> None:
+        with transcript.writing() as connection:
+            self.delete(connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
 
 
 @dataclass(frozen=True)
@@ -367,6 +349,10 @@ class StoreRead(TranscriptSource):
     def cut(self) -> ExternalCut:
         return self.transcript._cut(self.connection)
 
+    @contextmanager
+    def draft_snapshot(self, root: Path, thread: str):
+        yield self.connection
+
     def _records(self, where: str, parameters: tuple, *,
                  descending: bool) -> Iterator[ExternalRecord]:
         with closing(ExternalItemRow.stream(
@@ -409,9 +395,9 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
-    incarnation: ThreadIncarnation
+    lookup: str
     filename: ClassVar[str] = "external_transcripts.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, DraftRow)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
@@ -420,17 +406,13 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         database = cls.path_in(root)
         return database, database.with_name(database.name + "-wal")
 
-    @property
-    def lookup(self) -> str:
-        return self.incarnation.lookup
-
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
         with self.writing() as connection:
             if events:
                 self._insert_once(connection, turn_id, item_id, events, self._cut(connection).offset + 1)
-        DraftRow(self.lookup, turn_id, item_id, ()).end_turn(self.root)
+            DraftRow.delete(connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
 
     def _insert_once(self, connection, turn_id, item_id, events, seq) -> bool:
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
@@ -479,10 +461,13 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def draft(self, *, turn_id: str, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:
-        DraftRow(self.lookup, turn_id, item_id, ()).publish(self.root, events)
+        with self.writing() as connection:
+            DraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
 
     def end_turn(self) -> None:
-        self.current_draft(self.root, self.lookup).end_turn(self.root)
+        with self.reading() as records:
+            draft = records.current_draft(self.root, self.lookup)
+        draft.end_turn(self)
 
     @contextmanager
     def reading(self):
@@ -492,4 +477,51 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalItemRow.select(connection, row_type=ExternalCut, thread=self.lookup)[0]
+
+
+class DraftPublication:
+    """Unassigned native turns have no assigned draft to publish."""
+
+    def begin_message(self, timestamp: float) -> None:
+        pass
+
+    def append_text(self, text: str) -> None:
+        pass
+
+    def publish(self) -> None:
+        pass
+
+    def retire_message(self) -> None:
+        pass
+
+
+class TurnDraftPublication(ExternalTranscript, DraftPublication):
+    """A native turn owns one connection; each message owns one draft identity."""
+
+    def __init__(self, root: Path, lookup: str, connection: Connection, turn_id: str):
+        super().__init__(root, lookup)
+        self.connection = connection
+        self.turn_id = turn_id
+        self.current: TranscriptDraft = NoDraft()
+
+    @contextmanager
+    def writing(self):
+        with self.transaction(self.connection):
+            yield self.connection
+
+    def begin_message(self, timestamp: float) -> None:
+        from .transcript_events import AssistantTranscript
+        item_id = uuid4().hex
+        self.current = DraftRow(self.lookup, self.turn_id, item_id,
+                                (AssistantTranscript('', position=item_id, timestamp=timestamp),))
+
+    def append_text(self, text: str) -> None:
+        self.current = self.current.append_text(text)
+
+    def publish(self) -> None:
+        self.current.publish(self)
+
+    def retire_message(self) -> None:
+        self.current.end_turn(self)
+        self.current = NoDraft()
 

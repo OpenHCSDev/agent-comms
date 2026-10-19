@@ -645,6 +645,7 @@ class AssistantMessage(PiMessage):
 
     def tracked_end(self, session) -> None:
         self.stop_reason.tracked(session, self)
+        session.draft_publication.retire_message()
 
     @property
     def authoritative_text(self) -> str:
