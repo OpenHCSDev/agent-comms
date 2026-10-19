@@ -20,7 +20,6 @@ from .input_origin import (
 )
 
 if TYPE_CHECKING:
-    from .message_reference import MessageReference
     from .registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
 
