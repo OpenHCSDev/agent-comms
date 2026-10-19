@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.change_report import ChangedFact, ChangeReport, FileLine
 from agent_comms.messages import (
     AckKind, AlertKind, ChangeReportKind, HandoffKind, InfoKind, Message,
@@ -91,7 +92,7 @@ class TestChangeReportKind:
     def test_declared_report_publishes_and_round_trips(self, reporter, reporter_repo):
         committed = reporter.messaging.send(
             "reporter", "fixer", "review this", ChangeReportKind, report=report(reporter_repo)).message
-        stored, = list(reporter.views.dm_history_page("reporter", "fixer").messages)
+        stored, = list(reporter.views.history_page(CommandTarget.named("fixer"), viewer="reporter").messages)
         assert stored.report == report(reporter_repo)
         assert stored.type is ChangeReportKind
         assert Message.from_committed_wire(committed.to_wire()) == stored

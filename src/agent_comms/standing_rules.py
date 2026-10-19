@@ -30,9 +30,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def line(self) -> str: ...
 
-    def began(self) -> float | None:
-        """When this violation began, or None when its rule cannot say: it shows on every read."""
-        return None
+    @abstractmethod
+    def broke_after(self, after: float) -> bool: ...
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
@@ -42,7 +44,24 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
         """Every member's violations for one commander that began after ``after``."""
         found = (v for rule in cls.members_with(cls) for v in rule.violations(comms, commander))
-        return tuple(rule for rule in found if (began := rule.began()) is None or began >= after)
+        return tuple(rule for rule in found if rule.broke_after(after))
+
+
+class UndatedStandingRule(StandingRule, declared_name=None):
+    """A rule that cannot say when its condition began: it is broken on every read."""
+
+    def broke_after(self, after: float) -> bool:
+        return True
+
+
+class DatedStandingRule(StandingRule, declared_name=None):
+    """A rule that says when its condition began: it is broken on the reads after that."""
+
+    @abstractmethod
+    def began(self) -> float: ...
+
+    def broke_after(self, after: float) -> bool:
+        return self.began() >= after
 
 
 @dataclass(frozen=True)
@@ -50,7 +69,6 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
     why: str
-    since: float | None = None
     text: ClassVar[str]
 
     @classmethod
@@ -58,23 +76,21 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     def reason(cls, comms: Comms, commander: str) -> str | None: ...
 
     @classmethod
-    def broken_at(cls, comms: Comms, commander: str) -> float | None:
-        return None
+    def found(cls, why: str, comms: Comms, commander: str) -> Self:
+        return cls(why)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
-        return (cls(why, cls.broken_at(comms, commander)),) if why else ()
-
-    def began(self) -> float | None:
-        return self.since
+        return (cls.found(why, comms, commander),) if why else ()
 
     def line(self) -> str:
         return self.text.format(why=self.why)
 
 
 @dataclass(frozen=True)
-class HuntDue(ReasonedStandingRule):
+class HuntDue(ReasonedStandingRule, DatedStandingRule):
+    since: float
     seconds: ClassVar[int] = 900
     text = "HUNT DUE: read a hot path and order the fix this wake"
 
@@ -95,12 +111,15 @@ class HuntDue(ReasonedStandingRule):
         return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
 
     @classmethod
-    def broken_at(cls, comms: Comms, commander: str) -> float | None:
-        return cls.hunted(comms, commander) + cls.seconds
+    def found(cls, why: str, comms: Comms, commander: str) -> Self:
+        return cls(why, cls.hunted(comms, commander) + cls.seconds)
+
+    def began(self) -> float:
+        return self.since
 
 
 @dataclass(frozen=True)
-class DirectiveUnacted(StandingRule):
+class DirectiveUnacted(DatedStandingRule):
     """A claude-ai directive recorded on an open request, past its deadline with no order since."""
 
     goal: Goal
@@ -129,7 +148,7 @@ class DirectiveUnacted(StandingRule):
 
 
 @dataclass(frozen=True)
-class RulesDue(StandingRule):
+class RulesDue(DatedStandingRule):
     """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
     max_age: ClassVar[int] = 20 * 60
@@ -151,7 +170,7 @@ class RulesDue(StandingRule):
 
 
 @dataclass(frozen=True)
-class BridgeDown(ReasonedStandingRule):
+class BridgeDown(ReasonedStandingRule, UndatedStandingRule):
     text = (
         "COMMS BRIDGE DOWN: the commander receives nothing -> re-arm the bridge Monitor this wake"
     )
@@ -163,7 +182,7 @@ class BridgeDown(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
-class BoardDisagrees(StandingRule):
+class BoardDisagrees(UndatedStandingRule):
     """An open order reads as no commit despite its linked pull request having merged."""
 
     problem: str
@@ -187,7 +206,7 @@ class BoardDisagrees(StandingRule):
 
 
 @dataclass(frozen=True)
-class PlanIdle(StandingRule):
+class PlanIdle(UndatedStandingRule):
     """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
 
     phase: type[PlanPhase]
@@ -211,7 +230,7 @@ class PlanIdle(StandingRule):
 
 
 @dataclass(frozen=True)
-class MemoryLow(StandingRule):
+class MemoryLow(UndatedStandingRule):
     """Under the memory threshold a cleanup owner is due, told what holds the memory."""
 
     rule: StorageRule
@@ -235,7 +254,7 @@ class MemoryLow(StandingRule):
 
 
 @dataclass(frozen=True)
-class DiskLow(StandingRule):
+class DiskLow(UndatedStandingRule):
     """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
 
     rule: StorageRule

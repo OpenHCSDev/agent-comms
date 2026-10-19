@@ -835,14 +835,18 @@ class CommsTodoListTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStandingRulesTool(ThreadReadTool):
+class CommsStandingRulesTool(ThreadToolRequest):
     label = "Read broken standing rules"
-    description = "Every standing rule the commander breaks now, one line each, derived on read."
+    description = ("Every standing rule the commander breaks now, one line each, derived on read; "
+                   "Core first does what each broken rule does itself.")
     after: float = tool_field("Only rules broken since this time; 0 lists every one", default=0.0)
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.subject(self.thread), self.after)
-        return StandingRulesRead(tuple(rule.line() for rule in broken))
+    def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
+        broken = StandingRule.broken(comms, caller.name)
+        for rule in broken:
+            rule.enforce(comms, caller.name)
+        return StandingRulesRead(
+            tuple(rule.line() for rule in broken if rule.broke_after(self.after)))
 
 
 @dataclass(frozen=True, kw_only=True)

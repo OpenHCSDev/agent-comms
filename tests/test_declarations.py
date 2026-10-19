@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -605,9 +606,9 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     assert list(reopened.views.full_history_page().messages) == messages
     reopened.registry.rename("a", "renamed")
     monkeypatch.setattr(reopened.bus.log, "full_history_snapshot", lambda: pytest.fail("full scan"))
-    newest = reopened.bus.dm_history_page("renamed", "b", PageBounds(limit=1))
+    newest = reopened.views.history_page(CommandTarget.named("b"), PageBounds(limit=1), viewer="renamed")
     assert [row.seq for row in newest.messages] == [2]
-    older = reopened.bus.dm_history_page("renamed", "b", PageBounds(OlderTraversal(2), max_bytes=1))
+    older = reopened.views.history_page(CommandTarget.named("b"), PageBounds(OlderTraversal(2), max_bytes=1), viewer="renamed")
     assert [row.seq for row in older.messages] == [1]
     assert [row.seq for row in reopened.bus.inbox("b")] == [1, 3]
     unread = reopened.bus.inbox("b")

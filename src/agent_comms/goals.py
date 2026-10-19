@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import re
+import shlex
+import signal
+import subprocess
+import tempfile
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from .child_process import ExitedOutcome
+from .child_process import (BoundedRun, ChildOutcome, ChildResult, ExitedOutcome, SignaledOutcome,
+                            TimedOutOutcome)
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
@@ -222,12 +228,19 @@ class CheckResult(DeclaredFamily, affix="CheckResult"):
     @abstractmethod
     def require(self, result) -> None: ...
 
+    @abstractmethod
+    def distance(self, result: ChildResult) -> int:
+        """How far this run is from the result the order requires; zero when it is met."""
+
 
 @dataclass(frozen=True)
 class SilentCheckResult(CheckResult):
     def require(self, result):
         if result.outcome != ExitedOutcome(0) or result.stdout:
             raise ValueError("The order check must print nothing and exit zero.")
+
+    def distance(self, result: ChildResult) -> int:
+        return int(result.outcome != ExitedOutcome(0) or bool(result.stdout))
 
 
 @dataclass(frozen=True)
@@ -242,6 +255,11 @@ class CountCheckResult(CheckResult):
         if not isinstance(result.outcome, ExitedOutcome):
             raise ValueError(f"The order check did not exit, so it printed no count of {self.expected}.")
         CheckPrinted.decoded(result.stdout).require(self.expected)
+
+    def distance(self, result: ChildResult) -> int:
+        if not isinstance(result.outcome, ExitedOutcome):
+            raise ValueError("The order check did not exit, so it printed no count.")
+        return CheckPrinted.decoded(result.stdout).distance(self.expected)
 
 
 class CheckPrinted(DeclaredFamily, affix="Printed"):
@@ -259,6 +277,9 @@ class CheckPrinted(DeclaredFamily, affix="Printed"):
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         """Why a check that must fail before any work proves nothing yet."""
 
+    @abstractmethod
+    def distance(self, expected: int) -> int: ...
+
 
 @dataclass(frozen=True)
 class CountPrinted(CheckPrinted):
@@ -267,6 +288,9 @@ class CountPrinted(CheckPrinted):
     def require(self, expected: int) -> None:
         if self.count != expected:
             raise ValueError(f"The order check printed {self.count}, not its expected count {expected}.")
+
+    def distance(self, expected: int) -> int:
+        return abs(self.count - expected)
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ((f"Check already prints {self.count} before any work: `{command}` proves nothing; "
@@ -277,6 +301,10 @@ class CountPrinted(CheckPrinted):
 class NoIntegerPrinted(CheckPrinted):
     def require(self, expected: int) -> None:
         raise ValueError(f"The order check printed no integer, so no count of {expected}.")
+
+    def distance(self, expected: int) -> int:
+        self.require(expected)
+        return 0
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
@@ -297,12 +325,115 @@ class OrderCheck:
             raise ValueError("The order check directory does not exist.")
 
     LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)")
+    # The revision is the run's parameter; a check line that chooses one is refused.
+    REVISION_COMMANDS: ClassVar[frozenset[str]] = frozenset({"checkout", "switch"})
+    SEPARATORS: ClassVar[frozenset[str]] = frozenset({"&&", "||", ";", "|", "&"})
+    timeout: ClassVar[int] = 300
 
     @classmethod
     def parse(cls, line: str) -> OrderCheck | None:
         """The one reading of a check line, `<repo> :: <shell command> -> <integer>`; else None."""
         found = cls.LINE.fullmatch(line.strip())
-        return found and cls(found[1], found[2], CountCheckResult(int(found[3])))
+        if not found:
+            return None
+        if any(cls.git_command(words) in cls.REVISION_COMMANDS
+               for words in cls.simple_commands(found[2])):
+            raise ValueError("A check line never checks out a revision: Core runs it at the "
+                             "delivered commit and at each branch commit. Drop the checkout.")
+        return cls(found[1], found[2], CountCheckResult(int(found[3])))
+
+    @classmethod
+    def simple_commands(cls, command: str) -> list[list[str]]:
+        """The shell words of each simple command in ``command``."""
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        commands: list[list[str]] = [[]]
+        for word in lexer:
+            if word in cls.SEPARATORS:
+                commands.append([])
+            else:
+                commands[-1].append(word)
+        return commands
+
+    @staticmethod
+    def git_command(words: Sequence[str]) -> str:
+        """The git subcommand ``words`` run, or "" when they run no git."""
+        if words[:1] != ["git"]:
+            return ""
+        rest = iter(words[1:])
+        for word in rest:
+            if word in ("-C", "-c"):
+                next(rest, "")
+            elif not word.startswith("-"):
+                return word
+        return ""
+
+    async def run(self) -> ChildResult:
+        """The check on its directory's live state."""
+        return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
+                                    timeout=self.timeout)
+
+    def at(self, revision: str, repository: str) -> ChildResult:
+        """The check on ``revision``: the result a git note on the commit records, or one run in
+        a throwaway detached checkout and recorded there for every later reader."""
+        sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
+        for checked in CheckedCommit.stored(repository, sha):
+            if checked.command == self.command:
+                return checked.result
+        with tempfile.TemporaryDirectory(prefix="order-check-") as scratch:
+            tree = str(Path(scratch) / "tree")
+            CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)
+            try:
+                run = subprocess.run(("bash", "-c", self.command), cwd=tree, capture_output=True,
+                                     timeout=self.timeout)
+            except subprocess.TimeoutExpired:
+                return ChildResult(TimedOutOutcome(SignaledOutcome(signal.SIGKILL)))
+            finally:
+                CheckedCommit.git(repository, "worktree", "remove", "--force", tree)
+        checked = CheckedCommit(self.command, ChildOutcome.from_returncode(run.returncode),
+                                run.stdout.decode(errors="replace"))
+        checked.store(repository, sha)
+        return checked.result
+
+
+@dataclass(frozen=True)
+class CheckedCommit:
+    """What an order's check printed at a commit. A commit's result never changes, so the git
+    note that records it on the commit is read by every process before any check runs."""
+
+    command: str
+    outcome: ChildOutcome
+    stdout: str
+
+    NOTES: ClassVar[tuple[str, ...]] = (
+        "-c", "user.name=agent-comms", "-c", "user.email=core@agent-comms.invalid",
+        "notes", "--ref=agent-comms-checks")
+
+    @property
+    def result(self) -> ChildResult:
+        return ChildResult(self.outcome, self.stdout.encode())
+
+    @staticmethod
+    def git(repository: str, *args: str) -> str:
+        run = subprocess.run(("git", "-C", repository, *args), capture_output=True, text=True,
+                             timeout=60)
+        if run.returncode:
+            raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
+        return run.stdout
+
+    @classmethod
+    def stored(cls, repository: str, sha: str) -> tuple[CheckedCommit, ...]:
+        """Every check result the commit's note records; a commit no check ran on has none."""
+        noted = {line.split()[1] for line in cls.git(repository, *cls.NOTES, "list").splitlines()}
+        if sha not in noted:
+            return ()
+        return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
+                     cls.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
+
+    def store(self, repository: str, sha: str) -> None:
+        self.git(repository, *self.NOTES, "append", "-m",
+                 json.dumps(FieldCodec.encode(self), separators=(",", ":")), sha)
+
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:

@@ -107,7 +107,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsTurnsTool, {"thread": "worker"}, lead
     yield CommsThreadsTool, {}, lead
     yield CommsThreadsTool, {}, nobody
-    yield CommsStandingRulesTool, {"thread": "lead"}, lead
+    yield CommsStandingRulesTool, {}, lead
     monkeypatch.setattr(WorkBranches, "read", lambda self, snapshot: ())  # It asks gh.
     yield CommsWorkBranchesTool, {"checkout": str(project)}, lead
     yield CommsCollaborationTool, {"action": "add", "peer": "worker", "note": "Pairing"}, lead
