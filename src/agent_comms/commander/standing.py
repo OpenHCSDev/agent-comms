@@ -11,9 +11,13 @@ from typing import ClassVar
 
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
-from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingRule,
-                              UndatedStandingRule)
 from ..goals import Goal
+from ..standing_rules import (
+    DatedStandingRule,
+    ReasonedStandingRule,
+    StandingRule,
+    UndatedStandingRule,
+)
 from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince

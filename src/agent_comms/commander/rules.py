@@ -12,11 +12,14 @@ RULES DUE in rotate until the last review is answered and fresh.
 Every fork reviews for itself (forks must know correct maintenance, not carry dogma): a fork's
 actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
 """
-import glob, os, random, re, sys
+import glob
+import os
+import random
+import re
+import sys
 from dataclasses import dataclass
 
 from ..cli_commands import option
-
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller

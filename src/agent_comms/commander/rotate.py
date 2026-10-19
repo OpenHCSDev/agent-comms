@@ -2,9 +2,9 @@
 import time
 from datetime import datetime
 
-from . import judge, order
-from ..tools import CommsStandingRulesTool, StandingRulesRead
 from ..todos import Todo
+from ..tools import CommsStandingRulesTool, StandingRulesRead
+from . import judge, order
 
 
 def broken_rules(commander, after=0.0):

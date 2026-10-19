@@ -1,13 +1,17 @@
 """Follow live native sessions and print turn digests for commander judgment."""
-import os, time, glob, collections
+import collections
+import glob
+import os
+import time
 from pathlib import Path
 
-from ..native_tool_call import CodingCall, SelectedToolDenied
 from ..native_entries import NativeEntry
+from ..native_tool_call import CodingCall, SelectedToolDenied
 from ..pi_payloads import PiMessage, TextContent
-from ..tool_declaration import one_line
 from ..registration import Registration
 from ..todos import StorageStrikeTodo
+from ..tool_declaration import one_line
+
 
 def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""
