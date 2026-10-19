@@ -379,10 +379,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 else {}
             ),
         )
-        await _accept_visible_deliveries(
-            bus, wire_root_id, store_path, owner.incarnation.lookup, 0,
-            owner_name=owner.name, acquire_package=execution.validate,
-        )
+        with execution.cursor_delivery.measurements.operation("accept_deliveries"):
+            await _accept_visible_deliveries(
+                bus, wire_root_id, store_path, owner.incarnation.lookup, 0,
+                owner_name=owner.name, acquire_package=execution.validate,
+            )
         if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.

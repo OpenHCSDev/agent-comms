@@ -80,7 +80,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def external_records(self, root, incarnation):
         raise ValueError("A native session cannot publish an external transcript")
 
-    def select_session(self, directory, execution):
+    def select_session(self, directory, execution, source_reads):
         raise BackendDeclarationError('Runtime cannot select native sessions')
 
     @abstractmethod

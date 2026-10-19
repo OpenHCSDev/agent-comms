@@ -10,6 +10,7 @@ from agent_comms.native_package import NativePackageError, VerifiedNativePackage
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.selected_session import SelectedSession
+from agent_comms.selected_actions import NoSelectedTools
 
 
 def test_acquired_artifact_owns_path_and_derived_cli(declared_native_package):
@@ -48,7 +49,8 @@ def test_one_digest_for_managed_catalog_tracked_and_saved_header(declared_native
             worktree=work, root=tmp_path, session_file=str(saved))
         catalog = NativePiRpcLaunch.catalog('pi', (), package=package, worktree=work)
         tracked = NativePiRpcLaunch.tracked(package, worktree=work, root=tmp_path,
-            session=session, model=SelectedModel('local', 'fixture'))
+            session=session, model=SelectedModel('local', 'fixture'),
+            selected_tool_mode=NoSelectedTools())
         assert managed.package is catalog.package is tracked.package is package
         assert str(package.cli) in managed.argv
         assert str(package.cli) in catalog.argv

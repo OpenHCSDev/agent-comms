@@ -36,6 +36,7 @@ from .publisher import ResponseWrites
 from .native_entries import NativeEvidenceScope
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
+from .diagnostics import PublicationMeasurements
 from .thread_identity import ClaimedIdentity
 from .native_runtime_input import CurrentNativeCursor
 
@@ -59,6 +60,7 @@ class CursorDelivery:
     # verified prefix position/hash; repeated observations only decode appends.
     source_reads: NativeEvidenceScope = field(default_factory=NativeEvidenceScope, repr=False)
     observation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements, repr=False)
 
     @asynccontextmanager
     async def reading(self) -> AsyncIterator[NativeEvidenceScope]:
@@ -139,14 +141,16 @@ class CursorPublication:
         advance: bool = False,
     ) -> CursorEnvelope:
         delivery = self.delivery(session_id)
-        async with delivery.reading():
-            return await self._observe(
-                delivery, thread_name, session_id, defer_busy=defer_busy, advance=advance
-            )
+        with delivery.measurements.operation("cursor_observation"):
+            async with delivery.reading() as source_reads:
+                return await self._observe(
+                    delivery, thread_name, session_id, source_reads=source_reads,
+                    defer_busy=defer_busy, advance=advance,
+                )
 
     async def _observe(
         self, delivery: CursorDelivery, thread_name: str, session_id: str, *,
-        defer_busy: bool, advance: bool,
+        source_reads: NativeEvidenceScope, defer_busy: bool, advance: bool,
     ) -> CursorEnvelope:
         root_id = self.comms.owners.require_private_launch().wire_root_id
         revision = delivery.next_revision()
@@ -161,7 +165,7 @@ class CursorPublication:
             )
             cursor = await read_cursor(
                 bus, wire_root_id=root_id, owner_name=thread_name,
-                source_reads=delivery.source_reads,
+                source_reads=source_reads,
             )
         except BlockingIOError:
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))

@@ -81,12 +81,12 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
-    def select_session(self, directory, execution):
+    def select_session(self, directory, execution, source_reads):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
                     NativeSessionIdentity.from_evidence(
-                        execution.cursor_delivery.source_reads.for_source(path)
+                        source_reads.for_source(path)
                     ))
         return SavedSelectedSession(directory, identity=identity)
 
