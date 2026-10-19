@@ -6,10 +6,12 @@ RegistryDocument to reinterpret. Production readers keep one format.
 """
 from __future__ import annotations
 
+import fcntl
 import os
 import stat
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import CoordinationError
@@ -106,6 +108,18 @@ class OwnerRestartHandoff:
     agent_args: tuple[str, ...] | None
     launch_runtime: LaunchRuntime
 
+    def require_wire(self, descriptor: int) -> None:
+        """Validate the inherited original wire before a target opens its registry."""
+        if type(descriptor) is not int or descriptor < 0:
+            raise RelationViolationError('Retained wire requires an integer descriptor')
+        opened = os.fstat(descriptor)
+        named = store_lock_path(Path(self.root) / 'wire').stat()
+        if not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.geteuid():
+            raise RelationViolationError('Retained wire descriptor is not owned storage')
+        if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+            raise RelationViolationError('Retained wire descriptor names another lock')
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
             return lifecycle._launch_owner_unlocked(
@@ -154,17 +168,7 @@ class StoppedOwnerBatch:
     @classmethod
     def accept(cls, lifecycle: OwnerLifecycle, descriptor: int, handoff: OwnerRestartHandoff):
         """Accept an ORIGINAL inherited wire OFD; never reacquire it by name."""
-        import fcntl
-
-        if type(descriptor) is not int or descriptor < 0:
-            raise RelationViolationError('Retained wire requires an integer descriptor')
-        opened = os.fstat(descriptor)
-        named = store_lock_path(lifecycle.root / 'wire').stat()
-        if not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.geteuid():
-            raise RelationViolationError('Retained wire descriptor is not owned storage')
-        if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
-            raise RelationViolationError('Retained wire descriptor names another lock')
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        handoff.require_wire(descriptor)
         if str(lifecycle.root) != handoff.root:
             raise RelationViolationError('Retained stopped batch names another root')
         return cls(lifecycle, descriptor, handoff)

@@ -454,7 +454,7 @@ class PreparedCarries(ABC):
             return NoConversion(root)
         files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
             for _, conversion in conversions for path in conversion.backup_files(root)))))
-        return PendingConversion(chain, conversions, files, destination)
+        return PendingConversion(chain, conversions, files, destination, checkout)
 
     @abstractmethod
     def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
@@ -541,6 +541,7 @@ class PendingConversion(PreparedCarries):
     conversions: tuple[tuple[Step, type[Carry]], ...]
     files: tuple[Path, ...]
     backup: StoreBackup
+    checkout: Path
 
     def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
         import time
