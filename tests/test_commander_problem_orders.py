@@ -183,7 +183,7 @@ def test_done_declares_no_wrong_measure_and_the_board_shows_the_recorded_check_r
     reported = {f.name for f in fields(CommsOrderDoneTool)} - {f.name for f in fields(ThreadToolRequest)}
     assert reported == {'problem', 'delivery', 'claims'}
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
-    assert comms.goals.todos.get('P1').order.delivery.printed == '1'
+    assert comms.goals.todos.get('P1').order.printed == '1'
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
     assert progress == "P1: Delivered, waiting on install · Check printed '1'"
