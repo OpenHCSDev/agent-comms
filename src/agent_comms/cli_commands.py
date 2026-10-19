@@ -59,6 +59,7 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .field_codec import FieldCodec, PathText, compile_decoder
+from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
@@ -1753,7 +1754,8 @@ class LedgerCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class PollCliCommand(CliCommand):
     help = "Status snapshot: thread, inbox, ledger, peers"
-    thread: str | None = option("--thread", default=None)
+    thread: PollTarget = option("--thread", default_factory=CallingThreadTarget,
+        parser_default=FieldCodec.encode(CallingThreadTarget()), type=NamedThreadTarget.argument)
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.views.poll(self.thread)
