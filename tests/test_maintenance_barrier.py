@@ -163,44 +163,18 @@ def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
     assert gate.read().operator == FieldCodec.decode(MaintenanceOperatorField, 'operator')
 
 
-def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> None:
-    from agent_comms.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
+def test_ordinary_restart_waits_while_maintenance_holds(tmp_path: Path) -> None:
+    from agent_comms.owner_cutover import PreserveOwnerRuntime
+    from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
     from agent_comms.store_files import _store_lock
 
-    class ScratchCutover(MaintainedOwnerCutover):
-        def require_selection(self, snapshot, owners):
-            pass
-
-        def complete(self, stopped):
-            raise AssertionError('No process should be stopped by a phase check')
-
     comms = Comms(tmp_path / 'wire')
-    hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
-    cutover = ScratchCutover()
-    cutover.maintenance_hold = hold
+    hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, 'install'))
     with _store_lock(comms.root / 'wire'):
-        cutover.require_restart_phase(comms.owners)
-        from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
-
         with pytest.raises(OwnerMaintenancePendingRefusal, match='Maintenance is holding') as refused:
             PreserveOwnerRuntime().require_restart_phase(comms.owners)
         assert refused.value.queue_state().pending  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
-    with _store_lock(comms.root / 'wire'):
-        with pytest.raises(RelationViolationError, match='phase changed'):
-            cutover.require_restart_phase(comms.owners)
-
-
-def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
-    gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
-    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'stopped-cutover'))
-    with _store_lock(gate.wire_path) as lock:
-        assert gate.clear_stopped(hold, lock.descriptor).phase is ReadyPhase
-    assert gate.read().phase is ReadyPhase
-    with _store_lock(tmp_path / 'unrelated') as other:
-        with pytest.raises(RelationViolationError, match='wire lock changed'):
-            next_hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'new-cutover'))
-            gate.clear_stopped(next_hold, other.descriptor)
 
 
 def test_production_only_import_cannot_reach_disposable_control(tmp_path: Path) -> None:

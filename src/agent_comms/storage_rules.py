@@ -388,7 +388,7 @@ class MeasuredCommands(ShellProgram):
 
 class BuildsOnCommands(MeasuredCommands):
     effect = BuildStorageEffect
-    commands = (('build_runtime.py',), ('python', 'build_runtime.py'),
+    commands = (('upgrade_bus.py',), ('python', 'upgrade_bus.py'),
                 ('python', '-m', 'hatchling', 'build'), ('python', '-m', 'build'))
 
 
@@ -475,7 +475,7 @@ class DiskProgram(AllocatesOnCommands):
 
 
 class BuildProgram(BuildsOnCommands):
-    names = frozenset({'build_runtime.py'})
+    names = frozenset({'upgrade_bus.py'})
 
 
 class TestGateProgram(TestsOnCommands):

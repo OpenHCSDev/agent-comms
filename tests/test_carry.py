@@ -9,13 +9,25 @@ import subprocess
 import sys
 from contextlib import closing
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
+from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
+from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, Step, UnorderedSteps
+from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
+from tools.upgrade_bus import (
+    Home,
+    Revisions,
+    Runtime,
+    RuntimeCheck,
+    before_stop,
+    carried,
+    carry_all,
+)
 
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.activity import Activity, ActivityLog, ActivityState
-from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
@@ -24,29 +36,24 @@ from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceHeldError,
     MaintenanceOperator,
-)
-from agent_comms.read_basis import (
-    ChannelConversation, ConversationCursor, DMConversation, ReadCursor,
+    ReadyPhase,
 )
 from agent_comms.private_path import FileIdentity
+from agent_comms.read_basis import (
+    ChannelConversation,
+    ConversationCursor,
+    DMConversation,
+    ReadCursor,
+)
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_store import RegistryNeedsConversion, RegistryStore
+from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
-from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
-from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
-from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
-from tools.upgrade_bus import (
-    Revisions,
-    Stack,
-    before_stop,
-    carried,
-    carry_all,
-)
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -262,8 +269,8 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
 
 
-class CheckoutStack(Stack):
-    """A checkout's stack running this test's interpreter in place of its synced one."""
+class TestRuntime(Runtime):
+    """A runtime whose Python is this test's interpreter."""
 
     @property
     def python(self) -> Path:
@@ -293,7 +300,7 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
     pending = CarryChain.at(repo.path, newer).pending(())
     revisions = Revisions(repo.path, tmp_path / "trees")
     try:
-        installed = CheckoutStack(repo.path, home=tmp_path)
+        installed = TestRuntime(repo.path, home=Home(tmp_path))
         before = bus_files(root)
         steps = [*before_stop(root, pending, installed, revisions), *carry_all(root, pending, installed, revisions)]
     finally:
@@ -478,112 +485,55 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     assert not thread.executing
 
 
-def test_upgrade_busy_owner_refuses_before_any_stop_or_start(tmp_path):
-    from agent_comms.maintenance_barrier import ReadyPhase
-    from agent_comms.restart_refusals import OwnerBusyRefusal
-    from tools.upgrade_bus import live
+class Owners(Runtime):
+    """Two running owners; the CLI calls they receive are recorded."""
 
-    root = tmp_path / "bus"
-    Comms(root)
-    calls = []
-
-    class BusyStack(Stack):
-        def cli(self, root, *arguments):
-            calls.append(arguments)
-            return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
-
-        def require_idle(self, root, names):
-            assert names == ["worker"]
-            assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
-            raise OwnerBusyRefusal()
-
-    stack = BusyStack(REPO)
-    with pytest.raises(OwnerBusyRefusal):
-        live(REPO, root, "", "", (), stack, stack, None, "worker")
-    assert calls == [("threads",)]
-    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
-
-
-LIVE_DRIVER = """
-import signal, sys
-from pathlib import Path
-from upgrade_bus import Stack, live, stopped
-
-
-class Owners(Stack):
-    def require_idle(self, root, names):
-        pass
+    def __init__(self, path):
+        super().__init__(path)
+        object.__setattr__(self, "calls", [])
 
     def cli(self, root, *arguments):
-        print(' '.join(arguments), flush=True)
-        return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
+        self.calls.append(arguments)
+        if arguments == ("threads",):
+            return {"threads": [{"name": name, "role": "agent", "status": "running"}
+                                for name in ("busy", "idle")]}
+        return {"restart": {"name": json.loads(arguments[-1])["name"]}}
+
+    def verify(self, root):
+        return {}
 
 
-for each in (signal.SIGTERM, signal.SIGINT):
-    signal.signal(each, stopped)
-root = Path(sys.argv[1])
-live(root, root, "", "", (), Owners(root), Owners(root), None, "worker")
-"""
+def test_a_live_install_queues_each_owner_and_waits_for_none(comms, tmp_path, monkeypatch):
+    """The 14:13 install refused because 17 owners were never idle at once. Nothing waits
+    for owners: each is queued to restart onto the new runtime at its own turn end."""
+    import tools.upgrade_bus as upgrade_bus
 
-
-def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
-    """A reader holds the route; SIGTERM while the upgrade waits for it runs the abort: the bus
-    reads READY and the stopped thread is started again."""
-    import fcntl
-    import signal
-
-    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
-
-    root = tmp_path / "bus"
-    Comms(root)
-    routes = tmp_path / "home/.local/state/agent-comms"
-    routes.mkdir(parents=True)
-    reader = os.open(routes, os.O_RDONLY | os.O_DIRECTORY)
-    fcntl.flock(reader, fcntl.LOCK_SH)
-    try:
-        tool = subprocess.Popen(
-            [sys.executable, "-c", LIVE_DRIVER, str(root)], text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env={**os.environ, "HOME": str(tmp_path / "home"),
-                 "PYTHONPATH": os.pathsep.join(str(REPO / part) for part in ("src", "tools"))})
-        waited = ""
-        while "Waiting for default-route readers" not in waited:
-            line = tool.stderr.readline()
-            assert line, waited + tool.stdout.read()
-            waited += line
-        assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
-        tool.send_signal(signal.SIGTERM)
-        out, err = tool.communicate(timeout=60)
-    finally:
-        os.close(reader)
-    assert tool.returncode != 0
-    assert "stopped by SIGTERM" in err and "aborted before the backup" in err
-    assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
-    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
+    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
+    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
+    monkeypatch.setattr(upgrade_bus.Publication, "publish", lambda self, previous: None)
+    monkeypatch.setattr(upgrade_bus, "prune", lambda keep: {})
+    installed, runtime = Owners(tmp_path / "installed"), Owners(tmp_path / "runtime")
+    result = upgrade_bus.live(comms.root, (), installed, runtime, None, "worker")
+    assert result["queued"] == {name: {"restart": {"name": name}} for name in ("busy", "idle")}
+    assert [call[:3] for call in runtime.calls if call[0] == "tool"] == [
+        ("tool", "--tool", "comms_queue_restart")] * 2
+    assert not any(call[0] in ("stop", "start") for call in installed.calls + runtime.calls)
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
 
 
 def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tmp_path, monkeypatch):
     import tools.upgrade_bus as upgrade_bus
-    from agent_comms.maintenance_barrier import ReadyPhase
 
     datum = comms.root / "kept.txt"
     datum.write_text("before")
     original_inode = comms.root.stat().st_ino
     commands = []
 
-    class Installed(Stack):
+    class Installed(Runtime):
         def cli(self, root, *arguments):
             assert arguments == ("threads",)
             return {"threads": []}
-
-        def require_idle(self, root, names):
-            assert not names
-
-        def relock(self):
-            pass
-
-        def prepare_native(self):
-            pass
 
     def failed_carry(*args):
         datum.write_text("changed before failure")
@@ -591,11 +541,10 @@ def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tm
 
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
     monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
-    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     stack = Installed(tmp_path / "checkout")
     with pytest.raises(RuntimeError, match="carry failed after writing"):
-        upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None, "worker")
+        upgrade_bus.live(comms.root, (), stack, stack, None, "worker")
     assert datum.read_text() == "changed before failure"
     assert comms.root.stat().st_ino == original_inode
     assert not any("reset" in command for command in commands)
@@ -603,11 +552,13 @@ def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tm
     assert list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*/bus.tar"))
 
 
-def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
+def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path, monkeypatch):
     """The 22:20 install ran a uv from another agent's scratch; the installer names its own."""
-    stack = Stack(REPO, tmp_path)
-    with pytest.raises(UpgradeRefused, match=re.escape(str(stack.uv))):
-        stack.require_uv()
+    import tools.upgrade_bus as upgrade_bus
+
+    monkeypatch.setattr(upgrade_bus, "UV", tmp_path / "uv")
+    with pytest.raises(UpgradeRefused, match=re.escape(str(tmp_path / "uv"))):
+        upgrade_bus.upgrade(REPO, tmp_path / "bus", "HEAD", "worker", True)
 
 
 def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
@@ -643,14 +594,19 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
     assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
 
 
-def rehearsed(stack: Stack, root: Path) -> dict:
+class Unchecked(RuntimeCheck):
+    def run(self, copy, scratch, thread):
+        return {}
+
+
+def rehearsed(runtime: Runtime, root: Path) -> dict:
     from tools.upgrade_bus import rehearse
-    return rehearse(root, (), stack, None)
+    return rehearse(root, (), runtime, None, Unchecked(runtime, REPO))
 
 
-def installed_live(stack: Stack, root: Path) -> dict:
+def installed_live(runtime: Runtime, root: Path) -> dict:
     from tools.upgrade_bus import live
-    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker")
+    return live(root, (), runtime, runtime, None, "worker")
 
 
 @pytest.mark.parametrize("install", [rehearsed, installed_live])
@@ -674,35 +630,42 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
         ToolCallIndex.carry(comms.root, apply=True)
 
     def tool_call_index(root, pending, staged, revisions):
-        return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
+        step = Step(ToolCallIndex.name(), "HEAD", "ToolCallIndex", ToolCallIndex)
+        return [upgrade_bus.stepped(root, step, partial(ToolCallIndex.carry, root, apply=True))]
 
-    class Installed(Stack):
+    class Owner:
+        name = "turn-owner"
+
+        @classmethod
+        def start(cls, runtime, root, project):
+            return cls()
+
+        def restarted(self, runtime, root):
+            return {}, [f"{self.name}: restarted"]
+
+        def stop(self, runtime, root):
+            pass
+
+    class Installed(Runtime):
         def cli(self, root, *arguments):
             return {"threads": []}
-
-        def require_idle(self, root, names):
-            pass
-
-        def relock(self):
-            pass
-
-        def prepare_native(self):
-            pass
 
         def verify(self, root):
             return {"read": ExternalTranscript.path_in(root).exists()}
 
     monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "")
-    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
+    monkeypatch.setattr(upgrade_bus, "TurnInProgress", Owner)
     # A rehearsal places the route under its own home, so the route sits under this one.
     monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
     monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
     monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
-    result = install(Installed(tmp_path / "checkout", tmp_path / "home"), comms.root)
+    monkeypatch.setattr(upgrade_bus.Publication, "publish", lambda self, previous: None)
+    monkeypatch.setattr(upgrade_bus, "prune", lambda keep: {})
+    result = install(Installed(tmp_path / "checkout", Home(tmp_path / "home")), comms.root)
     step, = result["steps"]
     assert step["changed"] == step["indexes"] > 0
-    assert result["files"]["rewritten"] == 1
+    assert step["files"]["rewritten"] == 1
     assert result["read"] == {"read": True}
 
 

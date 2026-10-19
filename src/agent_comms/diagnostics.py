@@ -16,11 +16,19 @@ from uuid import uuid4
 
 from .store_files import _atomic_write_text
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .locked_store import HistoryDirectory
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic
     from .pi_events import Response
     from .threads import Thread
+
+
+class Diagnostics(HistoryDirectory):
+    """Owner startup logs and per-input failure records."""
+
+    filename = "diagnostics"
+
 
 
 @contextmanager
@@ -31,7 +39,7 @@ def owner_process_output(root: Path, thread: Thread):
     capture. Each launch gets its own private file, without changing thread or
     input disposition state.
     """
-    directory = root / "diagnostics"
+    directory = Diagnostics.path_in(root)
     directory.mkdir(mode=0o700, exist_ok=True)
     path = directory / f"owner-{thread.incarnation.lookup}-{uuid4().hex}.log"
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -119,7 +127,7 @@ def record_acquisition_progress(root, lease, input_id, measurements):
 
 def request_observation_path(root, turn_id):
     """Location of the original diagnostic publication, not another record."""
-    return root / "diagnostics" / f"{turn_id}.requests.jsonl"
+    return Diagnostics.path_in(root) / f"{turn_id}.requests.jsonl"
 
 
 def _record_request_observation(root, lease, record):
@@ -204,7 +212,7 @@ class NativeTerminalFailureRecord:
 
     @classmethod
     def read(cls, root: Path, input_id: str) -> NativeTerminalFailureRecord:
-        path = root / "diagnostics" / f"{input_id}.json"
+        path = Diagnostics.path_in(root) / f"{input_id}.json"
         record = FieldCodec.decode(cls, json.loads(path.read_text()))
         if record.turn_id != input_id or not record.raised.startswith(
             "agent_comms.native_pi.NativePiTerminalFailure: "
@@ -242,7 +250,7 @@ def record_drain_failure(
         **_source_error_evidence(source_error),
     }
     digest = hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest()
-    path = root / "diagnostics" / f"drain-{digest}.json"
+    path = Diagnostics.path_in(root) / f"drain-{digest}.json"
     try:
         original = path.read_text()
     except FileNotFoundError:
@@ -266,7 +274,7 @@ def _source_error_evidence(source_error: BaseException | None) -> dict:
 
 
 def _write_diagnostic_document(root: Path, name: str, document: dict) -> Path:
-    directory = root / "diagnostics"
+    directory = Diagnostics.path_in(root)
     directory.mkdir(mode=0o700, exist_ok=True)
     if os.name == "posix":
         fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)

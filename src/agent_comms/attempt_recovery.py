@@ -12,6 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 from typing import TYPE_CHECKING
 
+from .fresh_private_session import NativeSessions
 from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
 from .registration import Registration
@@ -145,7 +146,7 @@ class VerifiedOwnerLoss:
             self.native_input, self.boundary.registry.require(self.release.name)
         )
         session_dir = (
-            self._store.session.path.parent / "native-sessions" / self.native_input.owner_lookup
+            NativeSessions.path_in(self._store.session.path.parent) / self.native_input.owner_lookup
         )
         proc = Path("/proc")
         if not proc.is_dir():

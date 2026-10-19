@@ -8,7 +8,6 @@ witness is never removed: a lost/corrupt state denies instead of returning OFF.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import stat
@@ -29,7 +28,6 @@ from .store_files import (
     _async_store_lock,
     _atomic_write_text,
     _store_lock,
-    store_lock_path,
 )
 
 
@@ -344,31 +342,6 @@ class MaintenanceBarrier(MaintenanceIngress):
         """Finish a known-safe drain or abort; never infer safety from an error."""
         expected.require_draining()
         return self.advance(expected, ReadyPhase)
-
-    def clear_stopped(self, expected: MaintenanceState, wire_descriptor: int) -> MaintenanceState:
-        """Clear while the stopped batch holds its original exclusive wire OFD.
-
-        Reacquiring the wire by name would deadlock. An unrelated descriptor
-        cannot publish READY while another cutover holds the stopped workers' wire lock.
-        """
-        expected.require_draining()
-        if type(wire_descriptor) is not int or wire_descriptor < 0:
-            raise RelationViolationError('Maintenance needs the stopped wire descriptor')
-        opened = os.fstat(wire_descriptor)
-        named = store_lock_path(self.wire_path).stat()
-        if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
-            raise RelationViolationError('Maintenance wire lock changed')
-        fcntl.flock(wire_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with _store_lock(self.registry_path):
-            return self._advance_unlocked(expected, ReadyPhase)
-
-    def require_draining_unlocked(self, expected: MaintenanceState) -> None:
-        """Require this cutover's captured phase while holding the wire lock."""
-        expected.require_draining()
-        if self.current_unlocked() != expected:
-            raise RelationViolationError(
-                'Cutover maintenance phase changed before owner retirement'
-            )
 
     @contextmanager
     def allow_input(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:

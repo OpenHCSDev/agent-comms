@@ -1,13 +1,17 @@
 # Local agent-comms stack
 
-This uv project installs agent-comms editable from the main checkout alongside
-Toad, Textual and ui-theme from their `main` branches. It requires Python 3.14.
-`pyproject.toml` owns source selection. The lock is not committed: each install
-resolves the latest mains, and only PyPI releases and stock Pi
-(`pi-native.sha256`) are pinned. Development belongs in isolated worktrees,
-never in the live installation.
+This uv project declares the dependency set agent-comms runs with: Toad, Textual
+and ui-theme from their `main` branches, on Python 3.14. `pyproject.toml` owns
+source selection. The lock is not committed: each install resolves the latest
+mains, and only PyPI releases and stock Pi (`pi-native.sha256`) are pinned.
 
-From the repository root:
+What runs is never this project's environment. `tools/upgrade_bus.py` builds an
+immutable runtime under `~/.local/share/agent-comms/runtimes/` from a clean
+worktree of the target revision and this project's resolution, rehearses it on a
+copy of the bus and moves `~/.local/share/agent-comms/current` to it; every
+installed program, launcher and skill link reads through `current`.
+
+For development in a worktree:
 
 ```sh
 uv lock --project stack --upgrade --python 3.14
@@ -19,9 +23,8 @@ stack/bin/prepare-pi-native
 
 `stack/bin/toad-comms [THREAD]` opens the Toad workspace, where you can create
 a new agent. Supplying a thread attaches to that existing owner without sending
-a prompt. The installed `toad-comms` launcher points to this main checkout.
-Core source pulls apply to new processes without rebuilding a wheel; existing
-processes retain their loaded code.
+a prompt. The installed `toad-comms` is this script as the current runtime
+packages it. A merge reaches running processes only through the next install.
 
 The managed launcher follows the installed console entry points and active-route
 record. On that active N/K bus, ordinary channel posts notify eligible running

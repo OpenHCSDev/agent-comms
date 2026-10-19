@@ -116,7 +116,7 @@ async def test_cancelled_waiter_releases_only_its_own_claim(tmp_path):
 
 @pytest.mark.parametrize('command,kind', [
     ('python -B -m pytest x', TestGateRoomWork), ('pytest x', TestGateRoomWork),
-    ('python /some/build_runtime.py', BuildRoomWork), ('build_runtime.py', BuildRoomWork),
+    ('python /some/upgrade_bus.py', BuildRoomWork), ('upgrade_bus.py', BuildRoomWork),
 ])
 def test_measured_command_declarations_select_one_effect(command, kind, tmp_path):
     effects = shell_storage_effects(command, tmp_path)

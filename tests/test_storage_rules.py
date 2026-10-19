@@ -147,7 +147,7 @@ def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch)
 
 @pytest.mark.parametrize('command,kind', [
     ('python3.14.7 -m venv env', 'ForbiddenStorageEffect'),
-    ('python /scripts/build_runtime.py', 'BuildStorageEffect'),
+    ('python /scripts/upgrade_bus.py', 'BuildStorageEffect'),
     ('python -m pip install package', 'AllocateStorageEffect'),
     ('uv pip install package', 'AllocateStorageEffect'),
     ('npm ci', 'AllocateStorageEffect'),

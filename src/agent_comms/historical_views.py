@@ -11,7 +11,7 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .locked_store import RootFile
+from .locked_store import HistoryDirectory, RootFile
 from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
 from .errors import UnregisteredThreadError
@@ -333,6 +333,12 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
+class HistorySources(HistoryDirectory):
+    """Retained copies of other buses that historical views read."""
+
+    filename = "history"
+
+
 class HistoryArchive(RootFile):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
@@ -390,7 +396,7 @@ class HistoryArchive(RootFile):
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:
                 return existing
-            parent = self.bus_path.parent / "history"
+            parent = HistorySources.path_in(self.bus_path.parent)
             parent.mkdir(mode=0o700, exist_ok=True)
             stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
             try:

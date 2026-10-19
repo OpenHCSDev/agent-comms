@@ -51,6 +51,7 @@ from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
 from .thread_identity import AgentThreadRole, ThreadRole
 from .agent_backend import RuntimeLocation
+from .locked_store import HistoryDirectory
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
@@ -79,6 +80,13 @@ class NewThreadSpec:
         location = thread.runtime.new_location(threads.root, project)
         with _store_lock(threads._wire_lock_path):
             yield replace(thread, session_file=location.read_key)
+
+
+class ImportedSessions(HistoryDirectory):
+    """Sessions imported from other harnesses, one file per import."""
+
+    filename = "imported_sessions"
+
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -174,7 +182,7 @@ class ThreadManagement:
         project = Path(directory).expanduser().resolve()
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
-        session_path = self.root / "imported_sessions" / f"{uuid4().hex}.jsonl"
+        session_path = ImportedSessions.path_in(self.root) / f"{uuid4().hex}.jsonl"
         thread = self.registry.new_thread(
             name,
             tags,

@@ -9,10 +9,18 @@ from pathlib import Path
 from uuid import uuid4
 
 from .field_codec import RecordedTimestamp
+from .locked_store import HistoryDirectory
 from .native_entries import SessionEntry
 from .native_pi import NativePiUnavailable, _durable_private_session_dir
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import NativeSessionFileRole, fsync_directory
+
+
+class NativeSessions(HistoryDirectory):
+    """Each native owner's private session files, one directory per owner."""
+
+    filename = "native-sessions"
+
 
 
 def create_fresh_private_session(

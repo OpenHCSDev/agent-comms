@@ -15,7 +15,7 @@ from .attempt_recovery import RecoveryMonitorCapability
 from .child_process import NoProcess
 from .cli_result import CliResult
 from .comms import Comms
-from .fresh_private_session import create_fresh_private_session
+from .fresh_private_session import NativeSessions, create_fresh_private_session
 from .goals import NoGoal
 from .importing import ImportLimits
 from .launch_runtime import RestartEnvironment, ThreadLaunch
@@ -110,7 +110,7 @@ class CheckRoot:
             slot = original.incarnation.require_recorded().lookup
             project = copied.root / "projects" / slot
             project.mkdir(parents=True, mode=0o700)
-            session = self._session(original, copied.root / "native-sessions" / slot, project)
+            session = self._session(original, NativeSessions.path_in(copied.root) / slot, project)
             declarations[name] = replace(
                 original.without_turn(),
                 worktree=str(project),

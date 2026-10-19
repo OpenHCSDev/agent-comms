@@ -163,8 +163,8 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
     maintenance clears the bridge's next child receives a message sent after it."""
     from cutover.carry import STEPS, CarryChain, CarryLedger
     from test_bus_route_counts_locking import _case
-    from test_carry import REPO, CheckoutStack, Repository
-    from tools.upgrade_bus import Revisions, carry_all
+    from test_carry import REPO, Repository, TestRuntime
+    from tools.upgrade_bus import Home, Revisions, carry_all
     from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = _case(tmp_path / 'wire', monkeypatch)
@@ -200,7 +200,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
             revisions = Revisions(repo.path, tmp_path / 'trees')
             try:
                 carry_all(comms.root, CarryChain.at(repo.path, head).pending(()),
-                          CheckoutStack(repo.path, home=tmp_path), revisions)
+                          TestRuntime(repo.path, home=Home(tmp_path)), revisions)
             finally:
                 revisions.close()
             assert (comms.root / 'carried').read_text() == 'carried'

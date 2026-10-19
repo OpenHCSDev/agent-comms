@@ -1,7 +1,7 @@
 """What `agent-comms install` writes for each coding harness found on this machine.
 
 Each harness declares where it reads skills and what it needs to reach the bus;
-install and runtime publication both read those declarations.
+install and the installer's publication of a runtime both read those declarations.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import sys
 import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
+from importlib.metadata import distribution
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -50,6 +51,17 @@ def merge_json(path: Path, merge) -> None:
     merge(document)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2) + '\n')
+
+
+def installation_links(home: Path) -> dict[Path, Path]:
+    """What an installation links to this interpreter's runtime: every program the Core
+    and Toad distributions put in its ``bin``, and every harness's installed skill links."""
+    binary = Path(sys.executable).parent
+    programs = (Path(os.path.normpath(entry.locate()))
+                for package in ('agent-comms', 'batrachian-toad')
+                for entry in distribution(package).files or ())
+    return {home / '.local/bin' / program.name: program
+            for program in programs if program.parent == binary} | Harness.published_links(home)
 
 
 @dataclass(frozen=True)
@@ -101,7 +113,7 @@ class Harness(DeclaredFamily, affix="Harness"):
 
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:
-        """Installed links of every harness, which a runtime publication moves to the new runtime."""
+        """Installed links of every harness, which publishing a runtime moves to that runtime."""
         return {link: target for member in cls.members_with(cls)
                 for link, target in member(home).links().items() if link.is_symlink()}
 

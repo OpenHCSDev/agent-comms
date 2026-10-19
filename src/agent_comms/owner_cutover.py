@@ -12,7 +12,6 @@ from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
-    from .maintenance_barrier import MaintenanceState
     from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
     from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
     from .registry_document import RegistrySnapshot
@@ -88,21 +87,6 @@ class OwnerCutover(ABC):
             failure.add_note(f'Original-runtime recovery refused or failed: {recovery_error!r}')
             self.leave_stopped(failure)
         raise failure
-
-
-class MaintainedOwnerCutover(OwnerCutover):
-    """Stop an exact fleet while its durable Draining state holds new turns.
-
-    The publisher obtains maintenance_hold before polling idle owners. It
-    clears that exact hold under the wire lock after known-safe publication
-    (or on a known-safe abort), before any replacement launch. UNKNOWN outcomes
-    remain closed for explicit review rather than reopening on exception text.
-    """
-
-    maintenance_hold: MaintenanceState
-
-    def require_restart_phase(self, lifecycle: OwnerLifecycle) -> None:
-        lifecycle.maintenance.require_draining_unlocked(self.maintenance_hold)
 
 
 class StoppedOwnerInstallation(OwnerCutover):

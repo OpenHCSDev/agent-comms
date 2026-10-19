@@ -145,6 +145,17 @@ class RootFile:
         return Path(root) / cls.filename
 
     @classmethod
+    def paths_in(cls, root: Path) -> frozenset[Path]:
+        """Every location this family's imported members declare under ``root``."""
+        declared, pending = set(), [cls]
+        while pending:
+            family = pending.pop()
+            pending.extend(family.__subclasses__())
+            if "filename" in vars(family):
+                declared.add(family.path_in(root))
+        return frozenset(declared)
+
+    @classmethod
     def at(cls, root: Path | str, *args, **kwargs):
         return cls(cls.path_in(root), *args, **kwargs)
 
@@ -154,15 +165,12 @@ class RuntimeFile(RootFile):
 
     __slots__ = ()
 
-    @classmethod
-    def paths_in(cls, root: Path) -> frozenset[Path]:
-        declared, pending = set(), [cls]
-        while pending:
-            family = pending.pop()
-            pending.extend(family.__subclasses__())
-            if "filename" in vars(family):
-                declared.add(family.path_in(root))
-        return frozenset(declared)
+
+class HistoryDirectory(RootFile):
+    """A bus directory of per-thread or per-input history, read only by the thread, input or
+    view it names. Starting the bus and one fresh thread's turn never open it."""
+
+    __slots__ = ()
 
 
 class DocumentConversion(ABC):

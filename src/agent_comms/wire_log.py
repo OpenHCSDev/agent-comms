@@ -565,6 +565,11 @@ class WireLog(StoreLockOwner):
         self.path = Path(path)
         self._append_indexes: list[BusAppendIndex] = []
 
+    @classmethod
+    def at(cls, root: Path) -> WireLog:
+        """The log of the bus at ``root``."""
+        return cls(root / "bus.jsonl")
+
     def register_append_index[Index: BusAppendIndex](self, index: Index) -> Index:
         """Register one index owner for automatic capture with every opened cut."""
         if index.source_path != self.path:

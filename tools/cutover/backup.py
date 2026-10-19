@@ -5,13 +5,12 @@ import hashlib
 import json
 import os
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tarfile
 import tempfile
 import time
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Self
@@ -135,81 +134,3 @@ class Backup:
                 raise UpgradeRefused(f'The restored bus differs; failed data is at {failed}')
         self.restore_route()
         print(f'Restored the bus; failed data is kept at {failed}', file=sys.stderr)
-
-
-class StoreBackup(Backup):
-    """Snapshot declared databases through SQLite; restore only the selected files."""
-
-    @property
-    def data_root(self) -> Path:
-        return self.path / 'stores'
-
-    @staticmethod
-    def digest(path: Path) -> str:
-        return (CoordinationStore.digest(path) if CoordinationStore.is_database(path)
-                else hashlib.sha256(path.read_bytes()).hexdigest())
-
-    def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
-        contents = {}
-        for source in files:
-            if not source.exists():
-                continue
-            name = str(source.relative_to(self.root))
-            target = self.data_root / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if CoordinationStore.is_database(source):
-                with closing(CoordinationStore.read_snapshot(source)) as reader:
-                    with closing(sqlite3.connect(target)) as writer:
-                        reader.backup(writer)
-            else:
-                shutil.copy2(source, target)
-            with target.open('rb') as ready:
-                os.fsync(ready.fileno())
-            contents[name] = self.digest(target)
-            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-        return contents
-
-    def original(self) -> bool:
-        if not (self.path / 'files.json').exists():
-            return False
-        saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
-            target = self.root / name
-            if name not in saved:
-                if target.exists():
-                    return False
-            elif not target.exists() or self.digest(target) != saved[name]:
-                return False
-        return True
-
-    def restore(self) -> None:
-        saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
-            target = self.root / name
-            if name in saved:
-                descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
-                os.close(descriptor)
-                stage = Path(temporary)
-                try:
-                    shutil.copy2(self.data_root / name, stage)
-                    with stage.open('rb') as ready:
-                        os.fsync(ready.fileno())
-                    os.replace(stage, target)
-                finally:
-                    stage.unlink(missing_ok=True)
-            else:
-                target.unlink(missing_ok=True)
-            for companion in CoordinationStore.files(target)[1:]:
-                companion.unlink(missing_ok=True)
-        directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
-        if not self.original():
-            raise UpgradeRefused('Selected stores differ after backup restoration')
-        self.restore_route()

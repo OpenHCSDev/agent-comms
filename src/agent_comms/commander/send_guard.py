@@ -127,7 +127,7 @@ class TacticalCommand(GuardedCommand):
 @dataclass(frozen=True)
 class InstallCommand(TacticalCommand):
     work = 'install'
-    shapes = (('relink',), ('publish_runtime',), ('agent-comms', 'install'),
+    shapes = (('relink',), ('agent-comms', 'install'),
               ('pip', 'install'), ('uv', 'install'))
 
 

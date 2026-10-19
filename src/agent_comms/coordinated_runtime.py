@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from .fresh_private_session import NativeSessions
 from .agent_events import CompactionEvent
 from .pi_native_backend import PersistentPiSession
 from .comms import Comms
@@ -97,7 +98,7 @@ class SelectedExecution(NativeExecution):
             owner = Comms(self.root).registry.require(self.owner_name)
             if not Path(owner.worktree).is_dir():
                 raise ValueError("registered participant worktree is unavailable")
-            directory = self.root / "native-sessions" / owner.incarnation.lookup
+            directory = NativeSessions.path_in(self.root) / owner.incarnation.lookup
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
             _private_session_dir(directory)
             paths = ((self.session_file,) if self.session_file is not None
