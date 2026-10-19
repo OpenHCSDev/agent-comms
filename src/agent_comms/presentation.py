@@ -393,7 +393,7 @@ class DisplaySelection:
     @property
     def scopes(self) -> tuple[ChannelDisplayScope, ...]:
         return tuple(
-            ChannelDisplayScope.capture(channel, self.registry)
+            channel.display_scope(self.registry)
             for channel in self.channels.values()
         )
 
@@ -406,7 +406,7 @@ class DisplaySelection:
 
     def scope(self, target: str) -> ChannelDisplayScope:
         channel = self.catalog.require_channel(target, self.registry.threads)
-        return ChannelDisplayScope.capture(channel, self.registry)
+        return channel.display_scope(self.registry)
 
 
 class ChannelReadMark(ABC):

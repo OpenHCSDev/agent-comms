@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO, cast
+from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
@@ -247,7 +247,7 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
-    from .channels import Channel
+    from .channels import TagChannel
     from .historical_views import HistoryArchive, HistorySource
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
@@ -815,20 +815,8 @@ class ChannelDisplayScope(MessageDisplayScope):
     targets: frozenset[str]
     displayed: DisplayBasis | None = field(default=None, compare=False)
 
-    @classmethod
-    def capture(
-        cls, channel: Channel, snapshot: RegistryProvenance
-    ) -> ChannelDisplayScope:
-        if channel.any_mode:
-            return MemberActivityDisplayScope.capture(channel, snapshot)
-        return cls.history(channel)
-
-    @classmethod
-    def history(cls, channel: Channel) -> ChannelDisplayScope:
-        if channel.aggregate:
-            return AllChannelDisplayScope(channel.name)
-        # Nonaggregate channel declarations always supply their finite targets.
-        return cls(channel.name, cast(frozenset[str], channel.history_targets))
+    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
+        return (values[target] for target in self.targets if target in values)
 
     @property
     def index_targets(self) -> frozenset[str]:
@@ -874,6 +862,9 @@ class AllChannelDisplayScope(ChannelDisplayScope):
 
     targets: frozenset[str] = frozenset()
 
+    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
+        return values.values()
+
     def counted(self, cursor: ReadCursor, snapshot: RegistryProvenance
                 ) -> Iterable[tuple[Conversation, ConversationCursor]]:
         return cursor.conversations.items()
@@ -901,12 +892,12 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
     participant_names: frozenset[str] = frozenset()
 
     @classmethod
-    def capture(cls, channel: Channel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
+    def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
         members = frozenset(name for name, thread in snapshot.threads.items()
                             if channel.tags <= thread.tags)
         names = members | frozenset(alias for alias, owner in snapshot.aliases.items()
                                     if owner in members)
-        return cls(channel.name, cast(frozenset[str], channel.history_targets), participant_names=names)
+        return cls(channel.name, channel.history_targets, participant_names=names)
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:

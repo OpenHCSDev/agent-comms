@@ -53,10 +53,6 @@ class BuiltinChannel(StrEnum):
     def matches(self, tags: frozenset[str]) -> bool:
         return self is not self.NONE or not tags
 
-    @property
-    def history_targets(self) -> frozenset[str] | None:
-        return None if self.aggregate else frozenset((self.value,))
-
 
 class CommandTarget(ABC):
     """A command destination owns its binding and catalog participation."""
@@ -213,7 +209,7 @@ class ThreadTarget(NamedTarget):
         message, names = recipient.role.initial_delivery(message, target)
         return ThreadTarget(target), message, names
 
-    def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
+    def display_scope(self, viewer, snapshot, catalog, direct_scope):
         return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
 
     def conversation_key(self, sender, snapshot, channel, direct):
@@ -290,8 +286,8 @@ class ChannelTarget(NamedTarget):
                  if thread.name != sender and channel.matches(thread.tags)]
         return self, message, names
 
-    def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
-        return channel_scope.history(catalog.resolve(self.name))
+    def display_scope(self, viewer, snapshot, catalog, direct_scope):
+        return catalog.resolve(self.name).history_scope()
 
     def conversation_key(self, sender, snapshot, channel, direct):
         return channel(target=self.name)

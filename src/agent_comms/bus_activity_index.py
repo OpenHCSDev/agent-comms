@@ -74,9 +74,7 @@ class ChannelActivity:
         """Combine target-owned clocks using each declaration's history membership."""
         result = {}
         for name, channel in channels.items():
-            targets = channel.history_targets
-            clocks = (tuple(by_target.values()) if targets is None
-                      else tuple(by_target.get(target, cls()) for target in targets))
+            clocks = tuple(channel.history_scope().target_values(by_target))
             result[name] = cls(max((item.last_message for item in clocks), default=0),
                                max((item.last_user_input for item in clocks), default=0))
         return result

@@ -228,7 +228,7 @@ class HistoryViews:
         """Bounded channel history for any client adapter."""
         selected = CommandTarget.named(target).require_channel()
         channel = self.channels.catalog.read().resolve(selected.name)
-        return ChannelHistory(ChannelDisplayScope.history(channel)).page(self.presentation, bounds)
+        return ChannelHistory(channel.history_scope()).page(self.presentation, bounds)
 
     def last_sent_timestamps(
         self, rows: Iterable[tuple[str, float]], *, registry: RegistrySnapshot,

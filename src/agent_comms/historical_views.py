@@ -134,14 +134,14 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
         return ChannelSelection(
             viewer=snapshot.require(viewer).incarnation,
             bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
-            scope=ChannelDisplayScope.capture(channel, snapshot), history_revision=history_revision,
+            scope=channel.display_scope(snapshot), history_revision=history_revision,
         )
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         return presentation.channel_page(self.channel.name, viewer=self.viewer, bounds=bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
-        return ChannelDisplayScope.capture(self.channel, snapshot)
+        return self.channel.display_scope(snapshot)
 
 
 @dataclass(frozen=True, slots=True)

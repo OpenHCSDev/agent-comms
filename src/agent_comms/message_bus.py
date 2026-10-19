@@ -310,7 +310,7 @@ class MessageBus[Writes: Publisher]:
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
         channel = self._channels.read().resolve(target.name)
-        scope = ChannelDisplayScope.history(channel)
+        scope = channel.history_scope()
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
