@@ -289,7 +289,7 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         subprocess.run(["git", "-C", str(repo), *command], check=True)
     CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
         state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
-        skill=tmp_path / "skill.md", rules=(), repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
+        repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
         disk=tmp_path).write(tmp_path)
     CommanderConfig.installed.cache_clear()
     from agent_comms.commander import order

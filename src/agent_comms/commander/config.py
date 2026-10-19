@@ -58,8 +58,6 @@ class CommanderConfig(CommanderRole, BaseModel):
     state: Path
     board: Path
     narrative: Path
-    skill: Path
-    rules: tuple[Path, ...]
     repos: tuple[Repo, ...]
     worktrees: Path
     scratch: Path
@@ -73,6 +71,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     @staticmethod
     def packaged_rules() -> Path:
         return Path(str(files('agent_comms.commander') / 'rules'))
+
+    @staticmethod
+    def packaged_skill() -> Path:
+        return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
 
     @classmethod
     @cache

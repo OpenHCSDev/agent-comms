@@ -615,7 +615,8 @@ class ThreadRecord(CliResult):
 
     @projected(view="presence")
     def activity_detail(self) -> str:
-        return self.activity.detail
+        shown = self.activity.presentation(self.thread.display_title)
+        return " · ".join(part for part in (self.activity.detail, *shown.status.details) if part)
 
 
 @dataclass(frozen=True, slots=True)
@@ -841,8 +842,10 @@ class WireRevision(ReadState):
                 actors = {actor for message, _ in source.public_records(earlier.bus_log[0].size)
                           for actor in (message.sender, message.target)}
             catalog = comms.channels.catalog.read()
-            for actor in actors:
-                changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, comms.bus.require_channel))
+            with comms.bus.opened_activity() as channel_activity:
+                for actor in actors:
+                    changed.update(CommandTarget.named(actor).changed_threads(
+                        names, snapshot, catalog, channel_activity))
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != previous.activity.get(name)}

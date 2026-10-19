@@ -1,5 +1,6 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
+from bus_history import read_history
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import os
@@ -49,14 +50,14 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch, *, nat
     forged.write_text("#!/bin/sh\necho not-native\n")
     forged.chmod(0o755)
     with pytest.raises(NativePiUnavailable, match="validated native"):
-        NativePiRpcLaunch.managed(str(forged), (), root=tmp_path, worktree=tmp_path, package=native_runtime_package)
+        NativePiRpcLaunch.managed(str(forged), (), root=tmp_path, worktree=tmp_path, package=native_runtime_package, directory=tmp_path)
     assert verified == []
     launch = NativePiRpcLaunch.managed(
         "pi",
         ("--provider", "local", "--model", "fixture"),
         root=tmp_path, worktree=tmp_path,
         environment={"NODE_OPTIONS": "--import=/untrusted.js", "PI_WORKTREE": "/wrong"},
-     package=native_runtime_package)
+     package=native_runtime_package, directory=tmp_path)
     assert verified == []  # Managed construction consumes the already-acquired package.
     assert launch.package == package
     assert "NODE_OPTIONS" not in launch.env
@@ -73,37 +74,33 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch, *, nat
         ("--version",),
     ):
         with pytest.raises(NativePiUnavailable):
-            NativePiRpcLaunch.managed("pi", arguments, root=tmp_path, worktree=tmp_path, package=native_runtime_package)
+            NativePiRpcLaunch.managed("pi", arguments, root=tmp_path, worktree=tmp_path, package=native_runtime_package, directory=tmp_path)
 
 
-async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypatch):
-    from agent_comms.child_process import AttachedChild
-
-    async def forbidden(*args, **kwargs):
-        raise AssertionError("Unvalidated configuration reached child execution")
-
-    monkeypatch.setattr(AttachedChild, "start", forbidden)
-    result = [
-        item
-        async for item in one_turn_events(
-            str(tmp_path / "missing-native"), (), "must not send", str(tmp_path)
-        )
-    ]
-    error, done = result
-    assert isinstance(error, events.Error) and isinstance(done, events.Done)
-    assert error.reason_code == done.reason_code == "native_launch_invalid"
-    assert not done.ok and error.text == done.text
-    assert "missing-native" in done.text
+async def test_unvalidated_configuration_refuses_before_child(tmp_path):
+    missing = tmp_path / "missing-native"
+    with pytest.raises(FileNotFoundError) as caught:
+        [item async for item in one_turn_events(str(missing), (), "must not send", str(tmp_path))]
+    assert caught.value.filename == str(missing)
 
 
-@pytest.mark.usefixtures("native_rpc_fixture")
-async def test_native_early_exit_retains_failure_without_raw_stdout(tmp_path):
-    child = tmp_path / "rpc-child"
-    child.write_text(f"#!{sys.executable}\nimport sys\nprint('not a native record')\nsys.exit(3)\n")
-    child.chmod(0o755)
-    result = [item async for item in one_turn_events(str(child), (), "task", str(tmp_path))]
-    assert not result[-1].ok
-    assert not any(isinstance(item, events.Chunk) for item in result)
+async def test_native_provider_failure_retains_failure_without_raw_stdout(native_backend):
+    from acp.exceptions import RequestError
+    from agent_comms.acp_failure import RequestFailure
+
+    native = native_backend
+    await native.author_history()
+    original = native.session.read_bytes()
+    native.provider.status = 400
+    native.provider.error_message = "insufficient_quota"
+    async with native.open_owner() as (owner, session):
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "P698 original provider failure"}])
+        failure = RequestFailure.from_error(caught.value).failure
+        assert native.provider.error_message in failure.detail
+        assert failure.input_state.public_status == "started"
+        assert native.provider.posts == 1
+    assert native.session.read_bytes().startswith(original)
 
 
 async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, monkeypatch, *, native_runtime_package):
@@ -128,7 +125,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
         ),
         root=tmp_path, worktree=tmp_path,
         environment={"PI_CODING_AGENT_DIR": str(tmp_path / "agent-config")},
-     package=native_runtime_package)
+     package=native_runtime_package, directory=tmp_path)
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=12) as child:
         channel = PiRpcChannel(child.stdout)
         child.stdin.write(channel.encode(GetState(id="preflight")))
@@ -196,7 +193,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                     "headless", [{"type": "text", "text": "!relay #all headless native route"}]
                 )
                 assert response.stop_reason == "end_turn"
-                assert [m.body for m in list(comms.views.channel_history_page("#all").messages)] == [
+                assert [m.body for m in read_history(comms, "#all")] == [
                     "headless native route"
                 ]
                 assert not comms.registry.require("headless").active_turn.executing

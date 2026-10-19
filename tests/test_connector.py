@@ -3,6 +3,8 @@
 import base64
 import hashlib
 import secrets
+import shutil
+import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -25,6 +27,22 @@ from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
 
+def test_real_connector_refusals_and_replaced_source():
+    """The actual serve entrypoint, curl transport and production maintenance thread."""
+    import os
+    import subprocess
+    import sys
+
+    project = Path(__file__).resolve().parents[1]
+    environment = {**os.environ, "PYTHONPATH": str(project / "src")}
+    proof = subprocess.run(
+        [sys.executable, "-X", "faulthandler", str(project / "tests/verify_connector_live.py")],
+        env=environment, capture_output=True, text=True, timeout=60,
+    )
+    assert proof.returncode == 0, proof.stdout + proof.stderr
+    assert "same maintenance thread completed normally" in proof.stdout
+
+
 @pytest.mark.parametrize("served_by,registered", [
     ("installed", True), ("other", True), ("installed", False),
 ])
@@ -37,10 +55,6 @@ def test_connector_round_trip_owns_runtime_and_caller_validation(comms, tmp_path
     import sys
 
     comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
-    reviews = RuleReviews(comms.root)
-    reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
-    reviews.write("claude-ai", AnsweredRuleReviewEntry(
-        1, "connector.py:578 owns runtime validation; this test exercises it without imposing it on native-only upgrades."))
     runtimes = {name: tmp_path / name / "bin/python" for name in ("installed", "other")}
     for runtime in runtimes.values():
         runtime.parent.mkdir(parents=True)
@@ -187,6 +201,47 @@ async def test_connector_reads_two_newest_first_conversation_pages(client, store
     assert [row["id"] for row in first["dm"]] == [row.message_id for row in originals[4:2:-1]]
     assert [row["id"] for row in second["dm"]] == [row.message_id for row in originals[2:0:-1]]
     assert first["has_older"] and second["has_older"]
+
+
+async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(client, comms, tmp_path):
+    from agent_comms.channel_targets import CommandTarget
+
+    comms.channels.create_tag("comms")
+    for name in ("worker", "claude-ai"):
+        comms.channels.update_tags(name, add=frozenset({"comms"}))
+    originals = [comms.messaging.send(
+        "worker", "#comms", f"@claude-ai channel post {number}").message
+        for number in range(55)]
+    copied_root = tmp_path / "copied-wire"
+    shutil.copytree(comms.root, copied_root)
+    copied = Comms(copied_root)
+    copied_store = ConnectorStore.at(tmp_path / "copied-auth")
+    connector = Connector(copied_store, "http://127.0.0.1:18766", copied_root)
+    target = CommandTarget.named("#comms")
+    before = copied.bus.pending_count("claude-ai", target)
+    ledger = copied.bus.reads.read()
+    async with TestClient(TestServer(connector.application())) as reader:
+        headers = {"Authorization": f"Bearer {await approved_token(reader, copied_store)}"}
+        response = await reader.post("/mcp", headers=headers, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "comms_history", "arguments": {"peer": "#comms", "limit": 50}},
+        })
+        assert response.status == 200
+        result = (await response.json())["result"]
+    after = copied.bus.pending_count("claude-ai", target)
+    evidence = {"result": result, "unread_before": before, "unread_after": after}
+    (tmp_path / "channel-history.json").write_text(json.dumps(evidence, indent=2))
+    assert result["isError"] is False, result
+    page = result["structuredContent"]
+    assert page["channel"] == "#comms"
+    assert [row["id"] for row in page["messages"]] == [row.message_id for row in originals[:4:-1]]
+    assert len(page["messages"]) == 50 and page["has_older"]
+    # Joining the channel also posts membership messages; the read must leave
+    # those unread too, not only the 55 posts made above.
+    assert before >= len(originals)
+    assert after == before
+    assert copied.bus.reads.read() == ledger
+    assert comms.bus.pending_count("claude-ai", target) == before
 
 
 async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):

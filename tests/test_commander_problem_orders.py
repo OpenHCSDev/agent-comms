@@ -38,7 +38,7 @@ from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, ReleaseTodo, SendBackVerdict, StrikeReason,
-    StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
+    StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo, Slop, DeclarationDerivation)
 from agent_comms.turn_context import GoalSegment
 
 
@@ -335,6 +335,55 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
                                     f'delivered {clock(2035)} as {delivered}')
 
 
+def test_each_delivery_declares_the_strikes_it_carries(commander):
+    """A commit delivered after the deadline strikes its holder once; one on time strikes nobody,
+    and an operation strikes nobody, whenever it is recorded."""
+    comms, _ = commander
+    create(commander, 'P1', deadline=2000)
+    todo = comms.goals.todos.get('P1')
+    lead = comms.registry.require('lead').incarnation
+
+    def strikes(delivery, at):
+        return replace(delivery, at=RecordedEventTime(at)).strikes(todo, todo.order.id, lead)
+
+    commit = CommitDelivery(commit='a' * 40, delivered_commit='b' * 40)
+    (late,) = strikes(commit, 2035)
+    assert (late.previous, late.actor, late.expected_revision) == (todo.held(), lead, todo.revision)
+    assert late.reason.startswith('P1 order order-P1 late by 35 s') and 'b' * 40 in late.reason
+    assert strikes(commit, 2000) == ()
+    assert strikes(OperationDelivery(), 9000) == ()
+
+
+def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander):
+    """Core strikes a late delivered commit in the revision that records it; no script is needed."""
+    comms, caller = commander
+
+    def git(*args, at=1000):
+        return subprocess.check_output(
+            ('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t', *args),
+            env={**os.environ, 'GIT_COMMITTER_DATE': f'@{at} +0000'},
+            stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'on time', at=1990)
+    on_time = git('rev-parse', 'HEAD')
+    git('commit', '-q', '--allow-empty', '-m', 'late', at=2035)
+    late = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', late)
+
+    def done(problem, commit):
+        create(commander, problem, deadline=2000)
+        CommsOrderDoneTool(problem=problem, order_id=comms.goals.todos.get(problem).order.id,
+                           delivery=CommitDelivery(commit=commit, delivered_commit=commit),
+                           claims=working(comms)).apply(comms, caller)
+        return comms.goals.todos.get(problem)
+
+    assert done('P1', on_time).strikes == ()
+    delivered = done('P2', late)
+    (strike,) = delivered.strikes
+    assert not delivered.pending and strike.previous.owner == 'worker'
+    assert strike.reason.startswith('P2 order order-P2 late by 35 s') and late in strike.reason
+
+
 def test_a_main_merge_is_never_the_delivered_commit(commander):
     """P44 recorded the commander's main merge as the delivery, 72 minutes after the unit's own push."""
     comms, caller = commander
@@ -367,6 +416,45 @@ def test_a_done_record_from_before_the_split_reads_its_one_commit_as_both():
 def test_delivery_time_has_its_own_named_requirement():
     with pytest.raises(ValueError, match='delivery'):
         UnrecordedEventTime().require_delivery()
+
+
+def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
+    location = FileLine(__file__, 1)
+    for pattern in Slop.patterns():
+        slop = Slop(pattern, 'the count of open orders', location, DeclarationDerivation, location)
+        assert FieldCodec.decode(Slop, FieldCodec.encode(slop)) == slop
+        assert pattern in slop.render()
+        body = (f'Slop: {pattern}; fact the count of open orders; at {__file__}:1; '
+                f'derive declaration on {__file__}:1')
+        assert Slop.from_order(body) == [slop]
+    with pytest.raises(ValueError, match='MADEUP-999'):
+        Slop('MADEUP-999', 'the count of open orders', location, DeclarationDerivation, location)
+    for pattern in ('MADEUP-999', 'state'):
+        with pytest.raises(ValueError, match=pattern) as refused:
+            Slop.from_order(f'Slop: {pattern}; fact the count of open orders; at {__file__}:1; '
+                            f'derive declaration on {__file__}:1')
+        assert Slop.USAGE in str(refused.value)
+    valid = (f'Slop: MEMB-1; fact the count of open orders; at {__file__}:1; '
+             f'derive declaration on {__file__}:1')
+    malformed = 'Slop: MADEUP-999; an incomplete line must not disappear'
+    for body in (malformed, valid + '\n' + malformed, malformed + '\n' + valid):
+        with pytest.raises(ValueError, match='Slop: PATTERN-ID'):
+            Slop.from_order(body)
+    assert len(Slop.from_order(valid + '\n' + valid)) == 2
+
+
+def test_order_send_refuses_unknown_pattern_before_recording(commander_script):
+    script, repo = commander_script
+    extra = (f'Slop: MADEUP-999; fact the count of open orders; at {__file__}:1; '
+             f'derive declaration on {__file__}:1\n')
+    with pytest.raises(ValueError, match='MADEUP-999'):
+        problem(script, order_body(repo, extra=extra))
+    assert script.held_orders() == ()
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    with pytest.raises(ValueError, match='MADEUP-999'):
+        judge.BackVerb(ids=('edit:1234',), msg='m1', lines=('one',), why='wrong', roast='r', fix='f',
+                       pattern='MADEUP-999', fact='the count of open orders', at=f'{__file__}:1',
+                       derive='declaration', by=f'{__file__}:1').slop()
 
 
 def test_commander_script_records_every_order_step_in_core(commander, commander_script):
@@ -840,14 +928,9 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
     from agent_comms.connector import CALLER
     from agent_comms.goal_actions import CompletedGoalAction
     from agent_comms.goals import RequestDirective
-    from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
     from agent_comms.tools import CommsSendTool
     comms, caller = commander
     comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
-    def reviewed():
-        RuleReviews(comms.root).write('claude-ai', DrawnRuleReviewEntry(('Declare each fact once',), 1))
-        RuleReviews(comms.root).write('claude-ai', AnsweredRuleReviewEntry(
-            1, 'This tick moves rules.py:47 into one typed Core record that Core owns.'))
     def direct(target, body):
         CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
         return comms.bus.log.latest_sequence()
@@ -855,7 +938,6 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
         monkeypatch.setattr(standing_rules.time, 'time', lambda: after)
         return [rule.line() for rule in standing_rules.DirectiveUnacted.violations(comms, 'lead')]
     worker = comms.registry.require('worker').goal
-    reviewed()
     seq = direct('lead', 'Make the slowdowns impossible by mechanism.')
     assert direct('worker', 'A note to a unit, not a request.') and comms.registry.require('worker').goal == worker
     goal = comms.registry.require('lead').goal
@@ -870,7 +952,6 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
     assert unacted(directive.deadline + 1) == []
     CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
-    reviewed()  # the clock now stands past the first deadline
     seq = direct('lead', 'A second directive after the first request is done.')
     goal = comms.registry.require('lead').goal
     assert goal.id != 'request' and goal.state.active and goal.text == 'A second directive after the first request is done.'
@@ -1142,7 +1223,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
                   why='The changes repair the existing canonical state owner', lines=('value = 2',),
                   msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner').message.message_id)
     command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
-        **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        **fields, roast='r', fix='f', pattern='IDEN-5', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
@@ -1165,7 +1246,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
-        slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        pattern='IDEN-5', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1').run()
     saved = comms.goals.todos.get('P1')
     assert len(saved.verdicts) == len(saved.strikes) == 1
@@ -1256,7 +1337,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
 VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
     'superseded': "e1:ab --line one --why 'The task moved to a different implementation owner' --by m2",
-    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
+    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop IDEN-5"
             " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
 }
 

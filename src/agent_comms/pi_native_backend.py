@@ -246,6 +246,7 @@ class PiNativeBackend(
             package=package,
             worktree=thread.worktree,
             root=self.comms.root,
+            session_directory=thread.native_session_directory(self.comms.root),
             environment=environment,
             session_file=thread.runtime.read_key,
             observe=partial(self.observe, thread),
@@ -283,6 +284,7 @@ class PiNativeBackend(
             persistent_session=self,
             package=package,
             root=self.comms.root,
+            session_directory=thread.native_session_directory(self.comms.root),
             ui_request=delivery.ui_request,
             tool_mode=delivery.tool_mode,
         ):

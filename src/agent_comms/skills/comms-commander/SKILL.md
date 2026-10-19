@@ -36,7 +36,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 - **Rudeness carries intent and authority.** A polite order reads as a suggestion. Every order names what was stupid, slop or wrong and why; `order send` refuses an order with no blunt label unless `--clean`. Rude means blunt about the work, never slurs.
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
 - **Every order goes through `order send UNIT HH:MM BODYFILE`.** It refuses soft wording, orders without numbered edits, a report line or banned shapes, and records the deadline.
-- **A deadline is a ceiling, never a time to aim for.** Units often finish long before it. Orders name the event that starts the work ("the moment the turns are idle") and give the time only as "by HH:MM"; read the diff at the first commit and push for the earliest realistic finish. Order text that schedules work at a clock time is refused.
+- **A deadline is a ceiling, never a time to aim for.** Units often finish long before it. Orders name the event that starts the work ("the moment the turns are idle") and give the time only as "by HH:MM"; read the diff at the first commit and push for the earliest realistic finish.
 - **Strikes, then fire.** A send-back, missed deadline, false claim or off-order edit is `order strike UNIT PID --why ...`. Two strikes on one task takes the task away the same tick and reassigns every board row the unit owns. `order done UNIT` only after reading the diff that meets the order.
 - **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
@@ -75,7 +75,7 @@ Update the board row, move on. One line per unit touched.
 - Merging two owners because fields match today: merge only when every required answer agrees in every reachable state.
 - "Tests pass": passing runs cannot reveal outside supply. The app has to show it working.
 
-- **Every slop claim carries its formal statement.** Send-backs and orders saying "slop" carry `--slop/--fact/--at/--derive/--by` or a `Slop:` line; the tools refuse them otherwise.
+- **Every slop claim cites the pinned pattern catalog and carries its formal statement.** Send-backs use `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; orders use `Slop: PATTERN-ID; fact WORDS; at PATH:LINE; derive MECHANISM on PATH:LINE`. PATTERN-ID must exist in the packaged refactor-audit submodule's catalog. The tools refuse unknown IDs and malformed lines.
 - **Never fault inheritance itself.** "Inherits two classes" and "prefer composition" are dogma and the tools refuse them.
 - **Eliminate forwarding by fixing the hierarchy.** Fold a false owner into the real one, or compose the providers as parents. Never keep forwarders or move the routes to consumers.
 - **Factor into the parent.** Siblings keep only irreducible differences; residue shared across parents becomes a capability mixin.
