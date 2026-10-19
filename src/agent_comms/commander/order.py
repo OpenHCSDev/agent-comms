@@ -524,11 +524,10 @@ def done(pid, sha, delivered=None):
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
     call(CommsOrderDoneTool(problem=pid, delivery=delivery))
-    at = COMMS.goals.todos.get(pid).order.delivery.at
+    lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
-    if not operation and at.at > todo.deadline.at:
-        strike(unit, f'late on {pid}: order {todo.order.id} due {hhmm(todo.deadline)} '
-                     f'delivered {hhmm(at)} as {delivered}')
+    if not operation and lateness.late():
+        strike(unit, f'{pid} order {todo.order.id} {lateness} as {delivered}')
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 

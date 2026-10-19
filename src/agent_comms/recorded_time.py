@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from math import isfinite
@@ -13,6 +14,26 @@ if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
 Event = TypeVar("Event", bound="TranscriptEvent")
+
+
+@dataclass(frozen=True)
+class Lateness:
+    """How late one delivery was against its deadline, to the second."""
+
+    due: float
+    delivered: float
+
+    @property
+    def seconds(self) -> float:
+        return self.delivered - self.due
+
+    def late(self) -> bool:
+        return self.seconds > 0
+
+    def __str__(self) -> str:
+        due, delivered = (time.strftime("%H:%M:%S", time.localtime(at))
+                          for at in (self.due, self.delivered))
+        return f"late by {self.seconds:g} s: due {due}, delivered {delivered}"
 
 
 class EventTime(DeclaredFamily, affix="EventTime"):
@@ -27,6 +48,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def recorded_at(self, label: str) -> float:
         """The recorded instant; an unrecorded time refuses like ``require_recorded``."""
         raise ValueError(f"{label} requires a recorded time.")
+
+    def lateness(self, deadline: EventTime) -> Lateness:
+        """How late this delivery time is against ``deadline``; either unrecorded refuses."""
+        return Lateness(deadline.recorded_at("An order deadline"), self.recorded_at("A delivery"))
 
     def require_deadline(self) -> None:
         self.require_recorded("An order deadline")
