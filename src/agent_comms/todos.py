@@ -1872,7 +1872,7 @@ class DiffEvidence(Evidence):
 
 
 @dataclass(frozen=True)
-class TurnRecordEvidence(Evidence):
+class TurnEvidence(Evidence):
     thread: str
     turn_id: str
     form = "--turn THREAD:TURN_ID"
