@@ -790,10 +790,7 @@ class PrivateEvidenceRead:
         """Verify and hash original bytes without retaining the complete prefix."""
         try:
             info = os.fstat(self.stream.fileno())
-            NativeSessionFileRole.require(info)
-            revision = FileRevision.from_stat(info)
-            if revision.identity != self.identity:
-                raise NativeEvidencePrefixChanged("Native Pi evidence inode changed")
+            revision = self._observe_revision_after(FileRevision.from_stat(info))
             if not info.st_size:
                 raise NativePiUnavailable("Native Pi evidence file is empty")
             if info.st_size < self.size:
@@ -943,7 +940,9 @@ class PrivateEvidenceRead:
         earlier revision. Each observation also fences the next: growth seen on
         the descriptor cannot be hidden by shrinking the named file back.
         """
-        for info in (os.fstat(self.stream.fileno()), self.path.lstat()):
+        # Detect replacement before classifying the old descriptor's now-zero
+        # links: observing a new named source takes the existing reverify path.
+        for info in (self.path.lstat(), os.fstat(self.stream.fileno())):
             NativeSessionFileRole.require(info)
             observed = FileRevision.from_stat(info)
             if observed.identity != self.identity or (
