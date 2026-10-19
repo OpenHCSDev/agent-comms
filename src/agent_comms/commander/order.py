@@ -38,7 +38,7 @@ from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
@@ -61,12 +61,15 @@ def refuse(text, *families):
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
 
 
-def post(recipients, body):
-    """Send one message its caller refused with OUTGOING; judge reads it from bus history."""
-    command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
-    for unit in recipients:
-        command += ['--to', unit]
-    out = subprocess.run(command + ['--type', 'info', '--body', body], capture_output=True, text=True)
+def post(audience: VerdictAudience, body: str) -> str:
+    """Send one message its caller refused with OUTGOING; judge reads it from bus history.
+
+    One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
+    """
+    target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
+    out = subprocess.run(['timeout', '300', CLI, '--root', B, 'send', '--from', ME, '--to', target,
+                          '--type', 'info', '--body', audience.addressed(target, body)],
+                         capture_output=True, text=True)
     if '"id"' not in out.stdout:
         sys.exit(f'Send failed: {out.stdout}{out.stderr}')
     return json.loads(out.stdout)['id']
@@ -341,13 +344,13 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
     message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
-    sent = post([unit], message)
+    sent = post(VerdictAudience((unit,)), message)
     # The message is each order's recorded link; a verdict citing it lands on that order.
     for pid in group:
         call(CommsTodoTool(id=pid, operation=OrderMessage(
             COMMS.goals.todos.get(pid).revision, COMMS.registry.require(ME).incarnation, sent)))
     for other, text in taken.items():
-        post([other], text)
+        post(VerdictAudience((other,)), text)
     print(order.id)
     if replaces and not clean and struck_already:
         print(f'{unit} already struck on this order of {group[0]}; '
@@ -466,7 +469,7 @@ def board():
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
 
 
-def on_record(line: str, recorded: str, audience: tuple[str, ...] = ('#comms',)) -> None:
+def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
     """Put one line on the public record: the narrative file, then its audience.
 
     Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
@@ -478,7 +481,7 @@ def on_record(line: str, recorded: str, audience: tuple[str, ...] = ('#comms',))
                     'Written by agent-comms-commander order; never edited.\n\n')
         f.write(f'- {line}\n')
     try:
-        post([*audience], f'On the record: {line}')
+        post(audience, f'On the record: {line}')
     except SystemExit as failed:
         print(f'{recorded} recorded, but the post failed ({failed}). '
               'Repost with order.post; do not record it again.', file=sys.stderr)
@@ -505,7 +508,7 @@ def strike(unit, why, caught=f'{ME} at review'):
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
             f'caught by {caught}): {why}')
-    on_record(line, 'Strike')
+    on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
@@ -766,7 +769,7 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
             f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
-    on_record(line, 'Void')
+    on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
     print(f'{unit}: {n} strike(s) on {task}')
 
 
@@ -782,7 +785,8 @@ def due(pid: str, at: str, why: str) -> None:
     call(CommsTodoTool(id=pid, operation=AssignTodo(
         todo.revision, todo.assignment, moved, todo.order, todo.goal)))
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
-              f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline')
+              f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline',
+              VerdictAudience.of(todo.held().owner, todo.goal))
     print(f'{pid}: due {hhmm(moved)}')
 
 
@@ -795,9 +799,11 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
     call(CommsTodoTool(id=pid, operation=WithdrawTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, why,
         superseded_by)))
+    unit = todo.held().owner
     withdrawal, = COMMS.goals.todos.get(pid).order.withdrawals(todo)
-    on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal')
-    post([todo.assignment.owner],
+    on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
+              VerdictAudience.of(unit, todo.goal))
+    post(VerdictAudience((unit,)),
          f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
     board()
     print(withdrawal)
@@ -892,10 +898,11 @@ class DueVerb(OrderVerb, RuledVerb):
 class InstallVerb(RuledVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
     at: str = option("at", help="HH:MM the install is due")
+    installer: str = option("installer", help="the unit that runs the install")
 
     def run(self) -> None:
-        PlannedInstallDeadline(deadline(self.at)).plan(COMMS.root)
-        print(f'install due {self.at}')
+        PlannedInstallDeadline(deadline(self.at), self.installer).plan(COMMS.root)
+        print(f'install due {self.at}, run by {self.installer}')
 
 
 @dataclass(frozen=True, kw_only=True)

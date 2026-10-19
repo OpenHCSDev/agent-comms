@@ -257,6 +257,38 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(2, 4, 6))})
 
 
+def test_single_participant_dm_retains_its_scope_and_sql_identity(tmp_path):
+    comms = prepared(tmp_path)
+    snapshot = comms.registry.snapshot()
+    conversation = DMConversation((snapshot.require("alice").incarnation,))
+    scope = conversation.scope(snapshot)
+    assert scope.first_names == scope.second_names == snapshot.names_for("alice")
+    assert set(conversation.sql_keys(snapshot)) == {("alice", "alice")}
+
+
+def test_all_read_uses_conversation_maxima_without_sparse_sequences(tmp_path):
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    messages = [
+        comms.messaging.send("alice", "#team", "first channel sender").message,
+        comms.messaging.send("bob", "#team", "second channel sender").message,
+        comms.messaging.send("alice", "bob", "DM forward").message,
+        comms.messaging.send("bob", "alice", "DM reverse").message,
+    ]
+    comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
+    snapshot = comms.registry.snapshot()
+    seen = comms.bus.reads.cursor(viewer, snapshot)
+    from agent_comms.read_basis import AllChannelDisplayScope
+    with comms.bus.log.opened_wire_snapshot() as source:
+        basis = source.query_page_index(lambda index: AllChannelDisplayScope("#any").capture_all(
+            comms.bus.reads, viewer, snapshot, source, index, document=comms.bus.reads.read()))
+    assert len(basis.conversations) == 2
+    assert len(seen.conversations) == 2
+    assert all(message.seq in seen.for_conversation(ReadLedger.conversation(message, snapshot))
+               for message in messages)
+    assert all(not cursor.exceptions for cursor in seen.conversations.values())
+
+
 def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -267,8 +299,15 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     replacement.write_bytes(comms.bus.log.path.read_bytes())
     replacement.chmod(0o600)
     replacement.replace(comms.bus.log.path)
-    comms.views.viewer_snapshot(str(tmp_path))
-    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor()
+    reopened = wire(tmp_path)
+    assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor()
+    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+    from agent_comms.coordination_errors import DMScopeChanged
+    with pytest.raises(DMScopeChanged, match="Display incarnation changed"):
+        reopened.views.mark_page_read(page, worktree=str(tmp_path))
+    fresh = reopened.views.channel_display_page("#team", viewer=NamedViewer(viewer))
+    reopened.views.mark_page_read(fresh, worktree=str(tmp_path))
+    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 0
 
 
 def test_recorded_bus_identity_is_one_member(tmp_path):

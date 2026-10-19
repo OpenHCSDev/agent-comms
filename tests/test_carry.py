@@ -546,6 +546,55 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
     assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
 
 
+@pytest.mark.parametrize("registered", [True, False])
+def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp_path, monkeypatch, registered):
+    """The upgrade's last step sends through the connector Core declares and reads the message
+    back; a connector that cannot fails the upgrade through its restore."""
+    import tools.upgrade_bus as upgrade_bus
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
+
+    comms.registry.declare(comms.registry.new_thread("user", frozenset(), str(comms.root)))
+    if registered:
+        comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
+
+    class Owners(Stack):
+        python = Path(sys.executable)
+
+        def cli(self, root, *arguments):
+            return {"threads": []}
+
+        def relock(self):
+            pass
+
+        def prepare_native(self):
+            pass
+
+        def verify(self, root):
+            return {}
+
+    ran = upgrade_bus.run
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: (
+        "" if command[0] in ("git", "uv") else ran(*command, **options)))
+    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
+    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
+    stack = Owners(REPO, tmp_path / "home")
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+
+    def upgrading():
+        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None)
+
+    failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
+    if registered:
+        assert "Upgrade round trip" in upgrading()["round_trip"]
+        assert not list(failed)
+    else:
+        with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
+            upgrading()
+        assert len(list(failed)) == 1
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+
+
 def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):
     """A bridge publishes from its own process, and the upgrade reads the store's files raw
     for the backup and its digests. Neither may let the bridge write before the carry is

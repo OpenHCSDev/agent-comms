@@ -256,13 +256,6 @@ class PiUsage(PiPayload):
     reasoning: NonnegativePiCount = wire_field("reasoning", UnreportedCount())
     cache_write_1h: NonnegativePiCount = wire_field("cacheWrite1h", UnreportedCount())
 
-    @property
-    def token_total(self) -> PiCount:
-        return self.total_tokens
-
-    def charged(self) -> Decimal:
-        return self.cost.charged()
-
     def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
         return (account.charge(self),)
 
@@ -580,7 +573,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
     @property
     def measured_tokens(self) -> PiCount:
-        return self.usage.token_total
+        return self.usage.total_tokens
 
     def require_failed_terminal(self):
         raise ValueError("Native recovery requires an unambiguous failed terminal")

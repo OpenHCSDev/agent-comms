@@ -454,7 +454,7 @@ class DMConversation(Conversation):
         )))
 
     def scope(self, snapshot: RegistryProvenance) -> DMDisplayScope:
-        first, second = self.participants
+        first, second = self.participants[0], self.participants[-1]
         return DMDisplayScope.capture(first.name, second.name, snapshot)
 
     def recorded_keys(self, snapshot: RegistryProvenance) -> Iterable[Conversation]:
@@ -465,7 +465,7 @@ class DMConversation(Conversation):
         return any(snapshot.names_for(p.name).intersection(targets) for p in self.participants)
 
     def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]:
-        first, second = self.participants
+        first, second = self.participants[0], self.participants[-1]
         a, b = snapshot.names_for(first.name), snapshot.names_for(second.name)
         return tuple((target, sender) for senders, targets in ((a, b), (b, a))
                      for sender in senders for target in targets)
@@ -928,8 +928,14 @@ class AllChannelDisplayScope(ChannelDisplayScope):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
-                                     snapshot, source, index, document=document)
+        prefixes: dict[Conversation, int] = {}
+        for row in index.latest_by_conversation(self, source.boundary):
+            conversation = self.read_key(row.sender, row.target, snapshot)
+            prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            tuple(DisplayedConversation(conversation, (), sequence)
+                  for conversation, sequence in prefixes.items()),
+            source.bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
@@ -937,6 +943,14 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
     """Member activity may match a sender, DM peer or mention on any target."""
 
     participant_names: frozenset[str] = frozenset()
+
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
+        # Mentions and authorship may select only part of a channel conversation.
+        # Unlike the whole-bus view, they cannot grant its unseen prefix.
+        rows = self.offsets(index, lower=None, upper=None, descending=False,
+                            before_offset=source.boundary)
+        return reads.capture_indexed(viewer, rows, snapshot, source, index, document=document)
 
     @classmethod
     def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
