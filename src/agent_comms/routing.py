@@ -190,7 +190,7 @@ class DeliveryScope(MessageDisplayScope):
         return self.delivers(message.sender, message.target)
 
     def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
-        selected = CommandTarget.named(AnyChannel.target_name if target is None else target)
+        selected = CommandTarget.named(AnyChannel.declared_name if target is None else target)
         return selected.display_scope(self.actor, snapshot, catalog, DMDisplayScope)
 
     def canonical(self, name: str) -> str:

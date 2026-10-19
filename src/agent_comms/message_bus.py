@@ -25,7 +25,7 @@ from .messages import Message
 from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
-    AllChannelDisplayScope, ChannelDisplayScope,
+    ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
@@ -176,7 +176,7 @@ class MessageBus[Writes: Publisher]:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
-            selected = CommandTarget.named(AnyChannel.target_name if target is None else target)
+            selected = CommandTarget.named(AnyChannel.declared_name if target is None else target)
             return selected.pending_count(counts, basis.registry, basis.catalog)
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:

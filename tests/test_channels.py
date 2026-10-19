@@ -496,7 +496,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
 
     def names(client):
         ordered = [view.channel.name for view in client.views.channel_views()]
-        prefix = [builtin.target_name for builtin in BuiltinChannelView.declarations()]
+        prefix = list(BuiltinChannelView.names())
         assert ordered[:len(prefix)] == prefix
         return ordered[len(prefix):]
 

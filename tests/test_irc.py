@@ -35,7 +35,7 @@ class TestChannelTargets:
 
     def test_message_to_global_channel_is_valid(self):
         message = Message(
-            sender="a", target=AllChannel.target_name, body="x", type=InfoKind
+            sender="a", target=AllChannel.declared_name, body="x", type=InfoKind
         )
         assert message.target == "#all"
 

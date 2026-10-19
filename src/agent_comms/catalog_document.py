@@ -80,7 +80,7 @@ class CatalogDocument:
         for thread in threads.values():
             for tag in thread.tags:
                 first_seen[tag] = min(first_seen.get(tag, thread.created_at), thread.created_at)
-        result = Channels((kind.target_name, self.resolve(kind.target_name)) for kind in BuiltinChannelView.declarations())
+        result = Channels((name, self.resolve(name)) for name in BuiltinChannelView.names())
         for tag in sorted(self.tags.union(first_seen)):
             name = f"#{tag}"
             result[name] = self.resolve(name, created_at=first_seen.get(tag, 0.0))
@@ -112,7 +112,7 @@ class CatalogDocument:
         return preference.channel(TagChannel, target, frozenset({tag}))
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
-        return frozenset(kind.target_name for kind in BuiltinChannelView.declarations() if kind.matches(tags)) | frozenset(
+        return frozenset(kind.declared_name for kind in BuiltinChannelView.members_with(BuiltinChannelView) if kind.matches(tags)) | frozenset(
             f"#{tag}" for tag in tags
         )
 

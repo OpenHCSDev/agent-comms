@@ -30,7 +30,7 @@ from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import CommandTarget
-from .read_basis import AllChannelDisplayScope, ChannelDisplayScope
+from .read_basis import ChannelDisplayScope
 from .channels import AnyChannel, ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
