@@ -26,7 +26,8 @@ def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypa
 
     monkeypatch.setattr(comms.agents, "_emit_activity", fail_after_replacement)
     with pytest.raises(OSError, match="activity publication failed"):
-        comms.agents.begin_turn("owner", "same-id")
+        # Publication follows a real phase change, not an unchanged default phase.
+        comms.agents.begin_turn("owner", "same-id", "changed preparation detail")
     assert comms.registry.require("owner").turn_lease == replacement[0]
 
 

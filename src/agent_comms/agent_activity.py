@@ -259,9 +259,7 @@ class AgentActivity:
             lease = leased.turn_lease
             assert lease is not None
         try:
-            phase = PreparingPhase(detail)
-            lease.record.transition(lease, phase)
-            self._record_turn_activity(leased.name, (phase,))
+            self.transition_turn(lease, PreparingPhase(detail))
         except BaseException as error:
             self.finish_turn(lease, TurnEnding.from_exception(error))
             raise
@@ -273,6 +271,7 @@ class AgentActivity:
             self._emit_activity(phase.activity_event(name))
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        """Apply a requested phase and record only its changed-state effects."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = lease.record.transition(lease, phase)
             self._record_turn_activity(

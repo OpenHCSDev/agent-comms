@@ -43,7 +43,6 @@ async def test_registry_read_failure_escapes_real_runner_then_accepts_fresh_dm(t
     def fail_once(name):
         monkeypatch.setattr(comms.registry, 'require', read)
         raise ValueError('P689 injected registry read failure')
-    started = time.monotonic()
     with pytest.raises(ValueError, match='P689 injected registry read failure'):
         async with AsyncExitStack() as resources:
             owner = await Coordination.run_worker(partial(
@@ -51,6 +50,8 @@ async def test_registry_read_failure_escapes_real_runner_then_accepts_fresh_dm(t
             ))
             lease = owner.turn_lease
             before = lease.record.read()
+            # The one-second requirement begins at the mid-turn fault, not cold acquisition.
+            started = time.monotonic()
             monkeypatch.setattr(comms.registry, 'require', fail_once)
             await Coordination.run_worker(partial(comms.registry.require, 'unit'))
     assert time.monotonic() - started < 1
