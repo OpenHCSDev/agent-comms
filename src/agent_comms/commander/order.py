@@ -396,12 +396,11 @@ def board():
     listed, read = todos(), progress()
     activity = {unit: last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
-        unit = t.holder
         row = t.order.board_order(t)
-        lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {row.owner_file} | {row.owner} | '
-                     f'{row.order} | {row.due} | '
+        lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {row.owner_file} | '
+                     f'{row.owner} | {row.order} | {row.due} | '
                      f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
-                     f'{activity[unit].clock() if unit else "-"} |')
+                     f'{activity[t.holder].clock() if t.holder else "-"} |')
     history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
     lines += ['', '## Withdrawn orders', '',
               *(f'- {line}' for t in history for line in t.order.withdrawals(t))]

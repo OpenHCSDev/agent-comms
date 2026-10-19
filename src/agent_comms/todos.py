@@ -252,7 +252,6 @@ class PullRequests:
 
 
 def clock(at: float) -> str:
-    """Local HH:MM, the one clock format for orders, installs and boards."""
     return time.strftime("%H:%M", time.localtime(at))
 
 
@@ -1063,7 +1062,6 @@ class LocatedProblemFinding(ProblemFinding):
 
 @dataclass(frozen=True)
 class BoardOrder:
-    """The order columns of one board row."""
     owner_file: str
     owner: str
     order: str
