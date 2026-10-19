@@ -1,5 +1,6 @@
 """IRC model: channels, DMs, presence, history views."""
 
+from agent_comms.channel_targets import CommandTarget
 import pytest
 
 from agent_comms.registration import Registration
@@ -93,12 +94,12 @@ class TestHistory:
         chat.messaging.send("PR111", "fixer", "hello").message.message_id
         chat.messaging.send("fixer", "PR111", "hi back").message.message_id
         chat.messaging.send("PR111", "PR112", "unrelated").message.message_id
-        history = [m.body for m in list(chat.views.dm_history_page("PR111", "fixer").messages)]
+        history = [m.body for m in list(chat.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)]
         assert history == ["hello", "hi back"]
 
     def test_dm_history_requires_registered_threads(self, chat):
         with pytest.raises(UnregisteredThreadError):
-            list(chat.views.dm_history_page("PR111", "ghost").messages)
+            list(chat.views.history_page(CommandTarget.named("ghost"), viewer="PR111").messages)
 
     def test_channel_history_returns_all(self, chat):
         chat.messaging.send("PR111", "#ci", "one").message.message_id

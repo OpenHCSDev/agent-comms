@@ -20,6 +20,7 @@ from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import (
     ClearQueueRequest,
@@ -1667,7 +1668,7 @@ class TestTargetPrefix:
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
         assert wired.bus.pending_count("peer") == 1
         assert wired.bus.pending_count("PR111") == 0
-        assert [m.body for m in list(wired.views.dm_history_page("proj", "peer").messages)] == ["hi peer"]
+        assert [m.body for m in list(wired.views.history_page(CommandTarget.named("peer"), viewer="proj").messages)] == ["hi peer"]
 
 
 class TestFailureFeedback:
@@ -1738,7 +1739,7 @@ class TestFailureFeedback:
         history = (
             list(wired.views.channel_history_page(reply_target).messages)
             if channel
-            else list(wired.views.dm_history_page("proj", human.name).messages)
+            else list(wired.views.history_page(CommandTarget.named(human.name), viewer="proj").messages)
         )
         assert len(history) == 1
         assert isinstance(history[0].role, NoticeRole) is True
@@ -1773,7 +1774,7 @@ class TestFailureFeedback:
             await agent.turns.run_agent_turn(
                 "proj", "proj", "answer", origins=(origin,)
             )
-        history = list(wired.views.dm_history_page("proj", human.name).messages)
+        history = list(wired.views.history_page(CommandTarget.named(human.name), viewer="proj").messages)
         assert len(history) == 1
         assert isinstance(history[0].role, NoticeRole) is True
         assert history[0].body.startswith("Request failed: backend turn did not complete. ")

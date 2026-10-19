@@ -291,7 +291,7 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     _, _, live, _ = migrated
     viewer = live.messaging.user_identity(str(live.root)).name
     assert len(collect(live, "channel_history_page", "#team")) == 9
-    assert len(collect(live, "dm_history_page", "alice", viewer)) == 9
+    assert len(collect(live, "history_page", CommandTarget.named("alice"), viewer=viewer)) == 9
     assert len(collect(live, "full_history_page")) == 18
     for message in collect(live, "full_history_page"):
         if isinstance(message, HistoricalMessage):

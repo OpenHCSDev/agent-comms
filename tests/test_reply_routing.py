@@ -1,3 +1,4 @@
+from agent_comms.channel_targets import CommandTarget
 import asyncio
 import json
 
@@ -168,7 +169,7 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
         assert "Unrelated private question" in prompts[0]
         assert f"delivered automatically to {human.name}" in prompts[0]
         assert list(comms.views.channel_history_page("#test").messages) == channel_context
-        assert list(comms.views.dm_history_page("worker", human.name).messages) == []
+        assert list(comms.views.history_page(CommandTarget.named(human.name), viewer="worker").messages) == []
     finally:
         await agent.shutdown()
 

@@ -6,6 +6,7 @@ two CLI-registered threads exchange messages, a child forks, the child reads
 its inbox and responds, and the parent acknowledges.
 """
 
+from agent_comms.channel_targets import CommandTarget
 import json
 import subprocess
 import sys
@@ -197,10 +198,10 @@ class TestEndToEndLifecycle:
 
         # Both adapters project the same canonical source. Notification/native
         # consumption is tested by the dedicated ACP owner-path tests.
-        assert [m.body for m in list(comms.views.dm_history_page("cli-agent", "proj").messages)] == [
+        assert [m.body for m in list(comms.views.history_page(CommandTarget.named("proj"), viewer="cli-agent").messages)] == [
             "from the cli side"
         ]
         # And the CLI side can reply, visible in the thread's DM history.
         cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "roger")
-        dm = [m.body for m in list(wire(root).views.dm_history_page("cli-agent", "proj").messages)]
+        dm = [m.body for m in list(wire(root).views.history_page(CommandTarget.named("proj"), viewer="cli-agent").messages)]
         assert dm == ["from the cli side", "roger"]
