@@ -159,6 +159,13 @@ class TodoRows(Carry):
         if not TodoStore.path_in(root).exists():
             yield None
             return
+        with cls.todo_store(root, apply=apply) as db:
+            yield db
+
+    @classmethod
+    @contextmanager
+    def todo_store(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection]:
+        """The existing todo store, kept only when applied and every row still reads."""
         with closing(CoordinationStore.writer(TodoStore.path_in(root))) as db:
             db.execute("BEGIN IMMEDIATE")
             try:
@@ -367,10 +374,10 @@ class TodoColumnCarry(TodoRows):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        changed = 0
-        with cls.todo_rows(root, apply=apply) as db:
-            if db is not None:
-                changed = cls._carry(db, apply=apply)
+        if not TodoStore.path_in(root).exists():
+            return Carried(0)
+        with cls.todo_store(root, apply=apply) as db:
+            changed = cls._carry(db, apply=apply)
         return cls.carried(root, changed, {}, apply=apply)
 
     @classmethod
