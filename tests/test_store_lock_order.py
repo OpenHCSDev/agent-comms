@@ -30,7 +30,7 @@ def test_concrete_store_must_be_declared_at_startup(owner_type, monkeypatch):
         pass
 
     with pytest.raises(TypeError, match="missing from the lock order"):
-        StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order)
+        StoreLockOwner.declare_lock_order(*StoreLockOwner.lock_order())
     with pytest.raises(TypeError, match="absent from the declared lock order"):
         object.__new__(UnrankedOwner).lock_rank
     with pytest.raises(TypeError, match="derive from the composition root"):
@@ -40,7 +40,7 @@ def test_concrete_store_must_be_declared_at_startup(owner_type, monkeypatch):
 
 def test_duplicate_owner_in_order_is_rejected():
     with pytest.raises(TypeError, match="occurs twice"):
-        StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order, WireLog)
+        StoreLockOwner.declare_lock_order(*StoreLockOwner.lock_order(), WireLog)
 
 
 def test_conversation_read_and_native_write_share_declared_order(tmp_path):

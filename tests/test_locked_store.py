@@ -49,7 +49,7 @@ class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
 
 
 
-StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order, WaitDocument)
+StoreLockOwner.declare_lock_order(*StoreLockOwner.lock_order(), WaitDocument)
 
 
 def wait(goal_id="goal"):

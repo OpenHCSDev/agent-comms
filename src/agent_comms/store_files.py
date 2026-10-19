@@ -255,10 +255,31 @@ class StoreLockOwner(StoreOwner, declared_name=None):
             raise TypeError(f"Store owners missing from the lock order: {names}")
         StoreLockOwner._lock_order = owners
 
+    @classmethod
+    def lock_order(cls) -> tuple[type[StoreLockOwner], ...]:
+        """Load the acquisition relation before any independently opened store."""
+        if not StoreLockOwner._lock_order:
+            from .message_bus import MessageBus
+            from .wire_log import WireLog
+            from .registry_store import RegistryStore
+            from .catalog_store import ChannelCatalog
+            from .read_ledger import ReadLedger
+            from .relationships import RelationshipStore
+            from .runtime_info import RuntimeInfoStore
+            from .shared_ledger import SharedLedger
+            from .collaboration_ledger import CollaborationLedger
+            from .connector_store import ConnectorStore
+
+            cls.declare_lock_order(
+                MessageBus, WireLog, RegistryStore, ChannelCatalog, ReadLedger,
+                RelationshipStore, RuntimeInfoStore, SharedLedger, CollaborationLedger, ConnectorStore,
+            )
+        return StoreLockOwner._lock_order
+
     @property
     def lock_rank(self) -> int:
         try:
-            return StoreLockOwner._lock_order.index(type(self))
+            return self.lock_order().index(type(self))
         except ValueError:
             raise TypeError(f"{type(self).__name__} is absent from the declared lock order") from None
 
