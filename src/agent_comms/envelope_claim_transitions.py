@@ -257,7 +257,7 @@ class ClaimTransition:
                 raise ClaimTransitionError("Only the exact owner incarnation/generation may release.")
         for resource in self.claims:
             if existing := next_state.get(resource):
-                raise ClaimConflict(existing)
+                existing.require_holder(self.owner, self.incarnation)
         for release in self.releases:
             del next_state[release.resource]
         for resource in self.claims:
@@ -277,6 +277,10 @@ class ClaimOwner:
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
+
+    def require_holder(self, owner: str, incarnation: str) -> None:
+        if (self.owner, self.incarnation) != (owner, incarnation):
+            raise ClaimConflict(self)
 
 
 @dataclass(frozen=True, slots=True)

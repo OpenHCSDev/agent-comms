@@ -198,6 +198,5 @@ class Messaging:
         return basis.message_count
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
-        # The bus owns capture under its read lock and the ledger validates that
-        # source. Nesting an exclusive wire hold deadlocks its snapshot reader.
+        # The bus owns capture under its read lock and the ledger validates that source.
         self.bus.mark_delivered_through(self.registry.require(name).name, sequence)
