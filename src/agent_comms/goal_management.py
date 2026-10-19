@@ -274,32 +274,20 @@ class Goals:
         `settled` event. A later turn (even already finished) invalidates the
         old fence; a rename or unrelated metadata edit does not.
         """
-        if fence is None:
-            return ()
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            canonical = snapshot.canonical_name(fence.identity.incarnation.name)
-            source = snapshot.threads.get(canonical)
-            observed = (
-                source.observed_turn(snapshot.claimed_generations.get(canonical, 0))
-                if source is not None
-                else None
-            )
-            if (
-                source is None
-                or source.turn_record.read().executing
-                or observed is None
-                or observed != fence.renamed(canonical)
-                or not snapshot.statuses[canonical].active
-            ):
+            sources = snapshot.idle_after(fence)
+            if not sources:
                 return ()
+            source, = sources
+            canonical = source.name
             waits = self.waits.read()
             released: list[str] = []
             for goal_id, wait in waits.items():
                 if not any(
                     target.incarnation.resolved(snapshot) == source.incarnation
                     and (generation := wait.target_turn_generations[index]) is not None
-                    and 0 < generation <= fence.identity.generation
+                    and 0 < generation <= source.turn_generation
                     for index, target in enumerate(wait.targets)
                 ):
                     continue

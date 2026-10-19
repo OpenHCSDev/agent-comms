@@ -395,6 +395,10 @@ class Thread(ThreadProvenance):
             return None
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
 
+    def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
+        """Only the exact latest completed turn can release a dependency."""
+        return not self.executing and self.observed_turn(claim_scope) == fence.renamed(self.name)
+
     def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
         return self.goal.accepts_observation(goal_id, minimum_revision)
 

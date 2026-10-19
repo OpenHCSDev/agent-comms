@@ -610,6 +610,17 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     claimed_generations: Mapping[str, int]
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
+    def threads_for(self, incarnation) -> tuple[Thread, ...]:
+        thread = self.by_lookup.get(incarnation.lookup)
+        return () if thread is None else (thread,)
+
+    def idle_after(self, fence: FinishedTurnFence | None) -> tuple[Thread, ...]:
+        if fence is None:
+            return ()
+        return tuple(thread for thread in self.threads_for(fence.identity.incarnation)
+                     if self.statuses[thread.name].active and thread.latest_idle_turn(
+                         fence, self.claimed_generations.get(thread.name, 0)))
+
     @classmethod
     def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
         """One live registry cut owns the index and all its source maps."""
