@@ -74,7 +74,7 @@ class Edit(EditCall):
         return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new_text.splitlines())
 
     def rendered(self) -> str:
-        stamp = time.strftime('%H:%M', time.localtime(self.at)) if self.at is not None else 'undated'
+        stamp = time.strftime('%H:%M', time.localtime(self.at))
         return (f'--- {self.id} {stamp} {self.path}\n'
                 + '\n'.join(hunk.rendered() for hunk in self.hunks)
                 + f'\n=== end {self.id} code {self.code()}')
@@ -106,7 +106,7 @@ def roast(thread, lines, text, fix, slop):
 
 def alarm():
     while True:
-        late = [edit for edit in Edit.unjudged(order.COMMS, ME) if edit.at is not None and time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(order.COMMS, ME) if time.time() - edit.at > 300]
         if late:
             counts: dict[str, int] = {}
             for edit in late:

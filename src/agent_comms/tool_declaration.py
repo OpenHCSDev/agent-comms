@@ -25,7 +25,7 @@ class ReplacementEdit:
 @dataclass(frozen=True)
 class EditCall:
     id: str
-    at: float | None
+    at: float
     thread: str
     path: str
     hunks: tuple[ReplacementEdit, ...]
@@ -70,7 +70,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         except (MalformedRecord, SelectedToolDenied):
             return None
 
-    def edit_calls(self, call_id: str, at: float | None, thread: str, problem: str) -> tuple[EditCall, ...]:
+    def edit_calls(self, call_id: str, at: float, thread: str, problem: str) -> tuple[EditCall, ...]:
         return ()
 
     def reads(self) -> str:
