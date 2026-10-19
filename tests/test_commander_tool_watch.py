@@ -13,8 +13,7 @@ def test_pi_calls_through_the_watcher_digest_and_journal(tool_watch, commander):
     turns = collections.defaultdict(list)
     tool_watch.follow(comms.registry, turns, "worker", [line])
     assert turns["worker"] == ["edit a.py: -old text +new", "write b.py: body line", "bash ls -la"]
-    with open(tool_watch.EDITS) as journal:
-        records = [json.loads(record) for record in journal]
-    assert [(record["thread"], record["path"], record["hunks"]) for record in records] == [
-        ("worker", "a.py", [{"old": "old  text", "new": "new"}]),
-        ("worker", "b.py", [{"old": "", "new": "body\nline"}])]
+    edits = tool_watch.judge.Edit.recorded().values()
+    assert [(edit.thread, edit.path, edit.hunks) for edit in edits] == [
+        ("worker", "a.py", (tool_watch.judge.Hunk("old  text", "new"),)),
+        ("worker", "b.py", (tool_watch.judge.Hunk("", "body\nline"),))]

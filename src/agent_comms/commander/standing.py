@@ -33,12 +33,18 @@ class IdleUnits(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
-class ForkNow(ReasonedStandingRule):
-    text = "FORK NOW: {why}"
+class ForkNow(StandingRule):
+    """The load on the asked Comms needs more live forks than there are."""
+
+    load: capacity.Load
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
-        return capacity.short()
+    def violations(cls, comms: Comms, commander: str) -> tuple[ForkNow, ...]:
+        load = capacity.Load.of(comms, commander)
+        return (cls(load),) * load.short
+
+    def line(self) -> str:
+        return f"FORK NOW: {self.load}"
 
 
 @dataclass(frozen=True)
@@ -48,7 +54,7 @@ class Unjudged(ReasonedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = len(judge.Edit.unjudged())
+        total = len(judge.Edit.unjudged(comms, commander))
         return str(total) if total > cls.limit else None
 
 
