@@ -784,7 +784,7 @@
      }
      /**
       * Set or clear a label on an entry.
-@@ -1028,90 +829,68 @@
+@@ -1028,90 +829,70 @@
       * Pass undefined or empty string to clear the label.
       */
      appendLabelChange(targetId, label) {
@@ -874,22 +874,25 @@
      getTree() {
 -        const entries = this.getEntries();
 +        this.#acAssertUsable();
-+        const entries = this.entryStore;
++        const labels = new Map();
++        for (const label of this.entryStore.labels()) labels.set(label.targetId, label);
          const nodeMap = new Map();
          const roots = [];
          // Create nodes with resolved labels
 -        for (const entry of entries) {
 -            const label = this.labelsById.get(entry.id);
 -            const labelTimestamp = this.labelTimestampsById.get(entry.id);
-+        for (const entry of entries.entries()) {
-+            const label = this.entryStore.label(entry.id)?.label;
-+            const labelTimestamp = this.entryStore.label(entry.id)?.timestamp;
++        for (const entry of this.entryStore.entries()) {
++            const observed = labels.get(entry.id);
++            const label = observed?.label;
++            const labelTimestamp = observed?.timestamp;
              nodeMap.set(entry.id, { entry, children: [], label, labelTimestamp });
          }
          // Build tree
 -        for (const entry of entries) {
-+        for (const entry of entries.entries()) {
-             const node = nodeMap.get(entry.id);
+-            const node = nodeMap.get(entry.id);
++        for (const node of nodeMap.values()) {
++            const entry = node.entry;
              if (entry.parentId === null || entry.parentId === entry.id) {
                  roots.push(node);
 @@ -1147,10 +926,12 @@
@@ -942,7 +945,7 @@
      }
      /**
       * Create a new session file containing only the path from root to the specified leaf.
-@@ -1191,112 +976,43 @@
+@@ -1191,112 +976,47 @@
       * Returns the new session file path, or undefined if not persisting.
       */
      createBranchedSession(leafId) {
@@ -1002,9 +1005,13 @@
 +            this._pr48LoadedRevision = file ? next.revision : null;
 +            this.leafId = next.lastId;
 +            try {
++                const labels = new Map();
++                for (const label of source.labels()) labels.set(label.targetId, label.label);
++                const copiedLabels = new Map();
++                for (const label of next.labels()) copiedLabels.set(label.targetId, label.label);
 +                for (const meta of source.branchMetadata(leafId)) {
-+                    const label = source.label(meta.id)?.label;
-+                    if (label !== next.label(meta.id)?.label) this.appendLabelChange(meta.id, label);
++                    const label = labels.get(meta.id);
++                    if (label !== copiedLabels.get(meta.id)) this.appendLabelChange(meta.id, label);
                  }
 -                : { ...entry, parentId: pathParentId });
 -            pathParentId = entry.id;
