@@ -103,3 +103,8 @@ No agent launch, provider input, installation or PR merge occurred. Draft #1932
 is not a first-reply proof. Production checked full-phase briefs and the scratch
 unit/order/first-reply proof remain required. Unordered rows without a checked
 order cannot be dispatched by inventing their missing check.
+
+The exact delivery-frame launch restriction, missing production declaration sites,
+and a full ControlPlanePhase checked brief draft are in
+[phase7-task-draft.md](phase7-task-draft.md). The native acceptance entrypoint is
+unfinished implementation work here, not a request for the owner to write it.
