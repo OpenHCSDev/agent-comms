@@ -260,6 +260,7 @@ class PiNativeBackend(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
         from . import backend
+        from .agent_events import ToolStart
 
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
@@ -285,7 +286,6 @@ class PiNativeBackend(
             ui_request=delivery.ui_request,
             tool_mode=delivery.tool_mode,
         ):
-            from .agent_events import ToolStart
             if isinstance(event, ToolStart):
                 self.comms.agents.record_native_tool_call(thread, event.id)
             yield event

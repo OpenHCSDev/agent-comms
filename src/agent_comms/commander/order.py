@@ -27,7 +27,7 @@ from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
-from ..external_transcript import ExternalTranscript
+from ..agent_runtime import ReadsToolActivity
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
@@ -383,7 +383,11 @@ def close(pid, works, artifact=''):
 
 
 def last_activity(unit):
-    return ExternalTranscript(COMMS.root, COMMS.registry.require(unit).incarnation).last_tool_call()
+    thread = COMMS.registry.require(unit)
+    runtime = thread.runtime
+    if not isinstance(runtime, ReadsToolActivity):
+        raise TypeError(f"{runtime} cannot report tool activity")
+    return runtime.last_tool_call(COMMS.root, thread.incarnation)
 
 
 def board():
