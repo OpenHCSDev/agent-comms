@@ -1,5 +1,6 @@
 """A stored revision owns one immutable registry snapshot, including empty files."""
 import json
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from agent_comms.registration import Registration
@@ -33,6 +34,17 @@ def test_snapshot_is_built_once_and_changes_only_with_the_revision(tmp_path):
         assert third.last_seen["worker"] == second.last_seen["worker"] + 1
         assert registry.snapshot() is third
         assert capture.call_count == 2
+
+
+def test_concurrent_first_readers_share_one_snapshot(tmp_path):
+    path = tmp_path / "registry.json"
+    registry = Registration(path)
+    registry.register(registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    with patch.object(RegistrySnapshot, "capture", wraps=RegistrySnapshot.capture) as capture:
+        with ThreadPoolExecutor(max_workers=4) as readers:
+            snapshots = list(readers.map(lambda _: Registration(path).snapshot(), range(20)))
+        assert all(snapshot is snapshots[0] for snapshot in snapshots)
+        assert capture.call_count == 1
 
 
 def test_absence_and_recreation_have_distinct_snapshots(tmp_path):
