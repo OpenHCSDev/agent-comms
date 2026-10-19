@@ -1578,7 +1578,7 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
         if FieldCodec.decode(int, self.expected_revision) <= 0:
             raise TodoError("Todo operation requires a positive exact revision")
 
-    def prepare(self, goals, current):
+    def prepare(self, goals: Goals, current: Todo) -> Self:
         return self
 
     def record(self, goals: Goals, problem: str) -> Todo:
