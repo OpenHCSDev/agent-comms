@@ -32,7 +32,7 @@ async def _accept_visible_deliveries(
     text alone cannot identify the group receiving private input.
     """
     def accept(resource: Coordination) -> int:
-        with bus.log.certified_read() as source:
+        with bus.log.checked_read() as source:
             _require_no_private_owner_rename(bus.log.path.parent)
             marker = bus.log.private_marker_unlocked()
             if marker.root_id != root_id:
@@ -56,7 +56,7 @@ async def _accept_visible_deliveries(
                 initial = source.delivery(seq)
                 recipients = [r for r in initial.audience.recipients if r.recipient_lookup == lookup]
                 if not recipients:
-                    raise RelationViolationError("Certified initial lookup differs from bus row.")
+                    raise RelationViolationError("checked initial lookup differs from bus row.")
                 if any(r.canonical_thread == owner_name for r in recipients):
                     unaccepted.append(initial)
         visited_after = addressed[-1] if addressed else authorized_after

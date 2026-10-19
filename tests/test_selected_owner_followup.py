@@ -106,7 +106,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert "beta" not in agent.turns.turn_tasks
         assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == before_goal
-        # The completed selected reply consumes its certified dependency wait;
+        # The completed selected reply consumes its checked dependency wait;
         # a queued owner input keeps its claim_scope/goal authority across that change.
         from agent_comms.goal_waits import NoGoalWait
 

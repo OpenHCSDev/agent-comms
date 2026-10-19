@@ -1,4 +1,4 @@
-"""Fresh canonical roots certify before publication or native source observation."""
+"""Fresh canonical roots check before publication or native source observation."""
 
 import os
 from pathlib import Path
@@ -106,7 +106,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     not os.environ.get("AC_NATIVE_COPIED_PACKAGE"),
     reason="Prepared native package required; no provider request",
 )
-async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tmp_path):
+async def test_configured_acp_new_and_retained_attach_use_same_checked_root(tmp_path):
     comms = Comms(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(

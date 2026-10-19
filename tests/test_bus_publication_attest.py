@@ -13,7 +13,7 @@ from test_private_bus_checkpoint import _root
 
 def _read_bus(comms):
     """Every committed delivery, through the row store's own pointers."""
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         captured = source.capture_sources(tuple(DeliverySources.select(source.connection)))
     return list(captured)
 

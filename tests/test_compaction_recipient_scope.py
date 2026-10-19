@@ -7,7 +7,7 @@ from test_private_bus_checkpoint import _root
 
 
 def facts_for(comms, owner):
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         return tuple(source.retained_task_facts(owner.incarnation))
 
 

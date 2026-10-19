@@ -1,7 +1,7 @@
 """Current saved-state regression after the one-use operator has been deleted.
 
 All live inputs are read-only. Existing immutable sources retain their original
-byte certificates; no archive schema repair or resealing occurs.
+byte prefix records; no archive schema repair or resealing occurs.
 """
 import json
 import os
@@ -36,14 +36,14 @@ def current_sources():
                  for value in json.loads((live/'history_sources.json').read_text()))
 
 
-def test_all_declared_saved_checkpoints_keep_original_certificates():
+def test_all_declared_saved_checkpoints_keep_original_checked_prefixs():
     sources=current_sources()
     assert sources,'Representative retained history is required'
     for source in sources:
         source.validate()
         root=Path(source.root)
         # The canonical read uses archived access and the original sealed DB.
-        with WireLog(root/'bus.jsonl').certified_read() as opened:
+        with WireLog(root/'bus.jsonl').checked_read() as opened:
             witness=opened.witness
             assert opened.connection.execute('PRAGMA query_only').fetchone()[0]==1
         assert witness.root_id==source.wire_root_id

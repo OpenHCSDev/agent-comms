@@ -200,7 +200,7 @@ class PrivateNkLaunch(RootLaunch):
         directory, registry or database and make no provider request.
         """
         _private_session_dir(self.validated_root)
-        with WireLog(self.validated_root / "bus.jsonl").certified_read() as source:
+        with WireLog(self.validated_root / "bus.jsonl").checked_read() as source:
             marker = source.marker
         if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")

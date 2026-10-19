@@ -44,23 +44,22 @@ from .mentions import ThreadMention
 from .messages import Message
 from .private_bus_checkpoint import (
     install_private_bus_checkpoint,
-    opened_private_checkpoint_unlocked,
 )
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import StoreLock, _store_lock
+from .store_files import _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
 
-    from .private_bus_checkpoint import CertifiedSourceRead
+    from .private_bus_checkpoint import CheckedRead
     from .registration import Registration
 
 from .catalog_document import CatalogDocument
 from .channels import Channel
 from .catalog_store import ChannelCatalog
-from .wire_log import WireLog
+from .wire_log import WireLog, WireStoreLock
 from .wire_metadata import WireMetadata
 
 
@@ -100,7 +99,7 @@ class Publisher:
         target: NamedTarget,
         sequence: int,
         snapshot: RegistrySnapshot,
-        original_source: CertifiedSourceRead | None = None,
+        original_source: CheckedRead | None = None,
     ) -> Message:
         if original_source is not None:
             original_source.require_marker(self.log.private_marker_unlocked())
@@ -158,7 +157,7 @@ class ClaimWrites(PrivateWrites):
 
     def _publish_claim_envelope_unlocked(
         self,
-        bus_lock: StoreLock,
+        bus_lock: WireStoreLock,
         snapshot: RegistrySnapshot,
         message: Message,
         *,
@@ -297,7 +296,7 @@ class InitialWrites(PrivateWrites):
             return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
     def _publish_initial_cohort_unlocked(
-        self, bus_lock: StoreLock, message: Message, *, origin: InitialOrigin, activity: ActivityClocks
+        self, bus_lock: WireStoreLock, message: Message, *, origin: InitialOrigin, activity: ActivityClocks
     ) -> Message:
         """An ordinary initial cohort under the held bus lock."""
         if message.claim_transition is not None:
@@ -307,14 +306,7 @@ class InitialWrites(PrivateWrites):
             metadata = self.log.private_marker_unlocked()
             metadata.access.require_append()
 
-            # Fresh initialization occurs after lock acquisition and has no
-            # acquired source. Existing roots already borrowed this exact cut
-            # from the lock's durability owner; keep using it until append.
-            source = bus_lock.source
-            if source is None:
-                source = resources.enter_context(
-                    opened_private_checkpoint_unlocked(self.log, metadata)
-                )
+            source = resources.enter_context(bus_lock.current_source(self.log, metadata))
             source.require_marker(metadata)
             previous_sequence = source.committed_sequence()
             if metadata.last_seq >= MAX_WIRE_SEQ:

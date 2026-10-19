@@ -47,7 +47,7 @@ async def test_ordinary_native_write_commits_claim(native_backend, monkeypatch):
         )]), 35)
         assert target.read_text() == "P620 ordinary native write\n"
         assert len(claims) == 1
-        with agent._comms.bus.log.certified_read() as source:
+        with agent._comms.bus.log.checked_read() as source:
             committed = source.claim(str(target.resolve()))
         assert committed == claims[0]
         assert committed.owner == session

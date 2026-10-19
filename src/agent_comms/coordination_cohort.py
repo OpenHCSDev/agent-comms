@@ -236,7 +236,7 @@ def accept_delivery_cohort(
     coordinator has not registered each frozen stable lookup, no N is accepted.
     """
     # Hold the bus read open for the whole SQL write.
-    with bus.log.certified_read() as source, store.session.transaction() as db:
+    with bus.log.checked_read() as source, store.session.transaction() as db:
         marker = source.marker
         if marker.root_id != wire_root_id:
             raise IdentityConflict("cohort claim_scope wire root changed")
