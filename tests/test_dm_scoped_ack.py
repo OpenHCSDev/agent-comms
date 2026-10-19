@@ -14,7 +14,7 @@ import pytest
 
 import agent_comms.locked_store as locked_store
 from agent_comms.comms import wire
-from agent_comms.read_basis import DMDisplayBasis, EmptyTail
+from agent_comms.read_basis import DMDisplayBasis, DMSelection, EmptyTail
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
@@ -34,11 +34,8 @@ def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: P
         comms.messaging.send("peer", viewer, f"old {index}").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
     assert len(page.messages) == 5 and page.has_older
-    assert page.display_basis is not None
-    comms.views.mark_dm_view_read(
-        "peer", worktree=str(tmp_path), through=page.newest_seq,
-        expected_display_basis=page.display_basis,
-    )
+    assert isinstance(page.selection, DMSelection)
+    comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 45
     assert [message.body for message in comms.bus.inbox(viewer, CommandTarget.named("peer"))] == [
         f"old {index}" for index in range(45)
@@ -56,7 +53,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 0
     comms.messaging.send("peer", viewer, "painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
-    proof = page.display_basis
+    proof = page.selection.basis
     assert isinstance(proof, DMDisplayBasis)
     painted = page.newest_seq
     assert painted is not None
@@ -64,12 +61,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
     comms.messaging.send("peer", "executor", "executor unread").message.message_id
     comms.messaging.send("peer", "#all", "channel unread").message.message_id
     comms.messaging.send("peer", viewer, "after paint").message.message_id
-    comms.views.mark_dm_view_read(
-        "peer",
-        worktree=str(tmp_path),
-        through=painted,
-        expected_display_basis=proof,
-    )
+    comms.views.mark_page_read(page, worktree=str(tmp_path))
     reopened = wire(tmp_path)
     assert [message.body for message in reopened.bus.inbox(viewer, CommandTarget.named("peer"))] == ["after paint"]
     assert reopened.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
@@ -95,7 +87,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     comms.messaging.send("other", viewer, "OTHER_UNPAINTED_6").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert [message.body for message in page.messages] == ["PEER_PAINTED_2", "PEER_PAINTED_5"]
-    assert page.newest_seq == 5 and page.display_basis is not None
+    assert page.newest_seq == 5 and isinstance(page.selection, DMSelection)
     comms.registry.unregister("peer")
     comms.registry.remove("peer")
     comms.threads.rename_managed_thread("other", "peer", owner_pid=os.getpid())
@@ -104,12 +96,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     markers_before = marker_path.read_bytes() if marker_path.exists() else None
     assert before == 3
     with pytest.raises(DMScopeChanged, match="registry changed|incarnation changed"):
-        comms.views.mark_dm_view_read(
-            "peer",
-            worktree=str(tmp_path),
-            through=5,
-            expected_display_basis=page.display_basis,
-        )
+        comms.views.mark_page_read(page, worktree=str(tmp_path))
     markers_after = marker_path.read_bytes() if marker_path.exists() else None
     assert markers_after == markers_before
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == before
@@ -123,7 +110,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
         viewer = comms.messaging.user_identity(str(comms.root)).name
         comms.messaging.send("peer", viewer, "painted").message.message_id
     page = first.views.dm_display_page("peer", worktree=str(first.root))
-    assert page.display_basis is not None and page.newest_seq is not None
+    assert isinstance(page.selection, DMSelection) and page.newest_seq is not None
     for comms, target, through, error in (
         (second, "peer", page.newest_seq, DMScopeChanged),
         (first, "other", page.newest_seq, DMScopeChanged),
@@ -132,11 +119,9 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
         (first, "peer", -1, ValueError),
     ):
         with pytest.raises(error):
-            comms.views.mark_dm_view_read(
-                target,
-                worktree=str(comms.root),
-                through=through,
-                expected_display_basis=page.display_basis,
+            page.selection.basis.acknowledge(
+                comms.bus, comms.registry, comms.root, target,
+                worktree=str(comms.root), through=through,
             )
     assert first.bus.pending_count(first.messaging.user_identity(str(first.root)).name, CommandTarget.named("peer")) == 1
 
@@ -148,9 +133,9 @@ def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
     comms.messaging.send("peer", viewer, "painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     with pytest.raises(TranscriptChanged):
-        comms.views.mark_dm_view_read(
-            "peer", worktree=str(tmp_path), through=page.newest_seq + 1,
-            expected_display_basis=page.display_basis,
+        page.selection.basis.acknowledge(
+            comms.bus, comms.registry, comms.root, "peer",
+            worktree=str(tmp_path), through=page.newest_seq + 1,
         )
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
@@ -165,10 +150,7 @@ def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_pat
     tmp_path.rename(previous)
     shutil.copytree(previous, tmp_path, symlinks=True)
     with pytest.raises(DMScopeChanged, match="root was replaced"):
-        comms.views.mark_dm_view_read(
-            "peer", worktree=str(tmp_path), through=page.newest_seq,
-            expected_display_basis=page.display_basis,
-        )
+        comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
 
@@ -180,12 +162,7 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     comms.views.mark_user_view_read("peer", worktree=str(tmp_path))
     comms.messaging.send("peer", viewer, "unpainted after explicit mark").message.message_id
-    comms.views.mark_dm_view_read(
-        "peer",
-        worktree=str(tmp_path),
-        through=page.newest_seq,
-        expected_display_basis=page.display_basis,
-    )
+    comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
 
@@ -193,9 +170,9 @@ def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
     comms = wire(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert page.display_basis.displayed.tail == EmptyTail()
-    comms.views.mark_dm_view_read(
-        "peer", worktree=str(tmp_path), through=0, expected_display_basis=page.display_basis,
+    assert page.selection.basis.displayed.tail == EmptyTail()
+    page.selection.basis.acknowledge(
+        comms.bus, comms.registry, comms.root, "peer", worktree=str(tmp_path), through=0,
     )
     assert not (tmp_path / "read_ledger.json").exists()
 
@@ -213,7 +190,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert page.display_basis is not None
+    assert isinstance(page.selection, DMSelection)
     original = os.fsync
     parent_fd_seen: list[int] = []
 
@@ -224,17 +201,12 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
         original(fd)
 
     monkeypatch.setattr(locked_store, "os", SimpleNamespace(**(vars(os) | {"fsync": observe})))
-    comms.views.mark_dm_view_read(
-        "peer",
-        worktree=str(tmp_path),
-        through=page.newest_seq,
-        expected_display_basis=page.display_basis,
-    )
+    comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert parent_fd_seen and comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 0
 
     comms.messaging.send("peer", viewer, "next painted").message.message_id
     next_page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert next_page.display_basis is not None
+    assert isinstance(next_page.selection, DMSelection)
 
     def deny_parent(fd: int) -> None:
         metadata = os.fstat(fd)
@@ -247,12 +219,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
         locked_store, "os", SimpleNamespace(**(vars(os) | {"fsync": deny_parent}))
     )
     with pytest.raises(OSError, match="injected parent fsync denial"):
-        comms.views.mark_dm_view_read(
-            "peer",
-            worktree=str(tmp_path),
-            through=next_page.newest_seq,
-            expected_display_basis=next_page.display_basis,
-        )
+        comms.views.mark_page_read(next_page, worktree=str(tmp_path))
     assert (tmp_path / "read_ledger.json").read_bytes() == marker_before
     monkeypatch.setattr(locked_store, "os", os)
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1

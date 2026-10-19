@@ -25,7 +25,6 @@ from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalThread, HistorySource
-    from .read_basis import HistoricalDisplay
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 from .agent_activity import AgentActivity
@@ -53,8 +52,6 @@ from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .presentation import (
-    ChannelReadMark,
-    ReadAll,
     ChannelView,
     CoordinationSnapshot,
     MessageNotification,
@@ -129,10 +126,7 @@ class ThreadViewRead(ConversationPreparation):
             bounds=PageBounds(OlderTraversal(self.through.wire.sequence + 1)),
         )
         if page.messages:
-            self.views.mark_dm_view_read(
-                self.thread.name, worktree=self.viewer.worktree,
-                through=page.messages[-1].seq, expected_display_basis=page.display_basis,
-            )
+            self.views.mark_page_read(page, worktree=self.viewer.worktree)
 
 
 @dataclass(frozen=True)
@@ -214,7 +208,7 @@ class HistoryViews:
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
                      *, viewer: str | None = None) -> MessagePage:
         """The decoded target selects its scope and participant requirements."""
-        view = target.history_view(viewer, self.channels.catalog.read(), ChannelHistory, DMHistory)
+        view = target.history_view(viewer, self.bus.require_channel, ChannelHistory, DMHistory)
         return view.page(self.presentation, bounds)
 
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
@@ -222,10 +216,10 @@ class HistoryViews:
         source = self.bus.history.attach(Path(source_root), source_read=source_read)
         catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
-        with _store_lock(self._wire_lock_path):
+        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path):
             existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:
-                document.restore_missing(incoming, existing=existing)
+                document.restore_missing(incoming, activity, existing=existing)
         return source
 
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
@@ -248,11 +242,12 @@ class HistoryViews:
         viewer: DisplayViewer = AnonymousViewer(),
         bounds: PageBounds = NEWEST_PAGE,
     ) -> MessagePage:
-        channel = self.channels.catalog.read().require_channel(target)
+        channel = self.bus.require_channel(target)
         return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
-    def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:
-        displayed.acknowledge(self.bus.history, self.registry)
+    def mark_page_read(self, page: MessagePage, *, worktree: str) -> None:
+        """Acknowledge the original read evidence of exactly the painted page."""
+        page.selection.acknowledge(self, page, worktree=worktree)
 
     def last_sent_timestamps(
         self, rows: Iterable[tuple[str, float]], *, registry: RegistrySnapshot,
@@ -278,7 +273,7 @@ class HistoryViews:
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path, mode=SharedLock()):
-                resolved = scope.resolve(self.channels.catalog, self.registry)
+                resolved = scope.resolve(self.bus.require_channel, self.registry)
                 through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
 
             selected = (message for message in messages if resolved.matches(message))
@@ -295,8 +290,8 @@ class HistoryViews:
         """Channel declarations and current members; clients never infer membership."""
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
-        channels = catalog.views()
         with self.bus.opened_activity() as clocks:
+            channels = catalog.views(clocks)
             return ChannelView.roster(
                 snapshot,
                 channels.visible(visibility),
@@ -314,9 +309,9 @@ class HistoryViews:
         """Read one channel; observe and order only its own members."""
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
-        channel = catalog.require_channel(name)
-        registered = channel.members(ChannelMemberIndex(snapshot.threads.values()))
         with self.bus.opened_activity() as clocks:
+            channel = catalog.require_channel(name, clocks)
+            registered = channel.members(ChannelMemberIndex(snapshot.threads.values()))
             rows = ((alias, clocks.sent[alias]) for thread in registered
                     for alias in snapshot.names_for(thread.name) if alias in clocks.sent)
             sent = self.last_sent_timestamps(rows, registry=snapshot)
@@ -342,14 +337,15 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
         retired = set()
-        for name in channels:
-            try:
-                channel = catalog.require_channel(name)
-            except UnknownChannelError:
-                retired.add(name)
-            else:
-                if channel.archived:
+        with self.bus.opened_activity() as activity:
+            for name in channels:
+                try:
+                    channel = catalog.require_channel(name, activity)
+                except UnknownChannelError:
                     retired.add(name)
+                else:
+                    if channel.archived:
+                        retired.add(name)
         return RetiredViews(
             frozenset(thread for thread in threads if not thread.current(snapshot)),
             frozenset(retired),
@@ -397,31 +393,6 @@ class HistoryViews:
         thread.execution.prepare_conversation(ThreadViewRead(
             self, thread, self.messaging.user_identity(worktree), through,
         ))
-
-    def mark_channel_view_read(
-        self,
-        target: str,
-        *,
-        worktree: str,
-        mark: ChannelReadMark = ReadAll(),
-    ) -> None:
-        self.presentation.mark_channel_read(
-            target,
-            viewer=self.messaging.user_identity(worktree).name,
-            mark=mark,
-        )
-
-    def mark_dm_view_read(
-        self, peer: str, *, worktree: str, through: int, expected_display_basis: DMDisplayBasis
-    ) -> None:
-        expected_display_basis.acknowledge(
-            self.bus,
-            self.registry,
-            self.root,
-            peer,
-            worktree=worktree,
-            through=through,
-        )
 
     def mark_user_view_read(self, target: str, *, worktree: str) -> None:
         """Explicit human 'Mark inbox read' for a channel, DM, or native thread.

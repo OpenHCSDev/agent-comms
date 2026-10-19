@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
+from functools import partial
+
+from .bus_activity_index import ActivityClocks
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -55,6 +58,7 @@ if TYPE_CHECKING:
     from .registration import Registration
 
 from .catalog_document import CatalogDocument
+from .channels import Channel
 from .catalog_store import ChannelCatalog
 from .wire_log import WireLog
 from .wire_metadata import WireMetadata
@@ -63,28 +67,30 @@ from .wire_metadata import WireMetadata
 class Publisher:
     """Reads and validates publications; each private write is a capability below."""
 
-    def __init__(self, log: WireLog, registry: Registration, channels: ChannelCatalog):
+    def __init__(self, log: WireLog, registry: Registration, channels: ChannelCatalog, opened_activity):
         self.log = log
         self._registry = registry
         self._channels = channels
+        self.opened_activity = opened_activity
 
     @classmethod
     def prepare_root(cls, root: Path) -> None:
         """A publisher that only reads leaves its root as it finds it."""
 
     def _validate_publish_request(
-        self, message: Message, *, registry_snapshot: RegistrySnapshot | None = None,
-        catalog: CatalogDocument | None = None,
-    ) -> tuple[str, NamedTarget]:
-        """Resolve the public route from the acquired declarations when supplied."""
+        self, message: Message, *, registry_snapshot: RegistrySnapshot,
+        catalog: CatalogDocument, activity: ActivityClocks,
+    ) -> tuple[str, NamedTarget, Callable[[str], Channel]]:
+        """Resolve the public route from the caller's acquired declarations."""
 
-        snapshot = self._registry.snapshot() if registry_snapshot is None else registry_snapshot
+        snapshot = registry_snapshot
         sender = snapshot.canonical_name(message.sender)
         if sender not in snapshot.threads:
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
         target = CommandTarget.named(message.target)
-        target.require_publication(message, snapshot, lambda: self._channels.read() if catalog is None else catalog)
-        return sender, target
+        require_channel = partial(catalog.require_channel, activity=activity)
+        target.require_publication(message, snapshot, require_channel)
+        return sender, target, require_channel
 
     def _prepare_message_unlocked(
         self,
@@ -93,10 +99,9 @@ class Publisher:
         sender: str,
         target: NamedTarget,
         sequence: int,
-        snapshot: RegistrySnapshot | None = None,
+        snapshot: RegistrySnapshot,
         original_source: CertifiedSourceRead | None = None,
     ) -> Message:
-        snapshot = snapshot or self._registry.snapshot()
         if original_source is not None:
             original_source.require_marker(self.log.private_marker_unlocked())
         message.require_task_publication(sender, snapshot, original_source)
@@ -145,10 +150,10 @@ class ClaimWrites(PrivateWrites):
         guarded reader may re-fsync/adopt a complete visible row, but the caller
         MUST NOT replay its message or provider/tool work automatically.
         """
-        with self.log.locked() as bus_lock:
+        with self.opened_activity() as activity, self.log.locked() as bus_lock:
             return self._publish_claim_envelope_unlocked(
                 bus_lock, self._registry.snapshot(), message,
-                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases,
+                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases, activity=activity,
             )
 
     def _publish_claim_envelope_unlocked(
@@ -162,6 +167,7 @@ class ClaimWrites(PrivateWrites):
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path | ClaimRelease] = (),
         claim: WakeClaim | None = None,
+        activity: ActivityClocks,
     ) -> Message:
         """The claim envelope under a held bus lock and its locked registry snapshot."""
         if message.claim_transition is not None or (not claims and not releases):
@@ -180,7 +186,7 @@ class ClaimWrites(PrivateWrites):
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")
-        sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
+        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self._channels.read(), activity=activity)
         with bus_lock.current_source(self.log, metadata) as source:
             # The checkpoint high-water also covers a prior visible append;
             # accepting new input never replays a historical message or claim.
@@ -233,14 +239,15 @@ class InitialWrites(PrivateWrites):
         rewrites history or falls back to an uncoordinated append.
         """
 
-        with guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
+        with self.opened_activity() as activity, guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
             if not self.log.read_metadata_unlocked().private:
                 # Refuse invalid input before creating a protocol on a fresh
                 # root. Established roots validate against the same guarded
                 # snapshot that selects the audience below.
-                self._validate_publish_request(message)
+                self._validate_publish_request(message, registry_snapshot=self._registry.snapshot(),
+                                               catalog=self._channels.read(), activity=activity)
                 self._initialize_private_protocol_unlocked()
-            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin)
+            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
     def initialize_private_protocol(self) -> str:
         """Marker issuer for a NEW, isolated bus root only.
@@ -286,11 +293,11 @@ class InitialWrites(PrivateWrites):
         This private path assumes cooperating Comms writers hold the global
         wire lock. It never publishes from a caller-supplied audience or claim.
         """
-        with self.log.locked() as bus_lock:
-            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin)
+        with self.opened_activity() as activity, self.log.locked() as bus_lock:
+            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
     def _publish_initial_cohort_unlocked(
-        self, bus_lock: StoreLock, message: Message, *, origin: InitialOrigin
+        self, bus_lock: StoreLock, message: Message, *, origin: InitialOrigin, activity: ActivityClocks
     ) -> Message:
         """An ordinary initial cohort under the held bus lock."""
         if message.claim_transition is not None:
@@ -319,8 +326,8 @@ class InitialWrites(PrivateWrites):
             before_revisions = tuple(FileRevision.capture(path) for path in source_paths)
             snapshot = self._registry.snapshot()
             catalog = self._channels.read()
-            sender, target = self._validate_publish_request(
-                message, registry_snapshot=snapshot, catalog=catalog)
+            sender, target, require_channel = self._validate_publish_request(
+                message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
             sender_thread = snapshot.threads.get(sender)
             if sender_thread is None or not snapshot.statuses[sender].visible:
                 raise RelationViolationError("Initial sender must be visible and registered.")
@@ -328,7 +335,8 @@ class InitialWrites(PrivateWrites):
             # any sequence reservation, refusing with what is missing.
             message.type.require_publishable(message, Path(sender_thread.worktree))
             origin.require_sender(message, sender_thread, snapshot)
-            target, message, names = target.initial_delivery(sender, message, snapshot, catalog)
+            target, message, names = target.initial_delivery(
+                sender, message, snapshot, require_channel)
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
@@ -404,6 +412,7 @@ class ResponseWrites(PrivateWrites):
         *,
         conversation,
         registry_snapshot: RegistrySnapshot | None = None,
+        activity: ActivityClocks,
     ) -> Message:
         """Internal append with bus lock; a supplied registry snapshot stays locked."""
 
@@ -412,8 +421,8 @@ class ResponseWrites(PrivateWrites):
             return matched
         message = intent.message
         # A durable exact replay above wins even after registry/route renames.
-        sender, target = self._validate_publish_request(
-            message, registry_snapshot=registry_snapshot
+        sender, target, require_channel = self._validate_publish_request(
+            message, registry_snapshot=registry_snapshot, catalog=self._channels.read(), activity=activity
         )
         role = (
             self._registry.require(sender).role
