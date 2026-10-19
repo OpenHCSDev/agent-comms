@@ -3,6 +3,7 @@
 The controlled active turn is allocated/released by the registry owner. It is
 not a model request, does not replay a saved input, and does not touch live data.
 Run with the qualified target Python and an output directory under owned scratch.
+Prepare output/wire with tools/upgrade_bus.py first; this journey never skips carries.
 """
 from pathlib import Path
 import json
@@ -14,25 +15,23 @@ import threading
 import time
 
 source = Path(__file__).resolve().parents[1]
-import agent_comms
-import agent_comms.native_package
-agent_comms.__path__.insert(0, str(source / 'src/agent_comms'))
-sys.path.insert(0, str(source))
 from agent_comms.active_route import ActiveRoute, publish_active_route
 from agent_comms.comms import Comms
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.maintenance_barrier import ReadyPhase
 from agent_comms.runtime import socket_path
 from tools.publish_runtime import RuntimePublication
+from tools.cutover.carry import CarryChain, CarryLedger
 
 
 def main():
     output, old, target = map(Path, sys.argv[1:])
-    output.mkdir(mode=0o700, parents=True)
+    output.mkdir(mode=0o700, parents=True, exist_ok=True)
+    root = output / 'wire'
+    if CarryChain.at(source, 'HEAD').pending(CarryLedger(root).applied()):
+        raise RuntimeError('Prepare output/wire with tools/upgrade_bus.py before this journey')
     home = output / 'home'
     home.mkdir(mode=0o700)
-    root = output / 'wire'
-    root.mkdir(mode=0o700)
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(('AGENT_COMMS_', 'PI_', 'PYTHON'))}
     environment.update(HOME=str(home), AGENT_COMMS_ROOT=str(root), VIRTUAL_ENV=str(old),
@@ -72,7 +71,6 @@ print(c.owners.start('publication-copy').pid,flush=True)
         edit.commit()
     lease = leased.turn_lease
     publication = RuntimePublication(target, {})
-    owners = (original.process_identity,)
     results = {}
     try:
         # Kill only the isolated publisher while it is waiting, then re-enter
@@ -80,12 +78,10 @@ print(c.owners.start('publication-copy').pid,flush=True)
         waiting = subprocess.Popen([target / 'bin/python', '-I', '-c', '''
 import sys
 from pathlib import Path
-import agent_comms,agent_comms.native_package
-agent_comms.__path__.insert(0,sys.argv[1]+'/src/agent_comms');sys.path.insert(0,sys.argv[1])
 from tools.publish_runtime import RuntimePublication
 from agent_comms.comms import Comms
 root=Path(sys.argv[2]);c=Comms(root)
-RuntimePublication(Path(sys.argv[3]),{}).publish(root,(c.registry.require('publication-copy').process_identity,))
+RuntimePublication(Path(sys.argv[3]),{}).publish(root,checkout=Path(sys.argv[1]))
 ''', str(source), str(root), str(target)], env=dict(os.environ))
         deadline = time.monotonic() + 10
         while not comms.owners.maintenance.read().turn_pending:
@@ -95,7 +91,7 @@ RuntimePublication(Path(sys.argv[3]),{}).publish(root,(c.registry.require('publi
         waiting.wait()
         assert current.resolve() == old
         try:
-            publication.publish(root, owners, timeout=.1)
+            publication.publish(root, checkout=source, timeout=.1)
             raise AssertionError('Busy owner did not prevent publication')
         except TimeoutError:
             results['timeout_released'] = comms.owners.maintenance.read().phase is ReadyPhase
@@ -113,7 +109,7 @@ RuntimePublication(Path(sys.argv[3]),{}).publish(root,(c.registry.require('publi
         interrupt = threading.Thread(target=during_hold, args=(lambda: os.kill(os.getpid(), signal.SIGINT),))
         interrupt.start()
         try:
-            publication.publish(root, owners, timeout=10)
+            publication.publish(root, checkout=source, timeout=10)
             raise AssertionError('Interrupt was not delivered')
         except KeyboardInterrupt:
             results['interrupt_released'] = comms.owners.maintenance.read().phase is ReadyPhase
@@ -121,7 +117,7 @@ RuntimePublication(Path(sys.argv[3]),{}).publish(root,(c.registry.require('publi
         interrupt.join()
         release = threading.Thread(target=during_hold, args=(lambda: comms.registry.release_turn(lease),))
         release.start()
-        results['restarted'] = publication.publish(root, owners, timeout=10)
+        results['restarted'] = publication.publish(root, checkout=source, timeout=10)
         release.join()
         replacement = comms.registry.require(original.name)
         results.update(switched=current.resolve() == target,

@@ -30,11 +30,20 @@ def test_cli_failure_leaves_links_untouched(tmp_path, monkeypatch, command):
     route = LocalRoute(tmp_path / "bus")
 
     with pytest.raises(RuntimeError, match="Runtime CLI refused publication"):
-        publication.publish(route.root, ())
+        publication.require_cli(route.root)
 
     assert link.readlink() == Path("previous-command")
     assert current.readlink() == Path("previous-runtime")
     assert (link.lstat(), current.lstat()) == before
+
+
+def test_pending_carries_refuse_before_cli_or_maintenance(tmp_path):
+    root = tmp_path / "private-bus"
+    publication = RuntimePublication(tmp_path / "uninstalled", {})
+    with pytest.raises(RuntimeError, match="tools/upgrade_bus.py"):
+        publication.publish(root, checkout=Path(__file__).resolve().parents[1])
+    assert not (root / "registry.json").exists()
+    assert not (root / "runtime-publication.json").exists()
 
 
 def test_pointer_publication_does_not_kill_unselected_runtime_processes(

@@ -19,7 +19,6 @@ import sys
 import time
 
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
-from agent_comms.child_process import ProcessState
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, SubclassUnion, NullMember, RecordMember
 from agent_comms.harness_install import Harness, replace_link
@@ -30,6 +29,7 @@ from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.restart_refusals import OwnerBusyRefusal
 from agent_comms.store_files import _atomic_write_text, _store_lock
+from tools.cutover.carry import CarryChain, CarryLedger
 
 
 class PublicationIntent(SubclassUnion, affix=''):
@@ -111,7 +111,7 @@ class RuntimePublication:
                 f'Runtime CLI refused publication (exit {result.returncode}): {result.stdout}{result.stderr}'
             )
 
-    def publish(self, root: Path, owners: tuple[ProcessState, ...], *, timeout: float = 1200,
+    def publish(self, root: Path, *, checkout: Path, timeout: float = 1200,
                 resources: AbstractContextManager = nullcontext()) -> tuple[str, ...]:
         """Wait, stop, switch, resume, and release maintenance on every normal exit.
 
@@ -119,6 +119,11 @@ class RuntimePublication:
         input is resubmitted. Unrelated maintenance and changed incarnations
         are refused rather than guessed.
         """
+        pending = CarryChain.at(checkout, 'HEAD').pending(CarryLedger(root).applied())
+        if pending:
+            raise RuntimeError(
+                f'Pending carries must be applied with {checkout / "tools/upgrade_bus.py"} before publication'
+            )
         self.require_cli(root)
         path = active_route_path()
         route = read_active_route(path)
@@ -140,8 +145,7 @@ class RuntimePublication:
                 previous_busy = ()
                 while True:
                     snapshot = comms.registry.snapshot()
-                    selected = tuple(thread for thread in OwnerRestartRequest().threads(snapshot)
-                                     if thread.process_identity in owners)
+                    selected = OwnerRestartRequest().threads(snapshot)
                     busy = []
                     for thread in selected:
                         try:
