@@ -286,6 +286,8 @@ class InputObservation:
         state = self.state(session_id)
         if state.drain_task is task:
             state.observation_watcher = None
+            if not self.closing:
+                raise SystemExit(1)
 
     def wake_observer(self, session_id: str) -> None:
         state = self.state(session_id)

@@ -109,6 +109,12 @@ class UnavailableDrainDiagnostic(DrainDiagnostic):
         return "Waiting for recovery"
 
 
+class FailedWakeDiagnostic(UnavailableDrainDiagnostic):
+    @property
+    def headline(self) -> str:
+        return "Wake failed"
+
+
 class NativeInputDrainDiagnostic(DrainDiagnostic):
     """A native request failure is not evidence that the inbox cannot be read."""
 

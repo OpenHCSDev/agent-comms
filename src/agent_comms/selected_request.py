@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from asyncio import CancelledError
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -50,10 +49,13 @@ class SelectedRequest:
         except NativeRequestFailure as error:
             await self._native_failure(error)
             raise
-        except CancelledError:
-            # Native execution has unwound child/tool cleanup before the
-            # reserved request sees cancellation of its abandoned result.
-            await self._settle_unknown()
+        except BaseException:
+            # Every abandoned request leaves UNKNOWN after child/tool cleanup,
+            # including failures in local context publication, not just native errors.
+            try:
+                await self._settle_unknown()
+            except Exception as error:
+                raise SystemExit(1) from error
             raise
 
     async def _settle_unknown(self) -> bool:
