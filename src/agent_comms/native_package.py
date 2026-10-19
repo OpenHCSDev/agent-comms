@@ -65,9 +65,11 @@ def pinned_location() -> Path:
 
 
 def native_environment(cache: Path) -> Path:
-    """This pin's test environment under a StorageRule.native_cache root, shared by digest: its
-    manifest beside its built artifact, laid out as stack/ is. stack/bin/pi-native-test-env
-    builds it; the live install never does."""
+    """Require the pinned inputs, then key the environment by sources and manifest.
+
+    stack/bin/pi-native-test-env builds this stack-shaped directory; an installed
+    artifact is never evidence that the checkout's current sources were built.
+    """
     return cache / NativeBuildInputs(_resource_root().parent).require_pinned(MANIFEST)
 
 

@@ -20,7 +20,7 @@ class NativeBuildInputs:
             ("src/agent_comms", {".mjs"}),
             ("src/agent_comms/instructions", {".md"}),
         )
-        paths = set()
+        paths: set[Path] = set()
         for directory, suffixes in families:
             for path in (self.root / directory).rglob("*"):
                 relative = path.relative_to(self.root)
