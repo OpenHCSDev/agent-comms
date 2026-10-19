@@ -10,7 +10,7 @@ from tempfile import TemporaryFile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self, get_args, get_type_hints
 
 from pydantic import JsonValue
 
@@ -74,6 +74,10 @@ class SpecifiedImportPath(ImportPath, JsonShapeMember):
         environment["PYTHONPATH"] = self.value
 
 
+class NativeField:
+    """A launch field exported to the native process environment."""
+
+
 @dataclass(frozen=True)
 class RestartEnvironment:
     """Retained external directories and import settings selected by the launch."""
@@ -84,7 +88,7 @@ class RestartEnvironment:
     virtual_env: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True})
     config: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"})
     native_config: Annotated[Path, PathText] = field(kw_only=True)
-    agent_directory: Annotated[Path, PathText] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True})
+    agent_directory: Annotated[Path, PathText, NativeField()] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR"})
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.native_config.expanduser().resolve())
@@ -110,8 +114,10 @@ class RestartEnvironment:
 
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
-        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
-                for declaration in fields(self) if declaration.metadata.get("native")}
+        annotations = get_type_hints(type(self), include_extras=True)
+        return {key: encoded[key] for declaration, key in FieldCodec.record_fields(type(self))
+                if any(isinstance(marker, NativeField)
+                       for marker in get_args(annotations[declaration.name]))}
 
     def auth_revision(self) -> tuple[int, int]:
         info = (self.native_config / "auth.json").stat()
@@ -281,9 +287,13 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
 
     @classmethod
     def from_record(cls, record: LaunchRecord, **specific):
-        values = {item.name: getattr(record, item.name) for item in fields(LaunchRecord)}
-        values.update(specific)
-        return cls(**values)
+        encoded = FieldCodec.encode(record)
+        values = {key: encoded[key] for _, key in FieldCodec.record_fields(LaunchRecord)
+                  if key in encoded}
+        annotations = get_type_hints(cls, include_extras=True)
+        values.update({FieldCodec.record_key(cls, key): FieldCodec.encode(value, annotations[key])
+                       for key, value in specific.items()})
+        return FieldCodec.decode_record(cls, values)
 
     @classmethod
     def current(cls) -> LaunchRecord:
