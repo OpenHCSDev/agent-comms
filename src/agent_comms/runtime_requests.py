@@ -12,7 +12,7 @@ import json
 from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
@@ -177,13 +177,11 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
         snapshot.require_owner_process(owner, process)
         return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
 
-    def environment(self, root):
+    def launch(self, record):
         from .runtime import socket_path
 
-        return {
-            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
-        }
+        return replace(record, project_socket=socket_path(record.root, self.binding.process.pid),
+                       project_request=self.to_wire())
 
     def require_original(self, entry):
         if not entry.matches_name(self.thread):

@@ -53,7 +53,7 @@ class RootLaunch(ABC):
     @property
     @abstractmethod
     def child_root(self) -> Path:
-        """The root a launched child names in ``AGENT_COMMS_ROOT``."""
+        """The root written into the child's explicit launch record."""
 
     @abstractmethod
     def require_private(self) -> PrivateNkLaunch:
@@ -148,7 +148,7 @@ class PrivateNkLaunch(RootLaunch):
         return runtime.native_entrypoint
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
-        if agent_bin == NativeArguments.default_binary:
+        if agent_bin == NativeArguments.command_name:
             # The default stock binary cannot attest native input IDs.
             # Keep the owner on this installation's pinned Pi entrypoint.
             agent_bin = runtime.native_entrypoint

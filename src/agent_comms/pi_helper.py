@@ -12,7 +12,7 @@ from typing import ClassVar
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRecord, LaunchRuntime
 
 
 class PiHelperError(ValueError):
@@ -82,7 +82,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         node = shutil.which("node")
         if node is None:
             raise PiHelperError("Pi helper needs Node")
-        configuration = RestartEnvironment.inherit(environment)
+        configuration = LaunchRecord.current().configuration
         environment.update(configuration.encode_native())
         for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             environment.pop(key, None)
@@ -91,21 +91,22 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         command = (node, "--no-global-search-paths")
         # Every current caller supplies the verified native deployment.
         fence = package / "dist/agent-comms-import-fence.mjs"
-        command += ("--import", str(fence))
+        command += ("--import", str(Path(__file__).with_name("launch_record.mjs")), "--import", str(fence))
         return (*command, "--input-type=module", "--eval", cls.script.read_text()), environment
 
     @classmethod
     async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
         command, environment = cls.launch(request, dict(os.environ if env is None else env))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
-        outcome = await BoundedRun.run(
-            command,
-            input=payload.encode(),
-            timeout=cls.timeout_for(request),
-            cwd=cwd,
-            env=environment,
-            runtime=request.launch_runtime,
-        )
+        with LaunchRecord.current().arguments() as arguments:
+            outcome = await BoundedRun.run(
+                (*command, *arguments),
+                input=payload.encode(),
+                timeout=cls.timeout_for(request),
+                cwd=cwd,
+                env=environment,
+                runtime=request.launch_runtime,
+            )
         if not outcome.outcome.successful:
             raise cls.failure(request, outcome)
         if len(outcome.stdout) > cls.output_bound:

@@ -1,6 +1,6 @@
 /** Login-only control adapter. Pi's existing /login UI owns all authentication. */
 export default function (pi) {
-  const provider = process.env.AGENT_COMMS_LOGIN_PROVIDER || "";
+  const provider = globalThis.agentCommsLaunchRecord.login_provider;
   let timer;
   pi.on("session_start", (_event, ctx) => {
     ctx.ui.setEditorText(`/login${provider ? ` ${provider}` : ""}`);

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import re
-import shlex
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -249,9 +247,7 @@ class NoExtensionsArgument(NamedOption, FlagArgument):
 @dataclass(frozen=True)
 class NativeArguments:
     entries: tuple[NativeArgument, ...]
-    binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
-    arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
-    default_binary: ClassVar[str] = "pi"
+    command_name: ClassVar[str] = "pi"
 
     @classmethod
     def owner_launcher(cls, runtime: LaunchRuntime) -> str:
@@ -260,25 +256,6 @@ class NativeArguments:
         if not launcher.is_file():
             raise ValueError("Owner runtime has no native Pi launcher; restart in a complete runtime")
         return str(launcher)
-
-    @classmethod
-    def configured_binary(
-        cls, binary: str | None = None, environment: Mapping[str, str] | None = None,
-    ) -> str:
-        source = os.environ if environment is None else environment
-        return binary or source.get(cls.binary_key, cls.default_binary)
-
-    @classmethod
-    def configured(
-        cls,
-        arguments: Sequence[str] | None = None,
-        environment: Mapping[str, str] | None = None,
-    ) -> NativeArguments:
-        if arguments is None:
-            source = os.environ if environment is None else environment
-            encoded = source.get(cls.arguments_key)
-            arguments = () if encoded is None else shlex.split(encoded)
-        return cls.parse(arguments)
 
     @classmethod
     def parse(cls, arguments: Sequence[str]) -> NativeArguments:

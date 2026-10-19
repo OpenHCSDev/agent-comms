@@ -36,7 +36,7 @@ from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
-from .launch_runtime import LaunchRuntime
+from .launch_runtime import LaunchRecord, LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
@@ -459,13 +459,13 @@ class ThreadManagement:
 
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""
-        resolved_bin = NativeArguments.configured_binary()
+        resolved_bin = LaunchRecord.current().agent_bin
         runtime = LaunchRuntime.running()
         with spec.prepared(self, resolved_bin, runtime) as child:
             child = self.registry._declare_unlocked(child)
             try:
                 owned = self.owners._launch_owner_unlocked(
-                    child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
+                    child, LaunchRecord.current(), initial_input=spec.task,
                 )
                 spec.task.record_first_input(
                     partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,

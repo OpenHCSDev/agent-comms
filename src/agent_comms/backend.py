@@ -48,6 +48,7 @@ from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_package import VerifiedNativePackage
+from .launch_runtime import LaunchRecord
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
@@ -106,7 +107,7 @@ async def stream_agent_events(
     agent_args: Sequence[str],
     task: str,
     cwd: str,
-    env_extra: dict[str, str] | None = None,
+    env_extra: LaunchRecord,
     session_file: str | None = None,
     steering_queue: TurnInbox | None = None,
     finish_event: asyncio.Event | None = None,

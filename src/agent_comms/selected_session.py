@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,7 +12,6 @@ from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import NativeSessionFileRole
-from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
 
 if TYPE_CHECKING:
@@ -48,13 +46,6 @@ class SelectedSession:
 
     def launch_arguments(self, thinking_level: type[ThinkingChoice]) -> tuple[str, ...]:
         return NativeArguments(()).with_thinking(thinking_level).argv
-
-    def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
-        environment = ThreadLaunch.strip(dict(os.environ))
-        environment.update(original or {})
-        configuration = RestartEnvironment.inherit(environment).for_agent(agent_dir)
-        environment["PI_OFFLINE"] = "1"
-        return environment, configuration
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
         # Only an unselected new session uses the originally allocated directory.

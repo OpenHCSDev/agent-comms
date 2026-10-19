@@ -317,8 +317,9 @@ class OrderCheck:
 
     async def run(self) -> ChildResult:
         """The check on its directory's live state."""
+        from .launch_runtime import LaunchRuntime
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
-                                    timeout=self.timeout)
+                                    timeout=self.timeout, runtime=LaunchRuntime.running())
 
     def at(self, revision: str, repository: str) -> ChildResult:
         """The check on ``revision``: the result a git note on the commit records, or one run in

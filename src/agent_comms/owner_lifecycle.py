@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager, suppress
@@ -263,8 +262,7 @@ class OwnerLifecycle:
             return owned
 
     def ensure_owner(
-        self, name: str, *, agent_bin: str = NativeArguments.default_binary,
-        agent_args: Sequence[str] | None = None,
+        self, name: str, *, record: LaunchRecord,
     ) -> Thread:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -278,12 +276,11 @@ class OwnerLifecycle:
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, agent_bin, agent_args,
-                                                 launch_runtime=LaunchRuntime.running())
+                else self._launch_owner_unlocked(thread, record)
             )
 
     def start(
-        self, name: str, *, agent_bin: str | None = None, agent_args: Sequence[str] | None = None
+        self, name: str, *, record: LaunchRecord
     ) -> OwnerStartResult:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -299,10 +296,7 @@ class OwnerLifecycle:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
-            owner = self._launch_owner_unlocked(
-                thread, NativeArguments.configured_binary(agent_bin), agent_args,
-                launch_runtime=LaunchRuntime.running(),
-            )
+            owner = self._launch_owner_unlocked(thread, record)
             return OwnerStartResult(owner.name, owner.require_process().pid, True)
 
     @cached_property
@@ -319,12 +313,10 @@ class OwnerLifecycle:
         """Choose this runtime's reviewed native entrypoint for a private handoff."""
         return self.launch_authority.restart_entrypoint(source_binary, runtime)
 
-    def restart_environment(self, environment: Mapping[str, str], runtime: LaunchRuntime) -> dict[str, str]:
-        """Project the launch authority into the target runtime policy."""
-        result = runtime.environment(environment, configuration=LaunchRecord.current().configuration)
-        # The source owner's root is this launch's; the target derives the rest.
+    def restart_environment(self, configuration: RestartEnvironment, runtime: LaunchRuntime) -> RestartEnvironment:
+        """Project the selected external fields through the target runtime."""
         self.launch_authority.check()
-        return result
+        return runtime.project(configuration)
 
     def restart_owners(
         self,
@@ -414,24 +406,20 @@ class OwnerLifecycle:
     def _launch_owner_unlocked(
         self,
         thread: Thread,
-        agent_bin: str,
-        agent_args: Sequence[str] | None = None,
+        record: LaunchRecord,
         *,
-        launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] | None = None,
     ) -> Thread:
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
-        env = dict(os.environ if environment is None else environment)
-        launch_runtime.require_available()
-        env = launch_runtime.environment(env, configuration=LaunchRecord.current().configuration)
-        agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
-        env = initial_input.launch(thread.launch()).apply(env)
-        env[NativeArguments.binary_key] = agent_bin
-        env["AGENT_COMMS_ROOT"] = str(self.launch_authority.child_root)
-        if agent_args is not None:
-            env[NativeArguments.arguments_key] = shlex.join(agent_args)
+        record.runtime.require_available()
+        env = (record.runtime.environment(os.environ, configuration=record.configuration)
+               if environment is None else dict(environment))
+        agent_bin = self.require_launch_authority().prepare_owner(thread, record.agent_bin, record.runtime)
+        record = replace(record, agent_bin=agent_bin, thread=initial_input.launch(thread.launch()),
+                         root=self.launch_authority.child_root, implicit_root=False)
+        arguments = record.write(self.root / "runtime" / "launch" / f"{thread.incarnation.require_recorded().lookup}.json")
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:
@@ -441,12 +429,12 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker"),
+                (str(record.runtime.interpreter), "-m", "agent_comms.worker", *arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,
                 before_start=reserve,
-                runtime=launch_runtime,
+                runtime=record.runtime,
             )
         assert owned is not None
         return owned

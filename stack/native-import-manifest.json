@@ -18,9 +18,9 @@
       "sources": [
         {
           "path": "/home/ts/.pi/agent/extensions/agent-comms/index.ts",
-          "sha256": "0c0f09551a8fb32e3791e35eea3f48a456c1c22946e8c2a2c76ab7815392e670",
+          "sha256": "328e9de7bdbc33559e8d5c4414b2009a7f7b3897bba791cc299836d76fdadde7",
           "snapshot": "extensions/pi-agent-comms/index.ts",
-          "bytes": 6496
+          "bytes": 6522
         }
       ]
     },
@@ -35,9 +35,9 @@
         },
         {
           "path": "/home/ts/.pi/agent/extensions/project-sync/source.ts",
-          "sha256": "cc7a93fc05fbc2956abb048cae243b3426f4ef15ab291411a0fecac8dd142d64",
+          "sha256": "0574ade681a23db2a027e48ddec8f0dc6c9d1e8764dc67ffd32e6a403a034a3a",
           "snapshot": "extensions/pi-project-sync/index.ts",
-          "bytes": 1903
+          "bytes": 1862
         }
       ]
     },

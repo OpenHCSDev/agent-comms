@@ -21,7 +21,7 @@ from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
 from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRecord, LaunchRuntime
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
 from .native_input_record import NativeInputCommit
@@ -135,14 +135,13 @@ def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
     from .active_route import resolve_comms_route
 
-    package = resolve_comms_route().launch().require_private().validate()
-    environment = dict(os.environ)
+    record = LaunchRecord.startup()
+    package = resolve_comms_route(record.root).launch().require_private().validate()
     argv, environment = NativePiRpcLaunch.bootstrap(
-        package, tuple(sys.argv[1:]), Path.cwd(), environment,
-        RestartEnvironment.inherit(environment),
-        LaunchRuntime.running(),
+        package, tuple(sys.argv[1:]), Path.cwd(), dict(os.environ), record,
     )
-    os.execvpe(argv[0], list(argv), environment)
+    arguments = (LaunchRecord.argument, str(LaunchRecord.argument_path(sys.orig_argv)))
+    os.execvpe(argv[0], [*argv, *arguments], environment)
     return 0
 
 
@@ -422,14 +421,11 @@ class NativePiRpcLaunch:
     session: SelectedSession
     package: VerifiedNativePackage
 
-    root: Path = field(kw_only=True)
-    configuration: RestartEnvironment = field(kw_only=True)
-    runtime: LaunchRuntime = field(kw_only=True)
+    record: LaunchRecord = field(kw_only=True)
 
     @classmethod
     def bootstrap(
-        cls, package: VerifiedNativePackage, arguments, cwd, environment, configuration: RestartEnvironment,
-        runtime: LaunchRuntime,
+        cls, package: VerifiedNativePackage, arguments, cwd, environment, record: LaunchRecord,
     ):
         """Encode the held launch configuration at the native process boundary."""
         try:
@@ -437,9 +433,8 @@ class NativePiRpcLaunch:
         except OSError as error:
             raise NativePiUnavailable("Canonical owner instruction asset is unavailable") from error
         env = package.node_environment(environment)
-        env[ThreadLaunch.variable("worktree")] = str(cwd)
-        env = runtime.environment(env, configuration=configuration)
-        env.update(configuration.encode_native())
+        env = record.runtime.environment(env, configuration=record.configuration)
+        env.update(record.configuration.encode_native())
         argv = (
             *package.node("agent-comms-project-bootstrap.mjs"),
             *arguments, "--append-system-prompt", str(instructions),
@@ -447,9 +442,9 @@ class NativePiRpcLaunch:
         return argv, env
 
     @classmethod
-    def _build(cls, package, arguments, cwd, environment, session, configuration, runtime, root):
-        argv, env = cls.bootstrap(package, arguments, cwd, environment, configuration, runtime)
-        return cls(argv, cwd, env, session, package, root=root, configuration=configuration, runtime=runtime)
+    def _build(cls, package, arguments, cwd, environment, session, record):
+        argv, env = cls.bootstrap(package, arguments, cwd, environment, record)
+        return cls(argv, cwd, env, session, package, record=record)
 
     @classmethod
     def _command_selection(
@@ -463,7 +458,7 @@ class NativePiRpcLaunch:
         """
         stack_launcher = MANIFEST.parent / "bin" / "pi-native"
         executable = (
-            Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+            Path(shutil.which(command) or command).resolve(strict=True) if command != NativeArguments.command_name else None
         )
         allowed = (
             Path(NativeArguments.owner_launcher(runtime)).resolve(),
@@ -509,8 +504,10 @@ class NativePiRpcLaunch:
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
+        record = replace(LaunchRecord.current(), root=Path(root) if root is not None else LaunchRecord.current().root,
+                         implicit_root=False, thread=None, project_socket=None, project_request=None)
         return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
-            "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd), runtime, cwd)
+            "--no-context-files", "--no-session"), cwd, record, SelectedSession(cwd))
 
     @classmethod
     def managed(
@@ -521,7 +518,7 @@ class NativePiRpcLaunch:
         package: VerifiedNativePackage,
         worktree: Path,
         root: Path,
-        environment: dict[str, str] | None = None,
+        environment: LaunchRecord,
         session_file: str | None = None,
     ) -> NativePiRpcLaunch:
         """Prepare managed ACP/headless execution; native evidences remain separate."""
@@ -542,25 +539,24 @@ class NativePiRpcLaunch:
         session = (SavedSelectedSession(directory,
             identity=NativeSessionIdentity.locate(str(saved)))
             if saved is not None else SelectedSession(directory))
-        return cls._managed(package, arguments, cwd, environment, session, runtime, root)
+        return cls._managed(package, arguments, cwd, replace(environment, root=root, implicit_root=False), session)
 
     @classmethod
-    def _managed(cls, package, arguments, cwd, environment, session, runtime, root):
+    def _managed(cls, package, arguments, cwd, record, session):
         """Assemble the entire key from one acquired package and selected source."""
         cwd = Path(cwd).resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
-        env.update(environment or {})
         arguments += ("--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))
-        return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
+        return cls._build(package, arguments, cwd, env, session, record)
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
-        environment: dict[str, str] | None, session_file: str | None,
+        environment: LaunchRecord, session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
@@ -568,13 +564,13 @@ class NativePiRpcLaunch:
         launch/auth key and checking its actual saved-source revision/liveness.
         A different package or selected file needs its own fresh acquisition.
         """
-        self._command_selection(command, self.runtime, self.package)
+        self._command_selection(command, self.record.runtime, self.package)
         saved = Path(session_file).absolute() if session_file is not None else None
         if saved != self.session.path:
             return None
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
-            worktree, environment, self.session, self.runtime, root)
+            worktree, replace(environment, root=root, implicit_root=False), self.session)
 
     @classmethod
     def tracked(cls, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
@@ -592,7 +588,7 @@ class NativePiRpcLaunch:
         session: SelectedSession,
         model: SelectedModel,
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
-        environment: dict[str, str] | None = None,
+        environment: LaunchRecord,
         selected_tool_mode: NativeToolMode,
     ) -> NativePiRpcLaunch:
         """Construct a complete launch through its acquired immutable artifact.
@@ -625,8 +621,10 @@ class NativePiRpcLaunch:
         arguments.extend(session.launch_arguments(thinking_level))
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
-        env, configuration = session.launch_environment(agent_dir, environment)
-        return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
+        record = replace(environment, root=root, implicit_root=False, runtime=runtime,
+                         configuration=environment.configuration.for_agent(agent_dir))
+        env = dict(os.environ, PI_OFFLINE="1")
+        return cls._build(package, tuple(arguments), worktree, env, session, record)
 
 
 def _read_private_file(path: Path):

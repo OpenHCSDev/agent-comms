@@ -52,4 +52,4 @@ class NativeStartup:
     def for_launch(
         cls, launch: NativePiRpcLaunch,
     ) -> NativeStartup:
-        return cls(launch.root)
+        return cls(launch.record.root)

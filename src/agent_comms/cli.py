@@ -18,6 +18,7 @@ from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import client_wire
 from .coordination_errors import CoordinationError
+from .launch_runtime import LaunchRecord
 
 
 def _fail(error: BaseException) -> int:
@@ -38,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root",
         default=None,
-        help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
+        help="Comms root directory (otherwise the supplied launch record's root)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
@@ -48,9 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        args = build_parser().parse_args(argv)
+        arguments = list(sys.argv[1:] if argv is None else argv)
+        record = LaunchRecord.startup(arguments)
+        args = build_parser().parse_args(arguments)
         command = CliCommand.member_named(args.command).from_namespace(args)
-        with client_wire(Path(args.root).expanduser() if args.root else None) as comms:
+        with client_wire(Path(args.root).expanduser() if args.root else record.root) as comms:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

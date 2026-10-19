@@ -3,9 +3,9 @@
 import os
 import re
 import subprocess
-
+from dataclasses import replace
 from .config_options import ConfigOptions
-from .launch_runtime import ThreadLaunch
+from .launch_runtime import LaunchRecord
 
 
 def run_login(provider: str = "") -> int:
@@ -13,11 +13,10 @@ def run_login(provider: str = "") -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
         raise ValueError("Invalid provider identifier")
     package = ConfigOptions.configured().package
-    env = os.environ.copy()
-    ThreadLaunch.strip(env)
-    env = {**package.node_environment(env), "AGENT_COMMS_LOGIN_PROVIDER": provider}
-    env.pop("AGENT_COMMS_PROJECT_SOCKET", None)
-    env.pop("AGENT_COMMS_PROJECT_REQUEST", None)
+    record = replace(LaunchRecord.current(), login_provider=provider, thread=None,
+                     project_socket=None, project_request=None)
+    env = record.runtime.environment(package.node_environment(os.environ), configuration=record.configuration)
+    env.update(record.configuration.encode_native())
     command = [
         *package.node(),
         "--no-session",
@@ -30,4 +29,5 @@ def run_login(provider: str = "") -> int:
         "--no-prompt-templates",
         "--no-themes",
     ]
-    return subprocess.call(command, env=env)
+    with record.arguments() as arguments:
+        return subprocess.call((*command, *arguments), env=env)

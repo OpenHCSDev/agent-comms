@@ -123,7 +123,7 @@ class PersistentPiSession:
     async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
         from .native_child import BorrowedNative, EmptyNative, PiSessionChild
 
-        key = (launch, launch.configuration.auth_revision())
+        key = (launch, launch.record.configuration.auth_revision())
         child = self.child_state.reuse(key) if reuse else None
         reused = child is not None
         if child is None:
@@ -228,7 +228,7 @@ class PiNativeBackend(
 
         if open_native is None:
             open_native = NativeSessionPreparation.open
-        environment = await Coordination.run_worker(lambda: thread.native_environment(
+        environment = await Coordination.run_worker(lambda: thread.native_launch(
             self.comms.root, self.comms.registry.snapshot(), thread.worktree,
         ))
         package = self.comms.owners.require_private_launch().native_package

@@ -6,7 +6,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,6 +15,7 @@ from .pi_events import PiEvent
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .launch_runtime import LaunchRecord
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
@@ -37,9 +38,13 @@ class PiChild:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
 
     @classmethod
-    async def start_command(cls, argv, *, cwd, env=None, pass_fds=(), event_type=PiEvent, **state):
-        proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
-        return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
+    async def start_command(cls, argv, *, record: LaunchRecord, cwd, env=None, pass_fds=(), event_type=PiEvent, **state):
+        with state.pop('resources', ExitStack()) as resources:
+            arguments = resources.enter_context(record.arguments())
+            proc = await AttachedChild.start((*argv, *arguments), cwd=cwd, env=env,
+                                             pass_fds=pass_fds, runtime=record.runtime)
+            return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type),
+                       resources=resources.pop_all(), **state)
 
     async def request(self, command):
         if self.retired:
@@ -148,11 +153,11 @@ class PiSessionChild(PiChild):
     async def start(cls, key, attestation):
         launch, _ = key
         with ExitStack() as resources:
-            environment = dict(launch.env)
-            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
-                address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
-                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
+            record = launch.record
+            if record.project_socket is not None:
+                address = resources.enter_context(PrivateSocketRole.address(record.project_socket))
+                record = replace(record, project_socket=address)
+            return await cls.start_command(launch.argv, record=record, cwd=str(launch.cwd), env=launch.env,
                 key=key, attestation=attestation, resources=resources.pop_all())
 
 
@@ -285,7 +290,7 @@ class RetainedNative(ChildNative):
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
                 root=root, worktree=worktree, environment=environment, session_file=session_file)
-            if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
+            if candidate is not None and (candidate, candidate.record.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original

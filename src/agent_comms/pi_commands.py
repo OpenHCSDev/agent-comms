@@ -239,10 +239,12 @@ class CatalogQuery(NativeQuery):
                 worktree=Path.cwd() if worktree is None else worktree,
                 root=root,
             )
-            async with BoundedRun.session(
-                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
-            ) as child:
-                yield PiRpcChannel(child.stdout), child.stdin
+            with launch.record.arguments() as arguments:
+                async with BoundedRun.session(
+                    (*launch.argv, *arguments), cwd=launch.cwd, env=launch.env,
+                    timeout=CATALOG_TIMEOUT, runtime=launch.record.runtime,
+                ) as child:
+                    yield PiRpcChannel(child.stdout), child.stdin
         except TimeoutError as error:
             raise NativePiUnavailable(
                 f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "

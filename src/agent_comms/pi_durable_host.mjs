@@ -1,4 +1,5 @@
 // The sole pi-durable importer. All Pi records terminate at this JSONL boundary.
+import './launch_record.mjs';
 import { createInterface } from 'node:readline';
 import { readFile } from 'node:fs/promises';
 import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';

@@ -30,7 +30,7 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable, NativePiRpcLaunch
 from .native_package import VerifiedNativePackage
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRecord
 from .threads import Thread
 from .wire_watch import WatchSource, WireWatch
 
@@ -89,10 +89,10 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
 
-    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment,
+    def __init__(self, agent_bin: str, agent_args: NativeArguments, record: LaunchRecord,
                  package: VerifiedNativePackage):
         self.agent_bin, self.agent_args = agent_bin, agent_args
-        self.configuration = configuration
+        self.record = record
         self.package = package
         self.catalogs: dict[tuple[str, ...], asyncio.Task[list[CatalogChoice]]] = {}
         self.auth: tuple[int, int] | None = None
@@ -100,7 +100,7 @@ class CatalogConfigOption(ConfigOption):
 
     @property
     def current_auth(self) -> bool:
-        return self.auth == self.configuration.auth_revision()
+        return self.auth == self.record.configuration.auth_revision()
 
     def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
         return self.agent_args.with_model(thread.model).argv
@@ -109,7 +109,7 @@ class CatalogConfigOption(ConfigOption):
         async with self.lock:
             if not self.current_auth:
                 self.catalogs.clear()
-                self.auth = self.configuration.auth_revision()
+                self.auth = self.record.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
                 # A successful empty catalogue is setup state, not a failed
@@ -182,14 +182,14 @@ class ModelConfigOption(CatalogConfigOption):
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         values = [
             value.strip()
-            for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
+            for value in self.record.agent_models
             if value.strip()
         ]
         if not values:
             from .pi_commands import GetAvailableModels
 
             data = await GetAvailableModels().discover(
-                self.agent_bin, self.agent_args.argv, self.configuration.root, package=self.package
+                self.agent_bin, self.agent_args.argv, self.record.root, package=self.package
             )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -219,7 +219,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root,
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.record.root,
             package=self.package,
         )
         levels = [member.declared_name for member in data.levels]
@@ -242,11 +242,11 @@ class ConfigOptions:
         self,
         agent_bin: str,
         agent_args: NativeArguments,
-        configuration: RestartEnvironment,
+        record: LaunchRecord,
         acquire_package: Callable[[], VerifiedNativePackage],
     ):
         self.agent_bin, self.agent_args = agent_bin, agent_args
-        self.configuration = configuration
+        self.record = record
         self.acquire_package = acquire_package
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
@@ -258,17 +258,13 @@ class ConfigOptions:
     @classmethod
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
-        command = NativeArguments.configured_binary()
-        configuration = RestartEnvironment.inherit(os.environ)
-        package = partial(
-            NativePiRpcLaunch.package_for_command,
-            command, LaunchRuntime.running(), configuration.root,
-        )
-        return cls(command, NativeArguments.configured(), configuration, package)
+        record = LaunchRecord.current()
+        package = partial(NativePiRpcLaunch.package_for_command, record.agent_bin, record.runtime, record.root)
+        return cls(record.agent_bin, NativeArguments.parse(record.agent_args), record, package)
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
-            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration, self.package)
+            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.record, self.package)
         return self.catalogs[member]
 
     async def options(
@@ -304,7 +300,7 @@ class SessionConfigOptions(ConfigOptions):
         super().__init__(
             agent_bin,
             agent_args,
-            replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
+            replace(LaunchRecord.current(), root=comms.root, implicit_root=False),
             partial(comms.owners.launch_authority.package_for, agent_bin),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
@@ -431,7 +427,7 @@ class SessionConfigOptions(ConfigOptions):
     async def _observe_configuration(self) -> None:
         sources = (
             WatchSource.file(self.comms.registry.store.path),
-            WatchSource.file(self.configuration.native_config / "auth.json"),
+            WatchSource.file(self.record.configuration.native_config / "auth.json"),
         )
         async with aclosing(WireWatch.observations(*sources)) as observations:
             async for _ in observations:

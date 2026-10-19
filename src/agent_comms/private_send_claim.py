@@ -167,7 +167,7 @@ class PrivateSendClaim(PromptBoundary):
                 session=self.session,
                 model=model,
                 thinking_level=self.owner.thread.thinking_level,
-                environment=self.owner.thread.native_environment(
+                environment=self.owner.thread.native_launch(
                     self.bus.log.path.parent, registry,
                     self.owner.thread.worktree,
                 ),

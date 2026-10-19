@@ -76,7 +76,9 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
         return "delivered work"
 
     async def run(self, check, *command):
-        result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
+        from .launch_runtime import LaunchRuntime
+        result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120,
+                                      runtime=LaunchRuntime.running())
         if result.outcome != ExitedOutcome(0):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")

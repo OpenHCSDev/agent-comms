@@ -2,7 +2,8 @@
 from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from .launch_runtime import LaunchRecord
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -43,7 +44,8 @@ class EnsuringSessionLoadPlan(SessionLoadPlan):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         return await Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
-            agent_bin=lifecycle.agent_bin, agent_args=list(lifecycle.agent_args.argv),
+            record=replace(LaunchRecord.current(), agent_bin=lifecycle.agent_bin,
+                           agent_args=lifecycle.agent_args.argv),
         ))
 
 

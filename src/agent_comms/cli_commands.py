@@ -1922,7 +1922,8 @@ class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliC
     help = 'Start thread'
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
-        return ctx.owners.start(self.name)
+        from .launch_runtime import LaunchRecord
+        return ctx.owners.start(self.name, record=LaunchRecord.current())
 
 
 @dataclass(frozen=True, kw_only=True)

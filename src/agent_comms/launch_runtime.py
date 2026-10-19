@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sys
+from contextlib import contextmanager
+from tempfile import TemporaryDirectory
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -41,9 +44,11 @@ class LaunchRuntime:
     def native_entrypoint(self) -> str:
         return str(self.interpreter.with_name("pi-comms-native"))
 
+    def project(self, configuration: RestartEnvironment) -> RestartEnvironment:
+        return replace(configuration, pythonpath=NoImportPath(), virtual_env=str(self.prefix)).for_interpreter(self.interpreter)
+
     def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
-        projected = replace(configuration, pythonpath=NoImportPath(), virtual_env=str(self.prefix))
-        return projected.for_interpreter(self.interpreter).apply_runtime(source)
+        return self.project(configuration).apply_runtime(source)
 
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
@@ -63,10 +68,16 @@ class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
 class NoImportPath(ImportPath, JsonShapeMember):
     value: None = None
 
+    def apply(self, environment) -> None:
+        environment.pop("PYTHONPATH", None)
+
 
 @dataclass(frozen=True)
 class SpecifiedImportPath(ImportPath, JsonShapeMember):
     value: str
+
+    def apply(self, environment) -> None:
+        environment["PYTHONPATH"] = self.value
 
 
 @dataclass(frozen=True)
@@ -87,7 +98,10 @@ class EnvironmentRecord:
         return environment
 
     def encode(self) -> dict[str, str]:
-        return FieldCodec.encode(self)
+        encoded = FieldCodec.encode(self)
+        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+                for declaration in fields(self) if "wire_name" in declaration.metadata
+                and FieldCodec.wire_key(declaration) in encoded}
 
 
 @dataclass(frozen=True)
@@ -96,16 +110,20 @@ class RestartEnvironment(EnvironmentRecord):
 
     home: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"})
     path: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True})
-    pythonpath: ImportPath = field(default_factory=NoImportPath, metadata={"wire_omit_default": True, "wire_name": "PYTHONPATH", "runtime": True})
+    pythonpath: ImportPath = field(default_factory=NoImportPath, metadata={"wire_omit_default": True})
     virtual_env: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True})
     config: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"})
     native_config: Annotated[Path, PathText] = field(kw_only=True)
     agent_directory: Annotated[Path, PathText] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True})
-    default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.native_config.expanduser().resolve())
         object.__setattr__(self, "agent_directory", self.agent_directory.expanduser().resolve())
+
+    def encode(self) -> dict[str, str]:
+        encoded = super().encode()
+        self.pythonpath.apply(encoded)
+        return encoded
 
     def for_agent(self, directory: Path) -> RestartEnvironment:
         return replace(self, agent_directory=directory)
@@ -138,6 +156,7 @@ class RestartEnvironment(EnvironmentRecord):
                 result.pop(name, None)
                 if name in encoded:
                     result[name] = encoded[name]
+        self.pythonpath.apply(result)
         return result
 
 
@@ -184,7 +203,6 @@ class LaunchRecord:
     login_provider: str | None
     project_socket: Annotated[Path, PathText] | None
     project_request: dict[str, JsonValue] | None
-    parent_lifeline_fd: int | None
     annotation_grant: MessageReference | None
 
     argument: ClassVar[str] = "--comms-launch"
@@ -193,6 +211,8 @@ class LaunchRecord:
     def __post_init__(self) -> None:
         if not self.root.is_absolute():
             raise ValueError("A launch record requires an absolute root")
+        if not self.agent_bin.strip():
+            raise ValueError("A launch record requires its native binary")
 
     @classmethod
     def current(cls) -> LaunchRecord:
@@ -209,15 +229,18 @@ class LaunchRecord:
         return FieldCodec.decode(cls, json.loads(path.read_text()))
 
     @classmethod
-    def startup(cls, argv: list[str] | None = None) -> LaunchRecord:
-        arguments = sys.argv if argv is None else argv
+    def argument_path(cls, arguments) -> Path:
         try:
             index = arguments.index(cls.argument)
-        except ValueError as error:
+            return Path(arguments[index + 1])
+        except (ValueError, IndexError) as error:
             raise LaunchRecordUnavailable("An explicit --comms-launch FILE is required") from error
-        if index + 1 >= len(arguments):
-            raise LaunchRecordUnavailable("The launch record file is missing")
-        record = cls.read(Path(arguments[index + 1]))
+
+    @classmethod
+    def startup(cls, argv: list[str] | None = None) -> LaunchRecord:
+        arguments = sys.argv if argv is None else argv
+        record = cls.read(cls.argument_path(arguments))
+        index = arguments.index(cls.argument)
         del arguments[index:index + 2]
         cls.install(record)
         return record
@@ -225,18 +248,23 @@ class LaunchRecord:
     @classmethod
     def for_process(cls, pid: int) -> LaunchRecord:
         arguments = [os.fsdecode(item) for item in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0") if item]
-        try:
-            index = arguments.index(cls.argument)
-            path = arguments[index + 1]
-        except (ValueError, IndexError) as error:
-            raise LaunchRecordUnavailable("The selected process has no launch record") from error
-        return cls.read(Path(path))
+        return cls.read(cls.argument_path(arguments))
 
-    def write(self, path: Path) -> tuple[str, str]:
+    def write(self, path: Path | None = None) -> tuple[str, str]:
         from .store_files import _atomic_write_text
+        payload = json.dumps(FieldCodec.encode(self), separators=(",", ":"))
+        if path is None:
+            path = self.root / "runtime" / "launch" / f"{hashlib.sha256(payload.encode()).hexdigest()}.json"
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        _atomic_write_text(path, json.dumps(FieldCodec.encode(self), separators=(",", ":")))
+        _atomic_write_text(path, payload)
         return self.argument, str(path)
+
+    @contextmanager
+    def arguments(self):
+        directory = self.root / "runtime"
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with TemporaryDirectory(prefix="launch-", dir=directory) as temporary:
+            yield self.write(Path(temporary) / "record.json")
 
     def route(self):
         from .active_route import CommsRoute, resolve_comms_route

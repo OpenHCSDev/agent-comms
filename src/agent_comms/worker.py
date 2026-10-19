@@ -10,14 +10,14 @@ from contextlib import suppress
 
 from .acp import CommsAgent
 from .comms import wire
-from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, ThreadLaunch
+from .launch_runtime import LaunchRecord, ThreadLaunch
 
 
 async def run() -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
-    comms = wire()
+    record = LaunchRecord.current()
+    comms = wire(record.root)
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
     name = ThreadLaunch.current().name
@@ -25,7 +25,8 @@ async def run() -> None:
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
-        agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
+        agent_bin=record.agent_bin,
+        agent_args=list(record.agent_args),
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -89,24 +90,13 @@ def main() -> int:
     before consulting a route or wire so discovery cannot start an owner.
     Registration belongs to the original thread management operation.
     """
-    argparse.ArgumentParser(
-        prog="agent-comms-agent", description=__doc__,
-        epilog=(
-            f"Select an existing owner with {ThreadLaunch.variable('name')}. "
-            "Use agent-comms for commands."
-        ),
-    ).parse_args()
-    name = ThreadLaunch.current().name
-
-    comms = wire()
-    comms.owners.require_private_launch()  # Headless execution needs a private bus root.
-    thread = comms.registry.require(name)
-    if thread.process_identity.alive():
-        raise ValueError(f"Thread {thread.name!r} already has a live owner")
+    record = LaunchRecord.startup()
+    argparse.ArgumentParser(prog="agent-comms-agent", description=__doc__).parse_args()
+    wire(record.root).owners.require_private_launch()
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    raise SystemExit(main())

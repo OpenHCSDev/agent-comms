@@ -5,11 +5,11 @@ import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-async function project(socket: string, request: string) {
+async function project(socket: string, request: unknown) {
   const connection = createConnection({ path: socket });
   try {
     await once(connection, "connect");
-    connection.write(request + "\n");
+    connection.write(JSON.stringify(request) + "\n");
     const records = createInterface({ input: connection, crlfDelay: Infinity });
     try {
       for await (const line of records) {
@@ -30,10 +30,10 @@ async function project(socket: string, request: string) {
 }
 
 export default function (pi: ExtensionAPI) {
-  const thread = process.env.AGENT_COMMS_THREAD;
-  if (!thread || process.env.AGENT_COMMS_MANAGED !== "1") return;
-  const socket = process.env.AGENT_COMMS_PROJECT_SOCKET;
-  const request = process.env.AGENT_COMMS_PROJECT_REQUEST;
+  const record = globalThis.agentCommsLaunchRecord;
+  if (!record.thread?.managed) return;
+  const socket = record.project_socket;
+  const request = record.project_request;
   if (!socket || !request) throw new Error("Managed native launch lacks original project binding");
   pi.on("tool_call", async (event, ctx) => {
     if (event.toolName === "comms_set_project") return;

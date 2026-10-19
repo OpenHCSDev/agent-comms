@@ -194,7 +194,7 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         shutil.copyfile(stack / source, package / "dist" / target)
     for name in (
         "owner_tool_socket.mjs", "selected_claimed_write.mjs", "channel_coding_tools.mjs",
-        "pi_login_control.mjs",
+        "pi_login_control.mjs", "launch_record.mjs",
     ):
         shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
     subprocess.run(

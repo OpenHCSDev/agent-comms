@@ -202,7 +202,7 @@ class OwnedTurn:
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
-        self.env_extra = self.thread.native_environment(
+        self.env_extra = self.thread.native_launch(
             self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
         )
         from .turn_context import (

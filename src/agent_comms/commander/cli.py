@@ -12,6 +12,8 @@ def tool_name(module: str) -> str:
 
 
 def main() -> None:
+    from ..launch_runtime import LaunchRecord
+    LaunchRecord.startup()
     modules = (import_module(f'{package.__name__}.{m.name}') for m in pkgutil.iter_modules(package.__path__) if m.name != 'cli')
     tools = {tool_name(module.__name__): module for module in modules if hasattr(module, 'main')}
     if len(sys.argv) < 2 or sys.argv[1] not in tools:

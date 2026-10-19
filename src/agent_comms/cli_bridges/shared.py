@@ -36,7 +36,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.launch_runtime import LaunchRecord, LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message, MessageKind
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -370,12 +370,13 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     async def watch_child(self) -> None:
         """One child stream; the bus owns waiting and its next attempt after a hold."""
+        record = replace(LaunchRecord.current(), root=Path(self.binding.root), implicit_root=False)
         child = await AttachedChild.start((
-            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
+            str(record.runtime.interpreter.with_name('agent-comms')), *record.write(),
             '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
             '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
             '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-            stdio=StreamingChildStdio(input_enabled=False))
+            stdio=StreamingChildStdio(input_enabled=False), runtime=record.runtime)
         try:
             async for item in WatchLine.stream(child):
                 await item.handle(self, child)

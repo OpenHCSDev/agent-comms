@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read auth and models from the owner's canonical Pi configuration.
 
-AGENT_COMMS_NATIVE_CONFIG_DIR names that directory when the writable agent
+The explicit launch record names that directory when the writable agent
 directory (PI_CODING_AGENT_DIR) is a separate acquired resource. It is only a
 location; it switches no behavior. Settings, including compaction thresholds,
 come from PI_CODING_AGENT_DIR and the project, as Pi's RPC mode reads them.
@@ -28,8 +28,7 @@ def main(services: Path) -> None:
     source = replace_once(
         source,
         anchor,
-        "    const modelDir = process.env.AGENT_COMMS_NATIVE_CONFIG_DIR\n"
-        "        ? resolvePath(process.env.AGENT_COMMS_NATIVE_CONFIG_DIR) : agentDir;\n" + anchor,
+        "    const modelDir = resolvePath(globalThis.agentCommsLaunchRecord.configuration.native_config);\n" + anchor,
     )
     for name in ("auth.json", "models.json"):
         source = replace_once(source, f'join(agentDir, "{name}")', f'join(modelDir, "{name}")')
