@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
+from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
@@ -127,6 +128,7 @@ async def test_malformed_edit_reports_error_and_allows_a_later_tool_round(tmp_pa
             self.calls.append(call.call_id)
             slot = call.slot(self.input_id, round_number)
             consume_selected_slot(tmp_path, slot, slot)
+            return NoRoomNeeded()
 
     owner = Owner()
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
@@ -171,6 +173,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
 
         async def allow(self, turn, round_number, call):
             self.calls.append(call)
+            return NoRoomNeeded()
 
     owner = Owner()
     tmp_path.chmod(0o700)
@@ -223,6 +226,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
         async def allow(self, turn, round_number, call):
             checking.set()
             await release.wait()
+            return NoRoomNeeded()
 
     owner = Owner()
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
@@ -251,6 +255,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog)
 
         async def allow(self, turn, round_number, call):
             answered.set()
+            return NoRoomNeeded()
 
     tmp_path.chmod(0o700)
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())

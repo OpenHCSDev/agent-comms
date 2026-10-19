@@ -15,6 +15,7 @@ import pytest
 import agent_comms.native_pi as native_pi
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
+from agent_comms.storage_room import NoRoomNeeded, RoomReservation
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
@@ -37,8 +38,9 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     class Owner:
         input_id = secrets.token_hex(16)
 
-        async def allow(self, turn, round_number, call) -> None:
+        async def allow(self, turn, round_number, call) -> RoomReservation:
             assert turn is self
+            return NoRoomNeeded()
 
     tmp_path.chmod(0o700)
     owner = Owner()

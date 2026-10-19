@@ -28,7 +28,7 @@ from .envelope_claim_transitions import (
 )
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_arguments import NativeArguments
-from .storage_room import RoomReservation
+from .storage_room import NoRoomNeeded, RoomReservation
 from .native_tools import NativeToolDeclaration
 from .native_tool_transport import ToolTransport, ToolCallIdentity
 from .selected_tool_broker import (
@@ -44,7 +44,7 @@ class CodingToolOwner(ABC):
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
-    async def reserve_room(self, call: CodingCall) -> RoomReservation | None:
+    async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = registry.require(self.owner_name)
         effects = call.storage_effects(Path(thread.worktree))
@@ -53,9 +53,9 @@ class CodingToolOwner(ABC):
         if work:
             return await registry.storage_rule.wait_for_room(
                 work, thread, self.comms.root)
-        return None
+        return NoRoomNeeded()
 
-    async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation | None:
+    async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
         def check(store: Coordination) -> None:
             self.verify(store, turn, self.comms.registry.snapshot())
             slot = call.slot(turn.command.input_id, round_number)
@@ -68,13 +68,9 @@ class CodingToolOwner(ABC):
                     store, turn, resource, slot, self.claims.get(canonical))
 
         reservation = await self.reserve_room(call)
-        try:
+        async with reservation.checking():
             async with self.check_lock:
                 await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
-        except BaseException:
-            if reservation is not None:
-                await asyncio.to_thread(reservation.finish, completed=False)
-            raise
         return reservation
 
     @abstractmethod
@@ -145,7 +141,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
         super().__init__(directory, token)
         self.owner = owner
-        self.reservations = {}
+        self.reservations: dict[ToolCallIdentity, RoomReservation] = {}
         self.completions = set()
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
@@ -167,16 +163,17 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         # The owner rechecks authority after its unlocked room wait. The
         # transport holds the returned reservation for this exact tool call.
         reservation = await self.owner.allow(self.turn, round_number, call)
-        if reservation is not None:
+        async with reservation.checking():
+            call.progress.observation.require_executing()
             self.reservations[ToolCallIdentity(round_number, call.call_id)] = reservation
 
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
         identity, _ = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
-        reservation = self.reservations.pop(identity, None)
-        if reservation is not None:
-            task = asyncio.create_task(asyncio.to_thread(reservation.finish))
-            self.completions.add(task)
+        # A refused native call can end before the owner grants any room.
+        reservation = self.reservations.pop(identity, NoRoomNeeded())
+        task = asyncio.create_task(asyncio.to_thread(reservation.finish))
+        self.completions.add(task)
 
     async def close(self):
         await super().close()

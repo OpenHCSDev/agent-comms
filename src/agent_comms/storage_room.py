@@ -6,10 +6,11 @@ Waiting rows are also the status source; no activity event mirrors their state.
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
 import os
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
@@ -190,8 +191,35 @@ class WorkMeasurement:
         return self.peak
 
 
+class RoomReservation(ABC):
+    """One tool's room lifetime, including work that needs no room."""
+
+    @abstractmethod
+    def finish(self, *, completed=True): ...
+
+    @abstractmethod
+    def abandon(self): ...
+
+    @asynccontextmanager
+    async def checking(self):
+        """Failed authorization cannot keep room for a tool that never ran."""
+        try:
+            yield self
+        except BaseException:
+            await asyncio.to_thread(self.finish, completed=False)
+            raise
+
+
+class NoRoomNeeded(RoomReservation):
+    def finish(self, *, completed=True):
+        pass
+
+    def abandon(self):
+        pass
+
+
 @dataclass
-class RoomReservation:
+class MeasuredRoomReservation(RoomReservation):
     rule: RoomAllocation
     ticket: str
     measurement: WorkMeasurement
@@ -279,7 +307,7 @@ class RoomAllocation:
                 if await asyncio.to_thread(self._admit, ticket):
                     measurement = WorkMeasurement(self, process)
                     admitted = True
-                    return RoomReservation(self, ticket, measurement)
+                    return MeasuredRoomReservation(self, ticket, measurement)
         finally:
             if not admitted:
                 await asyncio.to_thread(ledger.release, ticket)
