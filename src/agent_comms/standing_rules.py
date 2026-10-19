@@ -142,21 +142,18 @@ class BoardDisagrees(StandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        from .todos import OrderProgress, ProgressSource, PullRequests
-
-        todos = cls.todos(comms, commander)
-        storage, pulls = comms.registry.storage_rule, PullRequests(todos)
-        found = []
-        for todo in todos:
-            progress = OrderProgress.read(todo, storage, pulls)
-            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
-            found.extend(cls(todo.id, todo.order.id, merged.sha)
-                         for merged in progress.missing_merges(source))
-        return tuple(found)
+        return tuple(
+            cls(todo.id, todo.order.id, merged.sha)
+            for todo, merged in comms.goals.todos.board_disagreements(
+                comms.registry.require(commander).incarnation, comms.registry.storage_rule
+            )
+        )
 
     def line(self) -> str:
-        return (f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
-                f"but its linked PR merged as {self.merge} -> repair the progress read this wake")
+        return (
+            f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
+            f"but its linked PR merged as {self.merge} -> repair the progress read this wake"
+        )
 
 
 @dataclass(frozen=True)
