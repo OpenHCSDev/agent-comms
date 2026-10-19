@@ -771,7 +771,27 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class TypedStore(RootFile):
+class StoreWriter:
+    """A transaction capability shared by stores and their turn-owned writers."""
+
+    @staticmethod
+    @contextmanager
+    def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            yield connection
+            connection.execute("COMMIT")
+        except BaseException:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+    @abstractmethod
+    def writing(self):
+        """Borrow one committed write transaction from this lifetime owner."""
+
+
+class TypedStore(RootFile, StoreWriter):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
     Members name the file and their rows. A transaction installs an absent
@@ -884,18 +904,6 @@ class TypedStore(RootFile):
         with self._attached(lambda: closing(self._open_writer())) as connection:
             self.require_schema(self._schema(connection))
             yield connection
-
-    @staticmethod
-    @contextmanager
-    def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            yield connection
-            connection.execute("COMMIT")
-        except BaseException:
-            if connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
