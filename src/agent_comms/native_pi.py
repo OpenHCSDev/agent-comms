@@ -74,7 +74,7 @@ class NativeEmptyAnswer(NativeRequestFailure):  # noqa: N818 - nominal model out
 
 
 class NativeInputUncommitted(NativePiUnavailable):
-    """The observed session holds no durable commit of the asked input; its turn is still pending."""
+    """The observed session holds no durable commit of the asked input; its turn is pending."""
 
     @property
     def stop_reason(self) -> type[PendingStopReason]:

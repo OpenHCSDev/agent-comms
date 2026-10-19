@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .pi_payloads import PiMessage, PiPayload
@@ -241,7 +241,8 @@ class NativeEvidenceRead:
         try:
             return self.inputs[input_id]
         except KeyError as missing:
-            raise NativeInputUncommitted("The specified input was never durably committed") from missing
+            raise NativeInputUncommitted(
+                "The specified input was never durably committed") from missing
 
     def tracked(self, input_id: str) -> MessageEntry:
         """The observed entry that holds this tracked input."""
@@ -252,7 +253,8 @@ class NativeEvidenceRead:
         for position, entry in enumerate(appended, len(self.entries)):
             if user := entry.tracked_user:
                 if user.input_id in self.inputs:
-                    raise MalformedRecord("ambiguous tracked user input: one input ID on two entries")
+                    raise MalformedRecord(
+                        "ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
 
     def observe(self):
@@ -266,7 +268,6 @@ class NativeEvidenceRead:
         This observes the native result; it grants no input or reply replay.
         """
         from .native_pi import NativeInputUncommitted
-        from .pi_vocabulary import PendingStopReason
 
         _header, entries = self.observe()
         try:
