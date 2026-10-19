@@ -189,22 +189,13 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
         COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
     except SelectedToolDenied as quota:
         problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-    try:
-        Todo.require_order_body(body)
-    except ValueError as invalid_body:
-        sys.exit(f'REFUSED, nothing recorded: {invalid_body}')
+    Todo.require_order_body(body)
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
     works = re.search(rf'(?m)^{re.escape(OrderRun.label)}\s*(.+)$', body)
-    try:
-        run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
-    except ValueError as refused:
-        problems.append(str(refused))
+    run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
     serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
-    try:
-        phase = OrderPhase.member_named(serves[1] if serves else UnplannedPhase.declared_name)
-    except ValueError as refused:
-        problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
+    phase = OrderPhase.member_named(serves[1] if serves else UnplannedPhase.declared_name)
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -260,18 +251,15 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
     holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
     replacing = not new and bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
-    try:
-        for pid in group:
-            if replacing:
-                listed[pid].require_replacement(replaces)
-        if replaces and not replacing:
-            raise ValueError('--replaces must name the current order on these problems to the same unit.')
-        trace = FileLine.from_wire(traced) if traced is not None else None
-        for pid in group:
-            if pid in listed and listed[pid].assignment:
-                listed[pid].assignment.require_trace(unit, trace)
-    except ValueError as refused:
-        problems.append(str(refused))
+    for pid in group:
+        if replacing:
+            listed[pid].require_replacement(replaces)
+    if replaces and not replacing:
+        raise ValueError('--replaces must name the current order on these problems to the same unit.')
+    trace = FileLine.from_wire(traced) if traced is not None else None
+    for pid in group:
+        if pid in listed and listed[pid].assignment:
+            listed[pid].assignment.require_trace(unit, trace)
     if holders and not reassign:
         problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
     if reassign is not None and len(reassign.split()) < 8:
@@ -290,16 +278,13 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     # the send-back records no second strike.
     struck_already = replacing and listed[group[0]].struck_on_order(unit)
     at = time.time()
-    try:
-        order = PendingProblemOrder(finding=finding,
-            id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
-            check=check, edits=edits, banned=banned,
-            report=report[1], run=run, serves=phase,
-            deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
-                rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
-            at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
-    except ValueError as refused:  # Core owns what an order may say
-        sys.exit(f'Refused order: {refused}')
+    order = PendingProblemOrder(finding=finding,
+        id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
+        check=check, edits=edits, banned=banned,
+        report=report[1], run=run, serves=phase,
+        deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
+            rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
+        at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     common = dict(order=order, request=order.request(COMMS.registry.require(ME), tuple(group)), deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
@@ -357,12 +342,8 @@ def correct_check(pid: str, line: str, why: str) -> None:
     if head != git('rev-parse', 'origin/main') or git('status', '--porcelain', '-uno'):
         sys.exit(f'Refused: {check.directory} is not a clean checkout of origin/main; '
                  'the corrected check runs on main')
-    try:  # the result done requires, judged on main
-        check.result.require(asyncio.run(BoundedRun.run(
-            ('bash', '-c', check.command), cwd=check.directory, timeout=90)))
-    except ValueError as failed:
-        sys.exit(f'Refused on main {head[:9]}: {failed} '
-                 'order check corrects a wrong check; it does not pass undelivered work')
+    check.result.require(asyncio.run(BoundedRun.run(
+        ('bash', '-c', check.command), cwd=check.directory, timeout=90)))
     call(CommsOrderCheckTool(problem=pid, check=check, why=why))
     print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
@@ -453,6 +434,7 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
     except (SystemExit, ValueError) as failed:
         print(f'{recorded} recorded, but the post failed ({failed}). '
               'Repost with order.post; do not record it again.', file=sys.stderr)
+        raise
 
 
 def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
@@ -778,10 +760,7 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
 
 def fire(unit: str, why: str) -> None:
     """Core releases every open problem the unit holds in one call; orders and strikes stay."""
-    try:
-        reason = StrikeReason(why)
-    except ValueError as refused:
-        sys.exit(f'Refused: {refused}')
+    reason = StrikeReason(why)
     for todo in call(CommsFireTool(unit=unit, reason=reason)).todos:
         print(f'{todo.id}: released from {unit}: {why}')
 

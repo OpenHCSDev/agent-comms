@@ -513,7 +513,7 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
         match node:
             case None:
                 return True
-            case ast.Name(id=name):
+            case ast.Name(id=name) | ast.Attribute(attr=name):
                 return name in cls.broad_names
             case ast.Tuple(elts=items):
                 return any(cls.broad(item) for item in items)
@@ -547,7 +547,7 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
     """A broad handler without a raise hides the failure, whatever it returns."""
 
     broad_names = frozenset({
-        "Exception", "ValueError", "RuntimeError", "OSError", "TypeError",
+        "Exception", "BaseException", "ValueError", "RuntimeError", "OSError", "TypeError",
         "KeyError", "AttributeError", "LookupError",
     })
 

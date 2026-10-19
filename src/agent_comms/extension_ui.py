@@ -50,11 +50,7 @@ class ExtensionUiSession:
         session.finished = True
 
     async def answer(self, request: DialogUiRequest, session: TurnSession) -> None:
-        try:
-            choice = await self.choose(request, session)
-        except ValueError as error:
-            await self.fail(str(error), session)
-            return
+        choice = await self.choose(request, session)
         # Input forwarding may become uncertain while the controller is awaiting
         # the user. Input permission must still hold when its answer reaches Pi.
         if not session.prompt_state.permits_extension_ui(session):

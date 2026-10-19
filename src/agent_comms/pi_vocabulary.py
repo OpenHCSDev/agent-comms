@@ -7,7 +7,7 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, FieldRepresentation
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         value = FieldCodec.decode(str | None, value)
         try:
             return cls.member_named(value)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnreportedStopReason
 
     @classmethod
@@ -179,7 +179,7 @@ class CompactionReason(DeclaredFamily, affix="CompactionReason"):
         value = FieldCodec.decode(str | None, value)
         try:
             return cls.member_named(value)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownCompactionReason
 
 

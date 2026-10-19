@@ -49,6 +49,7 @@ from .config_options import (
     ThinkingLevelConfigOption,
 )
 from .declared_family import DeclaredFamily
+from .errors import UnregisteredThreadError
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -389,6 +390,10 @@ class TargetBatchResult(CliResult):
 
 
 @dataclass(frozen=True)
+class CommandSelectionChanged(ValueError):
+    """The selected command is no longer bound to the captured target."""
+
+
 class TargetSelection(ABC):
     """The targets one execution runs on; each kind owns how its result comes back."""
     targets: tuple[CommandTarget, ...]
@@ -443,7 +448,7 @@ class TargetBatch(TargetSelection):
         for name in self.targets:
             try:
                 resolved = name.resolve(snapshot, comms.bus.require_channel)
-            except ValueError as error:
+            except UnregisteredThreadError as error:
                 outcomes.append((len(planned) + len(outcomes),
                                  TargetFailed(name.name, type(error).__name__, str(error))))
                 continue
@@ -454,8 +459,8 @@ class TargetBatch(TargetSelection):
                                                                    snapshot=snapshot, catalog=catalog, resolved=resolved))
                     if not bindings:
                         scope = f' in {context}' if context is not None else ''
-                        raise ValueError(f'This action is no longer available for {name}{scope}')
-                except ValueError as error:
+                        raise CommandSelectionChanged(f'This action is no longer available for {name}{scope}')
+                except (CommandSelectionChanged, UnregisteredThreadError) as error:
                     outcomes.append((len(planned) + len(outcomes),
                                      TargetFailed(name.name, type(error).__name__, str(error))))
                     continue
@@ -473,9 +478,9 @@ class TargetBatch(TargetSelection):
                         comms, name, context, snapshot=current, catalog=current_catalog,
                         resolved=name.resolve(current, comms.bus.require_channel)):
                     scope = f' in {context}' if context is not None else ''
-                    raise ValueError(f'The bound command for {name}{scope} changed; refresh the selection')
+                    raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
                 result = TargetCompleted(name.name, command, command.apply(comms))
-            except ValueError as error:
+            except (CommandSelectionChanged, UnregisteredThreadError) as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
             outcomes.append((position, result))
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
@@ -1517,12 +1522,9 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
         environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
 
         def git(*arguments: str, timeout: int = 60):
-            try:
-                done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                      capture_output=True, text=True, timeout=timeout,
-                                      env=environment)
-            except (OSError, subprocess.TimeoutExpired):
-                return 1, "", ""
+            done = subprocess.run(["git", "-C", str(worktree), *arguments],
+                                  capture_output=True, text=True, timeout=timeout,
+                                  env=environment)
             return done.returncode, done.stdout, done.stderr
 
         code, out, _ = git("rev-parse", "--is-inside-work-tree")
@@ -1797,7 +1799,7 @@ class ContextCliCommand(CliCommand):
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
                         owner.runtime.path)
-                except (OSError, ValueError, RuntimeError, RequestError) as error:
+                except RequestError as error:
                     return context, None, str(error)
                 return context, native, None
             finally:

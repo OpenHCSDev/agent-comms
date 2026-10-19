@@ -61,11 +61,7 @@ def follow(registry: Registration, turns: dict[str, list[str]], thread: str, pat
     offset = start
     for line in data.splitlines(keepends=True):
         at, offset = offset, offset + len(line)
-        try:
-            entry = NativeEntry.read(line)
-        except (ValueError, MalformedRecord) as refused:
-            print(f'REFUSED {path}@{at}: {one_line(str(refused), 200)}', flush=True)
-            continue
+        entry = NativeEntry.read(line)
         for message in entry.messages:
             if message.assistant:
                 walk(registry, turns, thread, message)
@@ -98,7 +94,7 @@ def main(a):
         for path in set(glob.glob(f'{B}/native-sessions/*/*.jsonl')) | set(names):
             try:
                 st = os.stat(path)
-            except OSError:
+            except FileNotFoundError:
                 continue
             if time.time() - st.st_mtime > 900 and path not in offsets:
                 continue
