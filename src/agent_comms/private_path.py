@@ -228,6 +228,11 @@ class PrivateSocketRole(PrivateRole):
 
 class TrustedAncestorRole(FilesystemRole):
     @classmethod
+    def require_path(cls, directory: Path) -> None:
+        for ancestor in (directory, *directory.parents):
+            cls.require(ancestor.lstat())
+
+    @classmethod
     def accepts_kind(cls, mode: int) -> bool:
         return stat.S_ISDIR(mode)
 

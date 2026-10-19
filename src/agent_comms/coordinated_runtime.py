@@ -18,7 +18,6 @@ from .agent_events import CompactionEvent
 from .pi_native_backend import PersistentPiSession
 from .comms import Comms
 from .coordination_errors import (
-    CoordinationError,
     IdentityConflict,
     PublicationActivationBlocked,
     RetryScheduled,
@@ -36,6 +35,10 @@ from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
 from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
+
+
+class SessionSetupFailed(ValueError):
+    """Native session setup is invalid; stop without retrying its input."""
 
 
 @dataclass(kw_only=True)
@@ -101,8 +104,8 @@ class SelectedExecution(NativeExecution):
                      else owner.runtime.read_keys())
             for path in paths:
                 _private_session_dir(Path(path).absolute().parent)
-        except (NativePiUnavailable, OSError) as error:
-            raise ValueError(f"Native session setup failed: {error}") from error
+        except NativePiUnavailable as error:
+            raise SessionSetupFailed(f"Native session setup failed: {error}") from error
         self.session_directory = directory
         if self.selected_tool_intent is not None:
             if type(self.selected_tool_intent) is not SelectedToolIntent:
@@ -158,9 +161,9 @@ class SelectedExecution(NativeExecution):
                             self.session_file,
                             self,
                         )
-                    except (NativePiUnavailable, CoordinationError, OSError, ValueError):
+                    except NativePiUnavailable as error:
                         await participant.fail_before_send(self.max_attempts)
-                        raise
+                        raise SessionSetupFailed(f"Native session acquisition failed: {error}") from error
                     try:
                         return await SelectedConsideration(participant).run(self, session)
                     except RetryScheduled:

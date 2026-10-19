@@ -938,6 +938,10 @@ class PrivateEvidenceRead:
         earlier revision. Each observation also fences the next: growth seen on
         the descriptor cannot be hidden by shrinking the named file back.
         """
+        try:
+            TrustedAncestorRole.require_path(self.path.parent)
+        except (OSError, ValueError) as error:
+            raise NativePiUnavailable("Native Pi evidence has an unsafe ancestor") from error
         # Detect replacement before classifying the old descriptor's now-zero
         # links: observing a new named source takes the existing reverify path.
         for info in (self.path.lstat(), os.fstat(self.stream.fileno())):
@@ -956,11 +960,10 @@ class PrivateEvidenceRead:
 def _private_session_dir(directory: Path) -> None:
     if ".." in directory.parts:
         raise NativePiUnavailable("Native Pi session directory is not lexical")
-    for ancestor in (directory, *directory.parents):
-        info = ancestor.lstat()
-        failed = TrustedAncestorRole.violation(info)
-        if failed is not None:
-            raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {failed.declared_name}")
+    try:
+        TrustedAncestorRole.require_path(directory)
+    except ValueError as error:
+        raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
     if PrivateDirectoryRole.violation(directory.lstat()) is not None:
         raise NativePiUnavailable("Native Pi session directory must be owner-only")
 
