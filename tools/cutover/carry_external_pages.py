@@ -14,7 +14,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalEventRow, ExternalTranscript, NoEarlierPage
 from agent_comms.field_codec import FieldCodec
 
-from cutover.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 def carry(root: Path, *, apply: bool) -> int:
