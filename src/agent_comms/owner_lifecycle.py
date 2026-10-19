@@ -263,7 +263,7 @@ class OwnerLifecycle:
             return owned
 
     def ensure_owner(
-        self, name: str, *, agent_bin: str = NativeArguments.default_binary,
+        self, name: str, *, agent_bin: str | None = None,
         agent_args: Sequence[str] | None = None,
     ) -> Thread:
         with _store_lock(self._wire_lock_path):
@@ -277,7 +277,7 @@ class OwnerLifecycle:
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, agent_bin, agent_args,
+                else self._launch_owner_unlocked(thread, NativeArguments.configured_binary(agent_bin), agent_args,
                                                  launch_runtime=LaunchRuntime.running())
             )
 

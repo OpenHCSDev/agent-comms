@@ -154,8 +154,6 @@ class PiSessionChild(PiChild):
             if runtime.project_socket is not None:
                 address = resources.enter_context(PrivateSocketRole.address(runtime.project_socket))
                 runtime = replace(runtime, project_socket=address)
-            if runtime.root is None:
-                raise NativePiUnavailable('Native child requires its explicit root')
             path = runtime.root / 'runtime' / f'native-launch-{uuid4().hex}.json'
             arguments = runtime.write(path)
             resources.callback(path.unlink, missing_ok=True)

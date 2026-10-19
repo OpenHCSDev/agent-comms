@@ -51,12 +51,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
         from .launch_runtime import LaunchRuntime
-        root = Path(args.root).expanduser() if args.root else None
         if args.comms_launch is not None:
+            if args.root is not None:
+                raise ValueError("A launch record and --root cannot both select the root")
             runtime = LaunchRuntime.read(args.comms_launch)
             LaunchRuntime.install(runtime)
-            if root is None:
-                root = runtime.root
+            root = runtime.root
+        else:
+            root = Path(args.root).expanduser() if args.root else None
         command = CliCommand.member_named(args.command).from_namespace(args)
         with client_wire(root) as comms:
             return command.run(comms, sys.stdout)

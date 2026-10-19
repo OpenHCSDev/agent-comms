@@ -174,7 +174,7 @@ class AppendProjectionStore(RuntimeFile, Generic[Checkpoint]):
         except (OSError, MalformedRecord):
             return NoCheckpoint()  # Unreadable disposable index: rebuilt from its source.
 
-    def _write_unlocked(self, text: str) -> None:
+    def _replace_unlocked(self, text: str) -> None:
         _atomic_write_text(self.path, text, fsync_parent=self.fsync_parent)
 
     def write(self, record: Checkpoint) -> None:

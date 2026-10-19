@@ -16,6 +16,7 @@ from agent_comms.coordination_errors import IdentityConflict, PublicationActivat
 
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
+from .launch_runtime import LaunchRuntime
 from .native_package import (
     MANIFEST, NativePackageError, VerifiedNativePackage, pinned_native_package,
 )
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
     from .acp_extension import CursorScope
     from .active_route import CommsRoute
     from .cursor_publication import CursorPublication
-    from .launch_runtime import LaunchRuntime
     from .threads import Thread
 
 
@@ -148,7 +148,7 @@ class PrivateNkLaunch(RootLaunch):
         return runtime.native_entrypoint
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
-        if agent_bin == NativeArguments.default_binary:
+        if agent_bin == LaunchRuntime.agent_bin:
             # The default stock binary cannot attest native input IDs.
             # Keep the owner on this installation's pinned Pi entrypoint.
             agent_bin = runtime.native_entrypoint

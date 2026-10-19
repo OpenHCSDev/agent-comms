@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -39,10 +39,7 @@ class RestartEnvironment:
         return {"PI_CODING_AGENT_DIR": str(self.agent_directory)}
 
     def auth_revision(self) -> tuple[int, int]:
-        try:
-            info = (self.native_config / "auth.json").stat()
-        except FileNotFoundError:
-            return 0, 0
+        info = (self.native_config / "auth.json").stat()
         return info.st_mtime_ns, info.st_size
 
 
@@ -90,6 +87,7 @@ class LaunchRuntime:
     parent_lifeline_fd: int | None = None
     annotation_grant: MessageReference | None = None
 
+    current_pointer: ClassVar[Path] = Path("~/.local/share/agent-comms/current")
     argument: ClassVar[str] = "--comms-launch"
     _running: ClassVar[LaunchRuntime | None] = None
 
@@ -160,23 +158,12 @@ class LaunchRuntime:
         result["VIRTUAL_ENV"] = str(self.prefix)
         return result
 
-    def accepts_launch_record(self, argv: Sequence[str]) -> bool:
-        """Identify Core entry points from their installed declarations, not a command list."""
-        from importlib.metadata import distribution
-        import shutil
-        if not argv:
-            raise ValueError('Child command is empty')
-        declarations = distribution('agent-comms').entry_points
-        executable = Path(shutil.which(argv[0]) or argv[0]).absolute()
-        for declaration in declarations:
-            if declaration.group != 'console_scripts':
-                continue
-            if executable == self.interpreter.with_name(declaration.name).absolute():
-                return True
-            if (executable == self.interpreter.absolute()
-                    and tuple(argv[1:3]) == ('-m', declaration.module)):
-                return True
-        return False
+    @classmethod
+    def require_current_writer(cls) -> None:
+        """Both the interpreter and imported Core must belong to the installed runtime."""
+        current = cls.current_pointer.expanduser().resolve(strict=True)
+        if Path(sys.prefix).resolve() != current or not Path(__file__).resolve().is_relative_to(current):
+            raise RelationViolationError("Live root writes require the installed current Core runtime")
 
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
