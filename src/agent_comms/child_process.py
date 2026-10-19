@@ -1428,8 +1428,7 @@ class AttachedChild(ChildProcess):
 
     def close_input(self) -> None:
         if self.stdin is not None:
-            with suppress(OSError):
-                self.stdin.close()
+            self.stdin.close()
 
     async def finish(self) -> ChildOutcome:
         """Allow a completed streaming protocol to flush and exit after EOF."""

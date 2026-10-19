@@ -28,6 +28,7 @@ from .active_route import ActiveRoute, replace_unreadable_active_route
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .change_report import ChangeReport
+from .check_root import CheckRoot
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel
 from .channels import ANY_CHANNEL
@@ -967,6 +968,20 @@ class CliCommand(
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckRootCliCommand(CliCommand, declared_name="check-root"):
+    help = "Run a command against selected recent history, then remove its private root"
+    threads: tuple[str, ...] = option(normalize=_tags, help="Comma-separated source thread names")
+    into: Annotated[Path, PathText] = option(
+        help="New directory under your agent scratch directory"
+    )
+    argv: tuple[str, ...] = option("argv", nargs=argparse.REMAINDER,
+                                 help="-- COMMAND ARGS; use {root} for the private root argument")
+
+    def apply(self, ctx: Comms) -> CliResult:
+        return CheckRoot(ctx, self.threads, self.into).run(self.argv)
 
 
 @dataclass(frozen=True, kw_only=True)

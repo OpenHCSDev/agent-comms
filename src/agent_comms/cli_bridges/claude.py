@@ -14,10 +14,8 @@ from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import (
-    Binding, LineMonitorBridge, Options, SessionFacts, TranscriptUpdate,
-    run_bridge,
-)
+from .shared import Binding, LineMonitorBridge, Options, run_bridge
+from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 
 
 class SubagentMeta(WireModel):
@@ -34,12 +32,12 @@ class ClaudeJsonLines(JsonLinesFile):
         return self.records.validate_python({**json.loads(raw), 'position': position})
 
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
-                       raw: bytes) -> Iterator[TranscriptUpdate]:
+                       raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from state.located(record.cwd)
         for update in record.updates(state):
             yield from update.during(state.phase)
 
-    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
+    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         """The file is named by its session; a subagent's task description is beside it, not in it."""
         meta = self.source.with_suffix('.meta.json')
         title = SubagentMeta.model_validate_json(meta.read_bytes()).description if meta.is_file() else ''
@@ -52,7 +50,7 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
 
     suffixes = frozenset({'.jsonl'})
 
-    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
+    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         if self.session_id not in (None, self.source.stem):
             raise ValueError('The transcript belongs to a different Claude session.')
         return super().facts(stream, boundary)
@@ -104,7 +102,7 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
             start = stream.tell()
         return start
 
-    async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
+    async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()
         with self.source.open('rb') as stream:
             original = FileRevision.from_file(stream)

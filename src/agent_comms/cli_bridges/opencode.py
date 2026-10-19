@@ -18,10 +18,8 @@ from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .history import OnlineHistory, OpenCodeHistory
-from .shared import (
-    IncomingFrame, TranscriptBridge, TranscriptUpdate, Options, run_bridge,
-    Watch, Binding,
-)
+from .shared import Binding, CliBridge, IncomingFrame, Options, TranscriptBridge, Watch, run_bridge
+from agent_comms.runtime_updates import RuntimeUpdate
 from .opencode_protocol import (
     Connected, OpenCodeEvent, OpenCodeStream, Prompt, SavedInput, Session, TextInput, Toast,
     SESSION_STATUSES, MESSAGES, IdleStatus,
@@ -60,6 +58,10 @@ class Attach(Watch):
     """The selected native session owns its Core thread and bridge child."""
 
     pid: int
+
+    @classmethod
+    def serves(cls, bridge: type[CliBridge]) -> bool:
+        return issubclass(bridge, OpenCodeBridge)
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -128,7 +130,7 @@ class OpenCodeConnection:
         async with self.http.get(self.path + '/message', params=query) as history:
             return MESSAGES.validate_json(await history.read())
 
-    async def status(self) -> TranscriptUpdate:
+    async def status(self) -> RuntimeUpdate:
         async with self.http.get('/session/status') as status_response:
             statuses = SESSION_STATUSES.validate_json(await status_response.read())
         # OpenCode omits idle sessions from its status map.
@@ -179,12 +181,12 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
     def connection(self) -> AsyncIterator[OpenCodeConnection]:
         return OpenCodeConnection.open(self.server, self.directory, self.session)
 
-    async def history(self) -> AsyncIterator[TranscriptUpdate]:
+    async def history(self) -> AsyncIterator[RuntimeUpdate]:
         async with self.connection() as connection:
             async for update in self.seen(connection, OpenCodeStream(connection)):
                 yield update
 
-    async def seen(self, connection: OpenCodeConnection, stream: OpenCodeStream) -> AsyncIterator[TranscriptUpdate]:
+    async def seen(self, connection: OpenCodeConnection, stream: OpenCodeStream) -> AsyncIterator[RuntimeUpdate]:
         messages = await connection.messages(self.query)
         stream.know(messages)
         for update in self.saved(connection.info, messages):
@@ -193,7 +195,6 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
 
 
 class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared_name=None):
-    operations = (*TranscriptBridge.operations, Attach)
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 
     def __init__(self, options: OpenCodeOptions, binding: Binding, db: CoordinationStore) -> None:
@@ -205,7 +206,7 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared
         parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')
         parser.add_argument('--directory', type=Path, default=Path.cwd(), help='OpenCode session working directory')
 
-    async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
+    async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         async with self.connection() as connection:
             # Subscribe before taking snapshots; the HTTP stream retains the overlap.
             # Finished identities prevent buffered parts reopening a finished draft.

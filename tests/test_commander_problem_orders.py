@@ -974,8 +974,8 @@ def test_column_carries_run_before_order_validation(commander):
         list(Todo.stream(db))
     repo = Path(__file__).parents[1]
     names = [step.name for step in CarryChain.at(repo, 'HEAD').steps]
-    members = {'carry_todo_messages': ('TodoMessages', 3),
-               'carry_todo_corrections': ('TodoCorrections', 0),
+    members = {'carry_todo_corrections': ('TodoCorrections', 0),
+               'carry_todo_messages': ('TodoMessages', 3),
                'carry_order_run': ('OrderRuns', 0),
                'carry_todo_open_indexes': ('TodoOpenIndexes', 0)}
     assert [name for name in names if name in members] == list(members)

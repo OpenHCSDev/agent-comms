@@ -20,7 +20,6 @@ from .carry import Carried, Carry
 class TurnRecords(Carry):
     """Each registry thread names its turn record instead of storing an idle turn."""
 
-    after = "carry_todo_voids"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

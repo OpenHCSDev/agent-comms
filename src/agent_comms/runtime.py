@@ -433,8 +433,7 @@ class RuntimeConnection:
             try:
                 if writer is not None:
                     writer.close()
-                    with suppress(OSError, ConnectionError):
-                        await writer.wait_closed()
+                    await writer.wait_closed()
             finally:
                 self._requests.discard(task)
 
@@ -560,15 +559,16 @@ class RuntimeProxy(RuntimeConnection):
                         request.id, RequestPermissionResponse.model_validate(reply)
                     )
             finally:
-                if (
-                    token == self._controller_token
-                    and self.writer is not None
-                    and not self.writer.is_closing()
-                ):
-                    self.writer.write(response.wire())
-                    with suppress(OSError, ConnectionError, TimeoutError):
+                try:
+                    if (
+                        token == self._controller_token
+                        and self.writer is not None
+                        and not self.writer.is_closing()
+                    ):
+                        self.writer.write(response.wire())
                         await asyncio.wait_for(self.writer.drain(), timeout=1)
-                self._permission_tasks.pop(request.id, None)
+                finally:
+                    self._permission_tasks.pop(request.id, None)
 
         self._permission_tasks[request.id] = asyncio.create_task(ask())
 
@@ -616,5 +616,4 @@ class RuntimeProxy(RuntimeConnection):
         await self.close_permissions()
         await super().close()
         if self.writer is not None:
-            with suppress(OSError, ConnectionError):
-                await self.writer.wait_closed()
+            await self.writer.wait_closed()

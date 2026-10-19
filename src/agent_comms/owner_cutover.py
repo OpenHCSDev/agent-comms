@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from contextlib import nullcontext
 from collections.abc import Sequence
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
@@ -58,8 +59,6 @@ class OwnerCutover(ABC):
 
     def recover(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         """No recovery without this operation's unchanged-original proof."""
-        from .errors import RelationViolationError
-
         raise RelationViolationError('This operation has not checked original-unchanged recovery')
 
     def failed(self, failure: StoppedOwnerFailure) -> NoReturn:

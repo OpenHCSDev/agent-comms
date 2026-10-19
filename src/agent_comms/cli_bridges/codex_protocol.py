@@ -18,10 +18,26 @@ from pydantic import (
 )
 
 from agent_comms.activity import ActivityState
-from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
-from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.runtime_updates import (
+    AppendDraftItem,
+    CompletedItem,
+    DraftAccumulator,
+    FinishedTurn,
+    HiddenItem,
+    PageItem,
+    ParagraphDraft,
+    PublishedPage,
+    RuntimeUpdate,
+    StartedItem,
+    TextDraft,
+    TurnEnded,
+    TurnStarted,
+)
+from agent_comms.tool_calls import ToolCall
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
@@ -31,23 +47,6 @@ from agent_comms.transcript_events import (
     ToolEndTranscript,
     TranscriptEvent,
     UserTranscript,
-)
-
-from .shared import (
-    AppendDraftItem,
-    CompletedItem,
-    DraftAccumulator,
-    FinishedTurn,
-    HiddenItem,
-    ParagraphDraft,
-    PageItem,
-    PublishedPage,
-    StartedItem,
-    TextDraft,
-    ToolCall,
-    TranscriptUpdate,
-    TurnEnded,
-    TurnStarted,
 )
 
 
@@ -196,7 +195,7 @@ class ThreadStatus(TaggedWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
     )
 
-    def update(self) -> TranscriptUpdate:
+    def update(self) -> RuntimeUpdate:
         return TurnEnded()
 
 
@@ -215,7 +214,7 @@ class SystemErrorStatus(ThreadStatus):
 class ActiveStatus(ThreadStatus):
     wire_tag = 'active'
 
-    def update(self) -> TranscriptUpdate:
+    def update(self) -> RuntimeUpdate:
         return TurnStarted()
 
 
@@ -297,7 +296,7 @@ class Item(TaggedWire, ABC):
     def events(self) -> tuple[TranscriptEvent, ...]:
         """The finished item's presentation."""
 
-    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> TranscriptUpdate:
+    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
         return CompletedItem(turn_id, self.id, events)
 
     def accumulator(self, started_at: EventTime) -> DraftAccumulator:
@@ -348,7 +347,7 @@ class UserItem(Item):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return (UserTranscript('\n'.join(part.display for part in self.content), position=self.id),)
 
-    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> TranscriptUpdate:
+    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
         # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
         if BusInput.identifies(self.clientId):
             return HiddenItem(events)
@@ -374,8 +373,9 @@ class ToolItem(Item, ABC):
 
     @property
     def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments,
-                        tool=ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id))
+        shown = ToolCall(self.id, self.tool_name, self.arguments)
+        tool = ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id)
+        return shown.recorded(tool) if tool else shown
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded, self.id)
@@ -658,8 +658,9 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'path': self.path}, self.kind.patch(self.path, self.diff),
-                        FilePatchTool(path=self.path)).finished('', ok, call_id)
+        call = ToolCall(call_id, 'edit', {'path': self.path}).recorded(FilePatchTool(path=self.path))
+        diff = self.kind.patch(self.path, self.diff)
+        return (call.patched(diff) if diff else call).finished('', ok, call_id)
 
 
 class FileChangeItem(Item):
@@ -736,7 +737,7 @@ class ItemEntry(WireModel):
     def completed(self) -> bool:
         return self.completedAtMs is not None
 
-    def publication(self) -> TranscriptUpdate:
+    def publication(self) -> RuntimeUpdate:
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
         event_time = self.started_at.continued_from(self.completedAtMs / 1000)
@@ -766,7 +767,7 @@ class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
     threadId: str
 
     @abstractmethod
-    def apply(self, stream: ItemStream) -> TranscriptUpdate: ...
+    def apply(self, stream: ItemStream) -> RuntimeUpdate: ...
 
 
 class TurnHeader(WireModel):
@@ -777,7 +778,7 @@ class TurnBegan(TranscriptNotification):
     method = 'turn/started'
     turn: TurnHeader
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+    def apply(self, stream: ItemStream) -> RuntimeUpdate:
         return TurnStarted()
 
 
@@ -785,7 +786,7 @@ class TurnFinished(TranscriptNotification):
     method = 'turn/completed'
     turn: TurnHeader
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+    def apply(self, stream: ItemStream) -> RuntimeUpdate:
         return FinishedTurn(self.turn.id)
 
 
@@ -798,7 +799,7 @@ class Started(ItemNotification):
     item: CodexItem
     startedAtMs: int
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+    def apply(self, stream: ItemStream) -> RuntimeUpdate:
         return StartedItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail,
                            self.item.accumulator(EventTime.capture(self.startedAtMs / 1000)))
 
@@ -808,7 +809,7 @@ class Completed(ItemNotification):
     item: CodexItem
     completedAtMs: int
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+    def apply(self, stream: ItemStream) -> RuntimeUpdate:
         # Completion is authoritative, including after joining mid-item.
         return ItemEntry(turnId=self.turnId, item=self.item,
                          completedAtMs=self.completedAtMs).publication()
@@ -842,7 +843,7 @@ class ItemStream:
     def __init__(self, thread: str):
         self.thread = thread
 
-    def receive(self, notification: RpcNotification) -> tuple[TranscriptUpdate, ...]:
+    def receive(self, notification: RpcNotification) -> tuple[RuntimeUpdate, ...]:
         declarations = TranscriptNotification.__registry_config__.registry_dict
         if notification.method not in declarations:
             # Usage, account, raw/private reasoning and other control

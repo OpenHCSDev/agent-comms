@@ -9,7 +9,6 @@ from .carry import Carried, Carry
 
 
 class StartingActivity(Carry):
-    after = "carry_external_positions"
 
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
