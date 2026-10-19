@@ -410,10 +410,8 @@ class OwnedTurn:
     async def fail(self, failure: Exception, cause: Exception) -> NoReturn:
         """Settle and report once, retaining the exception that actually failed the turn."""
         await Coordination.run_worker(self.settle_unbound)
-        request_failure = await self.progress.report_failure(failure)
-        if request_failure is not None:
-            raise request_failure.request_error() from cause
-        raise cause
+        outcome = await self.progress.report_failure(failure)
+        outcome.raise_fault(cause)
 
     async def run_native(self) -> None:
         try:

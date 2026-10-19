@@ -76,6 +76,13 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     prepared_owner, monkeypatch
 ):
     owner, session, native = prepared_owner
+    updates = []
+
+    class Client:
+        async def session_update(self, **kwargs):
+            updates.append(kwargs["update"])
+
+    owner.on_connect(Client())
     original = native.session.read_bytes()
     source = OSError("native diagnostic source")
     failure = RuntimeError("selected operation failed")
@@ -94,6 +101,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     assert caught.value.__cause__ is failure and failure.__cause__ is source
     request_failure = RequestFailure.from_error(caught.value)
     assert request_failure.notification_published and request_failure.failure.input_state.public_status == "not_sent"
+    assert len(failure_facts(updates, RequestFailedUpdate)) == 1
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
     assert not owner.turns.turn_locks[session].locked()
