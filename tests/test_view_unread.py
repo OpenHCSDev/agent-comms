@@ -1,3 +1,4 @@
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 import os
 import subprocess
@@ -49,7 +50,7 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     assert snapshot.channel_unread["#ci"] == snapshot.channel_unread["#docs"] == 1
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
-    assert comms.bus.pending_count("receiver", "#ci") == 1
+    assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 1
     comms.messaging.send_user_message("#ci", "my own message", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 1

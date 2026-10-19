@@ -78,7 +78,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     @classmethod
     def wire_member(cls, value):
         try:
-            member = cls.decode(value.get("type"))
+            member = cls.member_named(value.get("type"))
         except ValueError:
             return UnknownEntry
         return member.wire_variant(value)

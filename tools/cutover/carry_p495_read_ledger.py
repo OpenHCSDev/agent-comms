@@ -14,13 +14,13 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import ChannelConversation, DMConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
 @dataclass(frozen=True)
 class PreviousConversation:
     target: str = ''
-    participants: tuple[RecordedThreadIncarnation, ...] = ()
+    participants: tuple[ThreadIncarnation, ...] = ()
 
     def current(self):
         if self.participants:

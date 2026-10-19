@@ -33,7 +33,7 @@ from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
-from .turn_lease import FinishedTurnFence
+from .turn_lease import TurnCompletion
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
@@ -267,53 +267,46 @@ class Goals:
             return ()
         return closed
 
-    def release_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
+    def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
         """Release waits after the latest exact, still-idle child turn.
 
         ACP invokes this after terminal publication, never at the earlier UI
         `settled` event. A later turn (even already finished) invalidates the
         old fence; a rename or unrelated metadata edit does not.
         """
-        if fence is None:
-            return ()
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            canonical = snapshot.canonical_name(fence.identity.incarnation.name)
-            source = snapshot.threads.get(canonical)
-            observed = (
-                source.observed_turn(snapshot.claimed_generations.get(canonical, 0))
-                if source is not None
-                else None
-            )
-            if (
-                source is None
-                or source.turn_record.read().executing
-                or observed is None
-                or observed != fence.renamed(canonical)
-                or not snapshot.statuses[canonical].active
-            ):
+            sources = fence.idle_sources(snapshot)
+            if not sources:
                 return ()
-            waits = self.waits.read()
+            (source,) = sources
+            canonical = source.name
             released: list[str] = []
-            for goal_id, wait in waits.items():
-                if not any(
-                    target.incarnation.resolved(snapshot) == source.incarnation
-                    and (generation := wait.target_turn_generations[index]) is not None
-                    and 0 < generation <= fence.identity.generation
-                    for index, target in enumerate(wait.targets)
-                ):
-                    continue
-                owner = snapshot.threads.get(snapshot.canonical_name(wait.owner.name))
-                if owner is None:
-                    continue
-                if any(self._release_finished_wait(
-                    goal, owner, snapshot, canonical, goal_id, wait,
-                ) for goal in owner.goal.active()):
-                    released.append(owner.name)
+            for wait in self.waits.targeting(source.incarnation.require_recorded()):
+                for owner in snapshot.threads_for(wait.owner):
+                    if any(
+                        self._release_finished_wait(
+                            goal,
+                            owner,
+                            snapshot,
+                            canonical,
+                            wait.goal_id,
+                            wait,
+                        )
+                        for goal in owner.goal.active()
+                    ):
+                        released.append(owner.name)
             return tuple(released)
 
-    def _release_finished_wait(self, goal: Goal, owner: Thread, snapshot: RegistrySnapshot,
-                               canonical: str, goal_id: str, wait: RecordedGoalWait) -> bool:
+    def _release_finished_wait(
+        self,
+        goal: Goal,
+        owner: Thread,
+        snapshot: RegistrySnapshot,
+        canonical: str,
+        goal_id: str,
+        wait: RecordedGoalWait,
+    ) -> bool:
         if goal.id != goal_id or not wait.current_for(goal, owner.incarnation.require_recorded()):
             return False
         if any(self.agents.is_working(target.incarnation, snapshot) for target in wait.targets):

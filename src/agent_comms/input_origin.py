@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import field, dataclass
 from typing import TYPE_CHECKING, Annotated
 
@@ -19,6 +20,27 @@ if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+
+
+class InputDelivery:
+    """Whether an input delivered one bus message."""
+
+    @abstractmethod
+    def references(self) -> tuple[MessageReference, ...]: ...
+
+
+@dataclass(frozen=True)
+class DeliveredInput(InputDelivery):
+    reference: MessageReference
+
+    def references(self) -> tuple[MessageReference, ...]:
+        return (self.reference,)
+
+
+class UndeliveredInput(InputDelivery):
+    def references(self) -> tuple[MessageReference, ...]:
+        return ()
+
 
 
 class InputOrigin(DeclaredFamily, affix="InputOrigin"):
@@ -39,8 +61,8 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def matches_owner(self, recorded_name, incarnation):
         return recorded_name == incarnation.name
 
-    def delivery_reference(self, root_id: str) -> MessageReference | None:
-        return None
+    def delivery_reference(self, root_id: str) -> InputDelivery:
+        return UndeliveredInput()
 
     @property
     def reply_target(self) -> str | None:
@@ -81,8 +103,8 @@ class WireInputOrigin(InputOrigin):
     root_id: Annotated[str, Id128Text]
     reference: MessageReference
 
-    def delivery_reference(self, root_id: str) -> MessageReference | None:
-        return self.reference if self.root_id == root_id else None
+    def delivery_reference(self, root_id: str) -> InputDelivery:
+        return DeliveredInput(self.reference) if self.root_id == root_id else UndeliveredInput()
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
         raise RelationViolationError("Wire input provenance belongs to its original routed producer")

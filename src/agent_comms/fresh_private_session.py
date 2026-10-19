@@ -27,7 +27,7 @@ def create_fresh_private_session(
     path = session_dir / f"enrolled-{session_id}.jsonl"
     header = SessionEntry(
         id=session_id, version=3, cwd=str(worktree),
-        timestamp=datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        timestamp=datetime.now(UTC),
     )
     encoded = json.dumps(header.to_wire(), separators=(",", ":"), allow_nan=False).encode() + b"\n"
     try:

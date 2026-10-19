@@ -75,10 +75,10 @@ def test_family_names_and_boundary_decoding():
     assert WireExportFormat.names() == ("jsonl", "text")
     for member in WireExportFormat.members_with(WireExportFormat):
         value = member()
-        assert WireExportFormat.decode(value.declared_name)() == value
+        assert WireExportFormat.member_named(value.declared_name)() == value
         assert FieldCodec.decode(WireExportFormat, FieldCodec.encode(value)) == value
     with pytest.raises(ValueError):
-        WireExportFormat.decode("unknown")
+        WireExportFormat.member_named("unknown")
 
 
 def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
@@ -94,7 +94,7 @@ def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
                 return deque(rows, maxlen=self.count)
 
         limit = LastMessagesLimit(2)
-        assert WireExportLimit.decode("last_messages") is LastMessagesLimit
+        assert WireExportLimit.member_named("last_messages") is LastMessagesLimit
         assert FieldCodec.decode(WireExportLimit, {"kind": "last_messages", "count": 2}) == limit
         destination = tmp_path / "last.jsonl"
         acknowledgement = WireTranscriptExporter(

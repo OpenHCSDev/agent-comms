@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -295,6 +296,30 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     script.done('P2', late, late)
     struck = comms.goals.todos.get('P2')
     assert script.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
+
+
+def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_script):
+    """P136 was due 21:20:00 and delivered 21:20:35; its strike read "due 21:20 delivered 21:20"."""
+    comms, _ = commander
+    script, _ = commander_script
+
+    def git(*args, at=None):
+        env = {**os.environ, 'GIT_AUTHOR_DATE': f'@{at} +0000', 'GIT_COMMITTER_DATE': f'@{at} +0000'} if at else None
+        return subprocess.check_output(('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t',
+                                        *args), env=env, stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'base', at=500)
+    clock = lambda at: time.strftime('%H:%M:%S', time.localtime(at))  # noqa: E731
+    for pid, at in (('P1', 2000), ('P2', 2035)):
+        create(commander, pid, deadline=2000)
+        git('commit', '-q', '--allow-empty', '-m', f'{pid} delivered', at=at)
+        delivered = git('rev-parse', 'HEAD')
+        git('update-ref', 'refs/remotes/origin/main', delivered)
+        script.done(pid, delivered, delivered)
+    assert script.struck(comms.goals.todos.get('P1'), 'worker') == 0
+    (strike,) = comms.goals.todos.get('P2').strikes
+    assert strike.reason.startswith(f'P2 order order-P2 late by 35 s: due {clock(2000)}, '
+                                    f'delivered {clock(2035)} as {delivered}')
 
 
 def test_a_main_merge_is_never_the_delivered_commit(commander):
@@ -748,21 +773,24 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     from agent_comms.commander import request
     comms, caller = commander
     request = importlib.reload(request)
-    assert request.stalled() == [
+    standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
+    def stalled():
+        return [rule.line() for rule in standing.RequestStalled.violations(comms, 'lead')]
+    assert stalled() == [
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     todo = create(commander, 'P1')
     lead = comms.registry.require('lead').incarnation
     assert todo.goal == GoalRef('lead', lead.created_at, 'request')
-    assert request.stalled() == []
+    assert stalled() == []
     with pytest.raises(ValueError, match='still has open orders'):
         request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     with pytest.raises(ValueError, match='still open'):
         request.RequestAddVerb(text='A second owner request while the first is open').run()
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
-    assert request.stalled() == [
+    assert stalled() == [
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
-    assert request.stalled() == []
+    assert stalled() == []
 
 
 def stray(commander, problem, generation):
@@ -892,7 +920,8 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
     rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
-        lines = rotate.detached(rotate.owed_orders())
+        standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
+        lines = [rule.line() for rule in standing.Detached.violations(comms, 'lead')]
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
 
 

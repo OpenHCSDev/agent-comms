@@ -25,7 +25,9 @@ from .restart_refusals import (
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
-from .thread_identity import ClaimedIdentity, GenerationCounter, OwnerIdentity, TurnIdentity
+from .thread_identity import (
+    ClaimedIdentity, GenerationCounter, OwnerIdentity, RecordedThreadIncarnation, TurnIdentity,
+)
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
@@ -33,7 +35,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
@@ -175,14 +177,21 @@ class RegistryDocument(RegistryPresence):
         metadata={"wire_name": 'admissions', "thread_slice": GenerationOf})
 
     def copy(self) -> RegistryDocument:
-        return replace(self, **{
-            declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
-            for declared in fields(self)})
+        return replace(
+            self,
+            **{
+                declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
+                for declared in fields(self)
+            },
+        )
 
     def install_thread(self, thread: Thread) -> None:
         """Retire a withdrawn reference inside this registry transaction."""
-        previous = self.threads.get(thread.name)
-        if previous is not None and previous.turn_record != thread.turn_record:
+        if (
+            thread.name in self.threads
+            and self.threads[thread.name].turn_record != thread.turn_record
+        ):
+            previous = self.threads[thread.name]
             previous.turn_record.without_claim()
         self.threads[thread.name] = thread
 
@@ -516,21 +525,21 @@ class RegistryDocument(RegistryPresence):
         self.statuses[name] = resumed
         self.last_seen[name] = time.time()
 
-    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
+    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]:
         """Release only this exact lease; a revoked input grant cannot confirm completion."""
         name = self.canonical_name(lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None:
-            return False, None
+            return False, NoFinishedTurn()
         canonical_lease = lease.renamed(name)
         record = current.turn_record
         if record != canonical_lease.record:
-            return False, None
+            return False, NoFinishedTurn()
         if TurnIdentity(current.incarnation, current.turn_generation) != canonical_lease.identity:
-            return False, None
+            return False, NoFinishedTurn()
         turn = record.read().require_active()
         if not turn.may_release(canonical_lease):
-            return False, None
+            return False, NoFinishedTurn()
         attested = canonical_lease.can_attest(self.claims.generations[name])
         attested = attested and turn.claimed_generation is not None and self.statuses[name].active
         keeps_resume = turn.phase.keeps_project_resume
@@ -542,7 +551,7 @@ class RegistryDocument(RegistryPresence):
         )
         self.last_seen[name] = time.time()
         if not attested:
-            return True, None
+            return True, NoFinishedTurn()
         return True, FinishedTurnFence(
             identity=canonical_lease.identity,
             turn_id=lease.turn_id,
@@ -610,6 +619,17 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     claimed_generations: Mapping[str, int]
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
+    def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
+        return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
+
+    def idle_after(self, fence: FinishedTurnFence) -> tuple[Thread, ...]:
+        return tuple(
+            thread
+            for thread in self.threads_for(fence.identity.incarnation.require_recorded())
+            if self.statuses[thread.name].active
+            and thread.latest_idle_turn(fence, self.claimed_generations.get(thread.name, 0))
+        )
+
     @classmethod
     def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
         """One live registry cut owns the index and all its source maps."""
@@ -637,8 +657,8 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
-        thread = self.by_lookup.get(lookup)
-        if thread is not None:
+        if lookup in self.by_lookup:
+            thread = self.by_lookup[lookup]
             if thread.name != self.canonical_name(recipient.canonical_thread):
                 raise RelationViolationError("Frozen recipient name does not match its lookup.")
             return RegisteredRecipient(thread)

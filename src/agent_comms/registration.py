@@ -24,7 +24,7 @@ from .thread_status import (
 )
 from .threads import Thread
 from .storage_rules import StorageRule
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import TurnCompletion, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -235,7 +235,7 @@ class Registration:
             edit.commit()
             return result
 
-    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
+    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]:
         with self.store.editing() as edit:
             result = edit.document.release_turn(lease)
             edit.commit()

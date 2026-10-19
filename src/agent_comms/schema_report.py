@@ -62,7 +62,7 @@ class StoreSchemaReport:
         unknown = []
         for table in tables:
             try:
-                owner = TypedTable.decode(table.name)
+                owner = TypedTable.member_named(table.name)
             except ValueError:
                 unknown.append(table.name)
                 continue

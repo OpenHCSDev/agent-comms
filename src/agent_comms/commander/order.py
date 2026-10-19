@@ -234,7 +234,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append(str(refused))
     serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
     try:
-        phase = OrderPhase.decode(serves[1] if serves else UnplannedPhase.declared_name)
+        phase = OrderPhase.member_named(serves[1] if serves else UnplannedPhase.declared_name)
     except ValueError as refused:
         problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
@@ -524,11 +524,10 @@ def done(pid, sha, delivered=None):
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
     call(CommsOrderDoneTool(problem=pid, delivery=delivery))
-    at = COMMS.goals.todos.get(pid).order.delivery.at
+    lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
-    if not operation and at.at > todo.deadline.at:
-        strike(unit, f'late on {pid}: order {todo.order.id} due {hhmm(todo.deadline)} '
-                     f'delivered {hhmm(at)} as {delivered}')
+    if not operation and lateness.late():
+        strike(unit, f'{pid} order {todo.order.id} {lateness} as {delivered}')
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 
@@ -641,12 +640,13 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
     late, stalled, passed = [], [], []
     for t in pending:
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
-        if (entered := work.stalled_since(ordered)) is not None and since < entered < now:
+        if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
         if (crossed := t.late_since(now)) is None:
             continue
         answer = reply(t.holder, ordered) if work.strikes else None
-        if since < max(crossed, work.moved or 0, float(answer.get('ts', 0)) if answer else 0):
+        replied_at = float(answer.get('ts', 0)) if answer else 0
+        if since < max(crossed, replied_at) or work.moved_after(since):
             if work.strikes:
                 due = f'due {hhmm(t.deadline)}, order {t.order.id}'
                 late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
@@ -725,7 +725,7 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.decode(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_namespace(args)
 
 
 class RuledVerb(CommanderVerb):
@@ -917,7 +917,7 @@ class ServeVerb(OrderVerb, RuledVerb):
     phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
 
     def run(self) -> None:
-        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.decode(self.phase)))
+        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
         print(f'{self.pid} serves {self.phase}')
 
 

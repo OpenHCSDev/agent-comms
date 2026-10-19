@@ -289,7 +289,7 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
     @classmethod
     def wire_member(cls, value):
         try:
-            return cls.decode(value.get(cls.wire_tag))
+            return cls.member_named(value.get(cls.wire_tag))
         except ValueError:
             return UnknownContent
 
@@ -376,7 +376,7 @@ class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
     @classmethod
     def from_text(cls, value: str):
         try:
-            member = cls.decode(value)
+            member = cls.member_named(value)
         except ValueError:
             return UnrecognizedTransportStage(value)
         return member()
@@ -477,7 +477,7 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     @classmethod
     def wire_member(cls, value):
         try:
-            return cls.decode(value.get(cls.wire_tag))
+            return cls.member_named(value.get(cls.wire_tag))
         except ValueError:
             return UnknownDiagnostic
 
@@ -597,7 +597,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @classmethod
     def wire_member(cls, value):
         try:
-            return cls.decode(value.get(cls.wire_tag))
+            return cls.member_named(value.get(cls.wire_tag))
         except ValueError:
             return UnknownMessage
 
@@ -797,7 +797,7 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     @classmethod
     def wire_member(cls, value):
         try:
-            return cls.decode(value.get(cls.wire_tag))
+            return cls.member_named(value.get(cls.wire_tag))
         except ValueError:
             return UnknownDelta
 
@@ -950,7 +950,7 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
 
     @classmethod
     def wire_member(cls, value):
-        return cls if cls is not PiResponseData else cls.decode(value.get("kind"))
+        return cls if cls is not PiResponseData else cls.member_named(value.get("kind"))
 
 
 @dataclass(frozen=True)
@@ -1192,7 +1192,7 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
 
     @classmethod
     def wire_member(cls, value):
-        return cls.decode(value[cls.wire_tag])
+        return cls.member_named(value[cls.wire_tag])
 
     def edit_diff(self):
         return None

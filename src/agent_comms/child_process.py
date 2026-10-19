@@ -391,7 +391,7 @@ class Platform(DeclaredFamily, affix="Platform"):
 
     @classmethod
     def current(cls) -> Platform:
-        return cls.decode(sys.platform)()
+        return cls.member_named(sys.platform)()
 
     @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
