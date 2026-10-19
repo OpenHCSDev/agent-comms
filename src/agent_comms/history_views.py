@@ -418,13 +418,13 @@ class HistoryViews:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
         return WireRevision.capture(self, expiry_tick=int(time.time()))
 
-    def who(self) -> tuple[ThreadRecord, ...]:
+    def who(self) -> tuple[ThreadView, ...]:
         """Presence records; their owner supplies the wire representation."""
         views = self._presence_views()
         pending = CountedRead().counts(self.bus, tuple(view.thread.name for view in views))
         return tuple(replace(view, pending=pending[view.thread.name]) for view in views)
 
-    def presence(self) -> tuple[ThreadRecord, ...]:
+    def presence(self) -> tuple[ThreadView, ...]:
         """Presence records without viewer-specific unread scans."""
         return tuple(self._presence_views())
 

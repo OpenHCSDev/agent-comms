@@ -61,7 +61,7 @@ from .exporting import (
 )
 from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .presentation import CountedRead, InboxRead, ThreadRecord, UncountedRead
+from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
@@ -607,7 +607,7 @@ class AcknowledgedResult(CliResult):
 
 @dataclass(frozen=True)
 class WhoResult(CliResult):
-    who: tuple[Annotated[ThreadRecord, WireForm], ...]
+    who: tuple[Annotated[ThreadView, WireForm], ...]
 
 
 @dataclass(frozen=True)

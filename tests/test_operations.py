@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.channels import ANY_CHANNEL
 from agent_comms.activity import ActivityState

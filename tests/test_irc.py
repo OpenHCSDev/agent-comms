@@ -1,5 +1,6 @@
 """IRC model: channels, DMs, presence, history views."""
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.channel_targets import CommandTarget
 import pytest
 

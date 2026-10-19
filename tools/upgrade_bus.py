@@ -36,7 +36,7 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
