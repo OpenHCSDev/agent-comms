@@ -335,38 +335,55 @@ def physical_path(value, cwd):
     return (path if path.is_absolute() else cwd / path).resolve()
 
 
-def shell_commands(command):
-    """Lex whole shell source, excluding here-document bodies, not physical lines."""
-    body = []
-    while command:
-        lex = shlex.shlex(command, posix=False, punctuation_chars='<>\n')
-        lex.whitespace = ' \t\r'
-        lex.whitespace_split = True
-        delimiters = []
-        for word in lex:
-            if word == '<<':
-                strip_tabs = command[lex.instream.tell() - 1:lex.instream.tell()] == '-'
-                marker = lex.get_token()
-                if not marker or marker == '\n':
-                    raise ValueError('Missing here-document delimiter')
-                delimiter = shlex.split(marker.removeprefix('-') if strip_tabs else marker)[0]
-                delimiters.append((delimiter, '\t' if strip_tabs else ''))
-            elif '\n' in word and delimiters:
-                # shlex may look one character beyond the newline. Keep the
-                # original source through that newline, then skip literal data.
-                end = command.rfind('\n', 0, lex.instream.tell()) + 1
-                body.append(command[:end])
-                lines = iter(command[end:].splitlines(keepends=True))
-                for delimiter, tabs in delimiters:
-                    for line in lines:
-                        if line.rstrip('\r\n').lstrip(tabs) == delimiter:
-                            break
-                command = ''.join(lines)
+class ShellSource(shlex.shlex):
+    """Whole-source lexer which removes literal here-document input before decoding effects."""
+
+    here_document = '<<'
+    tab_marker = '-'
+    newline = '\n'
+
+    def __init__(self, command):
+        super().__init__(command, posix=False, punctuation_chars='<>\n')
+        self.whitespace = ' \t\r'
+        self.whitespace_split = True
+
+    @classmethod
+    def without_bodies(cls, command):
+        body = []
+        while command:
+            lex = cls(command)
+            delimiters = []
+            for word in lex:
+                if word == cls.here_document:
+                    after_operator = lex.instream.tell()
+                    strip_tabs = command[after_operator - 1:after_operator] == cls.tab_marker
+                    marker = lex.get_token()
+                    if not marker or marker == cls.newline:
+                        raise ValueError('Missing here-document delimiter')
+                    marker = marker.removeprefix(cls.tab_marker) if strip_tabs else marker
+                    delimiters.append((shlex.split(marker)[0], '\t' if strip_tabs else ''))
+                elif cls.newline in word and delimiters:
+                    # shlex may look one character beyond the newline; keep
+                    # the original header, not the lookahead into literal data.
+                    end = command.rfind(cls.newline, 0, lex.instream.tell()) + 1
+                    body.append(command[:end])
+                    lines = iter(command[end:].splitlines(keepends=True))
+                    for delimiter, tabs in delimiters:
+                        for line in lines:
+                            if line.rstrip('\r\n').lstrip(tabs) == delimiter:
+                                break
+                    command = ''.join(lines)
+                    break
+            else:
+                body.append(command)
                 break
-        else:
-            body.append(command)
-            break
-    lex = shlex.shlex(''.join(body), posix=True, punctuation_chars=';&|><()\n')
+        return ''.join(body)
+
+
+def shell_commands(command):
+    """Shell words, not matches in quoted code or here-document bodies."""
+    lex = shlex.shlex(ShellSource.without_bodies(command), posix=True,
+                      punctuation_chars=';&|><()\n')
     lex.whitespace = ' \t\r'
     lex.whitespace_split = True
     for separator, words in groupby(lex, key=lambda word: bool(word) and set(word) <= set(';&|()\n')):
@@ -523,11 +540,11 @@ def shell_storage_effects(command, cwd):
     syntax = subprocess.run(('bash', '--noprofile', '--norc', '-n', '-c', command),
                             capture_output=True, text=True)
     if syntax.returncode:
-        return (ForbiddenStorageEffect(f'Invalid shell command {command!r}: {syntax.stderr.strip()}'),)
+        raise SelectedToolDenied(f'Invalid shell command {command!r}: {syntax.stderr.strip()}')
     try:
         commands = tuple(shell_commands(command))
     except ValueError as error:
-        return (ForbiddenStorageEffect(f'Invalid shell command {command!r}: {error}'),)
+        raise SelectedToolDenied(f'Invalid shell command {command!r}: {error}') from error
     effects = []
     for words in commands:
         while words and '=' in words[0]:

@@ -163,6 +163,10 @@ def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch)
     ("echo '<<' 'EOF'\npython -m venv env", 'ForbiddenStorageEffect'),
     ("cat <<'A' <<'B'\ngit clone remote target\nA\nuv sync\nB\nmkdir target", 'WriteStorageEffect'),
     ("echo 'git clone remote target'\nmkdir target", 'WriteStorageEffect'),
+    ("printf '%s\\n' 'first\nsecond'\nmkdir target", 'WriteStorageEffect'),
+    ("cat <<'EOF'\n'unclosed literal data\nEOF\nmkdir target", 'WriteStorageEffect'),
+    ("cat <<-'EOF'\n\t'unclosed data\n\tEOF\nmkdir target", 'WriteStorageEffect'),
+    ("cat << -EOF\n'unclosed data\n-EOF\nmkdir target", 'WriteStorageEffect'),
 ])
 def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
     effects = shell_storage_effects(command, tmp_path)
