@@ -236,16 +236,9 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         if observer is not None:
             from agent_comms.pi_events import PiEvent
 
-            await observer(
-                PiEvent.from_wire(
-                    {
-                        "type": "response",
-                        "id": "native-prompt",
-                        "command": "prompt",
-                        "success": True,
-                    }
-                )
-            )
+            from agent_comms.agent_events import PromptAccepted
+
+            await observer(PromptAccepted())
             await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
             reply,

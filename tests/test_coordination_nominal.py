@@ -151,15 +151,13 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
         progress = DurableTurn(
             store.attempts, started.fence, started.snapshot.pointer_revision, "input"
         )
+        from agent_comms.agent_events import PromptAccepted
+
         samples = [
-            (
-                {"type": "response", "id": "native-prompt", "command": "prompt", "success": True},
-                "prompt_accepted",
-            ),
-            ({"type": "context_committed", "inputId": "input"}, "model_running"),
+            (PromptAccepted(), "prompt_accepted"),
+            (PiEvent.from_wire({"type": "context_committed", "inputId": "input"}), "model_running"),
         ]
-        for raw, expected in samples:
-            event = PiEvent.from_wire(raw)
+        for event, expected in samples:
             await progress.dispatch(event)
             assert sum(observation is event for observation in selected) == 1
             attempt = store.snapshots.get("e").attempt

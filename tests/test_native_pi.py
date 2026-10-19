@@ -903,7 +903,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             with pytest.raises(NativePiPromptRejected) as failed:
                 await TrackedTurnSession.execute(VerifiedNativePackage.acquire(package), **request)
             response = failed.value.rejected_response
-            assert response.id == "native-prompt" and response.success is False
+            assert len(response.id) == 32 and response.success is False
             assert "No API key" in response.error
             assert calls == []
             assert not any(event["type"] == "input_committed" for event in rpc_events)
