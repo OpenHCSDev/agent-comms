@@ -72,7 +72,8 @@ class QueuedPullRequest(ExternalRecord):
                     "api",
                     f"repos/{host.repository}/commits/{head}/pulls",
                     "--jq",
-                    f'[.[] | select(.head.sha == "{head}" and .state == "open") | {{number: .number}}]',
+                    f'[.[] | select(.head.sha == "{head}" and .state == "open")'
+                    ' | {number: .number}]',
                 )
             ),
         )

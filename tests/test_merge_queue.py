@@ -1,12 +1,16 @@
 """Authorization/schema checks; acceptance still requires an actual queued merge."""
 
+import io
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.field_codec import FieldCodec, MalformedRecord
+from install_gate import FailedMachineResult, GateResult, MachinesGateResult
 from merge_queue import (
+    DispatchQueueCheck,
     GateError,
     Host,
     InstallQueueCheck,
@@ -15,6 +19,7 @@ from merge_queue import (
     Target,
     WorkflowDispatchRunEvent,
     WorkflowRun,
+    annotation,
 )
 
 
@@ -46,6 +51,25 @@ class MergeQueueTests(unittest.TestCase):
             with self.assertRaises(GateError):
                 host.fetch("--upload-pack=anything")
         command.assert_not_called()
+
+    def test_foreign_status_does_not_dispatch_more_checks(self):
+        host = Host(Path("."), "owner/repo", Path("."), False)
+        with patch("merge_queue.StatusWorkflowRun.require"):
+            with patch.object(Host, "fetch") as fetch:
+                DispatchQueueCheck(123, "a" * 40, "unrelated").execute(host)
+        fetch.assert_not_called()
+
+    def test_gate_result_carries_failure_without_successful_private_steps(self):
+        result = MachinesGateResult({"desktop": FailedMachineResult("Insufficient room")})
+        decoded = FieldCodec.decode(GateResult, FieldCodec.encode(result))
+        self.assertEqual(decoded.failures, ("desktop: Insufficient room",))
+
+    def test_annotation_escapes_protocol_delimiters(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            annotation("tools/example.py", 17, "type mismatch\nnew line")
+        self.assertEqual(output.getvalue(),
+                         "::error file=tools/example.py,line=17::type mismatch%0Anew line\n")
 
     def test_unallocated_private_copies_fail_before_installer_execution(self):
         host = Host(Path("."), "owner/repo", Path("."), False)
