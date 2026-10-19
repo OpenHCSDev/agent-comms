@@ -23,9 +23,18 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
-from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
-from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
+
+sys.path.insert(0, str(
+    Path(__file__).resolve().parents[1] / subprocess.check_output(
+        ["git", "config", "--file", str(Path(__file__).resolve().parents[1] / ".gitmodules"),
+         "--get", "submodule.src/agent_comms/skills/refactor-audit.path"], text=True,
+    ).strip() / "scripts"
+))
+
+import audit
+from audit.handler_declarations import BuiltinHandlerDeclarations
+from audit.measures import FamilyFlattened as AuditFamilyFlattened
+from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -33,6 +42,8 @@ from cutover.carry import STEPS, Step
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
+
+AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
 
 
 class Measure(DeclaredFamily, affix="Measure"):
@@ -228,7 +239,7 @@ class TypeErrors(CheckedRevision):
         Tools import the same revision's ``src`` (``upgrade_bus.py`` puts it first), never the
         installed one."""
         paths = dict.fromkeys((Path(root).parts[0], "src"))
-        return {**os.environ, "MYPYPATH": os.pathsep.join(paths)}
+        return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
 
 
 class SourceLines(Measure):
@@ -247,8 +258,9 @@ class SourceLines(Measure):
             if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
                 added += int(increase)
                 removed += int(decrease)
+        # Each commit's trailer budgets that commit's lines, so a range's budget is their sum.
         declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
-        return {cls.__name__: removed + max((int(value) for value in declared.split()), default=0)}, {cls.__name__: added}
+        return {cls.__name__: removed + sum(int(value) for value in declared.split())}, {cls.__name__: added}
 
 
 @dataclass(frozen=True)
@@ -1447,7 +1459,9 @@ class UncarriedRecordFormat(Measure):
     @classmethod
     def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, StoredForm]:
         """Each versioned record in the changed modules, measured by that revision's own code."""
-        package = Path(root).parent
+        package = Path(root)
+        while git(repo, "ls-tree", "--name-only", ref, "--", str(package / "__init__.py")):
+            package = package.parent
         modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
                    for path in sorted(changed & python_paths(repo, ref, root))
                    if cls.declares_version(git(repo, "show", f"{ref}:{path}"))]
@@ -1457,7 +1471,10 @@ class UncarriedRecordFormat(Measure):
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             # Extracted source is stamped with its commit the way a build stamps it.
-            WheelStamp(revision(repo, ref)).write(Path(scratch) / root / "package_stamp.py")
+            for module in {module.split(".")[0] for module in modules}:
+                WheelStamp(revision(repo, ref)).write(
+                    Path(scratch) / package / module / "package_stamp.py"
+                )
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
                                      *modules], cwd=scratch, env=cls.environment(root),

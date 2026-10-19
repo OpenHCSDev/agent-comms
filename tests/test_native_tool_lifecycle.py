@@ -4,6 +4,8 @@ import asyncio
 import json
 import os
 import secrets
+import socket as sockets
+from contextlib import AsyncExitStack
 from types import SimpleNamespace
 
 import pytest
@@ -11,13 +13,14 @@ import pytest
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.native_tool_call import NativeToolCall, SelectedToolDenied, ToolStartNotSeen
+from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.native_tool_transport import ToolTransport, UnboundToolTransport
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
 
 @pytest.fixture(params=["coding", "selected"])
-def policy(request, tmp_path):
+def policy(request, tmp_path, tool_listener):
     tmp_path.chmod(0o700)
     token, input_id = secrets.token_hex(32), secrets.token_hex(16)
     effects = []
@@ -38,11 +41,11 @@ def policy(request, tmp_path):
         return NoRoomNeeded()
 
     socket = (
-        broker.SelectedToolSocket(tmp_path, token, lambda call: commit(call, 0))
+        broker.SelectedToolSocket(tool_listener(tmp_path, token), lambda call: commit(call, 0), pid=os.getpid())
         if selected
         else CodingToolSocket(
-            tmp_path, token,
-            SimpleNamespace(allow=allow_coding),
+            tool_listener(tmp_path, token),
+            SimpleNamespace(allow=allow_coding), pid=os.getpid(),
         )
     )
 
@@ -106,8 +109,14 @@ async def test_socket_arrival_before_native_events_waits_without_authority(polic
     p.end()
     p.socket.assert_complete()
     assert p.effects == ["one"]
-    with pytest.raises(SelectedToolDenied):
-        await p.socket.handle_request(p.raw())
+    # A provider id may be reused in a later round. A socket request alone
+    # cannot declare that round or reopen the completed call's permission.
+    pending = asyncio.create_task(p.socket.handle_request(p.raw()))
+    await asyncio.sleep(0)
+    assert not pending.done()
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
     with pytest.raises(SelectedToolDenied):
         p.end()
     assert p.effects == ["one"]
@@ -193,70 +202,54 @@ async def test_cancelled_wait_cannot_be_restarted_or_replayed(policy):
     assert not p.effects
 
 
-async def test_start_timeout_retains_observations_without_reopening_claim(policy, monkeypatch):
+async def test_start_event_not_elapsed_time_owns_authorization(policy):
     p = policy
-
-    async def missed_start(call):
-        raise ToolStartNotSeen()
-
-    with monkeypatch.context() as timeout:
-        timeout.setattr(NativeToolCall, "_wait_started", missed_start)
-        with pytest.raises(ToolStartNotSeen):
-            await p.socket.handle_request(p.raw())
-    assert not p.effects
-    p.announce()
-    p.start()
-    with pytest.raises(SelectedToolDenied, match="already consumed"):
-        await p.socket.handle_request(p.raw())
-    if p.selected:
-        with pytest.raises(SelectedToolDenied):
-            p.end(is_error=True)
-        with pytest.raises(SelectedToolDenied):
-            p.socket.assert_complete()
-    else:
-        p.end(is_error=True)
+    request = asyncio.create_task(p.socket.handle_request(p.raw()))
+    try:
+        # Beyond the removed ten-second limit: load cannot turn a queued start
+        # into a refusal, and waiting grants no permission on its own.
+        await asyncio.sleep(10.1)
+        assert not request.done() and not p.effects
+        p.announce()
+        p.start()
+        assert await request == {"ok": True}
+        p.end()
         p.socket.assert_complete()
-    assert not p.effects
+        assert p.effects == ["one"]
+    finally:
+        request.cancel()
+        await asyncio.gather(request, return_exceptions=True)
 
 
-async def test_delayed_declaration_binds_only_its_exact_request(policy, monkeypatch):
+async def test_delayed_declaration_binds_only_its_exact_request(policy):
     p = policy
     if p.selected:
         return  # Selected policy has one slot, not consecutive normal rounds.
-
-    async def missed_start(call):
-        raise ToolStartNotSeen()
-
-    with monkeypatch.context() as timeout:
-        timeout.setattr(NativeToolCall, "_wait_started", missed_start)
-        with pytest.raises(ToolStartNotSeen):
-            await p.socket.handle_request(p.raw("first"))
+    first = asyncio.create_task(p.socket.handle_request(p.raw("first")))
     second = asyncio.create_task(p.socket.handle_request(p.raw("second")))
     try:
         await asyncio.sleep(0)
-        with pytest.raises(KeyError):
-            p.socket.calls.require(0, "first")
         p.announce("first")
         assert p.socket.calls.require(0, "first").call_id == "first"
         with pytest.raises(KeyError):
             p.socket.calls.require(0, "second")
         p.start("first")
-        p.end("first", is_error=True)
+        assert await first == {"ok": True}
+        p.end("first")
         with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
-            p.socket.assert_complete()  # The unresolved request cannot disappear.
-        assert not p.effects and not second.done()
+            p.socket.assert_complete()
+        assert p.effects == ["first"] and not second.done()
         p.announce("second")
         p.start("second")
         assert await second == {"ok": True}
         p.end("second")
         p.socket.assert_complete()
-        assert p.effects == ["second"]
+        assert p.effects == ["first", "second"]
         assert [round.number for round in p.socket.calls.rounds] == [0, 1]
-        first = p.socket.calls.require(0, "first")
-        assert not (p.root / "selected-tool-ledger" / first.slot(p.input_id, 0)).exists()
     finally:
+        first.cancel()
         second.cancel()
-        await asyncio.gather(second, return_exceptions=True)
+        await asyncio.gather(first, second, return_exceptions=True)
 
 
 async def test_concurrent_duplicate_requests_admit_exactly_once(policy):
@@ -333,8 +326,7 @@ async def test_lost_terminal_receipt_cannot_be_replaced_by_error(policy, monkeyp
 async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     p = policy
     await p.socket.start()
-    p.socket.expected_pid = os.getpid()
-    reader, writer = await asyncio.open_unix_connection(str(p.socket.path))
+    reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.path))
     writer.write(p.raw())
     await writer.drain()
     async with asyncio.timeout(2):
@@ -344,13 +336,54 @@ async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     assert await reader.read() == b""
     writer.close()
     await writer.wait_closed()
-    assert not p.socket.path.exists() and not p.socket._handlers
+    assert not p.socket.listener.path.exists() and not p.socket._handlers
     with pytest.raises(SelectedToolDenied):
         p.socket.assert_complete()
     assert not p.effects
 
 
-async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
+async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
+    p = policy
+    closed, observed = [], []
+    reply = p.socket._reply
+    close = asyncio.StreamWriter.close
+
+    def close_once(writer):
+        closed.append(writer)
+        close(writer)
+
+    async def observe_reply(reader, writer):
+        observed.append(writer)
+        return await reply(reader, writer)
+
+    monkeypatch.setattr(asyncio.StreamWriter, "close", close_once)
+    monkeypatch.setattr(p.socket, "_reply", observe_reply)
+    p.announce()
+    p.start()
+    await p.socket.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.address))
+        try:
+            writer.write(p.raw())
+            await writer.drain()
+            assert json.loads(await reader.readline()) == {"ok": True}
+            assert await reader.read() == b""
+        finally:
+            writer.close()
+            await writer.wait_closed()
+        async with asyncio.timeout(2):
+            while p.socket._handlers:
+                await asyncio.sleep(0)
+        assert len(observed) == 1 and closed.count(observed[0]) == 1
+        assert p.effects == ["one"]
+        p.end()
+        p.socket.assert_complete()
+    finally:
+        await p.socket.close()
+    assert closed.count(observed[0]) == 1
+
+
+async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path, tool_listener):
     tmp_path.chmod(0o700)
     observed = []
 
@@ -359,8 +392,8 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
         return NoRoomNeeded()
 
     socket = CodingToolSocket(
-        tmp_path, secrets.token_hex(32),
-        SimpleNamespace(allow=allow_coding),
+        tool_listener(tmp_path, secrets.token_hex(32)),
+        SimpleNamespace(allow=allow_coding), pid=os.getpid(),
     )
     socket.turn = SimpleNamespace(command=SimpleNamespace(input_id=secrets.token_hex(16)))
     arguments = {"path": "x"}
@@ -371,7 +404,7 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     def raw(id):
         return (
             json.dumps(
-                {"token": socket.token, "call_id": id, "name": "read", "arguments": arguments}
+                {"token": socket.listener.token, "call_id": id, "name": "read", "arguments": arguments}
             )
             + "\n"
         ).encode()
@@ -397,3 +430,70 @@ def test_selected_slot_rejects_second_call(policy):
     policy.announce()
     with pytest.raises(SelectedToolDenied):
         policy.announce("second")
+
+
+@pytest.mark.parametrize("bind_child", [False, True])
+async def test_only_child_bound_transport_can_reply(tmp_path, bind_child):
+    turn = SimpleNamespace(launch=SimpleNamespace(session=SimpleNamespace(directory=tmp_path)))
+    async with AsyncExitStack() as resources:
+        unbound = await ToolTransport.open(turn, resources)
+        assert isinstance(unbound, UnboundToolTransport)
+        assert not hasattr(unbound, "_reply") and not hasattr(unbound, "_handle")
+        with pytest.raises(TypeError, match="pid"):
+            ToolTransport(unbound.listener)
+        with pytest.raises(ConnectionRefusedError):
+            await asyncio.open_unix_connection(str(unbound.listener.address))
+        if bind_child:
+            bound = await unbound.bind_process(os.getpid())
+            assert isinstance(bound, ToolTransport)
+            assert bound.expected_pid == os.getpid()
+            assert bound.listener.server.is_serving()
+    assert not (tmp_path / "s").exists()
+
+
+@pytest.mark.parametrize("failure", [ValueError("owner defect"), TimeoutError("owner deadline")])
+async def test_owner_failures_are_not_converted_to_refusals(policy, monkeypatch, failure):
+    p = policy
+
+    def fail_selected(_call):
+        raise failure
+
+    async def fail_coding(_turn, _round, _call):
+        raise failure
+
+    if p.selected:
+        monkeypatch.setattr(p.socket, "action", fail_selected)
+    else:
+        monkeypatch.setattr(p.socket.owner, "allow", fail_coding)
+    p.announce()
+    p.start()
+    await p.socket.start()
+    reader = asyncio.StreamReader()
+    reader.feed_data(p.raw())
+    reader.feed_eof()
+
+    def unexpected_reply(_raw):
+        pytest.fail("an owner defect became a tool reply")
+
+    peer, client = sockets.socketpair()
+    with peer, client:
+        writer = SimpleNamespace(get_extra_info=lambda _key: peer, write=unexpected_reply)
+        with pytest.raises(type(failure), match=str(failure)) as caught:
+            await p.socket._reply(reader, writer)
+        assert caught.value is failure
+        assert not p.effects
+
+
+async def test_malformed_child_json_receives_a_declared_refusal(policy):
+    p = policy
+    await p.socket.start()
+    reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.address))
+    try:
+        writer.write(b"{\n")
+        await writer.drain()
+        assert json.loads(await reader.readline())["ok"] is False
+        assert await reader.read() == b""
+        assert not p.effects
+    finally:
+        writer.close()
+        await writer.wait_closed()

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 
 import pytest
 
@@ -25,14 +26,14 @@ def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, en
 
 
 @pytest.mark.parametrize("request_first", [False, True])
-async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, request_first):
+async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, request_first, tool_listener):
     class Owner:
         async def allow(self, round_number, call):
             raise AssertionError("invalid arguments must never acquire authority")
 
-    socket = CodingToolSocket(tmp_path, "a" * 64, Owner())
+    socket = CodingToolSocket(tool_listener(tmp_path, "a" * 64), Owner(), pid=os.getpid())
     args = {"command": False}
-    raw = (json.dumps({"token": socket.token, "call_id": "bad", "name": "bash",
+    raw = (json.dumps({"token": socket.listener.token, "call_id": "bad", "name": "bash",
                        "arguments": {"command": "false"}}) + "\n").encode()
     pending = asyncio.create_task(socket.handle_request(raw)) if request_first else None
     if request_first:

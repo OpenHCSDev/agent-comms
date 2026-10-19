@@ -12,7 +12,10 @@ from agent_comms.acp_failure import ACPFailure, ProviderConnectionFailure, Reque
 from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
-from agent_comms.pi_payloads import AfterMessageStreamStartStage, UnrecognizedTransportStage
+from agent_comms.pi_payloads import (
+    AfterMessageStreamStartStage, CodedProviderDiagnosticError,
+    CodelessProviderDiagnosticError, UnrecognizedTransportStage,
+)
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
 
@@ -30,6 +33,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert event.message.stop_reason is ErrorStopReason
     assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics
+    assert type(diagnostic.error) is CodedProviderDiagnosticError
     assert diagnostic.error.name == "WebSocketCloseError"
     assert diagnostic.error.code == 1011
     assert diagnostic.details.request_bytes == 159312
@@ -88,6 +92,52 @@ def test_unrecognized_phase_is_a_typed_observation_not_a_send_decision():
     )
     assert "provider stage: future_native_stage" in failure.description
     assert failure.input_state is None
+
+
+def test_native_1006_decodes_code_without_parsing_error_prose():
+    from agent_comms.turn_failure import (
+        ModelRequestFailed, ProviderTransportFailed, RetryableProviderFailure,
+    )
+
+    record = observed()
+    record["message"]["diagnostics"][0]["error"].update(
+        code=1006, message="Opaque native close"
+    )
+    record["message"]["errorMessage"] = "Unrelated prose with no close code"
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    diagnostic, = event.message.diagnostics
+    assert diagnostic.error.code == 1006
+    failure = ModelRequestFailed.from_diagnostics(
+        event.message.error_message, event.message.diagnostics
+    )
+    assert isinstance(failure, ProviderTransportFailed)
+    assert isinstance(failure, RetryableProviderFailure)
+
+
+def test_native_close_without_code_uses_the_declared_codeless_state():
+    record = observed()
+    del record["message"]["diagnostics"][0]["error"]["code"]
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    diagnostic, = event.message.diagnostics
+    assert isinstance(diagnostic.error, CodelessProviderDiagnosticError)
+    assert diagnostic.error.description == "WebSocketCloseError"
+    assert "code" not in diagnostic.error.to_wire()
+
+
+@pytest.mark.parametrize("code", [None, True, {}])
+def test_present_malformed_code_is_not_treated_as_codeless(code):
+    record = observed()
+    record["message"]["diagnostics"][0]["error"]["code"] = code
+    with pytest.raises(ValueError):
+        PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+
+
+def test_error_prose_does_not_invent_a_close_diagnostic():
+    record = observed()
+    del record["message"]["diagnostics"]
+    record["message"]["errorMessage"] = "WebSocket closed 1006"
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    assert event.message.diagnostics == ()
 
 
 def test_native_1012_with_empty_thinking_reaches_provider_feedback():
