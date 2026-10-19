@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from agent_comms.commander.config import Repo
+from agent_comms.repo import Repo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import (DoneTodoState, MergedProblemOrder, OperationDelivery,
                                PullRequest, PullRequests, UnorderedProblemOrder)

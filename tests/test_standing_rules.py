@@ -11,7 +11,8 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.config import CommanderConfig, Repo
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.repo import Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase

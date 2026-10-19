@@ -1462,7 +1462,8 @@ class InstallCliCommand(CliCommand):
     commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .commander.config import CommanderConfig, Repo
+        from .commander.config import CommanderConfig
+        from .repo import Repo
 
         home = Path.home()
         project = self.project.resolve()

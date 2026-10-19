@@ -46,7 +46,8 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
-from .config import Commander, CommanderConfig, CommanderRole, Repo
+from ..repo import Repo
+from .config import Commander, CommanderConfig, CommanderRole
 
 CONFIG = CommanderConfig.installed()
 COMMANDER = Commander.of(CONFIG)

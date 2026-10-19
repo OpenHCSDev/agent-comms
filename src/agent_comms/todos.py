@@ -45,7 +45,7 @@ from .plan_phases import OrderPhase, UnplannedPhase
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
-    from .commander.config import Repo
+    from .repo import Repo
     from .comms import Comms
     from .goal_management import Goals
     from .registration import Registration

@@ -22,7 +22,8 @@ from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
 from . import judge
-from .config import CommanderConfig, Repo
+from ..repo import Repo
+from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
 
