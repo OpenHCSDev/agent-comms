@@ -35,7 +35,8 @@ class HistoryPageResult(CliResult):
 
     @staticmethod
     def decoded_messages(rows: list[JsonValue]) -> tuple[Message, ...]:
-        return tuple(map(Message.from_wire, FieldCodec.decode(tuple[dict[str, JsonValue], ...], rows)))
+        decoded = FieldCodec.decode(tuple[dict[str, JsonValue], ...], rows)
+        return tuple(map(Message.from_wire, decoded))
 
     @property
     def before(self) -> PageCursor | None:
@@ -68,6 +69,7 @@ class ChannelHistoryPageResult(HistoryPageResult):
     @classmethod
     def decode(cls, wire: Mapping[str, JsonValue]) -> Self:
         match wire:
-            case {cls.messages_key: list(rows), "has_older": bool(has_older), "channel": str(channel)}:
+            case {cls.messages_key: list(rows), "has_older": bool(has_older),
+                  "channel": str(channel)}:
                 return cls(cls.decoded_messages(rows), has_older, channel)
         raise MalformedRecord(f"Not a {cls.__name__} page.")
