@@ -308,7 +308,7 @@ class MessageBus[Writes: Publisher]:
         self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
-        channel = self._channels.read().resolve(target.name)
+        channel = self._channels.read().require_channel(target.name)
         scope = channel.history_scope()
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
@@ -318,4 +318,4 @@ class MessageBus[Writes: Publisher]:
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:
-        return list(self._channels.read().views(self._registry.all_threads()))
+        return list(self._channels.read().views())

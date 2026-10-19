@@ -206,13 +206,11 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_
         if self.parent is not None or self.archived:
             raise ValueError("Built-in channels cannot be grouped or archived.")
 
+    exact = False
+
     @classmethod
     def matches(cls, tags: frozenset[str]) -> bool:
         return True
-
-    @property
-    def exact(self) -> bool:
-        return False
 
     def can_set_archived(self, archived: bool) -> bool:
         return False
@@ -235,7 +233,7 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_
         return not existing
 
     def sort_key(self, ordering, view) -> tuple:
-        return not self.pinned, self.names().index(self.name), 0, 0, self.name
+        return not self.pinned, BuiltinChannelView.names().index(self.name), 0, 0, self.name
 
 
 class AnyChannel(BuiltinChannelView, declared_name="#any"):

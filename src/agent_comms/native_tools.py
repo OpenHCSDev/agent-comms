@@ -10,7 +10,7 @@ from typing import ClassVar
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
-from .tool_declaration import ToolDeclaration, one_line
+from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
 
 
 class NativeExecutableTool(ToolDeclaration):
@@ -139,12 +139,6 @@ class BashTool(CodingTool):
         return shell_storage_effects(self.command, cwd)
 
 
-@dataclass(frozen=True)
-class ReplacementEdit:
-    old_text: str = field(metadata={"wire_name": "oldText"})
-    new_text: str = field(metadata={"wire_name": "newText"})
-
-
 class MutatingPathTool(PathTool):
     acp_kind = "edit"
     claim_type: ClassVar[type[FileClaimPath]]
@@ -154,6 +148,9 @@ class MutatingPathTool(PathTool):
 
     def storage_effects(self, cwd):
         return (WriteStorageEffect(physical_path(self.path, cwd)),)
+
+    def edit_calls(self, call_id, at, thread, problem):
+        return (EditCall(call_id, at, thread, self.path, self.replacements(), problem),)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -13,6 +13,12 @@ Adaptive runtime entrypoints and publication coupling remain unfinished.
 one `# agent-comms-native-stock-v1 <npm spec>` line. Its complete bytes still
 select the build directory, so changing the tree pin changes the build identity.
 The current commitment is that line in `pi-native.sha256`; no document repeats it.
+The manifest also pins the source inventory as `agent-comms-native-inputs-v1`.
+`NativeBuildInputs` owns that inventory and hashes source paths, executable modes,
+contents and the stock release. Test environments require this commitment before
+using a cache key derived from both those inputs and the complete manifest.
+Changing a patch without rebuilding with `prepare-pi-native --update-pins` refuses
+the environment, even when an older cached artifact is available.
 The update-check/all-package-spawn correction supersedes NON-CLEAN `8c6ce7`'s
 `b6d13d86…` tree; see `native-package-subprocess-correction.md` for current review
 gates. The original import-boundary candidate superseded `3585b0f`'s `7d16eb01…` tree without

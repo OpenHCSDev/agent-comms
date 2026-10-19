@@ -21,7 +21,10 @@ from dataclasses import asdict, dataclass
 
 from ..comms import Comms
 from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo
-from ..tools import CommsVerdictTool
+from ..tools import CommsUnjudgedTool, CommsVerdictTool
+from ..field_codec import FieldCodec
+from ..tool_caller import ThreadCaller
+from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
 from ..cli_commands import option
 from .order import CommanderVerb, RuledVerb
@@ -29,60 +32,33 @@ from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
-RTS = str(CONFIG.state)
-EDITS = f'{RTS}/edits.jsonl'
 
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
 
 
 @dataclass(frozen=True)
-class Hunk:
-    old: str
-    new: str
+class Hunk(ReplacementEdit):
 
     def branches_added(self) -> int:
         """Branches the new text has beyond the old text (branch-vs-polymorphism: presumed slop)."""
-        return sum(1 for line in self.new.splitlines() if BRANCH.search(line)) - sum(
-            1 for line in self.old.splitlines() if BRANCH.search(line))
+        return sum(1 for line in self.new_text.splitlines() if BRANCH.search(line)) - sum(
+            1 for line in self.old_text.splitlines() if BRANCH.search(line))
 
     def rendered(self) -> str:
-        return (''.join(f'- {line}\n' for line in self.old.splitlines())
-                + ''.join(f'+ {line}\n' for line in self.new.splitlines()))
+        return (''.join(f'- {line}\n' for line in self.old_text.splitlines())
+                + ''.join(f'+ {line}\n' for line in self.new_text.splitlines()))
 
 
 @dataclass(frozen=True)
-class Edit:
-    """One row of edits.jsonl, decoded once: a unit's file edit awaiting its verdict."""
-    id: str
-    at: float
-    thread: str
-    path: str
+class Edit(EditCall):
+    """The Core result row, decoded at the commander's tool boundary."""
     hunks: tuple[Hunk, ...]
 
     @classmethod
-    def from_row(cls, id: str, at: float, thread: str, path: str, hunks: list[dict[str, str]]) -> Edit:
-        return cls(id, at, thread, path, tuple(Hunk(**hunk) for hunk in hunks))
-
-    @classmethod
-    def recorded(cls) -> dict[str, Edit]:
-        if not os.path.exists(EDITS):
-            return {}
-        with open(EDITS) as f:
-            edits = (cls.from_row(**json.loads(line)) for line in f if line.strip())
-            return {edit.id: edit for edit in edits}
-
-    def append(self) -> None:
-        """Write this edit as one row of edits.jsonl, the shape from_row reads back."""
-        with open(EDITS, 'a') as f:
-            f.write(json.dumps(asdict(self)) + '\n')
-
-    @classmethod
     def unjudged(cls, comms: Comms, commander: str) -> list[Edit]:
-        """The recorded edits that commander has judged on none of its orders in that Comms."""
-        judged = {v.tool_call_id for todo in comms.goals.todos.history_for_commander(
-            comms.registry.require(commander).incarnation) for v in todo.verdicts}
-        return [edit for edit in cls.recorded().values() if edit.id not in judged]
+        reply = CommsUnjudgedTool.invoke(comms, {'thread': commander}, caller=ThreadCaller(commander))
+        return list(FieldCodec.decode(tuple[cls, ...], reply['edits']))
 
     def code(self) -> str:
         """Four hex digits derived from the edit's own text; shown only after its full hunks."""
@@ -92,13 +68,14 @@ class Edit:
         return sum(hunk.branches_added() for hunk in self.hunks)
 
     def text(self) -> str:
-        return ''.join(hunk.old + hunk.new for hunk in self.hunks)
+        return ''.join(hunk.old_text + hunk.new_text for hunk in self.hunks)
 
     def added(self) -> str:
-        return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new.splitlines())
+        return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new_text.splitlines())
 
     def rendered(self) -> str:
-        return (f'--- {self.id} {time.strftime("%H:%M", time.localtime(self.at))} {self.path}\n'
+        stamp = time.strftime('%H:%M', time.localtime(self.at))
+        return (f'--- {self.id} {stamp} {self.path}\n'
                 + '\n'.join(hunk.rendered() for hunk in self.hunks)
                 + f'\n=== end {self.id} code {self.code()}')
 
@@ -189,18 +166,11 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     @abstractmethod
     def report(self, todos: tuple[Todo, ...]) -> None: ...
 
-    def held_order(self, edit: Edit) -> Todo:
-        """The open order my cited message was sent in; no verdict is recorded without it."""
-        sent = [todo for todo in order.held_by(edit.thread) if todo.sent_in(self.msg)]
-        if len(sent) != 1:
-            sys.exit(f'Refused: edit {edit.id}: {self.msg} was sent in {[todo.id for todo in sent]} of '
-                     f'the open orders {edit.thread} holds; cite the message its one order was sent in')
-        return sent[0]
-
     def run(self) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        edits = Edit.recorded()
+        orders = {todo.id: todo for todo in order.held_orders() if todo.sent_in(self.msg)}
+        edits = {edit.id: edit for edit in Edit.unjudged(order.COMMS, ME) if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
@@ -210,7 +180,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         for i in ids:
             if not any(line in edits[i].text() for line in self.lines):
                 sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
-        selected = {i: self.held_order(edits[i]) for i in ids}
+        selected = {i: orders[edits[i].problem] for i in ids}
         self.check_edits([edits[i] for i in ids])
         # Validate the whole batch through the operation owner before its first write.
         for i, todo in selected.items():

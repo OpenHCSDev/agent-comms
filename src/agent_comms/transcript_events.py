@@ -98,6 +98,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
+    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
+        return ()
+
     @property
     def dated(self) -> tuple[float, ...]:
         return () if self.timestamp is None else (self.timestamp,)
@@ -298,6 +301,11 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
+    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
+        if self.before(since) or self.tool is None:
+            return ()
+        return self.tool.edit_calls(self.tool_call_id, self.timestamp, thread, problem)
+
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
     tool: tool_declaration.ToolDeclaration | None = field(
         default=None, metadata={"wire_omit_default": True})
