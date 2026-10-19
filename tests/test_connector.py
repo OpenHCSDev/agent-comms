@@ -15,10 +15,10 @@ from agent_comms.connector import (
     CALLBACK,
     AuthorizationQuery,
     Connector,
-    ConnectorStore,
     ApproveVerb,
     RevokeVerb,
 )
+from agent_comms.connector_store import ConnectorStore
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
 from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 

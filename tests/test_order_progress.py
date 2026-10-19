@@ -9,8 +9,8 @@ import pytest
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
-    OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline, PullRequest,
-    PullRequests, PushedProgress, UnreadProgress)
+    InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
+    PullRequest, PullRequests, PushedProgress, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
@@ -242,6 +242,23 @@ def test_overdue_remains_announced_until_recorded(commander, commander_script):
     replied = deadline_lines(script, since)
     assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
     assert deadline_lines(script, time.time())[0].startswith("OVERDUE:")
+
+
+def test_install_due_reads_the_schedule_time_alone(commander):
+    """InstallDue reads the bus's install schedule and nothing else: a bus with no planned
+    install is due, and a planned one is due once its time has come."""
+    comms, _ = commander
+
+    def due():
+        return [rule.line() for rule in InstallDue.violations(comms, 'lead')]
+
+    assert due() == ['INSTALL DUE (no install is planned on this bus) -> the installer rehearses and '
+                     'installs main with tools/upgrade_bus.py and posts the result to the commander']
+    PlannedInstallDeadline.after('worker', time.time()).plan(comms.root)
+    assert due() == []
+    PlannedInstallDeadline.after('worker', time.time() - InstallDeadline.cadence).plan(comms.root)
+    (line,) = due()
+    assert line.startswith('INSTALL DUE (due ') and 'installer worker) -> the installer' in line
 
 
 def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander, commander_script, monkeypatch, tmp_path):
