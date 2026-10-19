@@ -1,15 +1,20 @@
-# P520 — 2026-10-18 19:43 EDT
+# P520 — 2026-10-18 20:15 EDT
 
-Full source is pushed in PR1604 at 30313a728. Not merged or installed. All 20 original callbacks and all three generic project definitions are deleted. Both review corrections are fixed. Source net +78; complete caller table and check scopes are in the PR body.
+PR1604 has current main merged normally. All twenty callback callers and three generic project definitions are deleted. Both review corrections are fixed. Source +235/-156, net +79; existing Src-Budget:80 declares the actual cost. Checker and baseline are unchanged. The unchanged checker against origin/main exits0 with no positive deltas or introduced findings.
 
-Local checks passed: real-wire set/edit/replace/clear and retirement; both permissions/scopes/contexts/executions/peer changes; passive absent failure; complete coordinator schema and actual declaration-owned SQLite validator registration. Six existing clear/account function cases plus absent iteration ran directly without pytest. AST covers 646 modules, zero omissions. No pytest-suite pass claimed.
+The comparison helper is deleted; callers use ==/!=. One shared operator preserves comparison of the same turn across the different lease/finished record types. Peer fields use NoGoal rather than nullable fields and preserve their original JSON through FieldCodec.
 
-P556 is merged through main and its archived-format probe completes. The full checker exits1 with no introduced findings; positive deltas are listed in the PR, not waived.
+Local checks pass: real-wire set/edit/replace/clear and retirement; both permissions/scopes/contexts/executions/peer changes; passive absent failure; complete coordinator schema and actual declaration-owned SQLite validator registration. Six existing clear/account function cases, absent iteration and cross-record equality ran directly. Pytest is unavailable in the permitted environment. Source/receiver evidence uses the existing NRA AST driver.
 
-Update 20:05 EDT: Codex supplied the full-version private runtime T000114Z (Core30313, Toade029). The normal-launcher UI journey passed: set active rev1, update blocked rev2/progress, physically Clear, confirm NoGoal plus terminal CancelledGeneration, then one fresh no-goal DM replied with its exact token. Four screenshots reviewed. Final screenshot has sidebar Ready but centre Finishing turn; consistent final-idle paint was not established. Copied owner stopped0 before auth deletion, copied auth absent, original hash unchanged, new input COMPLETED/not replayed. Evidence is `goal-ui-complete/{result.json,input.json,checks.txt,commands.jsonl,plain/*.png}` under the existing P520 scratch path. No default switch. Do not rerun the used driver/output directory.
+Private runtime T000114Z (Core30313, Toade029) showed goal set active rev1, change blocked rev2/progress and physical Clear. Backend became NoGoal and the original generation was terminal CancelledGeneration. One fresh no-goal DM replied with its exact token. Four screenshots reviewed. Copied owner stopped0 before auth deletion, auth absent, original hash unchanged, fresh input COMPLETED and never replayed. No default switch.
 
-The actual UI gap is closed at the strength above. The commander's source-size/debt-check merge hold remains separate; nothing is claimed merged or installed.
+## Broken
+centre status stuck on Finishing turn after the reply while the sidebar shows Ready (plain/no-goal-reply.png)
 
-Evidence is under `/home/ts/.cache/agent-scratch/core-pi-durable/p520/`: operations-complete-smoke.log, operations-clear-cases.log, operations-final-debt.log, operations-final-ast.json and operations-pr-body.md.
+Two views disagree about the same turn. The integration owner needs to assign this UI repair. The run and screenshot are preserved under `/home/ts/.cache/agent-scratch/core-pi-durable/p520/goal-ui-complete/`.
 
-The commander update attempted at 19:42 was refused: 'Maintenance holds ingress: the bus is under maintenance'. No message success claimed. P436 stays paused until reissued after P520 merge. No installation or native test owner started during this continuation; original sessions/auth/UNKNOWN inputs remain untouched.
+Next: merge PR1604 after the exit0 check, give Codex the merge for installation, then use a fresh copied run for installed-launcher goal set/change/retire. Never reuse the private run's input or output directory. P436 waits for its reissued order.
+
+Evidence: `/home/ts/.cache/agent-scratch/core-pi-durable/p520/operations-main-{smoke,named-absence,clear-cases,debt}.log`, operations-main-debt.exit, operations-merged-ast.json, operations-pr-body.md and goal-ui-complete/{result.json,input.json,checks.txt,commands.jsonl,plain/*.png}.
+
+Comms sends at 19:42 failed under maintenance; a later send failed with `todos.sqlite3 differs from its declaration`. Original sessions/auth/UNKNOWN inputs remain untouched.
