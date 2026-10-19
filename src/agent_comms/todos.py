@@ -25,6 +25,7 @@ from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
+from .errors import ToolRefusedError
 from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
     boundary_decoder,
@@ -726,7 +727,7 @@ class OrderWords(WireValue):
 
     def __post_init__(self) -> None:
         if refused := self.refused(self.text):
-            raise ValueError(refused)
+            raise ToolRefusedError(refused)
 
     def to_wire(self) -> str:
         return self.text
@@ -958,6 +959,11 @@ class DirectiveText:
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
         return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+
+    @classmethod
+    def require(cls, text: str) -> None:
+        if refused := cls.refused(text):
+            raise ToolRefusedError("Directive refused, nothing sent: " + " ".join(refused))
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
@@ -1417,7 +1423,7 @@ class HuntRecord(TypedTable):
     hunt: Hunt
 
 
-class TodoError(ValueError):
+class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
 
@@ -2080,8 +2086,7 @@ class Todo(TypedTable):
 
     @classmethod
     def require_order_body(cls, body: str) -> None:
-        if refused := DirectiveText.refused(body):
-            raise ValueError("; ".join(refused))
+        DirectiveText.require(body)
         Slop.from_order(body)
 
     def require_fold(self, target: Todo, why: str) -> None:
