@@ -14,6 +14,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
 from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
 from agent_comms.proven_source_coverage import SourceCoverage
+from agent_comms.cursor_owner import ActivationFloorCursor
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
 
@@ -33,19 +34,19 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
         assert comms.bus.log.read_metadata_unlocked(required=True).claims
         empty = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix(source_reads=source_reads)
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert empty.covered_seq == 0 and empty.injected_source_seqs == ()
         sent = comms.messaging.send_user_message(
             "bob", "fresh selected input", worktree=str(tmp_path)
         )
         before = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix(source_reads=source_reads)
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert before.blocked_seq == sent.seq and before.injected_source_seqs == ()
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
         selected = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix(source_reads=source_reads)
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
         assert source_witness(Comms(comms.root).bus).through_seq == sent.seq

@@ -56,19 +56,22 @@ class CoverageInput(ABC):
     def require_reference(self, owner, cursor) -> None:
         pass
 
-    @abstractmethod
-    def build(self, owner, covered_seq): ...
-
-
-@dataclass(frozen=True)
-class NoInjectedInput(CoverageInput):
     def build(self, owner, covered_seq):
         return CurrentNativeCursor(
             wire_root_id=owner.wire_root_id, recipient_lookup=owner.lookup,
             owner_thread=owner.thread.name, owner_generation=owner.generation,
             owner_claimed_generation=owner.claimed_generation, covered_seq=covered_seq,
-            injected_seq=0, input_id=None, stage=None, session_id=None, request_generation=None,
+            **self.input_fields(),
         )
+
+    @abstractmethod
+    def input_fields(self) -> dict: ...
+
+
+@dataclass(frozen=True)
+class NoInjectedInput(CoverageInput):
+    def input_fields(self):
+        return dict(injected_seq=0, input_id=None, stage=None, session_id=None, request_generation=None)
 
     def injected_for(self, state):
         return state.injected_seq
@@ -84,12 +87,9 @@ class NoInjectedInput(CoverageInput):
 class InjectedInput(CoverageInput):
     original: HistoricalNativeInput
 
-    def build(self, owner, covered_seq):
+    def input_fields(self):
         original = self.original
-        return CurrentNativeCursor(
-            wire_root_id=owner.wire_root_id, recipient_lookup=owner.lookup,
-            owner_thread=owner.thread.name, owner_generation=owner.generation,
-            owner_claimed_generation=owner.claimed_generation, covered_seq=covered_seq,
+        return dict(
             injected_seq=original.source_seq, input_id=original.input_id,
             stage=type(original.execution), session_id=original.context.session_id,
             request_generation=original.context.request_generation,

@@ -367,13 +367,15 @@ class NativeContextProof(NativeContextRecord):
         from .native_entries import NativeInputEvidenceRead
 
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            header, _entries = evidence.observe()
-            entry = evidence.tracked(input_id)
             with NativeContextJournal.open_evidence(session_file) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
                 if row is None:
+                    evidence.observe()
+                    evidence.tracked(input_id)
                     raise NativePiUnavailable("The input has no assembled-context proof")
-                return row.corroborate(session_file, header, entry)
+            header, _entries = evidence.observe_input(input_id, row.session_entry_id)
+            entry = evidence.tracked(input_id)
+            return row.corroborate(session_file, header, entry)
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -891,6 +893,28 @@ class PrivateEvidenceRead:
         header = self.header()
         self.decoded_through = max(self.decoded_through, self.stream.tell())
         return header
+
+    def verify(self) -> None:
+        """Validate this acquired source without decoding or moving its input position."""
+        size, digest, revision = self._capture_append()
+        self._commit_snapshot(size, digest, revision)
+
+    def start_at_entry(self, session_entry_id: str) -> None:
+        """Locate a recorded native identity backwards within the pinned verified cut.
+
+        The durable native acknowledgement supplies identity, never a byte offset.
+        Only the needed suffix is decoded and indexed by the input reader.
+        """
+        from .native_transcript import reverse_records
+
+        size, digest, revision = self._capture_append()
+        for start, _end, raw in reverse_records(self.path, size, stream=self.stream):
+            row = self._decode_row(raw)
+            if row.get('id') == session_entry_id:
+                self._commit_snapshot(size, digest, revision)
+                self.decoded_through = start
+                return
+        raise NativePiUnavailable('Recorded native input entry is absent from its source')
 
     def _commit_snapshot(self, size, digest, revision) -> None:
         try:

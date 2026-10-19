@@ -235,15 +235,31 @@ class NativeEvidenceRead:
                         "ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
 
-    def header(self):
-        """Read and decode the first physical record, without indexing history."""
-        header = NativeEntry.from_evidence(self.source.consume_header())
-        if not isinstance(header, SessionEntry):
+    def _accept_header(self, entries):
+        if not entries or not isinstance(entries[0], SessionEntry):
             raise MalformedRecord('Native Pi session header is invalid')
-        header.require_header()
+        entries[0].require_header()
+        return entries[0]
+
+    def header(self):
+        """Read and decode record one without discarding an existing input index."""
+        from .native_pi import NativePiUnavailable
+
+        try:
+            if self.entries:
+                self.source.verify()
+                return self._accept_header(self.entries)
+            header = self._accept_header((NativeEntry.from_evidence(self.source.consume_header()),))
+        except MalformedRecord as error:
+            self.close()
+            raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
         if not self.entries:
             self.entries = (header,)
         return header
+
+    def observe_input(self, input_id, session_entry_id):
+        """Full-history readers preserve their contiguous branch semantics."""
+        return self.observe()
 
     def observe(self):
         """Decode the captured cut."""
@@ -288,9 +304,7 @@ class NativeEvidenceRead:
             appended = tuple(self.decode_rows(self.source.rows()))
             self.index(appended)
             entries = self.entries + appended
-            if not entries or not isinstance(entries[0], SessionEntry):
-                raise MalformedRecord("Native Pi session header is invalid")
-            entries[0].require_header()
+            self._accept_header(entries)
         except NativeEvidencePrefixChanged:
             if reverified:
                 self.close()
@@ -320,6 +334,13 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
     Keep the parent class's file handle, append handling and error behavior.
     Read input evidence from that file without adding a history index or store.
     """
+
+    def observe_input(self, input_id, session_entry_id):
+        """A recorded native entry locates the first needed input, not a bus sequence."""
+        if len(self.entries) <= 1:
+            self.header()
+            self.source.start_at_entry(session_entry_id)
+        return self.observe()
 
     def decode_rows(self, rows):
         for index, row in enumerate(rows):
