@@ -296,6 +296,14 @@ class NoDraft(TranscriptDraft):
     pass
 
 
+class TranscriptRecord:
+    """A source position; only native records can project a decoded native entry."""
+
+    def project(self, projection):
+        """External records have events already, but no native entry for this callback."""
+        return ()
+
+
 class TranscriptSource:
     """Recorded items alone carry no assigned-wire or publication authority.
 
