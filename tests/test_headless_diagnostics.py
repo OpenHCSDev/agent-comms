@@ -59,7 +59,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     comms.registry.declare(
         comms.registry.new_thread(name='sender', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    incoming = comms.messaging.send_message("sender", "#comms", "Private input")
+    incoming = comms.messaging.send("sender", "#comms", "Private input").message
     original_send = comms.messaging.send
     observed = []
 

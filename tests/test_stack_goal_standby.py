@@ -205,9 +205,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 # message to start a turn before the goal wake under test.
                 agent.inputs.auto_wake = False
                 for index in range(5):
-                    early = comms.messaging.send_message(
+                    early = comms.messaging.send(
                         "child", "parent", f"WAIT_INSTRUCTION_{index}"
-                    )
+                    ).message
                     pending_keys.append(f"bus:{early.seq}")
                 await agent.inputs.drain_inbox("parent")
                 agent.inputs.auto_wake = True
@@ -243,9 +243,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 await agent.turns.goals.schedule_goal("parent")
                 assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
                 assert not agent.inputs.state("parent").pending_turns and len(requests) == 2 + offset
-            message = comms.messaging.send_message(
+            message = comms.messaging.send(
                 "child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT"
-            )
+            ).message
             await agent.inputs.drain_inbox("parent")
             await asyncio.wait_for(agent.inputs.state("parent").wake_task, 40)
             assert not failures, failures

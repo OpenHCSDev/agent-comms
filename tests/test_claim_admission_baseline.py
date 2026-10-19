@@ -62,12 +62,12 @@ def test_selected_wake_and_file_claims_have_no_common_claim_receipt() -> None:
             # Existing explicit resource claims are valid independent operations.
             # They neither consult nor reference the sealed N/K acknowledgement. A
             # future native edit claim_scope must join these two authorities.
-            committed = comms.messaging.send_message(
+            committed = comms.messaging.send(
                 "Bob",
                 "#team",
                 "Independent file claim",
                 claims=[ExistingFileClaim(Path("module.py"))],
-            )
+            ).message
             assert committed.claim_transition is not None
             assert not hasattr(committed.claim_transition, "wake_claim_id")
             projection = comms.bus.log.claim_projection()

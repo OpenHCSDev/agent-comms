@@ -62,7 +62,7 @@ def report(repo):
 class TestChangeReportKind:
     def test_send_requires_the_report_fields(self, reporter):
         with pytest.raises(ValueError, match="requires its report"):
-            reporter.messaging.send("reporter", "fixer", "review this", ChangeReportKind)
+            reporter.messaging.send("reporter", "fixer", "review this", ChangeReportKind).message.message_id
 
     def test_send_refuses_a_reference_absent_at_the_named_head(self, reporter):
         invalid = ChangeReport(
@@ -74,7 +74,7 @@ class TestChangeReportKind:
             ),),
         )
         with pytest.raises(ValueError, match="src/demo.py:9.*branch head main"):
-            reporter.messaging.send("reporter", "fixer", "review this", ChangeReportKind, report=invalid)
+            reporter.messaging.send("reporter", "fixer", "review this", ChangeReportKind, report=invalid).message.message_id
 
     def test_send_refuses_an_unknown_branch(self, reporter):
         invalid = ChangeReport(
@@ -86,11 +86,11 @@ class TestChangeReportKind:
             ),),
         )
         with pytest.raises(ValueError, match="ghost-branch"):
-            reporter.messaging.send("reporter", "fixer", "review this", ChangeReportKind, report=invalid)
+            reporter.messaging.send("reporter", "fixer", "review this", ChangeReportKind, report=invalid).message.message_id
 
     def test_declared_report_publishes_and_round_trips(self, reporter, reporter_repo):
-        committed = reporter.messaging.send_message(
-            "reporter", "fixer", "review this", ChangeReportKind, report=report(reporter_repo))
+        committed = reporter.messaging.send(
+            "reporter", "fixer", "review this", ChangeReportKind, report=report(reporter_repo)).message
         stored, = list(reporter.views.dm_history_page("reporter", "fixer").messages)
         assert stored.report == report(reporter_repo)
         assert stored.type is ChangeReportKind
@@ -111,29 +111,29 @@ class TestChangeReportKind:
 class TestHandoffClaims:
     def test_claim_without_evidence_is_refused_naming_the_claims(self, wired):
         with pytest.raises(ValueError, match="fixed.*without a file:line"):
-            wired.messaging.send("PR111", "fixer", "it is fixed", HandoffKind)
+            wired.messaging.send("PR111", "fixer", "it is fixed", HandoffKind).message.message_id
 
     def test_a_bare_evidence_word_is_not_a_command(self, wired):
         with pytest.raises(ValueError, match="fixed.*without a file:line"):
-            wired.messaging.send("PR111", "fixer", "I will find it; it is fixed", HandoffKind)
+            wired.messaging.send("PR111", "fixer", "I will find it; it is fixed", HandoffKind).message.message_id
 
     def test_claim_with_a_file_line_reference_publishes(self, wired):
-        committed = wired.messaging.send_message(
-            "PR111", "fixer", "it is fixed at src/x.py:12", HandoffKind)
+        committed = wired.messaging.send(
+            "PR111", "fixer", "it is fixed at src/x.py:12", HandoffKind).message
         assert committed.type is HandoffKind
 
     def test_claim_with_a_command_in_backticks_publishes(self, wired):
-        committed = wired.messaging.send_message(
-            "PR111", "fixer", "fixed; proof: `grep -rn kind src`", HandoffKind)
+        committed = wired.messaging.send(
+            "PR111", "fixer", "fixed; proof: `grep -rn kind src`", HandoffKind).message
         assert committed.type is HandoffKind
 
     def test_a_command_outside_backticks_is_not_evidence(self, wired):
         with pytest.raises(ValueError, match="fixed.*without a file:line"):
-            wired.messaging.send("PR111", "fixer", "fixed; I ran grep everywhere", HandoffKind)
+            wired.messaging.send("PR111", "fixer", "fixed; I ran grep everywhere", HandoffKind).message.message_id
 
     def test_plain_handoff_without_claims_publishes(self, wired):
-        committed = wired.messaging.send_message(
-            "PR111", "fixer", "handing over the thread", HandoffKind)
+        committed = wired.messaging.send(
+            "PR111", "fixer", "handing over the thread", HandoffKind).message
         assert committed.type is HandoffKind
 
 

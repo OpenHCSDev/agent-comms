@@ -155,7 +155,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
 
             def change_project_and_send_again():
                 changed = comms.threads.set_project(session, str(second))
-                sent.append(comms.messaging.send_message("sender", session, "Second message"))
+                sent.append(comms.messaging.send("sender", session, "Second message").message)
                 return changed
 
             class ChangeProjectDuringFirstTurn:
@@ -169,7 +169,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
                         native.provider.text = reply(sent[1])
                     return True
 
-            sent.append(comms.messaging.send_message("sender", session, "First message"))
+            sent.append(comms.messaging.send("sender", session, "First message").message)
             native.provider.text = reply(sent[0])
             gate = native.provider.response_gate = ChangeProjectDuringFirstTurn()
             try:

@@ -38,14 +38,14 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('sender', frozenset({'ci'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('receiver', frozenset({'ci', 'docs'}), str(tmp_path)))
-    comms.messaging.send("sender", "#ci", "first")
+    comms.messaging.send("sender", "#ci", "first").message.message_id
     messages = comms.bus.inbox("receiver")
     comms.messaging.acknowledge("receiver", tuple(message.reference for message in messages))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 1
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
-    comms.messaging.send("sender", "#ci", "second")
-    comms.messaging.send("sender", "#docs", "docs")
+    comms.messaging.send("sender", "#ci", "second").message.message_id
+    comms.messaging.send("sender", "#docs", "docs").message.message_id
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     assert snapshot.channel_unread["#ci"] == snapshot.channel_unread["#docs"] == 1
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
@@ -53,7 +53,7 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms.messaging.send_user_message("#ci", "my own message", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 1
-    comms.messaging.send("sender", "receiver", "agent-to-agent DM in the aggregate feed")
+    comms.messaging.send("sender", "receiver", "agent-to-agent DM in the aggregate feed").message.message_id
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 2
     comms.views.mark_channel_view_read("#any", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
@@ -66,7 +66,7 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path)))
-    comms.messaging.send("alice", "bob", "hidden until any-mode")
+    comms.messaging.send("alice", "bob", "hidden until any-mode").message.message_id
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 0
     comms.views.mark_channel_view_read("#team", worktree=str(tmp_path))
     comms.channels.set_channel_any_mode("#team", True)
@@ -81,8 +81,8 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
     comms.registry.declare(comms.registry.new_thread('carol', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('dave', frozenset(), str(tmp_path)))
     comms.channels.set_channel_any_mode("#team", True)
-    comms.messaging.send_message("carol", "dave", "unpainted older DM")
-    comms.messaging.send_message("alice", "bob", "painted DM")
+    comms.messaging.send("carol", "dave", "unpainted older DM").message
+    comms.messaging.send("alice", "bob", "painted DM").message
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
     comms.views.mark_channel_view_read("#team", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 0
@@ -100,8 +100,8 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     comms.registry.declare(comms.registry.new_thread('carol', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('dave', frozenset(), str(tmp_path)))
     comms.channels.set_channel_any_mode("#team", True)
-    comms.messaging.send_message("carol", "dave", "hidden old DM")
-    comms.messaging.send_message("alice", "bob", "painted DM")
+    comms.messaging.send("carol", "dave", "hidden old DM").message
+    comms.messaging.send("alice", "bob", "painted DM").message
     painted = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     assert [message.seq for message in painted.messages] == [2]
 
@@ -126,13 +126,13 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         comms = wire(root)
         comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(root)))
         comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(root)))
-        comms.messaging.send_message("alice", "bob", "hidden before crash")
+        comms.messaging.send("alice", "bob", "hidden before crash").message
         comms.views.mark_channel_view_read("#team", worktree=str(root))
         child = subprocess.run(
             [
                 sys.executable,
                 "-c",
-                "import os, sys\nfrom agent_comms.comms import wire\nwire(sys.argv[1]).messaging.send_message('alice', 'bob', 'hidden before exit')\nos._exit(9)",
+                "import os, sys\nfrom agent_comms.comms import wire\nwire(sys.argv[1]).messaging.send('alice', 'bob', 'hidden before exit')\nos._exit(9)",
                 str(root),
             ],
             check=False,

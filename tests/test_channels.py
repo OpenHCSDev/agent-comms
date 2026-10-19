@@ -50,7 +50,7 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     assert "#api" not in {view.channel.name for view in observer.views.channel_views()}
     assert "#api" in observer.channels.catalog.read().views(observer.registry.all_threads())
 
-    observer.messaging.send("other", "#api", "still routable")
+    observer.messaging.send("other", "#api", "still routable").message.message_id
     assert [message.body for message in observer.bus.inbox("a")] == ["still routable"]
     with pytest.raises(ValueError, match="cycle"):
         observer.channels.set_channel_metadata("ui", parent="#api", archived=False)
@@ -209,7 +209,7 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
     ] == ["both"]
     assert "#api-and-ui" in comms.channels.channels()
     with pytest.raises(ValueError, match="not a routable target"):
-        comms.messaging.send("other", "#api-and-ui", "must fail")
+        comms.messaging.send("other", "#api-and-ui", "must fail").message.message_id
     comms.channels.delete_saved_view("api-and-ui")
     assert not wire(tmp_path).channels.catalog.read().saved_views
 
@@ -217,7 +217,7 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
 def test_any_is_non_routable(tmp_path):
     comms = setup_wire(tmp_path)
     with pytest.raises(ValueError, match="not a routable target"):
-        comms.messaging.send("other", "#any", "agent send rejected")
+        comms.messaging.send("other", "#any", "agent send rejected").message.message_id
     with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send_user_message("#any", "user send rejected", worktree=str(tmp_path))
 
@@ -237,7 +237,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
             ViewPredicate(AllOfMatch, frozenset({"api", "ui"})),
         )
     )
-    comms.messaging.send("other", "#api", "target-owned historical row")
+    comms.messaging.send("other", "#api", "target-owned historical row").message.message_id
 
     before_conflict = comms.registry.snapshot()
     with pytest.raises(ValueError, match="already exists"):
@@ -433,7 +433,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
 def test_pending_projection_observes_external_changes_without_rescanning(tmp_path):
     comms = setup_wire(tmp_path)
     other = wire(tmp_path)
-    comms.messaging.send("other", "#api", "one")
+    comms.messaging.send("other", "#api", "one").message.message_id
     assert comms.bus.pending_count("a") == 1
     with patch.object(
         comms.bus.log, "verified_snapshot", side_effect=AssertionError("rescanned idle log")
@@ -450,7 +450,7 @@ def test_pending_projection_observes_external_changes_without_rescanning(tmp_pat
     messages = other.bus.inbox("a")
     other.messaging.acknowledge("a", tuple(message.reference for message in messages))
     assert comms.bus.pending_count("a") == 0
-    other.messaging.send("other", "#api", "two")
+    other.messaging.send("other", "#api", "two").message.message_id
     assert comms.bus.pending_count("a") == 1
 
 
@@ -467,7 +467,7 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
 
 def test_none_membership_and_independent_channel_order(tmp_path):
     comms = setup_wire(tmp_path)
-    comms.messaging.send("a", "#none", "for untagged agents")
+    comms.messaging.send("a", "#none", "for untagged agents").message.message_id
     assert [message.body for message in comms.bus.inbox("other")] == ["for untagged agents"]
     assert not comms.bus.inbox("b")
     comms.channels.set_channel_sort("#api", LastMessageThreadSort)
@@ -510,7 +510,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms.channels.set_channel_order(LastActivityChannelSort)
     assert set(names(comms)[:2]) == {"#ui", "#zeta"}
     comms.messaging.send_user_message("#alpha", "Human input", worktree=str(tmp_path))
-    comms.messaging.send("b", "#zeta", "Later agent output")
+    comms.messaging.send("b", "#zeta", "Later agent output").message.message_id
     invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"}, caller=NoThreadCaller())
     assert names(wire(tmp_path))[0] == "#alpha"
     assert tuple(comms.views.viewer_snapshot(str(tmp_path / "viewer-a")).channels) == tuple(

@@ -23,6 +23,7 @@ from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
 from .todos import TodoStore
+from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
 from .task_sources import TaskChange, OriginalTaskChange
@@ -47,28 +48,10 @@ class Messaging:
         role: MessageRole = ConversationRole(),
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
-        report: ChangeReport | None = None,
-    ) -> str:
-        """Declare a message and route it through the bus."""
-        return self.send_message(
-            sender, target, body, type, role=role, claims=claims, releases=releases,
-            report=report,
-        ).message_id
-
-    def send_message(
-        self,
-        sender: str,
-        target: str,
-        body: str,
-        type: Type[MessageKind] = InfoKind,
-        *,
-        role: MessageRole = ConversationRole(),
-        claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path] = (),
         task: TaskAttachment = NoTaskAttachment(),
         report: ChangeReport | None = None,
-    ) -> Message:
-        """Return one committed envelope, including optional guarded claims."""
+    ) -> SendResult:
+        """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             # A sender outside any watch is not paused by the drain; the barrier refuses it here.
@@ -103,8 +86,13 @@ class Messaging:
                 )
             else:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
-        todos.correct(owner.name, committed.message_id, body)
-        return committed
+        try:
+            todos.correct(owner.name, committed.message_id, body)
+        except Exception as error:
+            correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
+        else:
+            correction = CorrectionComplete()
+        return SendResult(committed, correction)
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         """What this owner's message to target answers among its running turn's inputs."""

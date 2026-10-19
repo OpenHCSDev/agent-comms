@@ -589,11 +589,11 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     for sender, target in (("missing", "b"), ("a", "missing")):
         with pytest.raises(ValueError):
-            comms.messaging.send_message(sender, target, "invalid")
+            comms.messaging.send(sender, target, "invalid").message
     messages = [
-        comms.messaging.send_message("a", "b", "first"),
-        comms.messaging.send_message("b", "a", "second"),
-        comms.messaging.send_message("a", "#all", "channel"),
+        comms.messaging.send("a", "b", "first").message,
+        comms.messaging.send("b", "a", "second").message,
+        comms.messaging.send("a", "#all", "channel").message,
     ]
     assert [row.seq for row in messages] == [1, 2, 3]
     assert len({row.message_id for row in messages}) == 3
@@ -611,7 +611,7 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
         "b", tuple(message.reference for message in unread)
     ) == 2
     assert reopened.bus.pending_count("b") == 0
-    later = reopened.messaging.send_message("renamed", "b", "later")
+    later = reopened.messaging.send("renamed", "b", "later").message
     assert later.seq == 4
     assert [row.seq for row in reopened.bus.inbox("b")] == [4]
 

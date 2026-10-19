@@ -284,7 +284,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
         wire = Comms(native.root)
         try:
             await Coordination.run_worker(partial(
-                wire.messaging.send_message, "sender", session, "P71_SELECTED_ORIGINAL",
+                wire.messaging.send, "sender", session, "P71_SELECTED_ORIGINAL",
             ))
             await wait_for(lambda: native.provider.posts == 1)
             wake = agent.inputs.state(session).wake_task
@@ -305,7 +305,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             user = stored_inputs(agent.inputs.dispositions.root).lookup(user_key)
             assert user.has_native_binding and not user.has_started
             bus_message = await Coordination.run_worker(partial(
-                wire.messaging.send_message, "sender", session, "P71_BUS_MUST_SURVIVE",
+                wire.messaging.send, "sender", session, "P71_BUS_MUST_SURVIVE",
             ))
             bus_key = InputDispositions.bus_key(bus_message, owner)
             await wait_for(lambda: stored_inputs(agent.inputs.dispositions.root).lookup(bus_key).has_native_binding)

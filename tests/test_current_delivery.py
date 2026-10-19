@@ -53,13 +53,13 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound)
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
-    old = comms.messaging.send_message("sender", "recipient", "retained history")
-    comms.messaging.send("sender", "#team", "old channel row")
+    old = comms.messaging.send("sender", "recipient", "retained history").message
+    comms.messaging.send("sender", "#team", "old channel row").message.message_id
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
     comms.registry.declare(comms.registry.new_thread(rebound, frozenset({'team'}), str(tmp_path)))
-    new = comms.messaging.send_message("sender", "recipient", "current input")
-    comms.messaging.send("sender", "#team", "current channel input")
+    new = comms.messaging.send("sender", "recipient", "current input").message
+    comms.messaging.send("sender", "#team", "current channel input").message.message_id
     current = wire(tmp_path)
     consistent(current, "sender", "recipient")
     with current.bus.snapshot(viewer=NamedViewer("recipient")) as (basis, source):
@@ -111,13 +111,13 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
-        comms.messaging.send_message("sender", viewer, f"row {number}")
+        comms.messaging.send("sender", viewer, f"row {number}").message
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
         assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 5}
 
     reader = wire(tmp_path)
     with reader.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, stale):
-        comms.messaging.send_message("sender", viewer, "after the reader's cut")
+        comms.messaging.send("sender", viewer, "after the reader's cut").message
         # Another reader indexes a later cut while this cut is held.
         observer = wire(tmp_path)
         with observer.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
@@ -147,14 +147,14 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
-        comms.messaging.send_message("sender", viewer, f"row {number}")
+        comms.messaging.send("sender", viewer, f"row {number}").message
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
         assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 5}
 
     reader = wire(tmp_path)
     with reader.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, stale):
-        comms.messaging.send_message("sender", viewer, "after the reader's cut")
-        comms.messaging.send_message("sender", viewer, "one more after it")
+        comms.messaging.send("sender", viewer, "after the reader's cut").message
+        comms.messaging.send("sender", viewer, "one more after it").message
         observer = wire(tmp_path)
         with observer.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
             assert observer.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 7}
@@ -252,7 +252,7 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_pat
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    message = comms.messaging.send_message("sender", viewer, "already read")
+    message = comms.messaging.send("sender", viewer, "already read").message
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
         viewer, (message,), comms.registry.snapshot(), comms.bus.log.path,
     ))

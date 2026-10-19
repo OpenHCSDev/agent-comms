@@ -24,7 +24,7 @@ def prepared(root):
 
 def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_path):
     comms = prepared(tmp_path)
-    message = comms.messaging.send_message("alice", "#team", "shown")
+    message = comms.messaging.send("alice", "#team", "shown").message
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     anonymous = comms.views.presentation.channel_page("#team")
     assert anonymous.display_scope.displayed is None
@@ -76,7 +76,7 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
 def test_bounded_page_marks_only_shown_messages(tmp_path):
     comms = prepared(tmp_path)
     for i in range(5):
-        comms.messaging.send("alice", "#team", f"message {i}")
+        comms.messaging.send("alice", "#team", f"message {i}").message.message_id
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), bounds=PageBounds(limit=2))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), mark=ReadThrough(page.newest_seq, page.display_scope)
@@ -86,7 +86,7 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
 
 def test_displayed_message_is_read_in_every_projection(tmp_path):
     comms = prepared(tmp_path)
-    comms.messaging.send("alice", "#team", "visible in both views")
+    comms.messaging.send("alice", "#team", "visible in both views").message.message_id
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), mark=ReadThrough(page.newest_seq, page.display_scope)
@@ -97,8 +97,8 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
 def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp_path):
     comms = prepared(tmp_path)
     comms.registry.declare(comms.registry.new_thread('carol', frozenset(), str(tmp_path)))
-    hidden = comms.messaging.send_message("bob", "carol", "no member mentioned")
-    shown = comms.messaging.send_message("bob", "carol", "@alice shown by mention")
+    hidden = comms.messaging.send("bob", "carol", "no member mentioned").message
+    shown = comms.messaging.send("bob", "carol", "@alice shown by mention").message
     comms.channels.set_channel_any_mode("#team", True)
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     assert [message.seq for message in page.messages] == [shown.seq]
@@ -120,7 +120,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     peer = comms.registry.require("alice")
     comms.registry.register(replace(peer, process_identity=ProcessIdentity.capture(os.getpid())))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("alice", viewer, "painted")
+    comms.messaging.send("alice", viewer, "painted").message.message_id
     page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
     assert page.display_basis.peer_created_at == page.display_basis.peer_created_at
     comms.registry.lease_local_turn("alice", "ordinary-turn")
@@ -141,7 +141,7 @@ def test_agent_sent_dm_includes_independent_human_read(tmp_path):
 
     comms = prepared(tmp_path)
     comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), role=UserThreadRole))
-    message = comms.messaging.send_message("alice", "reader", "painted agent DM")
+    message = comms.messaging.send("alice", "reader", "painted agent DM").message
     snapshot = comms.registry.snapshot()
     displayed = comms.bus.reads.capture(
         "reader", (message,), snapshot, comms.bus.log.path
@@ -175,7 +175,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
 
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    old = comms.messaging.send_message("alice", viewer, "painted before exit")
+    old = comms.messaging.send("alice", viewer, "painted before exit").message
     child = subprocess.run(
         [
             sys.executable,
@@ -197,7 +197,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     comms.registry.unregister("alice")
     comms.registry.remove("alice")
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
-    fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
+    fresh = comms.messaging.send("alice", viewer, "new incarnation unseen").message
     assert old.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     assert comms.bus.pending_count(viewer, "alice") == 1
     assert [row.seq for row in comms.bus.inbox(viewer, "alice")] == [fresh.seq]
@@ -210,7 +210,7 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     shown = set()
     for i in range(12):
-        comms.messaging.send("alice", rng.choice(["bob", "#team"]), f"row {i}")
+        comms.messaging.send("alice", rng.choice(["bob", "#team"]), f"row {i}").message.message_id
     for _ in range(18):
         comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
         page = comms.views.channel_display_page(
@@ -246,7 +246,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for i in range(6):
-        comms.messaging.send("alice", "#team", str(i))
+        comms.messaging.send("alice", "#team", str(i)).message.message_id
     scope = AlternateMessages("alternating", None)
     page = MessagePageRequest(scope).read(comms.bus.log)
     basis = comms.bus.reads.capture(
@@ -260,7 +260,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
 def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send_message("alice", "#team", "painted")
+    comms.messaging.send("alice", "#team", "painted").message
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), mark=ReadThrough(page.newest_seq, page.display_scope)
@@ -282,7 +282,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
 
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    message = comms.messaging.send_message("alice", viewer, "read before restore")
+    message = comms.messaging.send("alice", viewer, "read before restore").message
     ledger = comms.bus.reads
     assert ledger.read().bus_identity == NoRecordedBus()
     assert not ledger.read().bus_identity.matches(ObservedPath.at(comms.bus.log.path))
@@ -321,7 +321,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
     comms = prepared(tmp_path)
-    messages = [comms.messaging.send_message("alice", "#team", f"row {i}") for i in range(5)]
+    messages = [comms.messaging.send("alice", "#team", f"row {i}").message for i in range(5)]
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), bounds=PageBounds(limit=3))
     scope = page.display_scope
     assert scope is not None and scope.displayed is not None
@@ -354,7 +354,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for target in (viewer, "#team"):
-        comms.messaging.send("alice", target, "initial unread")
+        comms.messaging.send("alice", target, "initial unread").message.message_id
     painted, acknowledged = set(), set()
     pending = []
 
@@ -382,7 +382,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
     rng.shuffle(operations)
     for index, operation in enumerate(operations):
         if operation == "send":
-            comms.messaging.send("alice", rng.choice([viewer, "#team", "bob"]), f"row {index}")
+            comms.messaging.send("alice", rng.choice([viewer, "#team", "bob"]), f"row {index}").message.message_id
         elif operation == "mode":
             comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
         elif operation == "display":

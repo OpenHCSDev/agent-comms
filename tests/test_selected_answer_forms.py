@@ -116,7 +116,7 @@ async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path) -> N
         async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
             comms = agent._comms
             comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
-            comms.messaging.send_message("sender", session, "What did you find?")
+            comms.messaging.send("sender", session, "What did you find?").message
             native.provider.text = "Blocked: the edit did not run."
             await agent.inputs.drain_inbox(session)
             async with asyncio.timeout(60):

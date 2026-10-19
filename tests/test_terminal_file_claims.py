@@ -60,8 +60,8 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
         assert (release.resource, release.generation) == (claim.resource, claim.generation)
 
         # A delayed old settlement must leave a later acquired generation intact.
-        later = comms.messaging.send_message("Alice", "sender", "Independent manual claim",
-                                            claims=(ExistingFileClaim(resource),))
+        later = comms.messaging.send("Alice", "sender", "Independent manual claim",
+                                            claims=(ExistingFileClaim(resource),)).message
         current = comms.bus.log.claim_projection()[str(resource)]
         assert current.generation != claim.generation
         before = (comms.root / "bus.jsonl").read_bytes()
@@ -127,7 +127,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
         arguments = native.native_arguments()
         first = await asyncio.to_thread(comms.owners.start, "worker", agent_args=arguments)
         try:
-            comms.messaging.send_message("sender", "worker", "Change the value")
+            comms.messaging.send("sender", "worker", "Change the value").message
             async with asyncio.timeout(40):
                 while target.read_text() != "value = 2\n" or native.provider.posts < 2:
                     await asyncio.sleep(0.02)
@@ -171,7 +171,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
             native.provider.text = "Edited after restart."
             second = await asyncio.to_thread(comms.owners.start, "worker", agent_args=arguments)
             assert first.pid != second.pid
-            comms.messaging.send_message("sender", "worker", "Edit the same file for this new request")
+            comms.messaging.send("sender", "worker", "Edit the same file for this new request").message
             async with asyncio.timeout(40):
                 while target.read_text() != "value = 3\n" or comms.bus.log.claim_projection():
                     await asyncio.sleep(0.02)

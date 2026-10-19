@@ -193,9 +193,11 @@ class TurnRunner:
                 agent_task = text.strip()
             if relay_text:
                 target, body = parse_target(relay_text)
-                await Coordination.run_worker(partial(
-                    self.comms.messaging.send_message, thread_name, target, body,
+                sent = await Coordination.run_worker(partial(
+                    self.comms.messaging.send, thread_name, target, body,
                 ))
+                for notice in sent.notices:
+                    await self.effects._emit_event(session_id, events.Notice(text=notice))
             self.effects._debug_log(
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
             )

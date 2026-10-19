@@ -85,7 +85,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
                 "peer", tags=frozenset(), worktree=str(native.project)
             )
             origins = tuple(
-                comms.messaging.send_message("peer", "#comms", text)
+                comms.messaging.send("peer", "#comms", text).message
                 for text in ("Original first channel input", "Original second channel input")
             )
             prompt = "\n\n".join(ScheduledTurn.incoming(item).prompt for item in origins)

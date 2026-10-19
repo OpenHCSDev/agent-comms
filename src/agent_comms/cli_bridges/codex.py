@@ -14,6 +14,7 @@ import aiohttp
 from pydantic import JsonValue
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.messages import Message
+from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
 from .history import CodexHistory, OnlineHistory
 from .shared import (Binding, EarlierPublishedPage, IncomingFrame, PublishedPage, SessionFacts,
@@ -156,11 +157,11 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
             await codex.call(BusInput.for_message(self.thread, message.message_id, IncomingFrame(message).text))
         return DeliveredOutcome
 
-    async def show_sent(self, result: str, target: str, body: str) -> None:
+    async def show_sent(self, result: SendResult) -> None:
         async with CodexConnection.open(self.socket) as codex:
             await codex.call(DisplayOutput(
-                threadId=self.thread, clientUserMessageId=f'comms-out:{result}',
-                toolOutput=ToolOutput(output=self.sent_text(result, target, body))))
+                threadId=self.thread, clientUserMessageId=f'comms-out:{result.message.message_id}',
+                toolOutput=ToolOutput(output=self.sent_text(result))))
 
     async def report_failure(self, text: str) -> None:
         async with CodexConnection.open(self.socket) as codex:

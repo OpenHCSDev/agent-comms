@@ -25,7 +25,7 @@ def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
     comms = wire(root)
     start.wait()
     for index in range(count):
-        comms.messaging.send(sender, "#all", f"{sender}:{index}")
+        comms.messaging.send(sender, "#all", f"{sender}:{index}").message.message_id
 
 
 def _register_thread(root: str, name: str, start: Event) -> None:

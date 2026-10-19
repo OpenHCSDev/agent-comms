@@ -370,10 +370,10 @@ class TestHandlers:
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
         agent = canonical_agent(wire(tmp_path / "wire"))
         agent._comms.registry.declare(agent._comms.registry.new_thread(name='peer', tags=frozenset(), worktree='/wt'))
-        agent._comms.messaging.send("peer", "#all", "old message")
+        agent._comms.messaging.send("peer", "#all", "old message").message.message_id
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         assert agent._comms.bus.inbox(response.session_id) == []
-        agent._comms.messaging.send("peer", "#all", "new message")
+        agent._comms.messaging.send("peer", "#all", "new message").message.message_id
         assert [message.body for message in agent._comms.bus.inbox(response.session_id)] == [
             "new message"
         ]
@@ -493,7 +493,7 @@ class TestHandlers:
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.registry.declare(agent._comms.registry.new_thread(name='peer', tags=frozenset(), worktree='/wt'))
-        agent._comms.messaging.send("peer", "proj", "hello")
+        agent._comms.messaging.send("peer", "proj", "hello").message.message_id
         await agent.cancel(session_id="proj")
         assert agent._comms.bus.pending_count("proj") == 1
 
@@ -1495,9 +1495,9 @@ class TestFullHistory:
         comms = wire(tmp_path / "wire")
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset({'x'}), worktree='/wt'))
         comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
-        comms.messaging.send("a", "#all", "one")
-        comms.messaging.send("a", "b", "dm")
-        comms.messaging.send("b", "#x", "tagged")
+        comms.messaging.send("a", "#all", "one").message.message_id
+        comms.messaging.send("a", "b", "dm").message.message_id
+        comms.messaging.send("b", "#x", "tagged").message.message_id
         bodies = [(m.sender, m.target, m.body) for m in list(comms.views.full_history_page().messages)]
         assert bodies == [("a", "#all", "one"), ("a", "b", "dm"), ("b", "#x", "tagged")]
 
