@@ -7,7 +7,8 @@ permission to send and live-context ownership. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from abc import ABC, abstractmethod
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
 
@@ -18,7 +19,7 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from .coordination_errors import StaleFence, IdentityConflict
 from .field_codec import FieldCodec, MalformedRecord
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
-from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
+from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution, UnrecordedNativeInputReference
 from .selected_triage import SelectedTriage, RecordedTriageText
 from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
@@ -308,8 +309,139 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         }
 
 
+class SourceCursorPosition(ABC):
+    """The activation floor or the exact durable cursor read for this operation."""
+
+    covered_seq: int
+    injected_seq: int
+
+    def require_source(self, marker, witness) -> None:
+        if not marker.claimed_after_seq <= self.covered_seq <= witness.through_seq:
+            raise IdentityConflict("current source coverage regressed or exceeds the bus")
+
+    def require_current(self, owner, db) -> None:
+        if owner.cursor(db) != self.current:
+            raise StaleFence("current cursor SQL row changed during source verification")
+
+    @property
+    @abstractmethod
+    def current(self) -> CurrentNativeCursor | None: ...
+
+    @abstractmethod
+    def cursor_row(self, owner) -> CurrentNativeCursor: ...
+
+    @abstractmethod
+    def require_recorded_input(self, owner, db) -> None: ...
+
+    @abstractmethod
+    def verify_covered(self, owner, db, coverage) -> None: ...
+
+    @abstractmethod
+    def require_native_input(self, proof, injected_seq) -> None: ...
+
+    @abstractmethod
+    def commit(self, db, cursor: CurrentNativeCursor) -> CurrentNativeCursor | None: ...
+
+    def reference_for(self, cursor, coverage):
+        proof = coverage.last_proof(cursor.injected_seq)
+        if proof is not None and proof.owner_identity != cursor.owner_identity:
+            raise IdentityConflict("current native cursor proof belongs to another owner")
+        return proof.reference if proof is not None else UnrecordedNativeInputReference()
+
+    def candidate(self, owner, coverage, proof) -> CurrentNativeCursor:
+        row = self.cursor_row(owner)
+        if proof is not None:
+            row = replace(row, injected_seq=proof.source_seq, input_id=proof.input_id,
+                          stage=type(proof.execution), session_id=proof.context.session_id,
+                          request_generation=proof.context.request_generation)
+        row = replace(row, covered_seq=coverage.covered_seq)
+        if (row.owner_identity != owner.participant_identity
+            or row.covered_seq < self.covered_seq or row.injected_seq < self.injected_seq):
+            raise IdentityConflict("current cursor would change owner or regress")
+        return row
+
+
 @dataclass(frozen=True)
-class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
+class ActivationFloor(SourceCursorPosition):
+    covered_seq: int
+    injected_seq = 0
+
+    @property
+    def current(self):
+        return None
+
+    def require_source(self, marker, witness) -> None:
+        super().require_source(marker, witness)
+        if self.covered_seq != marker.claimed_after_seq:
+            raise IdentityConflict("current source activation floor changed")
+
+    def cursor_row(self, owner):
+        return CurrentNativeCursor(
+            wire_root_id=owner.wire_root_id, recipient_lookup=owner.lookup,
+            owner_thread=owner.thread.name, owner_generation=owner.generation,
+            owner_claimed_generation=owner.claimed_generation,
+            covered_seq=self.covered_seq, injected_seq=0, input_id=None,
+            stage=None, session_id=None, request_generation=None,
+        )
+
+    def require_recorded_input(self, owner, db) -> None:
+        pass
+
+    def verify_covered(self, owner, db, coverage) -> None:
+        pass
+
+    def require_native_input(self, proof, injected_seq) -> None:
+        pass
+
+    def commit(self, db, cursor):
+        if cursor.covered_seq <= self.covered_seq:
+            return None  # No source has yet crossed this activation's floor.
+        cursor.insert(db)
+        return cursor
+
+
+@dataclass(frozen=True)
+class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable, SourceCursorPosition):
+    @property
+    def current(self):
+        return self
+
+    def cursor_row(self, owner):
+        return self
+
+    def require_recorded_input(self, owner, db) -> None:
+        owner.require_recorded_input(db, self)
+
+    def verify_covered(self, owner, db, coverage) -> None:
+        owner.require_coverage(db, self, coverage, position=self)
+
+    def require_native_input(self, proof, injected_seq) -> None:
+        if injected_seq <= self.injected_seq and self.input_id != proof.input_id:
+            raise IdentityConflict("current cursor native input changed")
+
+    def reference_for(self, cursor, coverage):
+        if cursor.injected_seq == self.injected_seq:
+            if cursor.covered_seq < self.covered_seq or cursor.reference != self.reference:
+                raise IdentityConflict("current native cursor regresses its durable proof")
+            return self.reference
+        return super().reference_for(cursor, coverage)
+
+    def commit(self, db, cursor):
+        if cursor.covered_seq == self.covered_seq and cursor.injected_seq == self.injected_seq:
+            return self
+        updated = type(self).update(
+            db, where="wire_root_id=? AND recipient_lookup=? AND owner_generation=? "
+            "AND {owner_claimed_generation}=? AND covered_seq=? AND injected_seq=?",
+            parameters=(self.wire_root_id, self.recipient_lookup, self.owner_generation,
+                        self.owner_claimed_generation, self.covered_seq, self.injected_seq),
+            covered_seq=cursor.covered_seq, injected_seq=cursor.injected_seq,
+            input_id=cursor.input_id, stage=cursor.stage, session_id=cursor.session_id,
+            request_generation=cursor.request_generation,
+        )
+        if updated.rowcount != 1:
+            raise StaleFence("current cursor monotonic update lost its fence")
+        return cursor
+
     @property
     def context_anchor(self) -> str | None:
         return self.session_id
