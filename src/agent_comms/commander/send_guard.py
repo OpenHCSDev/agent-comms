@@ -1,12 +1,17 @@
-"""PreToolUse hook: the commander reaches units only through `order` (send = tracked deadline, say = no work),
-and orders tactical work from the unit that owns it instead of running it.
+"""PreToolUse hook: the commander reaches units only through `order` (send = tracked deadline,
+say = no work), and orders tactical work from the unit that owns it instead of running it.
 
 A raw `agent-comms ... send --from <commander>` to a unit bypasses the deadline board and the
 wording checks. Core's Todo store says who the units are; anyone else is reached directly.
 Installs, maintenance, connector restarts and carries are units' work: run by the commander,
 they take its turns away from orders.
 """
-import json, re, shlex, sys
+from __future__ import annotations
+
+import json
+import re
+import shlex
+import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,12 +31,12 @@ class TacticalCommand(DeclaredFamily, affix='Command'):
     shapes: ClassVar[tuple[tuple[str, ...], ...]]
 
     @classmethod
-    def ran_by(cls, command: str) -> tuple[type['TacticalCommand'], ...]:
+    def ran_by(cls, command: str) -> tuple[type[TacticalCommand], ...]:
         lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
-        words, simple = list(lexer), []
+        simple: list[str] = []
         commands = [simple]
-        for word in words:
+        for word in lexer:
             if word and set(word) <= set(';&|()'):
                 commands.append(simple := [])
             elif not any(space in word for space in ' \n\t'):
@@ -41,7 +46,7 @@ class TacticalCommand(DeclaredFamily, affix='Command'):
 
     @classmethod
     def runs(cls, words: list[str]) -> bool:
-        def ordered(shape):
+        def ordered(shape: tuple[str, ...]) -> bool:
             remaining = iter(words)
             return all(word in remaining for word in shape)
         return any(ordered(shape) for shape in cls.shapes)
@@ -92,17 +97,19 @@ def commander_session(session: str) -> bool:
     return False
 
 
-def deny(reason):
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-          "permissionDecisionReason": reason}}))
+def deny(reason: str) -> None:
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse", "permissionDecision": "deny",
+        "permissionDecisionReason": reason}}))
 
 
-def main(a):
+def main(a: list[str]) -> None:
     hook = json.load(sys.stdin)
     command = hook.get('tool_input', {}).get('command', '')
     raw = re.search(r'\bsend\b[^|;&]*--from\s+' + re.escape(order.ME) + r'\b', command)
     targets = set(re.findall(r'--to\s+(\S+)', command))
     if raw and 'agent-comms-commander' not in command and targets & order.units():
-        return deny("Raw send to a unit. Use agent-comms-commander order send (orders, with deadline) or order say (no work).")
+        return deny("Raw send to a unit. Use agent-comms-commander order send "
+                    "(orders, with deadline) or order say (no work).")
     if (kinds := TacticalCommand.ran_by(command)) and commander_session(hook.get('session_id', '')):
         deny(' '.join(kind.refusal() for kind in kinds))
