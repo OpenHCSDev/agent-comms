@@ -71,6 +71,9 @@ class ImportedReply(ImportedMessage):
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
+    # Import parts and the prefix precede journal rows; saved projections supply
+    # the required file position through TranscriptProjection.
+    position: int = 0
     routing = None
     source = None
     timestamp = None
@@ -133,7 +136,7 @@ class RecordedTranscript(TranscriptEvent):
 class TextTranscript(TranscriptEvent):
 
     def as_context(self) -> ContextTranscript:
-        return ContextTranscript(self.text, timestamp=self.timestamp)
+        return ContextTranscript(self.text, timestamp=self.timestamp, position=self.position)
 
     starts_activity = True
 
@@ -181,13 +184,23 @@ class WireTextTranscript(MarkdownTranscript):
     """Immutable presentation of one original committed wire record."""
 
     source: MessageReference = field()
+    position: ClassVar[int]
     routed = True
+
+    @property
+    def position(self) -> int:
+        return self.source.seq
 
 
 @dataclass(frozen=True, kw_only=True)
 class IncomingTranscript(TextTranscript):
     message: Message
     reader: str
+    position: ClassVar[int]
+
+    @property
+    def position(self) -> int:
+        return self.message.position
 
     @property
     def text(self):

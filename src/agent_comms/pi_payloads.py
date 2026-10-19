@@ -268,10 +268,10 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
         return self if self.to_wire() == raw else UnknownContent(raw)
 
-    def user_transcript(self):
+    def user_transcript(self, position: int):
         return []
 
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         return []
 
     wire_tag = "type"
@@ -295,15 +295,15 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
 
 @dataclass(frozen=True)
 class TextContent(PiContent):
-    def user_transcript(self):
+    def user_transcript(self, position: int):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(self.text)]
+        return [UserTranscript(self.text, position=position)]
 
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         from .transcript_events import AssistantTranscript
 
-        return [AssistantTranscript(self.text)]
+        return [AssistantTranscript(self.text, position=position)]
 
     text: str = field()
     text_signature: str | None = wire_field("textSignature")
@@ -316,10 +316,10 @@ class TextContent(PiContent):
 
 @dataclass(frozen=True)
 class ThinkingContent(PiContent):
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         from .transcript_events import ThinkingTranscript
 
-        return [ThinkingTranscript(self.thinking)]
+        return [ThinkingTranscript(self.thinking, position=position)]
 
     thinking: str = ""
     thinking_signature: str | None = wire_field("thinkingSignature")
@@ -335,11 +335,11 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return (self,)
 
-    def assistant_transcript(self):
+    def assistant_transcript(self, position: int):
         from .transcript_events import ToolStartTranscript
 
         return [
-            ToolStartTranscript(tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
+            ToolStartTranscript(position=position, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
                                 tool=ToolDeclaration.record(self.name, self.arguments))
         ]
 
@@ -351,10 +351,10 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 
 @dataclass(frozen=True)
 class ImageContent(PiContent):
-    def user_transcript(self):
+    def user_transcript(self, position: int):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]")]
+        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position)]
 
     data: str
     mime_type: str = wire_field("mimeType")
@@ -673,21 +673,18 @@ class AssistantMessage(PiMessage):
 
     @property
     def unread_reply(self) -> bool:
-        from .transcript_events import AssistantTranscript, NoticeTranscript
-
-        return any(
-            isinstance(event, (AssistantTranscript, NoticeTranscript)) and event.text.strip()
-            for event in self.transcript_events(None)
-        )
+        return bool(self.text.strip() or (
+            self.stop_reason.failed and self.error_message and self.error_message.strip()
+        ))
 
     def transcript_events(self, context):
         from .transcript_events import AssistantTranscript, NoticeTranscript
 
         if self.stop_reason.failed and self.error_message and self.error_message.strip():
-            return [NoticeTranscript(f"[agent error] {self.error_message.strip()}")]
+            return [NoticeTranscript(f"[agent error] {self.error_message.strip()}", position=context.position)]
         events = []
         for part in self.parts:
-            for event in part.assistant_transcript():
+            for event in part.assistant_transcript(context.position):
                 if (
                     isinstance(event, AssistantTranscript)
                     and events
@@ -730,7 +727,7 @@ class UserMessage(PiMessage):
         events = []
         if display is not None:
             if raw_text and raw_text != display.text:
-                events.append(ContextTranscript(raw_text))
+                events.append(ContextTranscript(raw_text, position=context.position))
             if display.text is None:
                 return events
             parts = (
@@ -738,7 +735,7 @@ class UserMessage(PiMessage):
                 *(part for part in parts if not isinstance(part, TextContent)),
             )
         for part in parts:
-            events.extend(part.user_transcript())
+            events.extend(part.user_transcript(context.position))
         return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
@@ -769,6 +766,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
+                position=context.position,
                 text=output,
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,

@@ -384,7 +384,7 @@ class TranscriptSource:
 
         entry = record.entry
         return tuple(project_events(TranscriptProjection(
-            routes.get(entry.id), routes.input_display(entry.input_id),
+            routes.get(entry.id), routes.input_display(entry.input_id), position=record.start,
         )))
 
 

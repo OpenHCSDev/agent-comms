@@ -320,6 +320,10 @@ class Message:
     )
 
     @property
+    def position(self) -> int:
+        return self.seq
+
+    @property
     def text_size(self) -> int:
         return len(self.body)
 

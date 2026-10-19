@@ -162,7 +162,7 @@ class NativeRecord:
 
     @property
     def events(self):
-        return self.project(lambda original: original.entry.events(TranscriptProjection()))
+        return self.project(lambda original: original.entry.events(TranscriptProjection(position=original.start)))
 
     def publication_producer(self) -> NativeEntry | None:
         if not self.complete or self.entry is None:
