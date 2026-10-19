@@ -230,15 +230,19 @@ def carry_all(
 
 
 def copy_bus(root: Path, copy: Path) -> None:
-    """Copy under the bus's wire lock so no writer tears the copy; sockets are skipped."""
-    def sockets(directory: str, names: list[str]) -> set[str]:
+    """Copy under the bus's wire lock so no writer tears the copy; sockets and maintenance files are skipped."""
+    # The maintenance files describe the live root; a copy is a new root and starts open.
+    held = set(MaintenanceBarrier(root / "registry.json").witness_paths())
+
+    def skipped(directory: str, names: list[str]) -> set[str]:
         return {name for name in names
-                if stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
+                if Path(directory, name) in held
+                or stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
 
     from agent_comms.store_files import _store_lock
 
     with _store_lock(root / "wire"):
-        shutil.copytree(root, copy, symlinks=True, ignore=sockets)
+        shutil.copytree(root, copy, symlinks=True, ignore=skipped)
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
