@@ -77,7 +77,7 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
                    '"offset" INTEGER NOT NULL, PRIMARY KEY ("seq")) STRICT')
     with pytest.raises(StaleBusPageIndexError):
         bus.incoming_page('b', after=6)
-    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+    with bus.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as opened:
         with BusPageIndex(bus.log.path) as index:
             index.sync(opened)
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
