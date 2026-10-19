@@ -33,7 +33,7 @@ from .publisher import Publisher
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import SharedLock, _store_lock
+from .store_files import ExclusiveLock, LockMode, SharedLock, _store_lock
 from .threads import Thread
 from .wire_log import CheckedWireStoreLock
 from .wire_metadata import WireMetadata
@@ -43,22 +43,12 @@ def verify_selected_wake(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
 ) -> None:
     """Reject any unselected, stale, stopped, or unrelated N/K execution."""
-    if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
-        raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with _store_lock(comms._wire_lock_path, mode=SharedLock()):
-        _require_no_private_owner_rename(comms.root)
-        try:
-            with comms.bus.log.checked_read() as source:
-                marker = source.marker
-                if claim_scope.source_seq <= marker.claimed_after_seq:
-                    raise IdentityConflict("Selected wake precedes the current claim_scope floor")
-            initial = comms.bus.log.read_delivery_cohort(
-                claim_scope.wire_root_id, claim_scope.source_seq
-            )
-            owner, generation = comms.registry.live_owner_with_claim(owner_name)
-        except (RelationViolationError, ValueError) as error:
-            raise IdentityConflict("Wake bus or live owner authority changed") from error
-        _verify_selected_wake_state(initial, owner, generation, store, claim_scope)
+    try:
+        with _selected_claim_boundary(comms, store, claim_scope, owner_name,
+                                      store.session.read, SharedLock()):
+            pass
+    except (RelationViolationError, ValueError) as error:
+        raise IdentityConflict("Wake bus or live owner authority changed") from error
 
 
 def _verify_selected_wake_state(
@@ -131,15 +121,16 @@ def _committed_source(
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str,
     checking: Callable[[], AbstractContextManager[object]],
+    mode: LockMode = ExclusiveLock(),
 ) -> Iterator[tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
     """One wire/bus/registry boundary for selected claim acquisition."""
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
     bus = comms.bus
     with (
-        _store_lock(comms._wire_lock_path),
-        bus.log.locked() as bus_lock,
-        _store_lock(comms.registry.store.path),
+        _store_lock(comms._wire_lock_path, mode=mode),
+        bus.log.locked(mode=mode) as bus_lock,
+        _store_lock(comms.registry.store.path, mode=SharedLock()),
     ):
         registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)

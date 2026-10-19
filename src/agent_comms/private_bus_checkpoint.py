@@ -44,15 +44,7 @@ from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
 from .thread_identity import ThreadIncarnation
 from .turn_context import ContextEntryManifest, RecordedContextManifest
-from .typed_table import (
-    Column,
-    ForeignKey,
-    Index,
-    SQLiteSchemaObject,
-    SqlStorage,
-    SqlValue,
-    TypedTable,
-)
+from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
 
