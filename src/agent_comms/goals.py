@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import signal
@@ -403,6 +404,12 @@ class GitCommandFailed(ValueError):
         self.run = run
         super().__init__(run.stderr.strip() or f"git failed with exit {run.returncode}")
 
+    def no_check_ran_on(self, sha: str) -> bool:
+        """Git's absent-note reply, not a corrupt repository or an invalid revision."""
+        return self.run.returncode == 1 and self.run.stderr in (
+            "", f"error: no note found for object {sha}.\n",
+        )
+
 
 @dataclass(frozen=True)
 class CheckedCommit:
@@ -424,7 +431,7 @@ class CheckedCommit:
     @staticmethod
     def git(repository: str, *args: str) -> str:
         run = subprocess.run(("git", "-C", repository, *args), capture_output=True, text=True,
-                             timeout=60)
+                             timeout=60, env=os.environ | {"LC_ALL": "C"})
         if run.returncode:
             raise GitCommandFailed(run)
         return run.stdout
@@ -435,7 +442,7 @@ class CheckedCommit:
         try:
             cls.git(repository, *cls.NOTES, "list", sha)
         except GitCommandFailed as failure:
-            if failure.run.returncode == 1 and not failure.run.stderr:
+            if failure.no_check_ran_on(sha):
                 return ()  # No check ran on this commit.
             raise
         return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
