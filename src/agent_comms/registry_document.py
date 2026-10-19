@@ -15,7 +15,6 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord
 from .registration_change import (
     InitialRegistration,
-    NativeSourcePublication,
     RegistrationChange,
     UpdatedRegistration,
 )
@@ -40,7 +39,6 @@ from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnL
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
     from .bus_publication import CommittedDelivery
-    from .native_input_owner import RegistryOwner
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +104,9 @@ class UserThreadLookup[Value](ABC):
     @abstractmethod
     def or_create(self, create: Callable[[], Value]) -> Value: ...
 
+    @abstractmethod
+    def require(self, refusal: Exception) -> Value: ...
+
 
 @dataclass(frozen=True, slots=True)
 class FoundUserThread[Value](UserThreadLookup[Value]):
@@ -120,6 +121,9 @@ class FoundUserThread[Value](UserThreadLookup[Value]):
     def or_create(self, create: Callable[[], Value]) -> Value:
         return self.value
 
+    def require(self, refusal: Exception) -> Value:
+        return self.value
+
 
 @dataclass(frozen=True, slots=True)
 class NoUserThread[Value](UserThreadLookup[Value]):
@@ -131,6 +135,9 @@ class NoUserThread[Value](UserThreadLookup[Value]):
 
     def or_create(self, create: Callable[[], Value]) -> Value:
         return create()
+
+    def require(self, refusal: Exception) -> Value:
+        raise refusal
 
 
 class ThreadSlice[Value](ABC):
@@ -252,9 +259,6 @@ class RegistryDocument(RegistryPresence):
         if thread is not None:
             thread.turn_record.without_claim()
         return self.claims.advance(name)
-
-    def snapshot(self) -> RegistrySnapshot:
-        return RegistrySnapshot.capture(self)
 
     def entry(self, name: str) -> RegistryEntry:
         thread = self.require(name)
@@ -471,15 +475,14 @@ class RegistryDocument(RegistryPresence):
         The outer wire lock alone cannot exclude a direct registry claim; this
         check and the STOPPED transition share the registry's own lock.
         """
-        snapshot = self.snapshot()
-        current = snapshot.require_active(expected.name)
+        current = self.require_active(expected.name)
         try:
             current.require_idle()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
         if current != expected:
             raise OwnerChangedBeforeFenceRefusal()
-        if snapshot.claimed_generations[current.name] != expected_claimed_generation:
+        if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
         self.statuses[expected.name] = expected.execution.registered_status(
             expected, StoppedThreadStatus())
@@ -608,18 +611,6 @@ class RegistryDocument(RegistryPresence):
             identity=canonical_lease.identity,
             turn_id=lease.turn_id,
             claimed_generation=lease.claimed_generation,
-        )
-
-    def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
-        """Publish only the source fact of an already authorized original owner."""
-        current = original.require_source_snapshot(self.snapshot())
-        return self._native_source_publication(current, session_file)
-
-    def _native_source_publication(self, current: Thread, session_file: str) -> NativeSourcePublication:
-        return NativeSourcePublication(
-            thread=replace(current, session_file=session_file),
-            status=self.statuses[current.name],
-            previous=current, previous_status=self.statuses[current.name],
         )
 
 

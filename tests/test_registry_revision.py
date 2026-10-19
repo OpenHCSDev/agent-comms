@@ -98,7 +98,10 @@ def test_sender_bindings_are_lazy_immutable_and_owned_by_the_snapshot(tmp_path):
             first["senders"] = "{}"
         assert FieldCodec.encode(historical) == encoded
         assert json.loads(first["unrecorded"]) == []
+    assert registry.snapshot() is snapshot
+    registry.heartbeat("worker")
     newer = registry.snapshot()
+    assert newer is not snapshot
     assert "sender_bindings" not in newer.__dict__
     assert newer.sender_bindings == snapshot.sender_bindings
     assert newer.sender_bindings is not snapshot.sender_bindings

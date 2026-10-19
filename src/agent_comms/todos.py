@@ -682,8 +682,12 @@ class NotifiedFirstCallEvent(FirstCallEvent):
 class OrderWords(WireValue):
     """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
+    # A path/file match starts at a token boundary or immediately after a
+    # quoted span. Retrying its greedy prefix at every character is quadratic
+    # for long ordinary words with no slash or filename suffix.
     CITED: ClassVar[re.Pattern] = re.compile(
-        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b')
+        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|'
+        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)')
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
     least_words: ClassVar[int] = 1
@@ -2308,7 +2312,7 @@ class TodoStore(TypedStore):
 
     def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
         """Correct every open order the unit holds when its published text uses jargon."""
-        if not (words := tuple(PlainText.found(text))) or not self.path.exists():
+        if not self.path.exists() or not (words := tuple(PlainText.found(text))):
             return ()
         with self.writing() as db:
             held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))

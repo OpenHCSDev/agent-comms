@@ -2,7 +2,6 @@
 
 import hashlib
 from dataclasses import replace
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -16,8 +15,9 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import AllOutcomes, MessageNotification, OwnerOutcomes
-from agent_comms.read_ledger import ReadLedger
-from agent_comms.read_basis import ReadCursor
+from agent_comms.messages import InfoKind, Message
+from agent_comms.read_ledger import ReadDocument, ReadLedger
+from agent_comms.read_basis import ConversationCursor, ReadCursor
 from agent_comms.registry_provenance import RegisteredRecipient, RetiredRecipient
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.registry_document import RegistrySnapshot
@@ -145,14 +145,19 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     lookup = source.threads["old"].incarnation.lookup
     assert type(archived) is RegistryProvenance and not hasattr(archived, "by_lookup")
     ledger = ReadLedger(tmp_path / "archive-reads.json")
-    with patch.object(ReadLedger, "cursor", return_value=ReadCursor(exceptions=(7,))):
-        for name in ("old", "second"):
-            assert ledger.historical_displayed_recipient(
-                SimpleNamespace(seq=7), FrozenRecipient(lookup, name), archived
-            ) == (archived.threads[name].incarnation,)
+    message = Message('old', '#archive', 'seen', InfoKind, seq=7, timestamp=1700.0)
+    conversation = ledger.conversation(message, archived)
+    document = ReadDocument(messages={
+        thread.incarnation: ReadCursor({conversation: ConversationCursor(exceptions=(7,))})
+        for thread in archived.threads.values()
+    })
+    for name in ("old", "second"):
         assert ledger.historical_displayed_recipient(
-            SimpleNamespace(seq=7), FrozenRecipient("wrong-lookup", "old"), archived
-        ) == ()
+            message, FrozenRecipient(lookup, name), archived, document=document
+        ) == (archived.threads[name].incarnation,)
+    assert ledger.historical_displayed_recipient(
+        message, FrozenRecipient("wrong-lookup", "old"), archived, document=document
+    ) == ()
     with pytest.raises(ValueError, match="positive recorded birth"):
         replace(source.threads["second"], created_at=0.0)
     zero = replace(recorded.threads["second"], created_at=0.0)
