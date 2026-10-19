@@ -89,11 +89,6 @@ class RuntimeChild:
         with self.checked():
             if self.members():
                 RecordedRuntimeGroup(self.identity).stop_sync(deadline=deadline)
-            survivors = self.members()
-            if survivors:
-                raise ChildRetirementFailed(
-                    f"Surviving pid(s): {', '.join(str(process.pid) for process in survivors)}"
-                )
 
 
 @dataclass(frozen=True)
