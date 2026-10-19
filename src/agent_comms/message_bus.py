@@ -14,6 +14,7 @@ from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import ANY_CHANNEL, BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
+from .coordinator import Coordination
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .historical_views import HistoryArchive
 from .message_page import (
@@ -180,7 +181,7 @@ class MessageBus[Writes: Publisher]:
 
         while True:
             try:
-                result = await asyncio.to_thread(admitted)
+                result = await Coordination.run_worker(admitted)
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()
