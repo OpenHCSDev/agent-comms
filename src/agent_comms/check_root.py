@@ -179,9 +179,7 @@ class CheckRoot:
         environment = ThreadLaunch.strip(dict(os.environ))
         RestartEnvironment.strip(environment, "root")
         with self.open() as copied:
-            arguments = tuple(
-                argument.replace("{root}", str(copied.root)) for argument in command
-            )
+            arguments = tuple(argument.replace("{root}", str(copied.root)) for argument in command)
             return CheckRootResult(
                 subprocess.run(arguments, cwd=copied.root, env=environment).returncode
             )

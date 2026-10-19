@@ -974,7 +974,9 @@ class CliCommand(
 class CheckRootCliCommand(CliCommand, declared_name="check-root"):
     help = "Run a command against selected recent history, then remove its private root"
     threads: tuple[str, ...] = option(normalize=_tags, help="Comma-separated source thread names")
-    into: Annotated[Path, PathText] = option(help="New directory under your agent scratch directory")
+    into: Annotated[Path, PathText] = option(
+        help="New directory under your agent scratch directory"
+    )
     argv: tuple[str, ...] = option("argv", nargs=argparse.REMAINDER,
                                  help="-- COMMAND ARGS; use {root} for the private root argument")
 

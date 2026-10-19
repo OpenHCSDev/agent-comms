@@ -10,19 +10,10 @@ import math
 import re
 import types
 from abc import abstractmethod
-from dataclasses import dataclass, field, fields, is_dataclass, replace
 from decimal import Decimal
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    Any,
-    ClassVar,
-    Literal,
-    Union,
-    get_args,
-    get_origin,
-)
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
@@ -36,9 +27,9 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnreportedStopReason,
 )
-from .send_result import CorrectionResult, CorrectionUnreported
 from .tool_declaration import ToolDeclaration
 from .transcript_events import SentTranscript
+from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
