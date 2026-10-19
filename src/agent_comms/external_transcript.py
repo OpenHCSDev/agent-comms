@@ -10,7 +10,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
@@ -253,16 +253,12 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
             yield DraftPublication()
             return
         transcript = ExternalTranscript(root, original.owner_lookup)
-        with transcript.writer_connection() as connection:
+        with transcript.writer_connection(check_same_thread=False) as connection:
             publication = TurnDraftPublication(original.owner_lookup, connection, input_id)
             try:
                 yield publication
             finally:
                 publication.retire_message()
-
-    def append_text(self, text: str):
-        from dataclasses import replace
-        return replace(self, events=tuple(replace(event, text=event.text + text) for event in self.events))
 
     def publish(self, transcript: StoreWriter) -> None:
         with transcript.writing() as connection:
@@ -485,10 +481,7 @@ class DraftPublication:
     def begin_message(self, timestamp: float) -> None:
         pass
 
-    def append_text(self, text: str) -> None:
-        pass
-
-    def publish(self) -> None:
+    def publish(self, parts: Iterable[str]) -> None:
         pass
 
     def retire_message(self) -> None:
@@ -502,7 +495,6 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
         self.lookup = lookup
         self.connection = connection
         self.turn_id = turn_id
-        self.current: TranscriptDraft = NoDraft()
 
     @contextmanager
     def writing(self):
@@ -510,18 +502,16 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
             yield self.connection
 
     def begin_message(self, timestamp: float) -> None:
+        self.item_id = uuid4().hex
+        self.timestamp = timestamp
+
+    def publish(self, parts: Iterable[str]) -> None:
         from .transcript_events import AssistantTranscript
-        item_id = uuid4().hex
-        self.current = DraftRow(self.lookup, self.turn_id, item_id,
-                                (AssistantTranscript('', position=item_id, timestamp=timestamp),))
-
-    def append_text(self, text: str) -> None:
-        self.current = self.current.append_text(text)
-
-    def publish(self) -> None:
-        self.current.publish(self)
+        DraftRow(self.lookup, self.turn_id, self.item_id,
+                 (AssistantTranscript(''.join(parts), position=self.item_id,
+                                      timestamp=self.timestamp),)).publish(self)
 
     def retire_message(self) -> None:
-        self.current.end_turn(self)
-        self.current = NoDraft()
+        with self.writing() as connection:
+            DraftRow.delete(connection, thread=self.lookup, turn_id=self.turn_id)
 
