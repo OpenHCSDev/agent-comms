@@ -7,7 +7,6 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, AsyncExitStack
 from functools import partial
 from pathlib import Path
-from types import TracebackType
 from typing import Self, TypeVar
 
 from .assignment_store import AssignmentStore
@@ -50,13 +49,10 @@ class Coordination:
         resources: AsyncExitStack, context: AbstractContextManager[Result],
     ) -> Result:
         """Join entry before cancellation, and pass the real exit back to its worker."""
-        async def leave(
-            exc_type: type[BaseException] | None, error: BaseException | None,
-            traceback: TracebackType | None,
-        ) -> bool | None:
-            return await Coordination.run_worker(partial(
-                context.__exit__, exc_type, error, traceback,
-            ))
+        async def leave(*exit_info):
+            # Forward contextlib's exit protocol unchanged; this bridge owns
+            # worker lifetime, not the meaning of an exception or a clean exit.
+            return await Coordination.run_worker(partial(context.__exit__, *exit_info))
 
         def enter() -> Result:
             value = context.__enter__()

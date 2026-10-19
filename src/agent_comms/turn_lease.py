@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from .activity import ObservedActivity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import NullMember, RecordMember, SubclassUnion
+from .field_codec import NullMember, RecordMember, SubclassUnion, boundary_decoder
 from .locked_store import JsonDocument
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -32,6 +32,12 @@ class TurnEnding(DeclaredFamily, affix="Ending"):
     @staticmethod
     def from_exception(error: BaseException) -> FailedEnding:
         return FailedEnding(''.join(traceback.format_exception(error)))
+
+    @staticmethod
+    @boundary_decoder
+    def from_context(error: BaseException | None) -> TurnEnding:
+        """Decode contextlib's external exception-or-None protocol once."""
+        return FinishedEnding() if error is None else TurnEnding.from_exception(error)
 
     @abstractmethod
     def record(self, turn: ActiveTurn) -> EndedTurn: ...
@@ -85,7 +91,7 @@ class TurnDeclaration(SubclassUnion, affix=""):
     started_at: float | None
 
     @abstractmethod
-    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None: ...
+    def leases(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> Iterator[TurnLeaseFence]: ...
 
     @abstractmethod
     def held_by(self, lease: TurnLeaseFence) -> bool: ...
@@ -140,9 +146,6 @@ class TurnDeclaration(SubclassUnion, affix=""):
     @abstractmethod
     def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]: ...
 
-    def notify_failure(self, messaging: Messaging, name: str) -> None:
-        pass
-
 
 class IdleTurn(TurnDeclaration, declared_name=None):
     """Idle behavior is shared by an empty owner and a recorded failure."""
@@ -184,11 +187,14 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def matches(self, turn_id: TurnId) -> bool:
         return False
 
-    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None:
-        raise RelationViolationError("registry owner has no active turn")
+    def leases(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> Iterator[TurnLeaseFence]:
+        return iter(())
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
-        raise RelationViolationError("registry owner has no active turn")
+        return False
+
+    def notify_failure(self, messaging: Messaging, name: str) -> None:
+        pass
 
     def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect:
         return UnchangedTurnEnding()
@@ -289,13 +295,13 @@ class ActiveTurn(RecordMember, TurnDeclaration):
             self.claimed_generation is None
             and replace(self, claimed_generation=lease.claimed_generation).held_by(lease))
 
-    def lease(
+    def leases(
         self, incarnation: ThreadIncarnation, record: StoredTurnRecord,
-    ) -> TurnLeaseFence | None:
+    ) -> Iterator[TurnLeaseFence]:
         if self.claimed_generation is None or self.turn_generation is None:
-            return None
-        return TurnLeaseFence(TurnIdentity(incarnation, self.turn_generation),
-                              self.id, self.claimed_generation, record=record)
+            return
+        yield TurnLeaseFence(TurnIdentity(incarnation, self.turn_generation),
+                             self.id, self.claimed_generation, record=record)
 
     def observed_id(self, finished: str | None) -> str:
         return self.id
@@ -370,8 +376,8 @@ class TurnRecord(SubclassUnion, affix=""):
     def without_claim(self) -> None: ...
 
     @abstractmethod
-    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None: ...
+    def leases(self, incarnation: ThreadIncarnation, process: ProcessState,
+               generation: int) -> Iterator[TurnLeaseFence]: ...
 
 
 @dataclass(frozen=True)
@@ -385,9 +391,9 @@ class NoTurnRecord(NullMember, TurnRecord):
     def without_claim(self) -> None:
         pass
 
-    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None:
-        return None
+    def leases(self, incarnation: ThreadIncarnation, process: ProcessState,
+               generation: int) -> Iterator[TurnLeaseFence]:
+        return iter(())
 
 
 @dataclass(frozen=True)
@@ -403,8 +409,8 @@ class StoredTurnReference(RecordMember, TurnRecord):
     def without_claim(self) -> None:
         self.read()
 
-    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None:
+    def leases(self, incarnation: ThreadIncarnation, process: ProcessState,
+               generation: int) -> Iterator[TurnLeaseFence]:
         raise RelationViolationError("Turn reference must be bound by its registry")
 
 
@@ -444,13 +450,11 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
         record._publish_unlocked(turn)
         return record
 
-    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None:
+    def leases(self, incarnation: ThreadIncarnation, process: ProcessState,
+               generation: int) -> Iterator[TurnLeaseFence]:
         active = self.read()
-        if not active.executing:
-            return None
         active.validate_owner(process, generation)
-        return active.lease(incarnation, self)
+        return active.leases(incarnation, self)
 
     def without_claim(self) -> None:
         self._publish_unlocked(self.read().without_claim())
@@ -467,7 +471,7 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
     ) -> tuple[TurnState, ...]:
         with _store_lock(self.registry_path):
             active = self.read()
-            if not active.executing or not active.held_by(lease):
+            if not active.held_by(lease):
                 return ()
             effects = tuple(observe(TurnState(active)))
             for state in effects:

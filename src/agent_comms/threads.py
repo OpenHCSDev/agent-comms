@@ -373,7 +373,9 @@ class Thread(ThreadProvenance):
     @property
     def turn_lease(self) -> TurnLeaseFence | None:
         """Read this record's exact turn once; no phase is cached on the thread."""
-        return self.turn_record.lease(self.incarnation, self.process_identity, self.turn_generation)
+        return next(self.turn_record.leases(
+            self.incarnation, self.process_identity, self.turn_generation,
+        ), None)
 
     def require_turn_lease(self) -> TurnLeaseFence:
         lease = self.turn_lease

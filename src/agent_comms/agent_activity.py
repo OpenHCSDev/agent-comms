@@ -247,7 +247,7 @@ class AgentActivity:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
-        if diagnostic is None or diagnostic.recorded_at >= lease.record.read().started_at:
+        if diagnostic is None or diagnostic.recorded_at >= lease.record.read().require_active().started_at:
             return False
         return self._recover_drain(thread.name, owner, diagnostic)
 

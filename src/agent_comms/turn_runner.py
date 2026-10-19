@@ -42,6 +42,7 @@ from .runtime import (
 )
 from .pi_payloads import StateData
 from .threads import Thread
+from .thread_identity import TurnId
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import FinishedEnding, TurnEnding, TurnLeaseFence, TurnState
@@ -112,7 +113,7 @@ class TurnRunner:
 
     def owns_turn(self, session_id: str, turn_id: str) -> bool:
         state = self.turn_state(session_id)
-        return state.active.phase.busy and state.active.id == turn_id
+        return state.active.phase.busy and state.active.matches(TurnId(turn_id))
 
     async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
         states = await Coordination.run_worker(partial(
@@ -320,9 +321,11 @@ class TurnRunner:
         this operation; no delivered result is needed to retire that lease.
         """
         owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
-        resources.push_async_exit(partial(
-            self.settle_turn, session_id, owner.turn_lease, task=task,
-        ))
+        resources.push_async_exit(
+            lambda _type, error, _traceback: self.settle_turn(
+                session_id, owner.turn_lease, TurnEnding.from_context(error), task=task,
+            )
+        )
         return owner
 
     def finish_turn(
@@ -341,7 +344,7 @@ class TurnRunner:
         self,
         session_id: str,
         lease: TurnLeaseFence,
-        exc_type=None, error: BaseException | None = None, traceback=None,
+        ending: TurnEnding = FinishedEnding(),
         *,
         task: asyncio.Task[Any] | None = None,
     ) -> None:
@@ -352,7 +355,6 @@ class TurnRunner:
         """
         if task is not None and self.turn_tasks.get(session_id) is task:
             self.turn_tasks.pop(session_id, None)
-        ending = FinishedEnding() if error is None else TurnEnding.from_exception(error)
         async with AsyncExitStack() as resources:
             update = await Coordination.run_worker(partial(
                 self.finish_turn, resources, session_id, lease, ending,
