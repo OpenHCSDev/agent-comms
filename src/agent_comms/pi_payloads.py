@@ -19,9 +19,7 @@ from typing import (
     Any,
     ClassVar,
     Literal,
-    Self,
     Union,
-    cast,
     get_args,
     get_origin,
 )
@@ -119,8 +117,8 @@ class PiPayload:
         return project_wire(value, target)
 
     @classmethod
-    def from_wire(cls, value: object) -> Self:
-        return cast(Self, FieldCodec.decode(cls, cls.normalize_wire(value)))
+    def from_wire(cls, value):
+        return FieldCodec.decode(cls, cls.normalize_wire(value))
 
     def to_wire(self):
         data = FieldCodec.encode(self)

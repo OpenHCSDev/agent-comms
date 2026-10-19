@@ -180,7 +180,7 @@ class CheckRoot:
         RestartEnvironment.strip(environment, "root")
         with self.open() as copied:
             arguments = tuple(
-                str(copied.root) if argument == "{root}" else argument for argument in command
+                argument.replace("{root}", str(copied.root)) for argument in command
             )
             return CheckRootResult(
                 subprocess.run(arguments, cwd=copied.root, env=environment).returncode
