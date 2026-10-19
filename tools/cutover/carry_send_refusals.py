@@ -5,7 +5,7 @@ from pathlib import Path
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.send_refusal import SendRefusal
+from agent_comms.coordination_tables.refusals import SendRefusal
 
 from .carry import Carried, Carry
 

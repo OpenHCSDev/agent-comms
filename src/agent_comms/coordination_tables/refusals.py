@@ -8,22 +8,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .active_route import guard_original_root_write
-from .coordination_database import CoordinationStore
-from .coordination_session import CoordinationSession
-from .errors import RelationViolationError, ToolRefusedError
-from .maintenance_barrier import MaintenanceBarrier
-from .notification_assignment import NotificationAssignment
-from .private_runtime_schema import PrivateRuntimeSchema
-from .store_files import SharedLock, _store_lock
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from agent_comms.active_route import guard_original_root_write
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_session import CoordinationSession
+from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.store_files import SharedLock, _store_lock
+from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
-    from .coordinator import Coordination
+    from agent_comms.coordinator import Coordination
 
 
 @dataclass(frozen=True)
-class SendRefusal(TypedTable, PrivateRuntimeSchema):
+class SendRefusal(CoordinatorTable, TypedTable):
     """One attempted send, with no fabricated message, audience or delivery identity."""
 
     id: int = field(metadata={"sql": Column(primary_key=True)})
@@ -51,7 +51,7 @@ class SendRefusal(TypedTable, PrivateRuntimeSchema):
 
     @classmethod
     def install(cls, store: Coordination) -> None:
-        """Explicit fresh-root/upgrade operation; ordinary reads and writes never repair schema."""
+        """Explicit upgrade operation; ordinary reads and writes never repair schema."""
         with store.session.transaction() as db:
             actual = cls.stored_schema(db)
             if actual:

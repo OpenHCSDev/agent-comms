@@ -73,7 +73,7 @@ from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .send_result import CorrectionResult, SendResult
-from .send_refusal import SendRefusal
+from .coordination_tables.refusals import SendRefusal
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
