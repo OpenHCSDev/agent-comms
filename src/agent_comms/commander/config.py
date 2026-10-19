@@ -23,7 +23,7 @@ class CommanderRole:
 
     @staticmethod
     def require_commander(thread: Thread) -> None:
-        if not NativeArguments().with_model(thread.model).provider_type.may_command:
+        if not NativeArguments(()).with_model(thread.model).provider_type.may_command:
             raise RelationViolationError(
                 f"Thread {thread.name!r} with declared model {thread.model!r} "
                 "cannot command: no Codex commander."

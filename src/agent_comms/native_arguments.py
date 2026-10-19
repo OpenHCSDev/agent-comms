@@ -98,14 +98,22 @@ class ExtensionArgument(NamedOption, ValueArgument):
 
 
 class ModelProvider(DeclaredFamily, affix="Provider"):
-    """External provider names are open; declarations own provider-specific capabilities."""
+    """Provider declarations own command permission; unknown names are refused."""
 
-    may_command: ClassVar[bool] = True
+    may_command: ClassVar[bool]
 
-    @classmethod
-    def named(cls, name: object) -> type[ModelProvider]:
-        return next((member for member in cls.members_with(cls)
-                     if member.declared_name == name), cls)
+
+class NoSelectedModel(ModelProvider, declared_name=None):
+    """External commanders without a native model remain valid commanders."""
+    may_command = True
+
+
+class AnthropicProvider(ModelProvider, declared_name="anthropic"):
+    may_command = True
+
+
+class OpenAIProvider(ModelProvider, declared_name="openai"):
+    may_command = True
 
 
 class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
@@ -134,7 +142,7 @@ class SelectedModel:
 
     @property
     def provider_type(self) -> type[ModelProvider]:
-        return ModelProvider.named(self.provider)
+        return ModelProvider.member_named(self.provider)
 
     @property
     def qualified(self) -> str:
@@ -308,7 +316,8 @@ class NativeArguments:
 
     @property
     def provider_type(self) -> type[ModelProvider]:
-        return ModelProvider.named(self.value(ProviderArgument))
+        provider = self.value(ProviderArgument)
+        return NoSelectedModel if provider is None else ModelProvider.member_named(provider)
 
     @property
     def model(self) -> str | None:
@@ -329,7 +338,7 @@ class NativeArguments:
         )
 
     def with_model(self, selected: str | None) -> NativeArguments:
-        if selected is None or "/" not in selected:
+        if selected is None:
             return self
         return self.replace(ProviderArgument).replace(
             ModelArgument, *SelectedModel.decode(selected).arguments
