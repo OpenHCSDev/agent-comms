@@ -190,11 +190,10 @@ class HistoryViews:
         source = self.bus.history.attach(Path(source_root), source_read=source_read)
         catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
-        source_threads = source.provenance.threads
         with _store_lock(self._wire_lock_path):
             existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:
-                document.restore_missing(incoming, source_threads, existing=existing)
+                document.restore_missing(incoming, existing=existing)
         return source
 
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
@@ -217,7 +216,7 @@ class HistoryViews:
         viewer: DisplayViewer = AnonymousViewer(),
         bounds: PageBounds = NEWEST_PAGE,
     ) -> MessagePage:
-        channel = self.channels.catalog.read().require_channel(target, self.registry.snapshot().threads)
+        channel = self.channels.catalog.read().require_channel(target)
         return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
     def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:
@@ -226,7 +225,7 @@ class HistoryViews:
     def channel_history_page(self, target: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded channel history for any client adapter."""
         selected = CommandTarget.named(target).require_channel()
-        channel = self.channels.catalog.read().resolve(selected.name)
+        channel = self.channels.catalog.read().require_channel(selected.name)
         return ChannelHistory(channel.name, channel.history_targets).page(self.presentation, bounds)
 
     def last_sent_timestamps(
@@ -275,7 +274,7 @@ class HistoryViews:
         """Channel declarations and current members; clients never infer membership."""
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
-        channels = catalog.views(snapshot.threads)
+        channels = catalog.views()
         with self.bus.opened_activity() as clocks:
             return ChannelView.roster(
                 snapshot,
@@ -294,7 +293,7 @@ class HistoryViews:
         """Read one channel; observe and order only its own members."""
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
-        channel = catalog.require_channel(name, snapshot.threads)
+        channel = catalog.require_channel(name)
         registered = channel.members(ChannelMemberIndex(snapshot.threads.values()))
         with self.bus.opened_activity() as clocks:
             rows = ((alias, clocks.sent[alias]) for thread in registered
@@ -324,7 +323,7 @@ class HistoryViews:
         retired = set()
         for name in channels:
             try:
-                channel = catalog.require_channel(name, snapshot.threads)
+                channel = catalog.require_channel(name)
             except UnknownChannelError:
                 retired.add(name)
             else:

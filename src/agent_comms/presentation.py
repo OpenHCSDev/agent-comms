@@ -387,7 +387,7 @@ class DisplaySelection:
 
     @property
     def channels(self) -> Channels:
-        return self.catalog.views(self.registry.threads)
+        return self.catalog.views()
 
     @property
     def scopes(self) -> tuple[ChannelDisplayScope, ...]:
@@ -404,7 +404,7 @@ class DisplaySelection:
         return self.viewer.require_name(self.registry)
 
     def scope(self, target: str) -> ChannelDisplayScope:
-        channel = self.catalog.require_channel(target, self.registry.threads)
+        channel = self.catalog.require_channel(target)
         return ChannelDisplayScope.capture(channel, self.registry)
 
 
