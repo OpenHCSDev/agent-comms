@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_coding_tools import CodingToolOwner
+from .coordination_session import NativeBoundary
+from .coordinator import Coordination
 from .messages import ClaimNoticeKind
 
 from .ordinary_turn_rules import (
@@ -86,23 +88,6 @@ class OwnedSend(CodingToolOwner):
             turn=self.turn,
         ).require_valid()
         InputKeysCheck(source=source, text=text).require_valid()
-        if source.accepted_id is None:
-            return
-        accepted = self.inputs.state(self.session_id).queued.get(source.accepted_id)
-        if accepted is None:
-            for row in self.inputs.dispositions.read(source.keys).rows.values():
-                row.require_not_cleared()
-            MissingAcceptedInputCheck().require_valid()
-        AcceptedInputCheck(
-            acknowledgement=accepted,
-            current=current,
-            claim_scope=self.claim_scope,
-            input_id=source.accepted_id,
-            keys=source.keys,
-            accepted_source=self.inputs.state(self.session_id).following.get(
-                source.accepted_id
-            ),
-        ).require_valid()
 
     def _require_context(
         self, source: TurnInputSource, current: Thread, wait: GoalWait,
@@ -131,6 +116,23 @@ class OwnedSend(CodingToolOwner):
         source = self.source(public_id)
         try:
             self._check_owner(current, snapshot, canonical, source, sent_text)
+            # The queue grants a send, not a running tool's lifetime. Once Pi
+            # starts this exact input, StartedInput removes its queue entry.
+            if source.accepted_id is not None:
+                accepted = self.inputs.state(self.session_id).queued.get(source.accepted_id)
+                if accepted is None:
+                    for row in self.inputs.dispositions.read(source.keys).rows.values():
+                        row.require_not_cleared()
+                    MissingAcceptedInputCheck().require_valid()
+                AcceptedInputCheck(
+                    acknowledgement=accepted,
+                    current=current,
+                    claim_scope=self.claim_scope,
+                    input_id=source.accepted_id,
+                    keys=source.keys,
+                    inputs=self.inputs,
+                    session_id=self.session_id,
+                ).require_valid()
         except ReservationViolationError as error:
             return self._refusal(error.rule, False)
         wait = self.comms.goals.goal_wait(canonical)
@@ -204,6 +206,16 @@ class OwnedSend(CodingToolOwner):
                 claims=(resource,),
             )
             return committed.require_claim_transition().claimed(canonical)
+
+    async def release_resources(self) -> None:
+        """The ordinary turn owns its acquisitions through native/tool retirement."""
+        def release() -> None:
+            with NativeBoundary(self.comms.bus) as boundary:
+                boundary.bus.publisher.release_resources(
+                    boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
+                )
+
+        await Coordination.run_worker(release)
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)
