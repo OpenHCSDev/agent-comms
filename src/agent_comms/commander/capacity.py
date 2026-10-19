@@ -13,23 +13,20 @@ import math, os, sys, time
 from dataclasses import dataclass
 
 from ..comms import Comms
-from . import order
-from .config import CommanderConfig
 
-FORKS = f'{CommanderConfig.installed().state}/forks'
 PER_COMMANDER = 6
 BEAT_AGE = 10 * 60
 
 
-def live_forks() -> list[str]:
-    os.makedirs(FORKS, exist_ok=True)
-    return [n[:-5] for n in os.listdir(FORKS) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{FORKS}/{n}') < BEAT_AGE]
+def live_forks(forks) -> list[str]:
+    os.makedirs(forks, exist_ok=True)
+    return [n[:-5] for n in os.listdir(forks) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{forks}/{n}') < BEAT_AGE]
 
 
-def beat(name: str):
-    os.makedirs(FORKS, exist_ok=True)
-    with open(f'{FORKS}/{name}.beat', 'a'):
-        os.utime(f'{FORKS}/{name}.beat')
+def beat(forks, name: str):
+    os.makedirs(forks, exist_ok=True)
+    with open(f'{forks}/{name}.beat', 'a'):
+        os.utime(f'{forks}/{name}.beat')
 
 
 @dataclass(frozen=True)
@@ -41,12 +38,12 @@ class Load:
     forks: tuple[str, ...]
 
     @classmethod
-    def of(cls, comms: Comms, commander: str) -> Load:
+    def of(cls, comms: Comms, commander: str, forks) -> Load:
         from ..tools import CommsUnjudgedTool
         actor, now = comms.registry.require(commander).incarnation, time.time()
         owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
         return cls(len(owed), sum(t.overdue(now) for t in owed),
-                   CommsUnjudgedTool.count(comms, commander), tuple(live_forks()))
+                   CommsUnjudgedTool.count(comms, commander), tuple(live_forks(forks)))
 
     @property
     def total(self) -> float:
@@ -71,6 +68,6 @@ class Load:
             sys.exit(f'REFUSED, nothing recorded: overloaded: {self}.')
 
 
-def main(a):
-    load = Load.of(order.COMMS, order.ME)
+def main(a, commander):
+    load = Load.of(commander.comms, commander.commander, commander.state / 'forks')
     print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')

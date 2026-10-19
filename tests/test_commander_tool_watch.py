@@ -13,7 +13,7 @@ from agent_comms.todos import StorageStrikeTodo
 from test_commander_problem_orders import create
 
 
-def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
+def test_pi_calls_through_the_watcher_digest(tool_watch, commander, commander_script):
     comms, _ = commander
     calls = [("edit", {"path": "a.py", "edits": [{"oldText": "old  text", "newText": "new"}]}),
              ("write", {"path": "b.py", "content": "body\nline"}),
@@ -23,7 +23,7 @@ def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
                            {"type": "toolCall", "id": f"c{index}", "name": name, "arguments": arguments}
                            for index, (name, arguments) in enumerate(calls)]}})
     turns = collections.defaultdict(list)
-    tool_watch.follow(comms.registry, turns, "worker", f"{line}\n".encode())
+    tool_watch.follow(commander_script[0], turns, "worker", f"{line}\n".encode())
     assert turns["worker"] == ["edit a.py: -old text +new", "write b.py: body line", "bash ls -la"]
 
 
@@ -32,42 +32,41 @@ def test_coordination_call_digests_its_arguments():
     assert call.digest() == 'comms_threads {}'
 
 
-def test_a_malformed_line_raises_instead_of_skipping_history(tool_watch, commander):
+def test_a_malformed_line_raises_instead_of_skipping_history(tool_watch, commander, commander_script):
     comms, _ = commander
     whole = json.dumps({"type": "message", "id": "m1", "timestamp": "2026-10-18T22:00:00.000Z",
                         "message": {"role": "user", "content": "hello"}})
     data = f'{whole}\n{{"type": "message"\n'.encode()
     with pytest.raises(json.JSONDecodeError):
-        tool_watch.follow(comms.registry, collections.defaultdict(list), "worker", data)
+        tool_watch.follow(commander_script[0], collections.defaultdict(list), "worker", data)
 
 
-def test_storage_watch_judges_only_core_units(tool_watch, commander, monkeypatch):
+def test_storage_watch_judges_only_core_units(tool_watch, commander, commander_script, monkeypatch):
     comms, _ = commander
     create(commander, 'P1')
     judged = []
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
                         lambda self, thread, effects: judged.append(thread))
     call = CodingCall.decode('write-1', 'write', {'path': 'a.py', 'content': 'body'})
-    tool_watch.enforce_storage(comms.registry, 'lead', call)
+    tool_watch.enforce_storage(commander_script[0], 'lead', call)
     assert judged == []
-    tool_watch.enforce_storage(comms.registry, 'worker', call)
+    tool_watch.enforce_storage(commander_script[0], 'worker', call)
     assert judged == ['worker']
 
 
-def test_storage_watch_reports_refused_call_without_judging(tool_watch, commander, monkeypatch, capsys):
+def test_storage_watch_reports_refused_call_without_judging(tool_watch, commander, commander_script, capsys):
     comms, _ = commander
-    create(commander, 'P1')
-    judged = []
-    monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
-                        lambda self, thread, effects: judged.append(thread))
+    before = create(commander, 'P1')
+    registry_before = comms.registry.store.path.read_bytes()
     call = CodingCall.decode('refused-1', 'write', {'path': 'a.py'})
-    tool_watch.enforce_storage(comms.registry, 'worker', call)
-    assert judged == []
+    tool_watch.enforce_storage(commander_script[0], 'worker', call)
+    assert comms.goals.todos.get('P1') == before
+    assert comms.registry.store.path.read_bytes() == registry_before
     assert capsys.readouterr().out == ''
     assert call.digest() == 'REFUSED write: Missing required fields for WriteTool: content'
 
 
-def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, commander, monkeypatch):
+def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, commander, commander_script, monkeypatch):
     from agent_comms.tool_declaration import ToolDeclaration
 
     comms, _ = commander
@@ -85,26 +84,26 @@ def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, co
                            {'type': 'toolCall', 'id': id, 'name': 'write', 'arguments': args}
                            for id, args in calls]}})
     turns = collections.defaultdict(list)
-    tool_watch.follow(comms.registry, turns, 'worker', (line + '\n').encode())
+    tool_watch.follow(commander_script[0], turns, 'worker', (line + '\n').encode())
     assert seen == ['write', 'write']
     assert turns['worker'] == ['REFUSED write: Missing required fields for WriteTool: content', 'write b.py: body']
 
 
-def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, commander, monkeypatch):
+def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, commander, commander_script, monkeypatch):
     comms, _ = commander
     before = create(commander, 'P1')
     announcements = []
-    monkeypatch.setattr(tool_watch.order, 'on_record', lambda *args: announcements.append(args))
+    monkeypatch.setattr(type(commander_script[0]), 'on_record', lambda *args: announcements.append(args))
 
     def deny(self, thread, effects):
         raise SelectedToolDenied('The write creates a file outside the declared scratch directory')
 
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage', deny)
     call = CodingCall.decode('write-1', 'write', {'path': 'a.py', 'content': 'body'})
-    tool_watch.enforce_storage(comms.registry, 'worker', call)
-    tool_watch.enforce_storage(comms.registry, 'worker', call)
+    tool_watch.enforce_storage(commander_script[0], 'worker', call)
+    tool_watch.enforce_storage(commander_script[0], 'worker', call)
     restarted = importlib.reload(tool_watch)
-    restarted.enforce_storage(comms.registry, 'worker', call)
+    restarted.enforce_storage(commander_script[0], 'worker', call)
     after = comms.goals.todos.get('P1')
     assert after.revision == before.revision + 1
     assert len(after.live_strikes('worker')) == 1

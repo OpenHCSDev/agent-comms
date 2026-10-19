@@ -765,7 +765,7 @@ class DeclaredOptions(Command):
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
+        for declared, _ in FieldCodec.record_fields(cls):
             option = CommandOption.of(declared)
             group = option.group
             owner = parser
@@ -799,16 +799,16 @@ class DeclaredOptions(Command):
             owner.add_argument(*flags, **options)
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
+    def from_namespace(cls, args: argparse.Namespace, **context: object) -> Self:
+        values: dict[str, object] = dict(context)
         hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
-            key = FieldCodec.wire_key(declared)
+        for declared, key in FieldCodec.record_fields(cls):
             value = getattr(args, key)
             normalize = CommandOption.of(declared).normalize
-            payload[key] = (normalize(value) if normalize is not None
-                            else compile_decoder(hints[declared.name]).argument_payload(value))
-        return cls.from_payload(payload)
+            raw = (normalize(value) if normalize is not None
+                   else compile_decoder(hints[declared.name]).argument_payload(value))
+            values.update(FieldCodec.field_plan(cls, declared.name).decoded({key: raw}))
+        return FieldCodec.construct(cls, values)
 
 
 @dataclass(frozen=True, kw_only=True)
