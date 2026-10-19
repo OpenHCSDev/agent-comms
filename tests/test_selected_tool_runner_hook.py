@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bus_history import read_history
 from dataclasses import replace
 from pathlib import Path
 
@@ -195,7 +196,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(pr
     assert session_dir == kwargs_seen[0]["session"].directory
     assert "selected_claimed_write at most once" in calls[0][1]
     assert "using no tools" not in calls[0][1]
-    assert not any(message.claim_transition for message in list(comms.views.full_history_page().messages))
+    assert not any(message.claim_transition for message in read_history(comms))
 
 
 @pytest.mark.asyncio
@@ -294,4 +295,4 @@ async def test_selected_full_failure_never_reissues_or_forges_response(private_d
         is None
     )
     assert len(calls) == len(bound) == 1
-    assert not any(message.claim_transition for message in list(comms.views.full_history_page().messages))
+    assert not any(message.claim_transition for message in read_history(comms))

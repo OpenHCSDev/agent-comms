@@ -432,11 +432,8 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
 
 def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
            kind: type[StrikeTodo] = StrikeTodo) -> None:
-    """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
-
-    Core records the strike on the task's Todo; the strike is written to the narrative file and posted to
-    #comms in the same step, so no failure stays private and none is described in words that hide what happened.
-    """
+    """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
+    failure stays private and none is described in words that hide what happened."""
     # What matters is how a mistake happened, how often, and how and when it was caught.
     if not any(stage in caught for stage in STAGES):
         sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{ME} at review".')
@@ -444,16 +441,26 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
     todo.state.require_open(todo)
     if todo.held().owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-    refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
-    recorded = call(CommsTodoTool(id=task, operation=kind(
-        todo.revision, COMMS.registry.require(ME).incarnation, todo.held(), f'{why} (caught by {caught})')))
-    if recorded.todo.revision == todo.revision:
+    recorded(unit, todo, kind(todo.revision, COMMS.registry.require(ME).incarnation, todo.held(),
+                              f'{why} (caught by {caught})'))
+
+
+def recorded(unit: str, todo: Todo, strike: StrikeTodo) -> None:
+    """Core records the strike on the task's Todo; it is written to the narrative file and posted
+    to #comms in the same step."""
+    refuse(strike.reason, *OUTGOING)  # posted to #comms, so refused before Core records the strike
+    if call(CommsTodoTool(id=todo.id, operation=strike)).todo.revision == todo.revision:
         return
-    n = struck(COMMS.goals.todos.get(task), unit)
-    line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
-            f'caught by {caught}): {why}')
+    posted(unit, COMMS.goals.todos.get(todo.id), strike)
+
+
+def posted(unit: str, todo: Todo, strike: StrikeTodo) -> None:
+    """A strike Core recorded on the task's Todo goes to the narrative file and #comms."""
+    n = struck(todo, unit)
+    line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {todo.id}'
+            f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
     on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
-    print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
+    print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
 
 def revision(repo: str, ref: str) -> str:
@@ -463,7 +470,8 @@ def revision(repo: str, ref: str) -> str:
 
 
 def done(pid, sha, screenshot='', seen='', repo=''):
-    """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
+    """Core runs the delivery's check at its checked commit and strikes a late delivered commit
+    in the same revision; this posts the strikes Core recorded."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
@@ -499,12 +507,10 @@ def done(pid, sha, screenshot='', seen='', repo=''):
                                   delivered_commit=delivered_commit, evidence=evidence)
         claim = MergedClaim(delivery.delivered)
     call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
-    lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
-    # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
-    if not operation and lateness.late():
-        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered_commit}')
-        return
-    print(f'{unit}: order {todo.order.id} met as {sha}')
+    delivered_todo = COMMS.goals.todos.get(pid)
+    for late in delivered_todo.strikes[len(todo.strikes):]:
+        posted(unit, delivered_todo, late)
+    print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
 
 
 def first_calls(held, activity):

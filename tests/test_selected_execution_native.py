@@ -1,4 +1,5 @@
 """SelectedExecution with pinned native Pi, local deterministic coding provider."""
+from bus_history import read_history
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import LowThinkingLevel
 from binding_reads import binding_rows
@@ -221,7 +222,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         assert len(requests) == 2 + triage
         assert outcome.publications
         responses = [
-            m for m in list(comms.views.full_history_page().messages) if m.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
+            m for m in read_history(comms) if m.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert not comms.registry.require("beta").active_turn.executing
