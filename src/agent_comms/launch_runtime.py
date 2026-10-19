@@ -177,13 +177,21 @@ class LaunchChange(DeclaredFamily, affix="LaunchChange"):
     def apply(self, record: LaunchRecord) -> LaunchRecord: ...
 
 
+class ConfigurationLaunchChange(LaunchChange):
+    """Only configuration changes may select a restart environment."""
+
+
 class NoLaunchChange(LaunchChange):
     def apply(self, record: LaunchRecord) -> LaunchRecord:
         return record
 
 
+class NoConfigurationLaunchChange(NoLaunchChange, ConfigurationLaunchChange):
+    pass
+
+
 @dataclass(frozen=True)
-class EnvironmentLaunchChange(LaunchChange):
+class EnvironmentLaunchChange(ConfigurationLaunchChange):
     configuration: RestartEnvironment
 
     def apply(self, record: LaunchRecord) -> LaunchRecord:

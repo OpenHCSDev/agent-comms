@@ -16,8 +16,8 @@ from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
 from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import (AnySourceInterpreter, ArgumentsLaunchChange, CommandLaunchChange,
-    EnvironmentLaunchChange, ExactSourceInterpreter, LaunchChange, LaunchRecord, LaunchRuntime,
-    NoLaunchChange, RestartEnvironment, SourceInterpreter)
+    ConfigurationLaunchChange, EnvironmentLaunchChange, ExactSourceInterpreter, LaunchChange, LaunchRecord, LaunchRuntime,
+    NoConfigurationLaunchChange, NoLaunchChange, RestartEnvironment, SourceInterpreter)
 from .field_codec import boundary_decoder
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
@@ -36,7 +36,7 @@ class OwnerRestartRequest:
     names: tuple[str, ...] | None = None
     changes: tuple[LaunchChange, ...] = field(default_factory=lambda: (NoLaunchChange(), NoLaunchChange()))
     expected: OwnerRestartSelection | None = None
-    runtime: LaunchChange = field(default_factory=NoLaunchChange)
+    runtime: ConfigurationLaunchChange = field(default_factory=NoConfigurationLaunchChange)
     source_interpreter: SourceInterpreter = field(default_factory=AnySourceInterpreter)
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
 
@@ -50,7 +50,7 @@ class OwnerRestartRequest:
         return cls(names=names, expected=expected,
             changes=(NoLaunchChange() if agent_bin is None else CommandLaunchChange(agent_bin),
                      NoLaunchChange() if agent_args is None else ArgumentsLaunchChange(agent_args)),
-            runtime=NoLaunchChange() if runtime is None else EnvironmentLaunchChange(runtime),
+            runtime=NoConfigurationLaunchChange() if runtime is None else EnvironmentLaunchChange(runtime),
             source_interpreter=AnySourceInterpreter() if source_interpreter is None else ExactSourceInterpreter(source_interpreter),
             launch_runtime=launch_runtime)
 

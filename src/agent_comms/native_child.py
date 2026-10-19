@@ -20,6 +20,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
 from .session_revision import SessionRevision
+from .selected_session import SelectedSession
 
 if TYPE_CHECKING:
     from .turn_context import Provenance
@@ -288,7 +289,8 @@ class RetainedNative(ChildNative):
         if self.current and self.child.key[0].package == package:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
-                root=root, directory=directory, worktree=worktree, environment=environment, session_file=session_file)
+                root=root, worktree=worktree, environment=environment,
+                selection=SelectedSession.for_launch(directory, session_file))
             if candidate.same_acquired(original, authentication):
                 return original
         return super().managed_launch(

@@ -566,8 +566,7 @@ class NativePiRpcLaunch(NativeLaunchMatch):
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
-        directory: Path,
-        environment: LaunchRecord, session_file: str | None,
+        environment: LaunchRecord, selection: SelectedSession,
     ) -> NativeLaunchMatch:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
@@ -576,7 +575,7 @@ class NativePiRpcLaunch(NativeLaunchMatch):
         A different package or selected file needs its own fresh acquisition.
         """
         self._command_selection(command, self.record.runtime, self.package)
-        if (session_file, directory) != (self.session.session_file, self.session.directory):
+        if selection != self.session:
             return NoRetainedNativeLaunch()
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),

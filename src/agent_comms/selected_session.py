@@ -13,6 +13,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import NativeSessionFileRole
 from .pi_vocabulary import ThinkingChoice
+from .field_codec import boundary_decoder
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
@@ -63,7 +64,8 @@ class SelectedSession:
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @classmethod
-    def for_launch(cls, directory: Path, path: Path | None) -> SelectedSession:
+    @boundary_decoder
+    def for_launch(cls, directory: Path, path: Path | str | None) -> SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,
