@@ -173,7 +173,7 @@ class TransitionGoalAction(GoalAction[Goal]):
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_order(goal, ctx.goals, ctx.thread.incarnation)
         state = self.next_state(goal, ctx)
-        self.admit(goal, state, ctx)
+        self.require_transition(goal, state, ctx)
         self.before_transition(goal, ctx)
         changed = replace(
             goal,
@@ -185,8 +185,8 @@ class TransitionGoalAction(GoalAction[Goal]):
         self.before_goal_publish(changed, ctx)
         return changed
 
-    def admit(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
-        """The goal's own state machine admits this transition."""
+    def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+        """The goal's own state machine allows this transition."""
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
 
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
@@ -595,7 +595,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
-    def admit(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+    def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """A blocked goal leaves its state machine only through the attempt ledger's retry."""
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
