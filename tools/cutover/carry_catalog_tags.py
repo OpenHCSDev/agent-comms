@@ -28,10 +28,9 @@ class CatalogTags(Carry):
             for tag in known:
                 preference = preferences.setdefault(f"#{tag}", {})
                 if preference.get("created_at", 0) <= 0:
-                    created_at = first_seen[tag]
-                    if created_at <= 0:
+                    if tag not in first_seen or first_seen[tag] <= 0:
                         raise ValueError(f"No retained creation time for #{tag}")
-                    preference["created_at"] = created_at
+                    preference["created_at"] = first_seen[tag]
                     filled += 1
             wire["tags"] = sorted(known)
             document = FieldCodec.decode(CatalogDocument, wire)

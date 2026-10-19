@@ -68,7 +68,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
 
     selected = comms.channels.set_channel_any_mode("#api", True)
     assert selected.exact and selected.any_mode
-    assert wire(tmp_path).channels.catalog.read().resolve("#api").any_mode
+    assert wire(tmp_path).channels.catalog.read().require_channel("#api").any_mode
     page = comms.views.channel_display_page("#api")
     assert bodies(page) == [
         "exact target",
@@ -189,8 +189,8 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms.registry.register(replace(comms.registry.require("renamed"), tags=frozenset({"api"})))
     comms.channels.rename_tag("api", "services")
     assert comms.bus.log.latest_sequence() == high_water
-    assert comms.channels.catalog.read().resolve("#services").any_mode
-    assert not comms.channels.catalog.read().resolve("#api").any_mode
+    assert comms.channels.catalog.read().require_channel("#services").any_mode
+    assert not comms.channels.catalog.read().require_channel("#api").any_mode
     assert bodies(comms.views.channel_display_page("#services")) == ["old sender DM"]
     comms.channels.delete_tag("services")
     metadata = comms.channels.catalog.path
@@ -279,11 +279,11 @@ def test_failed_document_write_does_not_publish_mode(tmp_path):
         pytest.raises(OSError, match="catalog failure"),
     ):
         comms.channels.set_channel_any_mode("#api", True)
-    assert not comms.channels.catalog.read().resolve("#api").any_mode
-    assert not wire(tmp_path).channels.catalog.read().resolve("#api").any_mode
+    assert not comms.channels.catalog.read().require_channel("#api").any_mode
+    assert not wire(tmp_path).channels.catalog.read().require_channel("#api").any_mode
     comms.channels.set_channel_any_mode("#api", True)
     comms.channels.create_tag("later")
-    assert wire(tmp_path).channels.catalog.read().resolve("#api").any_mode
+    assert wire(tmp_path).channels.catalog.read().require_channel("#api").any_mode
 
 
 def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
