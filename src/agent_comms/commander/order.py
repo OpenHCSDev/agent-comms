@@ -805,7 +805,7 @@ class LoadedVerb(RuledVerb):
 
     def gate(self) -> None:
         if not self.fork:
-            capacity.require()
+            capacity.Load.of(COMMS, ME).require()
         super().gate()
 
 
