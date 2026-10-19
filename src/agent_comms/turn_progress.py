@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable
 from contextlib import ExitStack
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -19,7 +19,7 @@ from .acp_failure import NativeTurnOutcome
 from .thread_identity import ClaimedIdentity
 from .comms import Comms
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
+from .diagnostics import PublicationMeasurements, record_request_progress
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .mro_dispatch import MroDispatch, handles
@@ -289,23 +289,14 @@ class TurnProgress(events.AgentEventConsumer):
         self.comms.agents.recover_completed_turn(self.turn_lease, self.thread.backend)
         return tuple(published)
 
-    def publish_checkpoint(self) -> tuple[SendResult, ...]:
+    def publish_checkpoint(self, terminal: events.Done) -> tuple[SendResult, ...]:
         """Close terminal publication and its original read before ACP delivery."""
-        if self.result is not None and self.result.ok:
+        if terminal.ok:
             return self.publish_success()
         else:
             # Streamed chunks were provisional. A failed or missing terminal
             # result cannot turn them into a completed wire reply. Keep the
             # failure notice non-waking, including for human reply targets.
-            # Backend text may include stderr, secrets, or content from an
-            # unrelated session. Persist only structural facts for headless owners.
-            diagnostic_path = record_terminal_failure(
-                self.comms.root,
-                turn_id=self.turn_lease.turn_id,
-                thread=self.thread_name,
-                event=asdict(self.result) if self.result is not None else {},
-                sequences=tuple(origin.seq for origin in self.origins),
-            )
             notice_targets = tuple(
                 dict.fromkeys(
                     (*self.reply_targets,)
@@ -322,8 +313,7 @@ class TurnProgress(events.AgentEventConsumer):
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
-                    f"{prefix}: backend turn did not complete. "
-                    f"[Open diagnostic]({diagnostic_path.as_uri()})",
+                    f"{prefix}: {terminal.text}",
                     AlertKind,
                     role=NoticeRole(),
                 ))
@@ -334,7 +324,9 @@ class TurnProgress(events.AgentEventConsumer):
             await self.consume(events.Done(text="Native turn ended without a result", ok=False))
         # Cancellation must join original sends, their annotation and the
         # checkpoint before OwnedTurn can settle or release its lease.
-        await self.report_sends(await Coordination.run_worker(self.publish_checkpoint))
+        await self.report_sends(await Coordination.run_worker(
+            partial(self.publish_checkpoint, self.result)
+        ))
         checkpoint = await Coordination.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
         await self.runtime.session_update(

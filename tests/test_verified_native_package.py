@@ -46,7 +46,7 @@ def test_one_digest_for_managed_catalog_tracked_and_saved_header(declared_native
         session = SelectedSession.for_launch(work, saved)
         assert session.identity == identity
         managed = NativePiRpcLaunch.managed('pi', (), package=package,
-            worktree=work, root=tmp_path, session_file=str(saved))
+            worktree=work, root=tmp_path, session_file=str(saved), directory=work)
         catalog = NativePiRpcLaunch.catalog('pi', (), package=package, worktree=work)
         tracked = NativePiRpcLaunch.tracked(package, worktree=work, root=tmp_path,
             session=session, model=SelectedModel('local', 'fixture'),

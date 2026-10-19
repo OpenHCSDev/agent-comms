@@ -3,6 +3,8 @@
 import base64
 import hashlib
 import secrets
+import shutil
+import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -199,6 +201,47 @@ async def test_connector_reads_two_newest_first_conversation_pages(client, store
     assert [row["id"] for row in first["dm"]] == [row.message_id for row in originals[4:2:-1]]
     assert [row["id"] for row in second["dm"]] == [row.message_id for row in originals[2:0:-1]]
     assert first["has_older"] and second["has_older"]
+
+
+async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(client, comms, tmp_path):
+    from agent_comms.channel_targets import CommandTarget
+
+    comms.channels.create_tag("comms")
+    for name in ("worker", "claude-ai"):
+        comms.channels.update_tags(name, add=frozenset({"comms"}))
+    originals = [comms.messaging.send(
+        "worker", "#comms", f"@claude-ai channel post {number}").message
+        for number in range(55)]
+    copied_root = tmp_path / "copied-wire"
+    shutil.copytree(comms.root, copied_root)
+    copied = Comms(copied_root)
+    copied_store = ConnectorStore.at(tmp_path / "copied-auth")
+    connector = Connector(copied_store, "http://127.0.0.1:18766", copied_root)
+    target = CommandTarget.named("#comms")
+    before = copied.bus.pending_count("claude-ai", target)
+    ledger = copied.bus.reads.read()
+    async with TestClient(TestServer(connector.application())) as reader:
+        headers = {"Authorization": f"Bearer {await approved_token(reader, copied_store)}"}
+        response = await reader.post("/mcp", headers=headers, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "comms_history", "arguments": {"peer": "#comms", "limit": 50}},
+        })
+        assert response.status == 200
+        result = (await response.json())["result"]
+    after = copied.bus.pending_count("claude-ai", target)
+    evidence = {"result": result, "unread_before": before, "unread_after": after}
+    (tmp_path / "channel-history.json").write_text(json.dumps(evidence, indent=2))
+    assert result["isError"] is False, result
+    page = result["structuredContent"]
+    assert page["channel"] == "#comms"
+    assert [row["id"] for row in page["messages"]] == [row.message_id for row in originals[:4:-1]]
+    assert len(page["messages"]) == 50 and page["has_older"]
+    # Joining the channel also posts membership messages; the read must leave
+    # those unread too, not only the 55 posts made above.
+    assert before >= len(originals)
+    assert after == before
+    assert copied.bus.reads.read() == ledger
+    assert comms.bus.pending_count("claude-ai", target) == before
 
 
 async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
