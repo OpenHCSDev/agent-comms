@@ -41,10 +41,10 @@ def decoded(name: str, args: object, call_id: str) -> CodingCall:
 def digest_line(name: str, args: object, call: CodingCall) -> str:
     """What the call does, in enough detail to judge it."""
     try:
-        tool = call.require_tool()
+        call.require_tool()
     except SelectedToolDenied:
         return f'REFUSED {name}: {one_line(str(args), 200)}'
-    return ToolDeclaration.call_digest(name, tool, args)
+    return ToolDeclaration.call_digest(name, ToolDeclaration.record(name, args), args)
 
 
 def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> None:
