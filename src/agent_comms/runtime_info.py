@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireValue
 from .locked_store import LockedStore, RootFile
 from .pi_counts import PiCount, UnreportedCount
 from .thread_owned_state import ThreadOwnedState
@@ -69,24 +69,38 @@ class AgentRuntimeInfo(RuntimeInfo):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]], lock_rank=6):
+class RuntimeInfoDocument(WireValue):
+    """Typed observations with the existing flat root-name wire form."""
+
+    observations: dict[str, AgentRuntimeInfo] = field(default_factory=dict)
+
+    @classmethod
+    def from_wire(cls, data: object) -> RuntimeInfoDocument:
+        return cls(FieldCodec.decode(dict[str, AgentRuntimeInfo], data))
+
+    def to_wire(self) -> object:
+        return FieldCodec.encode(self.observations, dict[str, AgentRuntimeInfo])
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[RuntimeInfoDocument]):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"
     json_indent = 2
 
     @property
-    def record_type(self) -> type[dict[str, AgentRuntimeInfo]]:
-        return dict[str, AgentRuntimeInfo]
+    def record_type(self) -> type[RuntimeInfoDocument]:
+        return RuntimeInfoDocument
 
-    def empty(self) -> dict[str, AgentRuntimeInfo]:
-        return {}
+    def empty(self) -> RuntimeInfoDocument:
+        return RuntimeInfoDocument()
 
     def for_thread(self, thread: str) -> RuntimeInfo:
         return self.for_threads((thread,))[thread]
 
     def for_threads(self, names: Iterable[str]) -> dict[str, RuntimeInfo]:
-        values = self.read()
+        values = self.read().observations
         resolved = {}
         for name in names:
             try:
@@ -98,32 +112,34 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRu
     def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
         """Apply only this observation's fields in the original store transaction."""
 
-        def apply(values: dict[str, AgentRuntimeInfo]) -> dict[str, AgentRuntimeInfo]:
+        def apply(document: RuntimeInfoDocument) -> RuntimeInfoDocument:
+            values = document.observations
             current = values.get(thread)
             if current is None:
                 current = AgentRuntimeInfo(thread=thread, timestamp=timestamp)
             observed = observation.project_runtime_info(replace(current, timestamp=timestamp))
-            return {**values, thread: observed}
+            return RuntimeInfoDocument({**values, thread: observed})
 
         self.update(apply)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         names = {thread.name for thread in threads}
         self.update(
-            lambda values: (
-                {name: value for name, value in values.items() if name not in names}
-                if names & values.keys()
-                else values
+            lambda document: (
+                RuntimeInfoDocument({name: value for name, value in document.observations.items() if name not in names})
+                if names & document.observations.keys()
+                else document
             )
         )
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
-        def rename(values: dict[str, AgentRuntimeInfo]) -> dict[str, AgentRuntimeInfo]:
+        def rename(document: RuntimeInfoDocument) -> RuntimeInfoDocument:
+            values = document.observations
             if old_name not in values or old_name == new_name:
-                return values
-            return {
+                return document
+            return RuntimeInfoDocument({
                 **{name: value for name, value in values.items() if name != old_name},
                 new_name: replace(values[old_name], thread=new_name),
-            }
+            })
 
         self.update(rename)
