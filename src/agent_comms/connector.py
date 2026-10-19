@@ -370,7 +370,9 @@ class Connector:
         tools: dict[str, type[ToolRequest] | type[ConnectorTool]] = {
             tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)
         }
-        tools.update({tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)})
+        tools.update({
+            tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
+        })
         return tools
 
     @contextmanager
