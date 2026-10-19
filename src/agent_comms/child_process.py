@@ -12,6 +12,7 @@ import io
 import json
 import math
 import os
+import re
 import secrets
 import selectors
 import shutil
@@ -945,7 +946,46 @@ class PosixLaunch(ChildLaunch):
             os.close(fd)
 
 
+class CheckPrinted(DeclaredFamily, affix="Printed"):
+    """The count printed by a child, or the absence of an integer."""
+
+    @staticmethod
+    def decoded(stdout: bytes) -> CheckPrinted:
+        counts = re.findall(r"\d+", stdout.decode(errors="replace"))
+        return CountPrinted(int(counts[-1])) if counts else NoIntegerPrinted()
+
+    @abstractmethod
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def distance(self, expected: int) -> int: ...
+
+
+@dataclass(frozen=True)
+class CountPrinted(CheckPrinted):
+    count: int
+
+    def distance(self, expected: int) -> int:
+        return abs(self.count - expected)
+
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
+        return ((f"Check already prints {self.count} before any work: `{command}` proves nothing; "
+                 "write a check that fails now",) if self.count == expected else ())
+
+
+@dataclass(frozen=True)
+class NoIntegerPrinted(CheckPrinted):
+    def distance(self, expected: int) -> int:
+        raise ValueError(f"The order check printed no integer, so no count of {expected}.")
+
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
+        return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
+
+
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
+    def printed_count(self, stdout: bytes) -> CheckPrinted:
+        raise ValueError("The order check did not exit, so it printed no count.")
+
     @property
     @abstractmethod
     def summary(self) -> str: ...
@@ -962,6 +1002,9 @@ class ChildOutcome(DeclaredFamily, affix="Outcome"):
 @dataclass(frozen=True)
 class ExitedOutcome(ChildOutcome):
     code: int
+
+    def printed_count(self, stdout: bytes) -> CheckPrinted:
+        return CheckPrinted.decoded(stdout)
 
     @property
     def summary(self) -> str:

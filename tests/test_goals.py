@@ -17,11 +17,42 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal, NoGoal
+from agent_comms.goals import (
+    CountCheckResult, Goal, NoGoal, NoReportedTurn, ReportedTurn, SilentCheckResult,
+)
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import ToolRequest
+
+
+def test_reported_turn_states_preserve_existing_wire_values():
+    absent = Goal('work', 'goal', published_seq=0)
+    assert absent.reported_turn == NoReportedTurn()
+    assert not absent.reports_turn('turn')
+    assert FieldCodec.encode(absent)['reported_turn'] is None
+    assert FieldCodec.decode(Goal, FieldCodec.encode(absent)) == absent
+    reported = Goal('work', 'goal', published_seq=0, reported_turn=ReportedTurn('turn'))
+    assert reported.reports_turn('turn') and not reported.reports_turn('other')
+    assert FieldCodec.encode(reported)['reported_turn'] == 'turn'
+    assert FieldCodec.decode(Goal, FieldCodec.encode(reported)) == reported
+
+
+def test_check_require_uses_distance_and_outcome_count():
+    from agent_comms.child_process import ChildResult, ExitedOutcome, SignaledOutcome
+
+    silent = SilentCheckResult()
+    silent.require(ChildResult(ExitedOutcome(0)))
+    with pytest.raises(ValueError, match=r'1 away from SilentCheckResult\(\)'):
+        silent.require(ChildResult(ExitedOutcome(0), b'noise'))
+    count = CountCheckResult(2)
+    count.require(ChildResult(ExitedOutcome(1), b'count 2\n'))
+    with pytest.raises(ValueError, match=r'1 away from CountCheckResult\(expected=2\)'):
+        count.require(ChildResult(ExitedOutcome(0), b'1\n'))
+    with pytest.raises(ValueError, match='did not exit'):
+        count.require(ChildResult(SignaledOutcome(15), b'2\n'))
+    with pytest.raises(ValueError, match='printed no integer'):
+        count.require(ChildResult(ExitedOutcome(0), b'no integer'))
 
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
@@ -80,14 +111,14 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
         "text": "Ship the release", "status": "active", "progress": goal.progress,
     }
     scope = thread.task_scope
-    assert scope == GoalTaskScope(project=str(tmp_path), goal=goal.checkpoint)
+    assert scope == GoalTaskScope(project=str(tmp_path), goal=goal.revision_key)
     scope.require_context(thread)
     comms.goals.update_goal("worker", ClearGoalAction())
     absent(stored())
     with pytest.raises(RelationViolationError, match="No goal is set"):
         scope.require_context(stored())
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Ship the patch"))
-    assert stored().task_scope == GoalTaskScope(project=str(tmp_path), goal=replacement.checkpoint)
+    assert stored().task_scope == GoalTaskScope(project=str(tmp_path), goal=replacement.revision_key)
     with pytest.raises(RelationViolationError, match="replaced or cleared"):
         scope.require_context(stored())
 
