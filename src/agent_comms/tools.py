@@ -68,7 +68,7 @@ from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, Order
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
                     TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
-from .messages import InfoKind, MessageKind, NoticeRole
+from .messages import InfoKind, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import NativeToolDeclaration, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .cli_result import ToolCatalogResult
@@ -1072,7 +1072,7 @@ class CommsSendTool(ToolRequest):
         "Threads a channel message is for; no other member is woken", default=()
     )
     type: Type[MessageKind] = tool_field(
-        "Message kind", default=InfoKind, choices=MessageKind.sendable_names
+        "Message kind", default=InfoKind, choices=SendableMessageKind.names
     )
     report: ChangeReport | None = tool_field(
         "Change report fields; required for the change-report kind", default=None

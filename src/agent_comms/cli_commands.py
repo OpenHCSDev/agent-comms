@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import builtins
 import json
 import os
 import re
@@ -37,6 +36,7 @@ from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
+from .cli_bridges.shared import Operation
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .history_result import HistoryPageResult
@@ -71,7 +71,7 @@ from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
 from .message_reference import MessageReference
 from .page_traversal import OlderTraversal, PageCursor
-from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
+from .messages import ConversationRole, InfoKind, Message, MessageKind, SendableMessageKind, SendableRole
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
@@ -763,7 +763,10 @@ class DeclaredOptions(Command):
 
     @classmethod
     def add_parser(cls, subparsers: Any) -> None:
-        parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
+        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
@@ -1058,22 +1061,32 @@ class SendCliCommand(CliCommand):
     sender: str = option("--from")
     target: str = option("--to")
     body: str = option("--body")
-    type: builtins.type[MessageKind] = option(
-        "--type", default=InfoKind, choices=MessageKind.sendable_names(), editor=ChoiceTargetField
+    kind: type[MessageKind] = option(
+        "--type", wire_name="type", default=InfoKind,
+        choices=SendableMessageKind.names(), editor=ChoiceTargetField
     )
-    role: builtins.type[MessageRole] = option("--role", default=ConversationRole)
+    role: type[SendableRole] = option("--role", default=ConversationRole)
     report: dict[str, Any] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
         normalize=_report_fields,
     )
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> MessageSentResult:
         result = ctx.messaging.send(
-            self.sender, self.target, self.body, self.type, role=self.role(),
+            self.sender, self.target, self.body, self.kind, role=self.role(),
             report=None if self.report is None
             else FieldCodec.decode(ChangeReport, self.report),
         )
         return MessageSentResult(result)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Send(SendCliCommand, Operation, declared_name=None):
+    sender: str = option("--from", default="")
+
+    async def run(self, bridge) -> None:
+        await bridge.show_sent((await asyncio.to_thread(
+            replace(self, sender=bridge.binding.bus).apply, bridge.comms)).sent)
 
 
 @dataclass(frozen=True, kw_only=True)

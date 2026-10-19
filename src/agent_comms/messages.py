@@ -31,10 +31,6 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class SendableMessageKind:
-    """Capability for kinds accepted by generic message commands."""
-
-
 class MessageKind(DeclaredFamily, affix="Kind"):
     """A declared message kind; each member owns the validation it requires.
 
@@ -46,10 +42,6 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     conversation_message: ClassVar[bool] = True
 
     @classmethod
-    def sendable_names(cls) -> tuple[str, ...]:
-        return tuple(member.declared_name for member in cls.members_with(SendableMessageKind))
-
-    @classmethod
     def require_sendable(cls) -> None:
         if not issubclass(cls, SendableMessageKind):
             raise ValueError(f"Message kind {cls.declared_name!r} is not generically sendable")
@@ -57,6 +49,10 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
         """Checks a send must pass before publication; base kinds declare none."""
+
+
+class SendableMessageKind(MessageKind, declared_name=None):
+    """The declared kinds accepted by generic message commands."""
 
 
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
@@ -71,19 +67,19 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
         )
 
 
-class InfoKind(SendableMessageKind, MessageKind):
+class InfoKind(SendableMessageKind):
     pass
 
 
-class QuestionKind(SendableMessageKind, MessageKind):
+class QuestionKind(SendableMessageKind):
     pass
 
 
-class AckKind(SendableMessageKind, MessageKind):
+class AckKind(SendableMessageKind):
     pass
 
 
-class HandoffKind(SendableMessageKind, MessageKind):
+class HandoffKind(SendableMessageKind):
     """A handoff declares its evidence; completion claims carry references."""
 
     CLAIMS = ("fixed", "single owner", "no other callers")
@@ -104,11 +100,11 @@ class HandoffKind(SendableMessageKind, MessageKind):
         )
 
 
-class AlertKind(SendableMessageKind, MessageKind):
+class AlertKind(SendableMessageKind):
     pass
 
 
-class ChangeReportKind(SendableMessageKind, MessageKind, declared_name="change-report"):
+class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
     """A review request declares each touched fact with its single owner."""
 
     @classmethod
@@ -148,13 +144,8 @@ class MessageRoleWire:
         return role.as_notice() if self.notice else role
 
 
-class MessageRole(InlineRecord, DeclaredFamily, affix="Role"):
+class MessageRole(InlineRecord):
     category: ClassVar[type[MessageCategory]]
-    sendable: ClassVar[bool] = False
-
-    @classmethod
-    def names(cls) -> tuple[str, ...]:
-        return tuple(role.declared_name for role in cls.members_with(cls) if role.sendable)
 
     @classmethod
     def wire_record(cls):
@@ -183,6 +174,10 @@ class MessageRole(InlineRecord, DeclaredFamily, affix="Role"):
             raise ValueError("direct frozen recipient must match the exact stored target.")
 
 
+class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
+    pass
+
+
 class InformationalMessage:
     def response_policy(self, message):
         return InformationalPolicy.instance()
@@ -195,9 +190,8 @@ class InformationalMessage:
 
 
 @dataclass(frozen=True, slots=True)
-class ConversationRole(MessageRole):
+class ConversationRole(SendableRole):
     category = InboundCategory
-    sendable = True
 
     def wire_fields(self):
         return MessageRoleWire()
@@ -225,9 +219,8 @@ class ConversationRole(MessageRole):
 
 
 @dataclass(frozen=True, slots=True)
-class NoticeRole(InformationalMessage, MessageRole):
+class NoticeRole(InformationalMessage, SendableRole):
     category = OtherCategory
-    sendable = True
 
     def wire_fields(self):
         return MessageRoleWire(notice=True)
@@ -248,7 +241,6 @@ class NoticeRole(InformationalMessage, MessageRole):
 
 @dataclass(frozen=True)
 class Membership(InformationalMessage):
-    sendable = False
     change: MembershipChange
 
     def wire_fields(self):
@@ -262,20 +254,19 @@ class Membership(InformationalMessage):
 
 
 @dataclass(frozen=True, slots=True)
-class MembershipConversationRole(Membership, ConversationRole):
+class MembershipConversationRole(Membership, ConversationRole, declared_name=None):
     def as_historical(self):
         return HistoricalMembershipConversationRole(self.change)
 
 
 @dataclass(frozen=True, slots=True)
-class MembershipNoticeRole(Membership, NoticeRole):
+class MembershipNoticeRole(Membership, NoticeRole, declared_name=None):
     def as_historical(self):
         return HistoricalMembershipNoticeRole(self.change)
 
 
 class HistoricalRole:
     """Historical rows cannot create current reply or notification work."""
-    sendable = False
 
     def notification_references(self, message):
         return ()
@@ -290,19 +281,20 @@ class HistoricalRole:
         return super().as_notice().as_historical()
 
 
-class HistoricalConversationRole(HistoricalRole, ConversationRole):
+class HistoricalConversationRole(HistoricalRole, ConversationRole, declared_name=None):
     pass
 
 
-class HistoricalNoticeRole(HistoricalRole, NoticeRole):
+class HistoricalNoticeRole(HistoricalRole, NoticeRole, declared_name=None):
     pass
 
 
-class HistoricalMembershipConversationRole(HistoricalRole, MembershipConversationRole):
+class HistoricalMembershipConversationRole(
+    HistoricalRole, MembershipConversationRole, declared_name=None):
     pass
 
 
-class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole):
+class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, declared_name=None):
     pass
 
 
