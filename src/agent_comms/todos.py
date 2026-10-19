@@ -225,8 +225,9 @@ class ProgressSource:
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
         log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))}",
+            ("git", "-C", str(self.checkout), "log", "-1", f"--since={after}",
              "--format=%H %ct", "HEAD", "--not", *excluded),
             capture_output=True, text=True, timeout=30)
         for line in log.stdout.splitlines() if not log.returncode else ():
