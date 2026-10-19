@@ -238,6 +238,7 @@ class NativeSession(MroDispatch, ABC):
         self.rejected_commands: list[events.InputRefused] = []
         self.explicit_interrupt = False
         self.settlement_count = 0
+        self.started_during_abort: list[events.FollowingInputStarted] = []
         self.finished = self.skip = False
 
     def accept_tool_round(self, message):
@@ -334,7 +335,7 @@ class NativeSession(MroDispatch, ABC):
         if self.accepts_output:
             matched, identity = self.inputs.mark_started(self, event)
             if matched:
-                self.started_during_abort.append(identity)
+                self.started_during_abort.append(events.FollowingInputStarted(id=identity))
 
     def permits_live_status(self) -> bool:
         """Only tracked, live input may publish an informational package acknowledgement."""
@@ -545,7 +546,6 @@ class NativeSession(MroDispatch, ABC):
         self.model_name: str | None = None
         self.active_session_file = self.launch.session.session_file
         self.watchdog.reading()
-        self.started_during_abort: list[str | None] = []
 
     async def retain_or_close(self) -> None:
         self.tool_socket.assert_complete()

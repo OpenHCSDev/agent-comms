@@ -9,7 +9,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack, ExitStack
 from dataclasses import dataclass
 from functools import partial
-from itertools import islice
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
@@ -263,9 +262,7 @@ class TrackedTurnSession(TurnSession):
         self.observe_event = observe_event
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
-        self.text_parts: list[str] = []
         self.draft_written_at = 0.0
-        self.draft_start = 0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
 
     @classmethod
@@ -491,8 +488,8 @@ class TrackedTurnSession(TurnSession):
         if not matched:
             raise NativePiUnavailable("Native Pi started a user message this turn did not send")
         source = await self.following.started(input_id)
-        self.terminal = source.continue_response(self.terminal, self.text_parts)
-        self.text_parts.clear()
+        self.terminal = source.continue_response(self.terminal, self.output.text_parts)
+        self.output.discard_text()
         return ()
 
     @handles(pi.ContextCommitted)
@@ -503,17 +500,14 @@ class TrackedTurnSession(TurnSession):
     async def assistant_started(self) -> None:
         await super().assistant_started()
         self.draft_written_at = 0.0
-        self.draft_start = len(self.text_parts)
         self.draft_publication.begin_message(time.time())
 
     async def text_received(self, text: str) -> None:
         await super().text_received(text)
-        self.text_parts.append(text)
         now = time.monotonic()
         if now - self.draft_written_at >= .1:
             await Coordination.run_worker(partial(
-                self.draft_publication.publish,
-                islice(self.text_parts, self.draft_start, None)))
+                self.draft_publication.publish, tuple(self.output.message_parts)))
             self.draft_written_at = now
 
     async def assistant_ended(self) -> None:
@@ -521,7 +515,7 @@ class TrackedTurnSession(TurnSession):
 
     def accept_tool_round(self, message):
         super().accept_tool_round(message)
-        self.text_parts.clear()
+        self.output.discard_text()
         self.terminal = self.terminal.tool_round()
 
     def accept_unfinished_message(self, failure: TurnFailure) -> None:
@@ -569,7 +563,7 @@ class TrackedTurnSession(TurnSession):
             # An empty model completion does not make a proved, settled child unavailable.
             # Per-input tool sockets still determine whether that child can be reused.
             self.retainable = self.tool_socket.retainable
-            response = self.terminal.require_response(self.text_parts)
+            response = self.terminal.require_response(self.output.text_parts)
             return NativeTurnResult(
                 response.strip(),
                 proof,

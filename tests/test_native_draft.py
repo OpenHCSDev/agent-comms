@@ -24,9 +24,7 @@ def test_native_draft_growth_throttle_and_retirement(tmp_path, monkeypatch):
         publication.begin_message(1.0)
         turn = object.__new__(TrackedTurnSession)
         turn.output = TurnOutput()
-        turn.text_parts = []
         turn.draft_publication = publication
-        turn.draft_start = 0
         turn.draft_written_at = 0.0
         clock = iter((10.0, 10.02, 10.11))
         monkeypatch.setattr(tracked, 'time', SimpleNamespace(monotonic=lambda: next(clock)))
@@ -39,7 +37,7 @@ def test_native_draft_growth_throttle_and_retirement(tmp_path, monkeypatch):
             assert source.current_draft(tmp_path, store.incarnation).events[0].text == 'one'
             await turn.text_received(' three')
             assert source.current_draft(tmp_path, store.incarnation).events[0].text == 'one two three'
-            assert turn.text_parts == ['one', ' two', ' three']
+            assert turn.output.text_parts == ['one', ' two', ' three']
             await Coordination.run_worker(publication.retire_message)
             assert source.current_draft(tmp_path, store.incarnation).external_row() is None
             publication.begin_message(2.0)
