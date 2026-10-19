@@ -229,8 +229,10 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
             updates.append(update)
 
     agent.sessions.client = Client()
+    project = tmp_path / "project"
+    project.mkdir(mode=0o700)
     try:
-        await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
+        await agent.new_session(cwd=str(project), mcp_servers=[])
         with pytest.raises(NativeTurnError) as caught:
             await asyncio.wait_for(agent.turns.run_agent_turn("project", "project", "fresh isolated work"), 20)
         failures = [item for update in updates for item in decode_updates(update.field_meta)
