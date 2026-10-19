@@ -12,13 +12,14 @@ from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import ANY_CHANNEL, BuiltinChannel, ChannelTarget, CommandTarget
+from .channel_targets import CommandTarget
+from .channels import ANY_CHANNEL
 from .errors import UnregisteredThreadError
 from .coordinator import Coordination
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .historical_views import HistoryArchive
 from .message_page import (
-    NEWEST_PAGE, DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
+    DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
@@ -26,8 +27,6 @@ from .messages import Message
 from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
-    AllChannelDisplayScope, ChannelDisplayScope,
-    DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
     WatchAcknowledgment,
@@ -317,27 +316,6 @@ class MessageBus[Writes: Publisher]:
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         return self.log.read_page(MessagePageRequest(delivery, PageBounds(NewerTraversal(after))))
-
-    def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Return one bounded page between two threads, either possibly deleted."""
-        snapshot = self._registry.snapshot()
-        scope = DMDisplayScope.capture(
-            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
-        )
-        return self.log.read_page(MessagePageRequest(scope, bounds))
-
-    def channel_history_page(
-        self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
-    ) -> MessagePage:
-        """Return one bounded page from a channel in ascending order."""
-        channel = self._channels.read().require_channel(target.name)
-        scope = channel.history_scope()
-        return self.log.read_page(MessagePageRequest(scope, bounds))
-
-    def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Bounded combined view of explicit channel and direct wire messages."""
-        scope = AllChannelDisplayScope(BuiltinChannel.ANY.value)
-        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:
         return list(self._channels.read().views())

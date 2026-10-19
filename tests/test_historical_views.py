@@ -13,7 +13,7 @@ from agent_comms.page_traversal import HistoryCursor
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor
+from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor, HistoricalSelection, ChannelSelection, DMSelection
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
@@ -121,7 +121,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
         "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
         bounds=PageBounds(OlderTraversal(100, source.key), 3),
     )
-    live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
+    live.views.mark_page_read(page.select([page.messages[1].seq]), worktree=str(live.root))
     snapshot = live.registry.snapshot()
     assert ReadLedger.at(source.root).read().messages == {
         viewer.incarnation: ReadCursor({
@@ -131,11 +131,11 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     assert live.bus.reads.cursor(viewer.name, snapshot) == ReadCursor()
     assert live.bus.pending_count("bob", CommandTarget.named("#team")) == 2
     with pytest.raises(ValueError):
-        live.views.mark_historical_view_read(
-            replace(
-                page.historical_display,
-                displayed=replace(page.historical_display.displayed, viewer_created_at=-9.0),
-            )
+        live.views.mark_page_read(
+            replace(page, selection=replace(page.selection, displayed=replace(
+                page.selection.displayed,
+                displayed=replace(page.selection.displayed.displayed, viewer_created_at=-9.0),
+            ))), worktree=str(live.root),
         )
 
 
@@ -153,13 +153,12 @@ def test_select_painted_page_keeps_its_source_with_attached_history(migrated, co
     message = page.messages[-1]
     selected = page.select((message.seq,))
     assert selected.messages == (message,)
-    assert selected.history_revision == page.history_revision
+    assert selected.selection.history_revision == page.selection.history_revision
     if archived:
-        assert selected.historical_display.source == source
-        assert selected.display_basis is None and selected.display_scope is None
+        assert isinstance(selected.selection, HistoricalSelection)
+        assert selected.selection.displayed.source == source
     else:
-        assert selected.historical_display is None
-        assert selected.display_basis is not None or selected.display_scope is not None
+        assert isinstance(selected.selection, (ChannelSelection, DMSelection))
 
 
 def test_duplicate_and_newer_incarnations_sessions(tmp_path):
@@ -317,7 +316,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     path = Path(source.root) / "bus.jsonl"
     path.write_bytes(path.read_bytes() + b"\n")
     with pytest.raises(ValueError, match="snapshot changed"):
-        live.views.mark_historical_view_read(page.historical_display)
+        live.views.mark_page_read(page, worktree=str(live.root))
     with pytest.raises(ValueError, match="snapshot changed"):
         live.views.channel_display_page(
             "#team", bounds=PageBounds(OlderTraversal(100, source.key))

@@ -7,7 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.channel_targets import ANY_CHANNEL, ChannelTarget, CommandTarget, ThreadTarget
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ParentedProcess, ProcessIdentity

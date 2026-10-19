@@ -23,8 +23,8 @@ from .thread_execution import (
     StartOwnerControl, ThreadCommandAvailability,
 )
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
-from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
-from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .channel_targets import ChannelTarget, CommandTarget
+from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -826,7 +826,7 @@ class CommsTodoListTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
-        pulls, storage = PullRequests(), comms.registry.storage_rule
+        pulls, storage = PullRequests(listed), comms.registry.storage_rule
         return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
                                  for todo in listed if todo.holder})
 
@@ -1170,7 +1170,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
-    target: str = tool_field("Channel or peer conversation", default=BuiltinChannel.ANY.value)
+    target: str = tool_field("Channel or peer conversation", default=ANY_CHANNEL.name)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 

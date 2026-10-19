@@ -215,12 +215,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send("owner", viewer, "already painted").message
     page = comms.views.dm_display_page("owner", worktree=str(tmp_path))
-    comms.views.mark_dm_view_read(
-        "owner",
-        worktree=str(tmp_path),
-        through=message.seq,
-        expected_display_basis=page.display_basis,
-    )
+    comms.views.mark_page_read(page, worktree=str(tmp_path))
     path = comms.bus.reads.path
     document = FieldCodec.decode(ReadDocument, json.loads(path.read_text()))
     viewer_identity = comms.registry.require(viewer).incarnation
@@ -232,12 +227,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     assert message.seq in reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     next_message = reopened.messaging.send("owner", viewer, "new paint").message
     page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
-    reopened.views.mark_dm_view_read(
-        "owner",
-        worktree=str(tmp_path),
-        through=next_message.seq,
-        expected_display_basis=page.display_basis,
-    )
+    reopened.views.mark_page_read(page, worktree=str(tmp_path))
     seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     assert all(sequence in seen for sequence in (message.seq, next_message.seq))
 
