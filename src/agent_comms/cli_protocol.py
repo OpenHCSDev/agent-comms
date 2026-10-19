@@ -92,8 +92,18 @@ class Outcome(DeclaredFamily, affix='Outcome'):
     async def acknowledge(cls, bridge: CliBridge, message: Message) -> None:
         """Pending transport outcomes cannot advance Core's read state."""
 
+    @classmethod
+    def followed_by(cls, observation: type[Outcome]) -> type[Outcome]:
+        return observation
+
 
 class FilteredOutcome(Outcome):
+    @classmethod
+    def followed_by(cls, observation: type[Outcome]) -> type[Outcome]:
+        # Transcript confirmation may race the final socket drain. An emission
+        # report cannot turn an already confirmed attempt back into pending.
+        return cls
+
     @classmethod
     async def acknowledge(cls, bridge: CliBridge, message: Message) -> None:
         await asyncio.to_thread(bridge.comms.messaging.acknowledge, bridge.binding.bus, (message.reference,))

@@ -60,6 +60,8 @@ agent-comms-commander = "agent_comms.commander.cli:main"
 agent-comms-watch-guard = "agent_comms_hooks.watch:main"
 agent-comms-claude-precompact = "agent_comms_hooks.compaction:starting"
 agent-comms-claude-compacted = "agent_comms_hooks.compaction:finished"
+agent-comms-claude-session-started = "agent_comms_hooks.session:started"
+agent-comms-claude-session-ended = "agent_comms_hooks.session:ended"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 
