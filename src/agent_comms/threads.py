@@ -13,6 +13,7 @@ from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .fresh_private_session import NativeSessions
 from .cli_result import ThreadToolCatalogResult
 from .launch_runtime import RestartEnvironment
 from .native_arguments import NativeArguments
@@ -194,8 +195,6 @@ class Thread(ThreadProvenance):
         return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
 
     def native_session_directory(self, root: Path) -> Path:
-        from .fresh_private_session import NativeSessions
-
         return NativeSessions.path_in(root) / self.incarnation.require_recorded().lookup
 
     def __post_init__(self) -> None:

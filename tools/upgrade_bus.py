@@ -331,8 +331,9 @@ class Runtime:
 
     def queue_restarts(self, root: Path) -> tuple[QueuedRestart, ...]:
         """Every independent owner gets its request concurrently, not one stop delay at a time."""
-        with ThreadPoolExecutor() as requests:
-            return tuple(requests.map(partial(self.queue_restart, root), self.owners(root)))
+        owners = self.owners(root)
+        with ThreadPoolExecutor(max_workers=max(1, len(owners))) as requests:
+            return tuple(requests.map(partial(self.queue_restart, root), owners))
 
     def settled(self, root: Path, queued: QueuedRestart, patience: int) -> QueuedRestart:
         """The queued restart once it settles; a settled restart names the owner's
