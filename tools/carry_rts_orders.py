@@ -10,6 +10,7 @@ import argparse
 import json
 import re
 import sqlite3
+import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, replace
@@ -148,7 +149,11 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
             strike.why, RecordedEventTime(strike.at)) for strike in strikes if strike.task == pid)
         generation = 'rts-order:' + old.msg
         if pid not in existing:
-            current = store.create(pid, Repo.of(Path(old.order.check.directory)).github,
+            try:
+                repo = Repo.of(Path(old.order.owner.file).parent)
+            except (subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError):
+                repo = Repo.of(Path(old.order.check.directory))
+            current = store.create(pid, repo.github,
                                    problems[pid].text, creator=actor, owner=owner,
                                    generation=generation, deadline=old.deadline(),
                                    order=old.order, goal=NoGoalReference())
