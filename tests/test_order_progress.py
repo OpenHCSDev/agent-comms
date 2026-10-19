@@ -65,6 +65,31 @@ def read(checkout, pulls=None):
     return OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), pulls or Listed())
 
 
+def test_uncounted_check_keeps_other_overdue_orders_visible(
+        checkout, commander, commander_script, monkeypatch):
+    from agent_comms.goals import CountCheckResult, OrderCheck
+    from agent_comms.child_process import NoCountYetPrinted, SignaledOutcome, TimedOutOutcome
+    script, _ = commander_script
+    todo, unit = checkout
+    commit(unit)
+    monkeypatch.setattr(OrderCheck, "timeout", 0.05)
+    todo = replace(todo, order=replace(todo.order,
+        check=OrderCheck(str(unit), "sleep 0.2; echo 0", CountCheckResult(0))))
+    monkeypatch.setattr(script.COMMS.registry, "storage_rule", StorageRule(checkout_base=unit.parent))
+    # The child really exceeds its timeout; partial stdout must never become a count.
+    outcome = TimedOutOutcome(SignaledOutcome(9))
+    assert isinstance(outcome.printed_count(b"0"), NoCountYetPrinted)
+    work = OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), Listed())
+    assert work.line.endswith("; no count yet")
+    second = create(commander, "P2", deadline=1)
+    lines = script.deadline_lines([todo, second],
+                                 {todo.id: work, second.id: NoCommitProgress()}, time.time())
+    assert len(lines) == 1
+    assert "no count yet" in lines[0] and "no commit since the order" in lines[0]
+    with pytest.raises(ValueError, match="no count yet"):
+        todo.order.check.result.require(todo.order.check.at("HEAD", str(unit)))
+
+
 def test_no_commit_since_the_order_is_explicit(checkout):
     progress = read(checkout)
     assert progress == NoCommitProgress()
