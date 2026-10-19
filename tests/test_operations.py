@@ -13,11 +13,13 @@ from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import QuestionKind
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.presentation import CountedRead, UncountedRead
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec, NewThreadSpec
 from agent_comms.threads import Thread
@@ -281,7 +283,8 @@ class TestThreadOps:
         """list_threads, thread_detail and who/presence write one thread's record from one parent."""
         views = wired.views
         rows = {
-            "detail": views.thread_detail("fixer", include_pending=counted).encoded(),
+            "detail": views.thread_detail(
+                "fixer", CountedRead() if counted else UncountedRead()).encoded(),
             "roster": next(row for row in (views.who() if counted else views.presence())
                            if row["name"] == "fixer"),
             **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
@@ -295,7 +298,7 @@ class TestThreadOps:
 
     def test_thread_detail_fail_closed(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.views.thread_detail("ghost")
+            wired.views.thread_detail("ghost", CountedRead())
 
     def test_heartbeat_marks_running(self, wired):
         wired.owners.stop("fixer")
@@ -568,7 +571,7 @@ class TestLedgerOps:
 class TestPollAndWire:
     def test_poll_snapshot(self, wired):
         wired.messaging.send("PR111", "fixer", "hello").message.message_id
-        snap = wired.views.poll("fixer").encoded()
+        snap = wired.views.poll(NamedThreadTarget("fixer")).encoded()
         assert snap["thread"]["name"] == "fixer"
         assert len(snap["inbox"]) == 1
         assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
@@ -578,7 +581,7 @@ class TestPollAndWire:
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll().encoded()
+        snap = wired.views.poll(CallingThreadTarget()).encoded()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):

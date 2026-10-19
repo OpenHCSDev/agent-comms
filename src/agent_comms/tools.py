@@ -1346,7 +1346,7 @@ def context_tool_catalog(context: str) -> list[dict[str, object]]:
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
 ) -> dict[str, JsonValue]:
-    return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
+    return ToolRequest.member_named(name).invoke(comms, arguments, caller=caller)
 
 
 def invoke_context_tool(
@@ -1357,7 +1357,7 @@ def invoke_context_tool(
     actor: str | None,
     arguments: Mapping[str, object] | None = None,
 ) -> dict[str, JsonValue]:
-    tool = ToolRequest.decode(name)
+    tool = ToolRequest.member_named(name)
     if tool.context is None:
         raise ValueError(f"Tool {name!r} is not a context action.")
     bound = dict(arguments or {})

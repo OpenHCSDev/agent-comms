@@ -115,7 +115,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
 
     @classmethod
-    def decode(cls, name: str) -> type[Self]:
+    def member_named(cls, name: str) -> type[Self]:
         cls._member_declarations()
         try:
             member = cls.__registry__[name]

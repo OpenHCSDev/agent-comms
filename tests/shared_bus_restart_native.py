@@ -847,7 +847,7 @@ async def run(arguments):
             if reserved:
                 # The family holds the actual resource, not a replaced runtime
                 # or invented Busy response. Each gate keeps its original IDs.
-                with ClaimContention.decode(arguments.contention_resource).ownership(
+                with ClaimContention.member_named(arguments.contention_resource).ownership(
                     service, len(names)
                 ) as ready:
                     if not ready:
