@@ -63,9 +63,10 @@ class DraftAccumulator:
         raise ValueError("Received a text delta for a non-text item")
 
     def finish(self, update: CompletedItem) -> tuple[ClosedDraft, FinishedItem]:
-        """Close on a full item, preserving provider time when no start was observed."""
-        events = tuple(self.started_at.stamp(event) for event in update.events)
-        return ClosedDraft(self.started_at), FinishedItem(update.turn_id, update.item_id, events)
+        """A completed record already owns every event's original clock."""
+        return ClosedDraft(self.started_at), FinishedItem(
+            update.turn_id, update.item_id, update.events
+        )
 
 
 class NoPrefixDraft(DraftAccumulator):

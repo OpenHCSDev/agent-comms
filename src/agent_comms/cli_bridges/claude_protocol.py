@@ -168,11 +168,24 @@ class Live(ClaudeReaderPhase):
         raise ValueError('Claude completed an item before identifying its turn')
 
 
+@dataclass
+class ClaudeToolDraft(ToolDraft):
+    """One decoded tool start, preserved until its separately timed result arrives."""
+
+    call: ToolCall
+
+    def completed(
+        self, record: TimedRecord, text: str, ok: bool,
+    ) -> tuple[TranscriptEvent, ...]:
+        ended = self.call.ended(text, ok, record.position)
+        return (*self.events, EventTime.capture(record.timestamp).stamp(ended))
+
+
 class ClaudeTurn(ABC):
     """The transcript's identified turn owns item identities."""
 
     @abstractmethod
-    def started(self, call: ToolCall, timestamp: float, position: int,
+    def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]: ...
 
     @abstractmethod
@@ -185,7 +198,7 @@ class ClaudeTurn(ABC):
 
 
 class UnknownTurn(ClaudeTurn):
-    def started(self, call: ToolCall, timestamp: float, position: int,
+    def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
 
@@ -202,10 +215,9 @@ class UnknownTurn(ClaudeTurn):
 class KnownTurn(ClaudeTurn):
     id: str
 
-    def started(self, call: ToolCall, timestamp: float, position: int,
+    def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
-        return (StartedItem(self.id, call.id, ActivityState.WORKING, call.title,
-                            ToolDraft(EventTime.capture(timestamp), (call.started(position),))),)
+        return (StartedItem(self.id, tool.call.id, ActivityState.WORKING, tool.call.title, tool),)
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
@@ -219,7 +231,7 @@ class KnownTurn(ClaudeTurn):
 @dataclass
 class ClaudeSession:
     turn: ClaudeTurn = field(default_factory=UnknownTurn)
-    tools: dict[str, ToolCall] = field(default_factory=dict)
+    tools: dict[str, ClaudeToolDraft] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
 
@@ -229,18 +241,18 @@ class ClaudeSession:
         self.project = cwd
         return (SessionFacts(project=cwd),)
 
-    def started(
-        self, call: ToolCall, timestamp: float, position: int,
-    ) -> tuple[RuntimeUpdate, ...]:
-        self.tools[call.id] = call
-        return self.turn.started(call, timestamp, position, self.phase)
+    def started(self, tool: ClaudeToolDraft) -> tuple[RuntimeUpdate, ...]:
+        self.tools[tool.call.id] = tool
+        return self.turn.started(tool, self.phase)
 
-    def tool_result(self, tool_id: str, text: str, ok: bool, position: int) -> tuple[RuntimeUpdate, ...]:
+    def tool_result(
+        self, tool_id: str, text: str, ok: bool, record: TimedRecord,
+    ) -> tuple[RuntimeUpdate, ...]:
         try:
-            call = self.tools.pop(tool_id)
+            tool = self.tools.pop(tool_id)
         except KeyError:
             return self.phase.missing_tool(tool_id)
-        return (*self.finished(tool_id, call.finished(text, ok, position)),
+        return (*self.finished(tool_id, tool.completed(record, text, ok)),
                 *self.turn.active(tool_id, self.phase, ActivityState.WORKING, ''))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
@@ -350,7 +362,8 @@ class ToolUse(AssistantBlock):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
-        return session.started(call, record.timestamp, record.position)
+        return session.started(ClaudeToolDraft(
+            EventTime.capture(record.timestamp), (call.started(record.position),), call))
 
 
     def call(self) -> ToolCall:
@@ -564,7 +577,9 @@ class ToolResult(UserBlock, ContentBlocks):
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record.position)
+        return session.tool_result(
+            self.tool_use_id, '\n'.join(part.result_text() for part in self.content),
+            not self.is_error, record)
 
 
 class UserMessage(ContentBlocks):
