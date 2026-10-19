@@ -285,7 +285,7 @@ class CodingCall(NativeToolCall):
     def digest(self) -> str: ...
 
     @classmethod
-    def storage_effects(cls, cwd):
+    def storage_effects(cls, cwd: Path) -> tuple[StorageEffect, ...]:
         """A call without executable effects needs no room."""
         return ()
 
