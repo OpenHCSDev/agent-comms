@@ -940,7 +940,7 @@ class CommsProblemCloseTool(ThreadToolRequest):
     description = "Record installed application evidence and close only a problem with no open order."
     problem: str = tool_field("Problem ID")
     works: str = tool_field("What worked in the app, quoting the order's Works when run")
-    working: WorkingClaim = tool_field("The screenshot of the order's run working; Core verifies it")
+    working: WorkingClaim = tool_field("The screenshot of the run working; Core verifies it")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
