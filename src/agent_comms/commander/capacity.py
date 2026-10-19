@@ -69,6 +69,6 @@ class Load:
             sys.exit(f'REFUSED, nothing recorded: overloaded: {self}.')
 
 
-def main(a, commander):
-    load = Load.of(commander.comms, commander.commander, commander.state / 'forks')
+def main(a, ctx):
+    load = Load.of(ctx.comms, ctx.commander, ctx.state / 'forks')
     print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')

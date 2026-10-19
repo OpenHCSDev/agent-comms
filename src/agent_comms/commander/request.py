@@ -19,11 +19,11 @@ from ..todos import Todo
 from .order import Commander, CommanderVerb, RuledVerb, hhmm
 
 
-def open_requests(commander: Commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
+def open_requests(ctx: Commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
-    thread = commander.comms.registry.require(commander.commander)
+    thread = ctx.comms.registry.require(ctx.commander)
     return tuple(request for goal in thread.goal.active()
-                 for request in goal.order.open_requests(goal, commander.comms.goals, thread.incarnation))
+                 for request in goal.order.open_requests(goal, ctx.comms.goals, thread.incarnation))
 
 
 class RequestVerb(CommanderVerb):
@@ -36,7 +36,8 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
     text: str = option("text")
 
     def run(self, ctx: Commander) -> None:
-        goal = ctx.comms.goals.update_goal(ctx.commander, SetGoalAction(text=self.text, order=RequestGoalOrder()))
+        goal = ctx.comms.goals.update_goal(ctx.commander,
+                                          SetGoalAction(text=self.text, order=RequestGoalOrder()))
         print(goal.require().id)
 
 
@@ -48,7 +49,8 @@ class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
 
     def run(self, ctx: Commander) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())
-        ctx.comms.goals.update_goal(ctx.commander, CompletedGoalAction(progress=self.why, expect=expect))
+        ctx.comms.goals.update_goal(ctx.commander,
+                                   CompletedGoalAction(progress=self.why, expect=expect))
         print(f"{self.id} done")
 
 
@@ -65,5 +67,5 @@ class RequestListVerb(RequestVerb, declared_name="list"):
                 print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
 
 
-def main(a: list[str], commander: Commander) -> None:
-    RequestVerb.parse(a, __doc__).apply(commander)
+def main(a: list[str], ctx: Commander) -> None:
+    RequestVerb.parse(a, __doc__).apply(ctx)

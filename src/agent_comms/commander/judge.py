@@ -76,12 +76,12 @@ class Edit(EditCall):
                 + f'\n=== end {self.id} code {self.code()}')
 
 
-def show(commander, pending: list[Edit]) -> None:
+def show(ctx, pending: list[Edit]) -> None:
     by_thread: dict[str, list[Edit]] = {}
     for edit in pending:
         by_thread.setdefault(edit.thread, []).append(edit)
     for name, edits in by_thread.items():
-        orders = commander.held_by(name)
+        orders = ctx.held_by(name)
         intent = '\n'.join(todo.order.instructions(todo) for todo in orders) or 'NO OPEN ORDER TODO'
         print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
         for edit in edits:
@@ -89,7 +89,7 @@ def show(commander, pending: list[Edit]) -> None:
     print(f'{len(pending)} unjudged')
 
 
-def roast(commander, audience, thread, lines, text, fix, slop):
+def roast(ctx, audience, thread, lines, text, fix, slop):
     """Every send-back is a lesson, sent to its verdict's audience: the quoted slop,
     the required fact it restates and the declaration that derives it (paper 1's definition), why that is
     stupid, and what replaces it."""
@@ -97,12 +97,12 @@ def roast(commander, audience, thread, lines, text, fix, slop):
             + '\n'.join(f'    {l.strip()}' for l in lines)
             + f'\nThe slop: {slop.render()}'
             + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
-    print(f'roast sent to {", ".join(audience.threads)}: ' + commander.post(audience, body))
+    print(f'roast sent to {", ".join(audience.threads)}: ' + ctx.post(audience, body))
 
 
-def alarm(commander):
+def alarm(ctx):
     while True:
-        late = [edit for edit in Edit.unjudged(commander.comms, commander.commander) if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if time.time() - edit.at > 300]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
@@ -158,8 +158,10 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def run(self, ctx: order.Commander) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        orders = {todo.id: todo for todo in ctx.held_orders() if not self.msg or todo.sent_in(self.msg)}
-        edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if edit.problem in orders}
+        orders = {todo.id: todo for todo in ctx.held_orders()
+                  if not self.msg or todo.sent_in(self.msg)}
+        edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
+                 if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
@@ -176,7 +178,8 @@ class VerdictVerb(JudgeVerb, RuledVerb):
             self.operation(ctx, todo, i).prepare(ctx.comms.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
-            result = ctx.call(CommsVerdictTool(id=todo.id, operation=self.operation(ctx, current[todo.id], i)))
+            result = ctx.call(CommsVerdictTool(id=todo.id,
+                              operation=self.operation(ctx, current[todo.id], i)))
             current[todo.id] = result.todo
         left = len(Edit.unjudged(ctx.comms, ctx.commander))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
@@ -215,7 +218,8 @@ class SupersededVerb(VerdictVerb):
     by: str = option("--by", help="the replacing order's message")
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
-        return SupersededVerdict(todo.revision, ctx.comms.registry.require(ctx.commander).incarnation,
+        return SupersededVerdict(todo.revision,
+                                 ctx.comms.registry.require(ctx.commander).incarnation,
                                  todo.held(), edit_id, replacement=self.by, reason=self.why)
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -265,5 +269,5 @@ class BackVerb(VerdictVerb):
             ctx.on_record(line, 'Send-back', audience)
 
 
-def main(args, commander):
-    JudgeVerb.parse(args or ['show'], __doc__).apply(commander)
+def main(args, ctx):
+    JudgeVerb.parse(args or ['show'], __doc__).apply(ctx)

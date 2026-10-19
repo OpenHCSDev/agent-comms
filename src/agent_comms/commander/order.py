@@ -142,33 +142,6 @@ def revision(repo: str, ref: str) -> str:
         ['git', '-C', repo, 'rev-parse', '--verify', f'{ref}^{{commit}}'], text=True).strip()
 
 
-def replied(latest: Message | None) -> str:
-    """The reply an overdue alarm is read against."""
-    if latest is None:
-        return '; no reply since the order'
-    at = time.strftime('%H:%M', time.localtime(latest.timestamp))
-    return f'; REPLIED {at} [{latest.message_id}]: {" ".join(latest.body.split())[:160]} -- read it before pushing'
-
-
-class HuntPlace:
-    def prompt(self) -> str:
-        return HuntDue.text
-
-    def __str__(self) -> str:
-        return 'No changed production file on origin/main.'
-
-
-@dataclass(frozen=True)
-class ChangedHuntPlace(HuntPlace):
-    file: str
-
-    def prompt(self) -> str:
-        return HuntVerb.due(self.file)
-
-    def __str__(self) -> str:
-        return self.file
-
-
 class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
@@ -554,7 +527,7 @@ class Commander(CommanderContext):
     def hunts(self):
         return self.comms.goals.todos.hunts_for_commander(self.comms.registry.require(self.commander).incarnation)
 
-    def next_hunt(self) -> HuntPlace:
+    def next_hunt(self):
         """Least-recently hunted file among the most-churned production files on origin/main."""
         hunted = {}
         for h in self.hunts():
@@ -569,14 +542,18 @@ class Commander(CommanderContext):
                 if os.path.exists(full) and f.endswith('.py'):
                     churn[full] = churn.get(full, 0) + 1
             candidates += sorted(churn, key=churn.get, reverse=True)[:15]
-        return ChangedHuntPlace(min(candidates, key=lambda f: hunted.get(f, 0))) if candidates else HuntPlace()
+        return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
 
-    def reply(self, unit: str, since: float) -> Message | None:
-        """The unit's newest message to me after ``since`` in the recent bus window."""
+    def reply(self, unit: str, since: float) -> str:
+        """The newest reply suffix for this command's overdue alarm."""
         with self.comms.bus.log.opened_wire_snapshot() as source:
-            return next((message for message in source.newest_messages()
-                         if message.sender == unit and message.timestamp > since
-                         and message.target in (self.commander, '#comms')), None)
+            for message in source.newest_messages():
+                if (message.sender == unit and message.timestamp > since
+                        and message.target in (self.commander, '#comms')):
+                    at = time.strftime('%H:%M', time.localtime(message.timestamp))
+                    return (f'; REPLIED {at} [{message.message_id}]: '
+                            f'{" ".join(message.body.split())[:160]} -- read it before pushing')
+        return '; no reply since the order'
 
     def deadline_lines(self, pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
         """Every past-due unrecorded order alarms with its state until recorded.
@@ -591,7 +568,7 @@ class Commander(CommanderContext):
                 continue
             answer = self.reply(t.holder, ordered)
             due = f'due {hhmm(t.deadline)}, order {t.order.id}'
-            late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
+            late.append(f'{t.holder} ({due}, {work.line}{answer})')
         alarm = (f'OVERDUE: {", ".join(late)} -> record merged work; '
                  'push or merge unfinished work now')
         return [alarm] * bool(late) + stalled
@@ -630,7 +607,7 @@ class Commander(CommanderContext):
             if idle_prs:
                 print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
             for _ in HuntDue.broken(self.comms, self.commander, since):
-                print(self.next_hunt().prompt(), flush=True)
+                print(HuntVerb.due(self.next_hunt()), flush=True)
             since = now
             time.sleep(60)
 
@@ -1015,5 +992,5 @@ class OverdueVerb(OrderVerb):
         ctx.overdue()
 
 
-def main(a, commander: Commander):
-    OrderVerb.parse(a, __doc__).apply(commander)
+def main(a, ctx: Commander):
+    OrderVerb.parse(a, __doc__).apply(ctx)

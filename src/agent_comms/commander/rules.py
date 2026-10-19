@@ -46,12 +46,12 @@ def rules() -> list[str]:
     return found
 
 
-def record(commander: Commander, who: str, entry: RuleReviewEntry) -> None:
-    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), commander.comms)
+def record(ctx: Commander, who: str, entry: RuleReviewEntry) -> None:
+    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), ctx.comms)
     print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
-def review(commander: Commander, who: str) -> None:
+def review(ctx: Commander, who: str) -> None:
     every = rules()
     for i, r in enumerate(every, 1):
         print(f'{i:3}. {r}')
@@ -59,19 +59,19 @@ def review(commander: Commander, who: str) -> None:
     print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:
         print(f'  - {r}')
-    drawn = random.sample(paper, DRAWN) if who != commander.commander else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    drawn = random.sample(paper, DRAWN) if who != ctx.commander else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
     pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
-    record(commander, who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != commander.commander else 2))
+    record(ctx, who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != ctx.commander else 2))
     print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
         print(f'  {n}. {r}')
 
 
-def answer(commander: Commander, n: int, text: str, who: str) -> None:
-    record(commander, who, AnsweredRuleReviewEntry(n, text))
+def answer(ctx: Commander, n: int, text: str, who: str) -> None:
+    record(ctx, who, AnsweredRuleReviewEntry(n, text))
 
 
 class RulesVerb(CommanderVerb):
@@ -102,8 +102,8 @@ class StaleVerb(RulesVerb):
         print('\n'.join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx))) or 'fresh')
 
 
-def main(a, commander):
+def main(a, ctx):
     try:
-        RulesVerb.parse(a, __doc__).apply(commander)
+        RulesVerb.parse(a, __doc__).apply(ctx)
     except ValueError as refused:  # Core owns what a review and an answer may say
         sys.exit(f'REFUSED: {refused}')

@@ -120,8 +120,8 @@ class TacticalCommand(GuardedCommand):
         return any(ordered(shape) for shape in cls.shapes)
 
     @classmethod
-    def install_refusals(cls, commander: Commander) -> tuple[str, ...]:
-        return InstallDeadline.read(commander.comms.root).refusals(cls.work, commander.commander)
+    def install_refusals(cls, ctx: Commander) -> tuple[str, ...]:
+        return InstallDeadline.read(ctx.comms.root).refusals(cls.work, ctx.commander)
 
 
 @dataclass(frozen=True)
@@ -152,9 +152,9 @@ class CarryCommand(TacticalCommand):
     shapes = (('cutover',),)
 
 
-def main(a: list[str], commander: Commander) -> None:
+def main(a: list[str], ctx: Commander) -> None:
     hook = ClaudeBashHook.read()
-    session = CommanderSession(hook.session_id, commander)
+    session = CommanderSession(hook.session_id, ctx)
     reasons = GuardedCommand.refusals(hook.tool_input.command, session)
     if reasons:
         print(json.dumps({"hookSpecificOutput": {
