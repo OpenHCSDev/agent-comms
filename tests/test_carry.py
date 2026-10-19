@@ -96,6 +96,16 @@ def test_steps_at_head_form_one_chain_and_each_module_declares_its_step():
             assert declared.after == step.after
 
 
+def test_retained_read_ledger_still_reaches_its_cursor_conversions():
+    chain = CarryChain.at(REPO, "HEAD")
+    pending = chain.pending(("carry_read_ledger",))
+    names = [step.name for step in pending]
+    assert names.index("carry_p495_read_ledger") < names.index("carry_archived_read_ledgers")
+    assert names.index("carry_archived_read_ledgers") < names.index("carry_goal_wait_targets")
+    assert all(step.revision != "HEAD" for step in pending
+               if step.name in ("carry_p495_read_ledger", "carry_archived_read_ledgers"))
+
+
 def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
     repo = Repository(tmp_path)
     held = repo.commit({"carry_a": step_source(None), "carry_b": step_source("carry_a")})
