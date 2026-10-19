@@ -17,6 +17,7 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
@@ -337,14 +338,23 @@ class ProgressSource:
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since={after}",
-             "--format=%H %ct", "HEAD", "--not", *excluded),
-            capture_output=True, text=True, timeout=30)
-        for line in log.stdout.splitlines() if not log.returncode else ():
+        for line in self.git("log", "-1", f"--since={self.git_since}",
+                             "--format=%H %ct", "HEAD", "--not", *excluded).splitlines():
             sha, at = line.split()
             yield sha, float(at)
+
+    @property
+    def git_since(self) -> str:
+        return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
+
+    @cached_property
+    def pushes(self) -> tuple[PushedProgress, ...]:
+        return tuple(PushedProgress.pushes(self))
+
+    @cached_property
+    def moved_at(self) -> float:
+        return max((self.since, *(at for _, at in self.commits()),
+                    *(push.at for push in self.pushes)))
 
     def git(self, *args: str) -> str:
         run = subprocess.run(("git", "-C", str(self.checkout), *args),
@@ -364,9 +374,8 @@ class MeasuredProgressSource(ProgressSource):
     def readings(self) -> DistanceReadings:
         """The order's base, then each branch commit since the order; the last two are read."""
         base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
         commits = [(sha, float(at)) for sha, at in (line.split() for line in reversed(self.git(
-            "log", "--first-parent", f"--since={after}", "--format=%H %ct", "HEAD",
+            "log", "--first-parent", f"--since={self.git_since}", "--format=%H %ct", "HEAD",
             "--not", base).splitlines()))]
         points = [(base, self.since), *commits][-2:]
         return DistanceReadings(
@@ -399,7 +408,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def from_source(cls, source: ProgressSource) -> OrderProgress:
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
-            return next((progress for member in members for progress in member.found(source)),
+            return next((progress for member in members for progress in member.observations(source)),
                         NoCommitProgress())
         except subprocess.TimeoutExpired as unread:
             return UnreadProgress(str(unread))
@@ -450,6 +459,10 @@ class FoundProgress(OrderProgress):
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         """Each member of this class the source holds."""
 
+    @classmethod
+    def observations(cls, source: ProgressSource) -> Iterator[Self]:
+        return cls.found(source)
+
 
 class Stalling:
     """One inactivity deadline and its strike/release transition."""
@@ -497,6 +510,20 @@ class Moving(Stalling):
         return self.readings
 
 
+@dataclass(frozen=True, kw_only=True)
+class MissingCheckoutProgress(Moving, FoundProgress):
+    precedence: ClassVar[int] = 2
+    state: ClassVar[str] = "ordered checkout is missing"
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        if not source.checkout.exists():
+            yield cls(at=max((source.since, *(pr.updated_at for pr in source.requests("open")))))
+
+    def stall_reason(self) -> str:
+        return "the ordered checkout is missing and its PR has not changed for ten minutes"
+
+
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
@@ -522,9 +549,18 @@ class UnreadProgress(OrderProgress):
         return f"progress unread: {self.reason}"
 
 
+class GitProgress(Moving, FoundProgress, declared_name=None):
+    """Found progress whose activity includes the checkout's commits and pushes."""
+
+    @classmethod
+    def observations(cls, source: ProgressSource) -> Iterator[Self]:
+        return (replace(progress, at=max(progress.at, source.moved_at))
+                for progress in cls.found(source))
+
+
 @dataclass(frozen=True)
-class CommittedProgress(Moving, FoundProgress):
-    precedence: ClassVar[int] = 3
+class CommittedProgress(GitProgress):
+    precedence: ClassVar[int] = 4
     sha: str
 
     @classmethod
@@ -540,12 +576,26 @@ class CommittedProgress(Moving, FoundProgress):
 @dataclass(frozen=True)
 class PushedProgress(CommittedProgress):
     """Pushed past the default branch, with no PR naming the order yet."""
-    precedence: ClassVar[int] = 4
+    precedence: ClassVar[int] = 5
+
+    @classmethod
+    def pushes(cls, source: ProgressSource) -> Iterator[Self]:
+        """A push-ref update has its own time, not the commit's author time."""
+        branch = source.git("branch", "--show-current").strip()
+        for row in source.git("reflog", "show", "--all", "--date=unix",
+                              f"--since={source.git_since}",
+                              "--format=%gD%x09%H%x09%gs").splitlines():
+            selector, sha, subject = row.split("\t", 2)
+            reference, stamp = selector.rsplit("@{", 1)
+            if reference == f"refs/remotes/origin/{branch}" and subject == "update by push":
+                yield cls(sha[:9], at=float(stamp.removesuffix("}")))
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
+        moves = (*source.commits("origin/HEAD"),
+                 *((push.sha, push.at) for push in source.pushes))
         return (cls(sha[:9], at=at, readings=source.readings())
-                for sha, at in source.commits("origin/HEAD"))
+                for sha, at in sorted(moves, key=lambda move: move[1], reverse=True)[:1])
 
     @property
     def state(self) -> str:
@@ -553,15 +603,15 @@ class PushedProgress(CommittedProgress):
 
 
 @dataclass(frozen=True)
-class OpenPrProgress(Moving, FoundProgress):
-    precedence: ClassVar[int] = 2
+class OpenPrProgress(GitProgress):
+    precedence: ClassVar[int] = 3
     number: int
     head: str
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.number, pr.head[:9], at=pr.updated_at, readings=source.readings())
-                for pr in source.requests("open"))
+        return (cls(pr.number, pr.head[:9], at=pr.updated_at,
+                    readings=source.readings()) for pr in source.requests("open"))
 
     @property
     def state(self) -> str:
