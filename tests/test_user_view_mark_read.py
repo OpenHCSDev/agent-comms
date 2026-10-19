@@ -9,13 +9,14 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.ui_model.unread import ReplyUnread
 from native_unread_fixture import completed_snapshot
 
 
 def answer(path, text):
     with path.open("a") as output:
         output.write(
-            json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
+            json.dumps({"type": "message", "timestamp": "2026-09-20T00:00:01Z", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
             + "\n"
         )
 
@@ -33,14 +34,16 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     comms.messaging.send("sender", "#ci", "Channel message").message.message_id
 
     before = completed_snapshot(comms, str(tmp_path))
-    assert before.thread_unread["sender"] == before.unread["sender"] == 1
+    assert before.thread_unread["sender"] == ReplyUnread(1)
+    assert before.unread["sender"] == 1
     assert before.channel_unread["#ci"] == 1
     assert comms.bus.pending_count("receiver", CommandTarget.named("sender")) == 1
     assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 1
 
     comms.views.mark_user_view_read("sender", worktree=str(tmp_path))
     after_dm = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-    assert after_dm.thread_unread["sender"] == after_dm.unread.get("sender", 0) == 0
+    assert after_dm.thread_unread["sender"] == ReplyUnread(0)
+    assert after_dm.unread.get("sender", 0) == 0
     assert after_dm.channel_unread["#ci"] == 1
     assert comms.bus.pending_count("receiver", CommandTarget.named("sender")) == 1
 
@@ -61,7 +64,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     assert comms.views.viewer_snapshot(str(tmp_path)).unread.get("receiver", 0) == 0
 
     answer(source, "New reply after manual read")
-    assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == 1
+    assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == ReplyUnread(1)
     with pytest.raises(ValueError, match="registered"):
         comms.views.mark_user_view_read("missing", worktree=str(tmp_path))
 

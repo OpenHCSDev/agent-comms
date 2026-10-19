@@ -104,6 +104,9 @@ class UserThreadLookup[Value](ABC):
     @abstractmethod
     def or_create(self, create: Callable[[], Value]) -> Value: ...
 
+    @abstractmethod
+    def require(self, refusal: Exception) -> Value: ...
+
 
 @dataclass(frozen=True, slots=True)
 class FoundUserThread[Value](UserThreadLookup[Value]):
@@ -118,6 +121,9 @@ class FoundUserThread[Value](UserThreadLookup[Value]):
     def or_create(self, create: Callable[[], Value]) -> Value:
         return self.value
 
+    def require(self, refusal: Exception) -> Value:
+        return self.value
+
 
 @dataclass(frozen=True, slots=True)
 class NoUserThread[Value](UserThreadLookup[Value]):
@@ -129,6 +135,9 @@ class NoUserThread[Value](UserThreadLookup[Value]):
 
     def or_create(self, create: Callable[[], Value]) -> Value:
         return create()
+
+    def require(self, refusal: Exception) -> Value:
+        raise refusal
 
 
 class ThreadSlice[Value](ABC):
