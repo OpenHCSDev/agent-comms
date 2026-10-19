@@ -65,7 +65,9 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: str | None = field(default_factory=lambda: uuid4().hex)
+    id: str | None = field(
+        default_factory=lambda: uuid4().hex, metadata={"wire_absent_none": True}
+    )
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -98,8 +100,6 @@ class PiCommand(DeclaredFamily):
     def to_rpc(self) -> dict[str, Any]:
         data = FieldCodec.encode(self)
         data["type"] = data.pop("kind")
-        if self.id is None:
-            del data["id"]
         return data
 
     @classmethod
@@ -109,8 +109,7 @@ class PiCommand(DeclaredFamily):
         try:
             cls.member_named(kind)
         except ValueError:
-            return UnknownCommand(id=data.get("id"), wire=value)
-        data.setdefault("id", None)
+            return UnknownCommand(id=FieldCodec.field_plan(cls, "id").read(data), wire=value)
         return FieldCodec.decode(cls, {"kind": kind, **data})
 
     @classmethod
