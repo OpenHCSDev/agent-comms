@@ -95,7 +95,8 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
             "verifier", session, f"Distinct isolated delayed-round verification {native.session.stem}."
         ).message
         await owner.inputs.drain_inbox(session)
-        await asyncio.wait_for(reply_turn_finished(owner, session), 120)
+        with pytest.raises(NativePiTerminalFailure, match=provider.error_message):
+            await asyncio.wait_for(reply_turn_finished(owner, session), 120)
 
         rows = [json.loads(line) for line in native.session.read_text().splitlines()]
         tools = [row["message"] for row in rows if row.get("type") == "message"

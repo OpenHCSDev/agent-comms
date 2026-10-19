@@ -106,8 +106,14 @@ async def test_socket_arrival_before_native_events_waits_without_authority(polic
     p.end()
     p.socket.assert_complete()
     assert p.effects == ["one"]
-    with pytest.raises(SelectedToolDenied):
-        await p.socket.handle_request(p.raw())
+    # A provider id may be reused in a later round. A socket request alone
+    # cannot declare that round or reopen the completed call's permission.
+    pending = asyncio.create_task(p.socket.handle_request(p.raw()))
+    await asyncio.sleep(0)
+    assert not pending.done()
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
     with pytest.raises(SelectedToolDenied):
         p.end()
     assert p.effects == ["one"]
