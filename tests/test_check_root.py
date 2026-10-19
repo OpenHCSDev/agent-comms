@@ -62,6 +62,14 @@ def test_python_failure_removes_root(source, tmp_path):
     assert not root.exists()
 
 
+def test_cleanup_uses_the_registry_executor_selection_not_human_senders(source, tmp_path):
+    root = tmp_path / "with-human"
+    with CheckRoot(source, ("B",), root).open() as c:
+        user = c.messaging.user_identity(c.registry.require("B").worktree)
+        assert user.name in c.registry.snapshot().threads
+    assert not root.exists()
+
+
 def test_existing_destination_and_source_directory_are_never_removed(source, tmp_path):
     with pytest.raises(FileExistsError):
         with CheckRoot(source, ("B",), tmp_path).open():

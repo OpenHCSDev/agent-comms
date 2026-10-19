@@ -23,6 +23,7 @@ from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .native_entries import TranscriptProjection
 from .native_transcript import NativeTranscript
 from .read_basis import MemberActivityDisplayScope
+from .registry_document import RosterVisibility
 from .storage_rules import StorageRoots
 from .transcript_routes import TranscriptRoutes
 
@@ -67,8 +68,8 @@ class CheckRoot:
                 self._populate(copied)
                 yield copied
             finally:
-                for name in copied.registry.snapshot().threads:
-                    copied.owners.stop(name)
+                for thread in copied.registry.snapshot().visible_threads(RosterVisibility(archived=True)):
+                    copied.owners.stop(thread.name)
         finally:
             RecoveryMonitorCapability.retire_check_root(root)
 
