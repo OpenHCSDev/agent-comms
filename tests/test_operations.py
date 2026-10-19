@@ -135,7 +135,7 @@ class TestMessaging:
         for index in range(5):
             wired.messaging.send("PR111", "#all", f"m{index}").message.message_id
 
-        page = wired.views.channel_history_page("#all", PageBounds(limit=2))
+        page = wired.views.history_page(CommandTarget.named("#all"), PageBounds(limit=2))
         assert [message.body for message in page.messages] == ["m3", "m4"]
         assert page.has_older
         assert wired.bus.log.latest_sequence() == 5

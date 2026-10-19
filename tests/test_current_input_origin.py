@@ -1,5 +1,6 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
+from bus_history import history
 from agent_comms.messages import NoticeRole
 from contextlib import ExitStack
 
@@ -66,7 +67,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     comms.agents.begin_turn("beta", "held-native", "Existing original")
     agent.inputs.state("beta").inbox = asyncio.Queue()
     origin = capture(comms)
-    before = list(comms.bus.full_history_page().messages)
+    before = history(comms)
     command = QueuePromptRequest("Never replay UNKNOWN", origin=origin)
     assert decode_request(encode_request(command)) == command
     try:
@@ -76,7 +77,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         key = "acp:" + command.input_id
         row = stored_inputs(inputs.root).lookup(key)
         assert row.origin == origin and row.source_text == command.user_text
-        assert len(stored_inputs(inputs.root).rows) == 1 and list(comms.bus.full_history_page().messages) == before
+        assert len(stored_inputs(inputs.root).rows) == 1 and history(comms) == before
         from agent_comms.turn_context import UserFollowupSegment
         queued = agent.inputs.state('beta').inbox.get_nowait()
         assert queued.input_id.value == command.input_id

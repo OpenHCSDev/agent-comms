@@ -4,6 +4,7 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from bus_history import history
 import asyncio
 import json
 import os
@@ -476,7 +477,7 @@ class TestHandlers:
         )
         assert response.stop_reason == "end_turn"
         assert not agent.turns.turn_state("proj").active.phase.busy
-        history = list(agent._comms.views.channel_history_page("#all").messages)
+        history = history(agent._comms, "#all")
         assert [m.body for m in history] == ["hello all"]
 
     async def test_unknown_session_fails_closed(self, tmp_path):
@@ -1474,7 +1475,7 @@ class TestWireProtocol:
         assert responses[2]["result"]["sessionId"] == "proj"
         assert responses[3]["result"]["stopReason"] == "end_turn"
         assert "proj" in comms.registry
-        assert [m.body for m in list(comms.views.channel_history_page("#all").messages)] == ["anyone alive?"]
+        assert [m.body for m in history(comms, "#all")] == ["anyone alive?"]
 
 
 class TestLiveDrain:
@@ -1500,7 +1501,7 @@ class TestFullHistory:
         comms.messaging.send("a", "#all", "one").message.message_id
         comms.messaging.send("a", "b", "dm").message.message_id
         comms.messaging.send("b", "#x", "tagged").message.message_id
-        bodies = [(m.sender, m.target, m.body) for m in list(comms.views.full_history_page().messages)]
+        bodies = [(m.sender, m.target, m.body) for m in history(comms)]
         assert bodies == [("a", "#all", "one"), ("a", "b", "dm"), ("b", "#x", "tagged")]
 
 
@@ -1695,7 +1696,7 @@ class TestFailureFeedback:
         origin = Message(sender="peer", target="#team", body="do the work", type=InfoKind)
         with pytest.raises(RequestError, match="Internal error"):
             await agent.turns.run_agent_turn("proj", "proj", "do the work", origins=(origin,))
-        history = list(wired.views.channel_history_page("#team").messages)
+        history = history(wired, "#team")
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
         assert isinstance(notice.role, NoticeRole) is True
@@ -1737,7 +1738,7 @@ class TestFailureFeedback:
                 "proj", "proj", "answer", origins=(origin,)
             )
         history = (
-            list(wired.views.channel_history_page(reply_target).messages)
+            history(wired, reply_target)
             if channel
             else list(wired.views.history_page(CommandTarget.named(human.name), viewer="proj").messages)
         )
@@ -1809,7 +1810,7 @@ class TestFailureFeedback:
         assert all(
             (
                 "foreign earlier turn" not in message.body
-                for message in list(wired.views.channel_history_page("#team").messages)
+                for message in history(wired, "#team")
             )
         )
 
@@ -1835,7 +1836,7 @@ class TestFailureFeedback:
             await agent.turns.run_agent_turn(
                 "proj", "proj", "answer", origins=(origin,)
             )
-        history = list(wired.views.full_history_page().messages)
+        history = history(wired)
         assert len(history) == 1
         assert {message.target for message in history} == {"#team"}
         assert all((isinstance(message.role, NoticeRole) and (not message.role.response_policy(message).starts_turn) for message in history))

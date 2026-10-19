@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bus_history import history
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -92,7 +93,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     reopened = Comms(comms.root)
     assert _rows(reopened, "peer")[0][0].goal_contacts == (contact,)
     assert not comms.relationships.store.path.exists()
-    assert list(comms.views.full_history_page().messages) == []
+    assert history(comms) == []
 
 
 def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(

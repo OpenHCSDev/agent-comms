@@ -9,6 +9,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
+from bus_history import history
 
 
 def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tmp_path):
@@ -19,7 +20,7 @@ def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tm
     with sqlite3.connect(database) as db:
         db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
         before = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
-    assert list(Comms(comms.root).views.full_history_page().messages) == []
+    assert history(Comms(comms.root)) == []
     with Coordination(str(database)):
         pass  # Opening a store is not explicit private-runtime installation.
     with pytest.raises(SchemaVersionError):

@@ -5,6 +5,7 @@ These tests do not prove a provider spend ceiling, copied-Pi trust or release.
 
 from __future__ import annotations
 
+from bus_history import history
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from conftest import publish_initial
 import asyncio
@@ -174,7 +175,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(private_comms, s
                 ).fetchone()[0]
                 == 1
             )
-        assert list(comms.views.channel_history_page("#team").messages)[-1].sender == "beta"
+        assert history(comms, "#team")[-1].sender == "beta"
         assert not (root / "read_markers.json").exists()
     finally:
         for child in (*children, duplicate):

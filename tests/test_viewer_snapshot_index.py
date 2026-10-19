@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from bus_history import history
 from agent_comms.wire_log import WireLog
 
 from conftest import publish_initial
@@ -609,7 +610,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
         second = publish_initial(comms, 'sender', '#team', '@Alice next')
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     assert source.stream.closed
-    assert [message.message_id for message in list(comms.bus.full_history_page().messages)] == [
+    assert [message.message_id for message in history(comms)] == [
         first.message_id, second.message_id
     ]
 

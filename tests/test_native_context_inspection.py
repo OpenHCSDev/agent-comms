@@ -1,4 +1,5 @@
 """Existing real native/ACP owner; inspect through its original Unix socket."""
+from bus_history import history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -154,7 +155,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
             steps = (inputs[0],) if receiving_only else (inputs[0], inputs[2])
             for index, text in enumerate(steps, 1):
                 if index == 2:
-                    private_choice, = list(owner._comms.bus.full_history_page().messages)
+                    private_choice, = history(owner._comms)
                     owner._comms.messaging.send_user_message('#team',
                         'PUBLIC_USER_CORRECTION_WITHOUT_PRIVATE_BODY', worktree=str(project),
                         task=UserTaskSupersession(CorrectionTaskChange(private_choice.reference)))
@@ -284,7 +285,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
         # synthesis request; one request serves both originals in this turn.
         assert fixture.provider.posts == 5
         assert owner._comms.bus.log.latest_sequence() == baseline_sequence + 3
-        decision, user_correction, correction = list(owner._comms.bus.full_history_page().messages)
+        decision, user_correction, correction = history(owner._comms)
         assert decision.task.chosen == choice
         assert decision.task.author == thread.incarnation
         first_request = fixture.provider.requests[0]

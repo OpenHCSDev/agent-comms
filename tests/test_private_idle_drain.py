@@ -1,5 +1,6 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from bus_history import history
 from agent_comms.native_package import VerifiedNativePackage
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
@@ -166,7 +167,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             await progress.chunk(events.Chunk("committed progress"))
             await progress.committed_progress(events.CommittedProgress("committed progress"))
             assert progress.reply_parts == []
-            assert [(row.body, isinstance(row.role, NoticeRole)) for row in list(comms.bus.full_history_page().messages)] == [
+            assert [(row.body, isinstance(row.role, NoticeRole)) for row in history(comms)] == [
                 ("committed progress", True),
             ]
             progress.result = events.Done("refused", False)
@@ -193,7 +194,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
                 finish.set()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            rows = list(comms.bus.full_history_page().messages)
+            rows = history(comms)
             assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
             assert "[Open diagnostic]" in rows[-1].body
             assert comms.registry.require("beta").turn_lease == execution.turn_lease

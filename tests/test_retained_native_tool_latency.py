@@ -1,4 +1,5 @@
 """Real selected native tools over an isolated retained source; localhost only."""
+from bus_history import history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -185,7 +186,7 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(tm
         assert sizes_after_decode[0] > captured_sizes[0], "Fast native append during initial decoding must be exercised"
         assert saved.read_bytes().startswith(source.read_bytes())
         if outcome == "complete":
-            assert list(comms.views.full_history_page().messages)[-1].body == provider.text
+            assert history(comms)[-1].body == provider.text
         assert all(not child.alive() for child in children)
         assert all(reader.source.stream.closed and not reader.entries for reader in readers)
         acknowledgement = {

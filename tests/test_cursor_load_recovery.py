@@ -1,5 +1,6 @@
 """A contended trusted load must not suppress its later real cursor recovery."""
 
+from bus_history import history
 import asyncio
 import json
 import os
@@ -126,7 +127,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         for _ in range(20):
             await agent.inputs.drain_inbox(owner.name)
         assert agent.cursors.delivery(owner.name).revision == settled_revision
-        assert list(comms.views.full_history_page().messages) == []  # No input submitted or replayed.
+        assert history(comms) == []  # No input submitted or replayed.
     finally:
         drains = [state.drain_task for state in agent.inputs.drained.values() if state.drain_task]
         for task in drains:

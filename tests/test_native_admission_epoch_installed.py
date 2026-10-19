@@ -5,6 +5,7 @@ controlled. Registry claim_scope, release acknowledgement, process identity, coo
 native input/proof journal and recovery monitor use their production owners.
 """
 
+from bus_history import history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import asyncio
 import hashlib
@@ -165,7 +166,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
             assert source == next(row for row in owned.records() if row.input_id == input_id)
             assert native_path.read_bytes().startswith(native_before)
             assert any(
-                row.body == "NEW_NATIVE_EPOCH_COMPLETED" for row in list(comms.views.full_history_page().messages)
+                row.body == "NEW_NATIVE_EPOCH_COMPLETED" for row in history(comms)
             )
         acknowledgement = {
             "provider": "localhost-only",

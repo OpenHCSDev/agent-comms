@@ -1,5 +1,6 @@
 """How much one thread matters to another, and what its peers see of that."""
 
+from bus_history import history
 from conftest import publish_initial
 import json
 
@@ -145,7 +146,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     shown = json.loads(_partner_activity(comms, "owner")[0].text().splitlines()[-1])
     assert shown[0]["peer"] == "partner" and shown[0]["state"] == "completed"
     # The change is read at the partner's next turn: nothing was sent and nobody was woken.
-    assert list(comms.views.full_history_page().messages) == []
+    assert history(comms) == []
     assert comms.bus.pending_counts_all(["owner", "partner", "mate"]) == dict.fromkeys(
         ("owner", "partner", "mate"), 0
     )

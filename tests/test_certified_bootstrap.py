@@ -1,5 +1,6 @@
 """Fresh canonical roots certify before publication or native source observation."""
 
+from bus_history import history
 import os
 from pathlib import Path
 
@@ -65,7 +66,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
         page = reader.read(limit=1, partial=True)
         assert page.more_sources and page.blocked_seq == first.seq
         assert page.covered_seq == 0 and page.injected_source_seqs == ()
-        assert [message.seq for message in list(comms.bus.full_history_page().messages)] == [first.seq, second.seq]
+        assert [message.seq for message in history(comms)] == [first.seq, second.seq]
         with pytest.raises(ValueError, match="received bool"):
             reader.read(limit=True)
 

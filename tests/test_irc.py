@@ -1,5 +1,6 @@
 """IRC model: channels, DMs, presence, history views."""
 
+from bus_history import history
 from agent_comms.channel_targets import CommandTarget
 import pytest
 
@@ -105,17 +106,17 @@ class TestHistory:
         chat.messaging.send("PR111", "#ci", "one").message.message_id
         chat.messaging.send("fixer", "#ci", "two").message.message_id
         chat.messaging.send("PR111", "#all", "three").message.message_id
-        assert [m.body for m in list(chat.views.channel_history_page("#ci").messages)] == ["one", "two"]
+        assert [m.body for m in history(chat, "#ci")] == ["one", "two"]
 
     def test_global_channel_history(self, chat):
         chat.messaging.send("PR111", "#all", "hello").message.message_id
-        assert [m.body for m in list(chat.views.channel_history_page("#all").messages)] == ["hello"]
+        assert [m.body for m in history(chat, "#all")] == ["hello"]
         with pytest.raises(ValueError, match="not a channel"):
-            list(chat.views.channel_history_page("broadcast").messages)
+            history(chat, "broadcast")
 
     def test_channel_history_rejects_dm_target(self, chat):
         with pytest.raises(ValueError, match="not a channel"):
-            list(chat.views.channel_history_page("fixer").messages)
+            history(chat, "fixer")
 
 
 class TestChannelsDerived:

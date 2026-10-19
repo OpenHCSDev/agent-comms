@@ -1,5 +1,6 @@
 """Saved audience retirement retains addressed history, never routing authority."""
 
+from bus_history import history
 from agent_comms.messages import Membership
 import json
 from dataclasses import replace
@@ -89,7 +90,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     assert [m.seq for m in tail.messages] == [3, 4]
     older = comms.views.channel_display_page("#engineering", bounds=PageBounds(OlderTraversal(3), 2))
     assert [m.seq for m in older.messages] == [1, 2]
-    assert [m.target for m in list(comms.views.channel_history_page("#engineering").messages)] == [
+    assert [m.target for m in history(comms, "#engineering")] == [
         m.target for m in rows
     ]
     for send in (
@@ -128,7 +129,7 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
     assert comms.bus.log.latest_sequence() == before
     comms.messaging.send_user_message("#team", "exact", worktree=str(comms.root))
     comms.channels.update_tags("bob", remove=frozenset({"team"}))
-    rows = list(comms.views.channel_history_page("#team").messages)
+    rows = history(comms, "#team")
     assert [row.body for row in rows if not isinstance(row.role, Membership)] == ["exact"]
     assert any(isinstance(row.role, Membership) for row in rows)
     assert not any(row.target == "#team-view" for row in rows)

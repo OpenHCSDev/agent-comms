@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bus_history import history
 from conftest import publish_initial
 import os
 import sys
@@ -148,7 +149,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 )
                 == selected_owner
             )
-            assert len(list(comms.views.full_history_page().messages)) == 2
+            assert len(history(comms)) == 2
             # Simulate a crash after the durable rename intent but before SQL
             # owner CAS: an already selected attempt and exact resource claim
             # must not admit a new claim or touch the existing file.
@@ -280,4 +281,4 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 publish_selected_resource_claim(
                     comms, store, claim_scope, "Alice", ExistingFileClaim(Path(resource))
                 )
-            assert len(list(comms.views.full_history_page().messages)) == 2
+            assert len(history(comms)) == 2
