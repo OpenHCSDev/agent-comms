@@ -14,12 +14,13 @@ from __future__ import annotations
 import inspect
 import json
 import shlex
-import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
 from typing import ClassVar
+
+from agent_comms_hooks import ClaudeBashHook
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
@@ -148,10 +149,9 @@ class CarryCommand(TacticalCommand):
 
 
 def main(a: list[str]) -> None:
-    hook = json.load(sys.stdin)
-    reasons = GuardedCommand.refusals(hook.get('tool_input', {}).get('command', ''),
-                                      CommanderSession(hook.get('session_id', '')))
+    hook = ClaudeBashHook.read()
+    reasons = GuardedCommand.refusals(hook.tool_input.command, CommanderSession(hook.session_id))
     if reasons:
         print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": "deny",
+            "hookEventName": hook.hook_event_name, "permissionDecision": "deny",
             "permissionDecisionReason": ' '.join(reasons)}}))
