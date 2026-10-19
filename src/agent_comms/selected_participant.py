@@ -127,19 +127,23 @@ class SelectedParticipant(MroDispatch):
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, cursor_delivery: CursorDelivery, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, ParticipantPublisher)
-        owner, participant, pending, sent_outcomes = await Coordination.run_async(
-            store.session.path,
-            lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
-        )
+        with cursor_delivery.measurements.operation("claim_prepare"):
+            owner, participant, pending, sent_outcomes = await Coordination.run_async(
+                store.session.path,
+                lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
+            )
         if not pending:
             yield None
             return
         identity = ParticipantOwner(owner.thread, participant.participant_generation)
-        model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
+        with cursor_delivery.measurements.operation("model_selection"):
+            model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
         lease = cls.lease(comms, owner)
         try:
-            leased = await Coordination.run_worker(lambda: next(lease))
-            sources = await cls.sources(bus, store, root_id, pending, identity)
+            with cursor_delivery.measurements.operation("claim_lease"):
+                leased = await Coordination.run_worker(lambda: next(lease))
+            with cursor_delivery.measurements.operation("claim_sources"):
+                sources = await cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch.first_route(sources)
             selected = cls(
                 comms,

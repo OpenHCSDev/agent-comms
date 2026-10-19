@@ -25,6 +25,7 @@ from .comms import Comms
 from .field_codec import FieldCodec, MalformedRecord
 from .envelope_claim_transitions import (
     ClaimOwner,
+    FileClaimPath,
     WakeClaim,
 )
 from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
@@ -42,13 +43,19 @@ from .selected_tool_broker import (
 @dataclass
 class CodingCall(NativeToolCall):
     @abstractmethod
-    def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]: ...
+    def allowed_claim(self) -> FileClaimPath | None: ...
 
     @abstractmethod
     def digest(self) -> str: ...
 
+    def decide_storage(self, registry, thread: str) -> None:
+        """A call without executable effects has nothing to decide."""
+
     def storage_violation(self, registry, thread: str) -> str | None:
-        """A call without executable effects has nothing to judge."""
+        try:
+            self.decide_storage(registry, thread)
+        except SelectedToolDenied as denied:
+            return str(denied)
         return None
 
     def commit_terminal(
@@ -89,19 +96,15 @@ class ExecutableCodingCall(CodingCall):
     def name(self) -> str:
         return self.tool.declared_name
 
-    def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]:
-        return self.tool
+    def allowed_claim(self) -> FileClaimPath | None:
+        return self.tool.claim
 
     def digest(self) -> str:
         return self.tool.digest()
 
-    def storage_violation(self, registry, thread: str) -> str | None:
-        try:
-            worktree = Path(registry.require(thread).worktree)
-            registry.decide_storage(thread, self.tool.storage_effects(worktree))
-        except SelectedToolDenied as denied:
-            return str(denied)
-        return None
+    def decide_storage(self, registry, thread: str) -> None:
+        worktree = Path(registry.require(thread).worktree)
+        registry.decide_storage(thread, self.tool.storage_effects(worktree))
 
 
 @dataclass
@@ -129,8 +132,8 @@ class RefusedCodingCall(CodingCall):
     def name(self) -> str:
         return self.tool_name
 
-    def require_tool(self) -> Never:
-        raise SelectedToolDenied("Refused native coding arguments cannot execute")
+    def allowed_claim(self) -> Never:
+        raise SelectedToolDenied(self.reason)
 
     def digest(self) -> str:
         return f'REFUSED {self.name}: {one_line(self.reason, 200)}'
@@ -171,14 +174,11 @@ class CodingToolOwner(ABC):
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(turn.launch.session.directory, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
-            tool = call.require_tool()
             try:
-                effects = tool.storage_effects(Path(owner.worktree))
-                if effects:
-                    self.comms.registry.decide_storage(self.owner_name, effects)
+                call.decide_storage(self.comms.registry, self.owner_name)
             except SelectedToolDenied as error:
                 raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
-            resource = tool.claim
+            resource = call.allowed_claim()
             if resource is not None:
                 canonical = resource.normalized(Path(owner.worktree))
                 self.claims[canonical] = self.claim_resource(

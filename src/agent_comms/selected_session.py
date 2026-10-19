@@ -11,9 +11,8 @@ from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
-from .native_package import VerifiedNativePackage
 from .native_pi import NativePiUnavailable, _session_location
-from .private_path import PrivateFileRole
+from .private_path import NativeSessionFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
 
@@ -73,11 +72,11 @@ class SelectedSession:
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @classmethod
-    def for_launch(cls, directory: Path, path: Path | None, package: VerifiedNativePackage) -> SelectedSession:
+    def for_launch(cls, directory: Path, path: Path | None) -> SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(package, str(path)))
+            identity=NativeSessionIdentity.locate(str(path)))
 
     @classmethod
     async def prepare(
@@ -100,9 +99,11 @@ class SelectedSession:
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
             thread = participant.owner.thread
             runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
-            return runtime.select_session(directory, execution)
+            return runtime.select_session(directory, execution, source_reads)
 
-        return await Coordination.run_worker(acquire)
+        with participant.cursor_delivery.measurements.operation("session_reopen"):
+            async with participant.cursor_delivery.reading() as source_reads:
+                return await Coordination.run_worker(acquire)
 
 
 @dataclass(frozen=True)
@@ -144,7 +145,7 @@ class SavedSelectedSession(SelectedSession):
         try:
             if self.path.resolve(strict=True) != self.path:
                 raise ValueError("redirected saved session")
-            PrivateFileRole.require(self.path.lstat())
+            NativeSessionFileRole.require(self.path.lstat())
         except (OSError, ValueError) as error:
             raise IdentityConflict("native start requires the exact saved session") from error
         return self.path

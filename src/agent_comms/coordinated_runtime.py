@@ -39,6 +39,7 @@ from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthori
 
 @dataclass(kw_only=True)
 class NativeExecution(ABC):
+    cursor_delivery: CursorDelivery
     pi_session: PersistentPiSession = field(default_factory=PersistentPiSession, compare=False)
 
     @abstractmethod
@@ -58,7 +59,6 @@ class SelectedExecution(NativeExecution):
     wire_root_id: str
     owner_name: str
     native_package: VerifiedNativePackage
-    cursor_delivery: CursorDelivery
     opt_in: bool = True
     after_seq: int = 0
     session_file: Path | None = None

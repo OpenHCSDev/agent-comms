@@ -19,7 +19,9 @@ from delivery_owner_fixture import canonical_agent, reply_turn_finished
     ("read", {"path": "x", "offset": None, "limit": None}, {"path": "x"}),
 ])
 def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, encoded):
-    assert CodingCall.decode("optional-null", name, arguments).require_tool().arguments == encoded
+    call = CodingCall.decode("optional-null", name, arguments)
+    assert call.allowed_claim() is None
+    assert call.tool.arguments == encoded
 
 
 @pytest.mark.parametrize("request_first", [False, True])

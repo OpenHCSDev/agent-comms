@@ -141,8 +141,9 @@ async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend,
         starts.append(event.tool_call_id)
         await tool_started(turn, event)
         # Appended bytes extend the retained digest; the start leaves its verified prefix behind.
-        source = turn.evidence.source
-        verified.append((source.path, source.prefix))
+        async with turn.cursor_delivery.reading() as source_reads:
+            source = source_reads.for_source(turn.active_session_file).source
+            verified.append((source.path, source.prefix))
 
     monkeypatch.setattr(TrackedTurnSession, "tool_started", during_tool_start)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):

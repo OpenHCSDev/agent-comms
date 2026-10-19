@@ -48,7 +48,7 @@ class UnstartedRuntime(RuntimeLocation):
     def external_records(self, root, incarnation):
         return self.history_source(root, incarnation)
 
-    def select_session(self, directory, execution):
+    def select_session(self, directory, execution, source_reads):
         return SelectedSession(directory)
 
     def history_source(self, root, incarnation):

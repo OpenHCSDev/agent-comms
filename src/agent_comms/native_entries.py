@@ -129,12 +129,6 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         with NativeEvidenceRead.open(session_file) as evidence:
             yield evidence
 
-    @classmethod
-    @contextmanager
-    def open_input_evidence(cls, session_file):
-        with NativeInputEvidenceRead.open(session_file) as evidence:
-            yield evidence
-
     @property
     def tracked_user(self) -> MessageEntry | None:
         return None
@@ -333,7 +327,7 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
 
 
 class NativeEvidenceScope(ExitStack):
-    """One acquired input-proof source for a bounded corroboration operation.
+    """One recipient-owned input-proof source across its corroboration lifetime.
 
     Only the current descriptor and its decoded bytes are held. Switching
     journals closes the previous reader; no proof, acknowledgement or disposition is
@@ -388,6 +382,12 @@ class SessionEntry(NativeEntry):
     def require_header(self) -> None:
         if not self.id:
             raise MalformedRecord("Native Pi session header is invalid")
+
+    def require_reopen(self) -> None:
+        """Saved native execution supports v3; display may decode older headers."""
+        self.require_header()
+        if self.version != 3:
+            raise MalformedRecord("Strict native v3 session header required")
 
 
 @dataclass(frozen=True, kw_only=True)
