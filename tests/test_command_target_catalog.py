@@ -30,7 +30,7 @@ def test_catalog_binding_failure_propagates_for_each_target_family(
     monkeypatch.setattr(ReadTargetCliCommand, binding, classmethod(broken))
     for selection in (target, (target, ThreadTarget("other"))):
         with pytest.raises(ValueError, match="broken binding"):
-            CliCommand.target_catalog(comms, selection, project=str(tmp_path))
+            CliCommand.target_catalog(comms, CliCommand.selected_targets(selection), project=str(tmp_path))
 
 
 def test_channel_catalog_resolves_members_once_per_selected_target(comms, tmp_path, monkeypatch):
@@ -54,7 +54,7 @@ def test_channel_catalog_resolves_members_once_per_selected_target(comms, tmp_pa
     for name, members in (("#team", ("first", "second")), ("#both", ("first",)),
                           ("#all", ("first", "second"))):
         scans.clear()
-        actions = CliCommand.target_catalog(comms, name, project=str(tmp_path))
+        actions = CliCommand.target_catalog(comms, CliCommand.selected_targets(name), project=str(tmp_path))
         assert len(scans) == 1
         assert next(action.bound for action in actions if action.declaration is StartCliCommand) == tuple(
             StartCliCommand(name=member) for member in members)
@@ -77,7 +77,7 @@ def test_channel_execution_rechecks_members_after_each_action(comms, tmp_path, m
         return result
 
     monkeypatch.setattr(StopCliCommand, "apply", stop)
-    result = StopCliCommand.execute_target(comms, ("#team",), {})
+    result = StopCliCommand.execute_target(comms, StopCliCommand.selected_targets(("#team",)), {})
     assert len(result.outcomes) == 2
     assert result.outcomes[0].successful
     assert not result.outcomes[1].successful
@@ -100,9 +100,9 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
     assert type(StopCliCommand.selected_targets(target)) is selection
     if selection is OneTarget and not resolvable:
         with pytest.raises(ValueError):
-            StopCliCommand.execute_target(comms, target, {})
+            StopCliCommand.execute_target(comms, StopCliCommand.selected_targets(target), {})
         return
-    result = StopCliCommand.execute_target(comms, target, {})
+    result = StopCliCommand.execute_target(comms, StopCliCommand.selected_targets(target), {})
     if selection is OneTarget:
         assert result.stopped == "first"
     else:
