@@ -1,21 +1,17 @@
 """Compiled native recovery owns closure; Core preserves the original failure."""
-from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-from pathlib import Path
 
 import pytest
-from acp import RequestError
 
 import agent_comms.backend as backend
 import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
-from agent_comms.acp_failure import NativeMessageFailureSource, RequestFailure
+from agent_comms.acp_failure import NativeMessageFailureSource, NativeTurnError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import ProviderTransportFailureDiagnostic
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 from test_native_refusal_recovery import _settled_records, _stub_with
 
@@ -233,13 +229,11 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
             updates.append(update)
 
     agent.sessions.client = Client()
-    package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
+    project = tmp_path / "project"
+    project.mkdir(mode=0o700)
     try:
-        await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
-        with pytest.raises(RequestError) as caught:
+        await agent.new_session(cwd=str(project), mcp_servers=[])
+        with pytest.raises(NativeTurnError) as caught:
             await asyncio.wait_for(agent.turns.run_agent_turn("project", "project", "fresh isolated work"), 20)
         failures = [item for update in updates for item in decode_updates(update.field_meta)
                     if isinstance(item, RequestFailedUpdate)]
@@ -256,7 +250,7 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
         assert isinstance(diagnostic, ProviderTransportFailureDiagnostic)
         assert diagnostic.error.code == "EOPAQUE" and diagnostic.error.message == FINAL
         assert failure.source.message.diagnostics == failure.failure.diagnostics
-        request_failure = RequestFailure.from_error(caught.value)
+        request_failure = caught.value.request
         assert request_failure.notification_published
         assert request_failure.failure == failure.failure
         assert not any(getattr(getattr(update, "content", None), "text", None) for update in updates)
