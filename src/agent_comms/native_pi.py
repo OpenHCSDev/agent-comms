@@ -436,19 +436,13 @@ class NativePiRpcLaunch:
             instructions = OWNER_INSTRUCTIONS.resolve(strict=True)
         except OSError as error:
             raise NativePiUnavailable("Canonical owner instruction asset is unavailable") from error
-        env = dict(environment)
-        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            env.pop(name, None)
-        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        env = package.node_environment(environment)
         env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
         env.update(configuration.encode_native())
-        cli = package.cli
         argv = (
-            "node", "--no-global-search-paths",
-            "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
-            "--import", str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli), *arguments, "--append-system-prompt", str(instructions),
+            *package.node("agent-comms-project-bootstrap.mjs"),
+            *arguments, "--append-system-prompt", str(instructions),
         )
         return argv, env
 
