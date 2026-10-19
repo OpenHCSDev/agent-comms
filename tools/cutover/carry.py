@@ -395,8 +395,6 @@ class TodoColumnCarry(Carry):
         actual = tuple(row[1] for row in db.execute(f'PRAGMA table_info("{table}")'))
         expected = tuple(item.wire_name for item in fields)
         if actual == expected:
-            for _row in Todo.stream(db):
-                pass
             db.rollback()
             return 0
         # The chain says which declared columns this bus may still lack here; the
@@ -410,8 +408,9 @@ class TodoColumnCarry(Carry):
         selected = ", ".join(f'? AS "{item.wire_name}"' if item in added else f'"{item.wire_name}"'
                              for item in fields)
         empty = tuple(item.encode(()) for item in added)
-        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
-        count = sum(1 for _row in Todo.iterate(rows))
+        # Rows decode only once every step before the last has carried them; this one
+        # adds columns, so it counts rows without reading them as today's Todo.
+        (count,) = db.execute(f'SELECT count(*) FROM "{table}"').fetchone()
         if not apply:
             db.rollback()
             return count
