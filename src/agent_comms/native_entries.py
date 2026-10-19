@@ -7,11 +7,11 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, TimestampText
 from .pi_payloads import PiMessage, PiPayload
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
@@ -30,7 +30,7 @@ class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
     id: str | None = None
     parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
-    timestamp: str | None = None
+    timestamp: Annotated[datetime, TimestampText]
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
@@ -47,26 +47,13 @@ class RecordedEntry(PiPayload):
     def source_coordinates(self):
         return self
 
-    @property
-    def recorded_at(self) -> datetime | None:
-        """Pi's external ISO8601 time, decoded once for tolerant transcript display."""
-        if self.timestamp is None:
-            return None
-        try:
-            recorded = datetime.fromisoformat(self.timestamp)
-            recorded.timestamp()
-        except (ValueError, OverflowError):
-            return None
-        return recorded if recorded.utcoffset() is not None else None
-
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Project one journal clock onto every display part without inventing time.
 
         Decode it once, before splitting into message/tool/routing events; ACP
         consumers receive Unix seconds.
         """
-        recorded = self.recorded_at
-        timestamp = recorded.timestamp() if recorded is not None else None
+        timestamp = self.timestamp.timestamp()
         return [replace(event, timestamp=timestamp) for event in self._events(context)]
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
