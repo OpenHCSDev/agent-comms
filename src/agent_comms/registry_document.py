@@ -250,14 +250,14 @@ class RegistryDocument(RegistryPresence):
             and self.threads[thread.name].turn_record != thread.turn_record
         ):
             previous = self.threads[thread.name]
-            previous.turn_record.without_claim()
+            previous.turn_record.end()
         self.threads[thread.name] = thread
 
     def advance_claim(self, name: str) -> int:
         """Remove the thread's permission to publish and advance its input claim."""
         thread = self.threads.get(name)
         if thread is not None:
-            thread.turn_record.without_claim()
+            self.threads[name] = replace(thread, turn_record=thread.turn_record.end())
         return self.claims.advance(name)
 
     def entry(self, name: str) -> RegistryEntry:
@@ -424,7 +424,7 @@ class RegistryDocument(RegistryPresence):
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread.without_turn(), process_identity=NoProcess()))
+            additions.append(replace(thread, turn_record=thread.turn_record.end(), process_identity=NoProcess()))
         restored = {thread.name: thread for thread in additions}
         available = self.threads | restored
         aliases = source.restorable_aliases(available, self.aliases)
@@ -499,7 +499,6 @@ class RegistryDocument(RegistryPresence):
         thread = self.threads[name]
         self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
         self.advance_claim(name)
-        self.threads[name] = thread.without_turn()
 
     def archive(self, name: str) -> None:
         name = self.canonical_name(name)
@@ -598,9 +597,8 @@ class RegistryDocument(RegistryPresence):
         attested = canonical_lease.can_attest(self.claims.generations[name])
         attested = attested and turn.claimed_generation is not None and self.statuses[name].active
         keeps_resume = turn.phase.keeps_project_resume
-        record.without_claim()
         self.threads[name] = replace(
-            current.without_turn(),
+            current, turn_record=record.end(),
             last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
             project_resume_due=current.project_resume_due and keeps_resume,
         )

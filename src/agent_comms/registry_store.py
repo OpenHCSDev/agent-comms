@@ -105,9 +105,11 @@ class RegistryEdit:
             turn_id,
             current.require_process().pid,
             routing=routing,
+            owner=current.process_identity,
             claimed_generation=self.document.claims.generations[current.name],
             turn_generation=identity.generation,
         )
+        current.turn_record.end()
         leased = replace(
             current,
             turn_generation=identity.generation,
@@ -212,7 +214,8 @@ class RegistryStore(LockedStore[RegistryDocument]):
 
     def _bind_thread(self, thread: Thread) -> Thread:
         record = thread.turn_record
-        bound = record.bound_to(self.path, TurnIdentity(thread.incarnation, thread.turn_generation))
+        bound = record.bound_to(self.path, TurnIdentity(thread.incarnation, thread.turn_generation),
+                                thread.process_identity)
         return thread if bound is record else replace(thread, turn_record=bound)
 
     def _bind_document(self, document: RegistryDocument) -> RegistryDocument:

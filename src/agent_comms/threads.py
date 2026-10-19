@@ -319,10 +319,6 @@ class Thread(ThreadProvenance):
                     thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 
-    def without_turn(self) -> Thread:
-        """Drop the reference; the registry transaction owns revoking the record."""
-        return replace(self, turn_record=NoTurnRecord())
-
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
         scope = previous.channel_scope_generation

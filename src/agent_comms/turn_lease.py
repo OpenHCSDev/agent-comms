@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ObservedActivity
+from .child_process import NoProcess, ProcessState
 from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion
 from .locked_store import JsonDocument
@@ -19,7 +20,6 @@ from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
-    from .child_process import ProcessState
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -60,8 +60,17 @@ class TurnDeclaration(SubclassUnion, affix=""):
     @abstractmethod
     def require_turn(self, turn_id: TurnId) -> None: ...
 
-    @abstractmethod
-    def without_claim(self) -> TurnDeclaration: ...
+    def observed(self, process: ProcessState) -> TurnDeclaration:
+        return self
+
+    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None:
+        return None
+
+    def held_by(self, lease: TurnLeaseFence) -> bool:
+        return False
+
+    def may_release(self, lease: TurnLeaseFence) -> bool:
+        return False
 
     @abstractmethod
     def observed_id(self, finished: str | None) -> str | None: ...
@@ -77,11 +86,14 @@ class TurnDeclaration(SubclassUnion, affix=""):
 
 
 @dataclass(frozen=True)
-class NoTurn(NullMember, TurnDeclaration):
+class IdleTurn(TurnDeclaration, declared_name=None):
     phase: ClassVar[TurnPhase] = IdlePhase()
     id = None
     started_at = None
-    executing = False
+    @property
+    def executing(self) -> bool:
+        return False
+
     report_turn = ""
 
     def require_active(self) -> ActiveTurn:
@@ -102,9 +114,6 @@ class NoTurn(NullMember, TurnDeclaration):
     def require_turn(self, turn_id: TurnId) -> None:
         raise RelationViolationError("live owner does not hold the requested turn")
 
-    def without_claim(self) -> NoTurn:
-        return self
-
     def observed_id(self, finished: str | None) -> str | None:
         return finished
 
@@ -119,6 +128,11 @@ class NoTurn(NullMember, TurnDeclaration):
 
 
 @dataclass(frozen=True)
+class NoTurn(NullMember, IdleTurn):
+    pass
+
+
+@dataclass(frozen=True)
 class ActiveTurn(RecordMember, TurnDeclaration):
     id: str
     owner_pid: int
@@ -127,7 +141,16 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     claimed_generation: int | None = field(default=None, metadata={"wire_name": "admission_generation"})
     turn_generation: int | None = None
     phase: TurnPhase = field(default_factory=PreparingPhase)
-    executing = True
+    owner: ProcessState = field(default_factory=NoProcess, compare=False, repr=False,
+                                metadata={"wire_transient": True})
+
+    @property
+    def executing(self) -> bool:
+        return self.owner.owns_turn(self) and self.owner.alive()
+
+    def observed(self, process: ProcessState) -> TurnDeclaration:
+        turn = replace(self, owner=process)
+        return turn if turn.executing else InterruptedTurn(turn)
 
     @property
     def report_turn(self) -> str:
@@ -161,9 +184,6 @@ class ActiveTurn(RecordMember, TurnDeclaration):
 
     def matches(self, turn_id: TurnId) -> bool:
         return TurnId(self.id) == turn_id
-
-    def without_claim(self) -> ActiveTurn:
-        return replace(self, claimed_generation=None)
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return self.id == lease.turn_id and self.current(
@@ -214,6 +234,25 @@ class ActiveTurn(RecordMember, TurnDeclaration):
 
 
 @dataclass(frozen=True)
+class InterruptedTurn(RecordMember, IdleTurn):
+    """The dead owner's input remains UNKNOWN; this is idle, never replay permission."""
+
+    turn: ActiveTurn
+
+    @property
+    def id(self) -> str:
+        return self.turn.id
+
+    @property
+    def started_at(self) -> float:
+        return self.turn.started_at
+
+    @property
+    def report_turn(self) -> str:
+        return self.turn.id
+
+
+@dataclass(frozen=True)
 class TurnState:
     """Read-only capture of the existing lease, not another state store."""
 
@@ -242,7 +281,8 @@ class TurnRecord(SubclassUnion, affix=""):
     """A stored turn reference or the declared absence of one; never a phase cache."""
 
     @abstractmethod
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> TurnRecord: ...
+    def bound_to(self, registry_path: Path, identity: TurnIdentity,
+                 process: ProcessState) -> TurnRecord: ...
 
     @abstractmethod
     def read(self) -> TurnDeclaration: ...
@@ -251,8 +291,13 @@ class TurnRecord(SubclassUnion, affix=""):
     def executing(self) -> bool:
         return self.read().executing
 
+    def end(self) -> NoTurnRecord:
+        """End this record, retiring its file through its owning store."""
+        self._retire()
+        return NoTurnRecord()
+
     @abstractmethod
-    def without_claim(self) -> None: ...
+    def _retire(self) -> None: ...
 
     @abstractmethod
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
@@ -261,13 +306,14 @@ class TurnRecord(SubclassUnion, affix=""):
 
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> NoTurnRecord:
+    def bound_to(self, registry_path: Path, identity: TurnIdentity,
+                 process: ProcessState) -> NoTurnRecord:
         return self
 
     def read(self) -> NoTurn:
         return NoTurn()
 
-    def without_claim(self) -> None:
+    def _retire(self) -> None:
         pass
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
@@ -279,13 +325,14 @@ class NoTurnRecord(NullMember, TurnRecord):
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
 
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        return StoredTurnRecord.for_identity(registry_path, identity)
+    def bound_to(self, registry_path: Path, identity: TurnIdentity,
+                 process: ProcessState) -> StoredTurnRecord:
+        return StoredTurnRecord.for_identity(registry_path, identity, process)
 
     def read(self) -> TurnDeclaration:
         raise RelationViolationError("Turn reference must be bound by its registry")
 
-    def without_claim(self) -> None:
+    def _retire(self) -> None:
         self.read()
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
@@ -299,6 +346,8 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
 
     identity: TurnIdentity = field(metadata={"wire_transient": True})
     registry_path: Path = field(repr=False, compare=False, metadata={"wire_transient": True})
+    process: ProcessState = field(default_factory=NoProcess, repr=False, compare=False,
+                                 metadata={"wire_transient": True})
 
     record_type = ActiveTurn
 
@@ -308,23 +357,28 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
         name = f"{identity.incarnation.require_recorded().lookup}-{identity.generation}.json"
         return self.registry_path.parent / "turns" / name
 
-    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        record = super().bound_to(registry_path, identity)
-        return (self if (self.registry_path, self.identity) ==
-                (record.registry_path, record.identity) else record)
+    def bound_to(self, registry_path: Path, identity: TurnIdentity,
+                 process: ProcessState) -> StoredTurnRecord:
+        record = super().bound_to(registry_path, identity, process)
+        return (self if (self.registry_path, self.identity, self.process) ==
+                (record.registry_path, record.identity, record.process) else record)
 
-    def empty(self) -> ActiveTurn:
-        raise RelationViolationError(f"Active turn record is missing: {self.path}")
+    def empty(self) -> NoTurn:
+        return NoTurn()
+
+    def read(self) -> TurnDeclaration:
+        return self._read_unlocked().observed(self.process)
 
     @classmethod
-    def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        return cls(identity, registry_path.resolve())
+    def for_identity(cls, registry_path: Path, identity: TurnIdentity,
+                     process: ProcessState = NoProcess()) -> StoredTurnRecord:
+        return cls(identity, registry_path.resolve(), process)
 
     @classmethod
     def begin(
         cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn,
     ) -> StoredTurnRecord:
-        record = cls.for_identity(registry_path, identity)
+        record = cls.for_identity(registry_path, identity, turn.owner)
         record.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         record._publish_unlocked(turn)
         return record
@@ -335,8 +389,14 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)
 
-    def without_claim(self) -> None:
-        self._publish_unlocked(self.read().without_claim())
+    def _retire(self) -> None:
+        # Earlier files of this same incarnation also outlived their turns.
+        # Never remove a newer generation through an older captured record.
+        prefix = self.identity.incarnation.require_recorded().lookup
+        for path in self.path.parent.glob(f"{prefix}-*.json"):
+            generation = int(path.stem.removeprefix(f"{prefix}-"))
+            if generation <= self.identity.generation:
+                path.unlink(missing_ok=True)
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
