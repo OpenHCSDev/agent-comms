@@ -1325,6 +1325,11 @@ class MergedProblemOrder(ProblemOrder):
     def id(self) -> str:
         return self.original.id
 
+    @property
+    def serves(self) -> type[OrderPhase]:
+        """A merge finishes the phase its order served."""
+        return self.original.serves
+
     def require_close(self) -> None:
         pass
 
