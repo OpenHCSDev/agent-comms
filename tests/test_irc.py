@@ -1,6 +1,6 @@
 """IRC model: channels, DMs, presence, history views."""
 
-from bus_history import read_history
+from agent_comms.field_codec import FieldCodec
 from agent_comms.channel_targets import CommandTarget
 import pytest
 
@@ -10,6 +10,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from bus_history import read_history
 
 
 @pytest.fixture
@@ -157,7 +158,7 @@ class TestPresence:
         assert Registration(path).last_seen("a") == seen
 
     def test_who_shape(self, chat):
-        rows = {row["name"]: row for row in chat.views.who()}
+        rows = {row.thread.name: row.to_wire() for row in chat.views.who()}
         assert rows["PR111"]["status"] == "running"
         assert rows["PR111"]["tags"] == ["ci"]
         assert rows["PR111"]["last_seen"] > 0

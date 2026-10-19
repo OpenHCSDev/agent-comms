@@ -123,13 +123,11 @@ class AgentActivity:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             # A tool-use hook runs outside any watch; maintenance refuses it like a send.
             MaintenanceBarrier(self._wire_lock_path.parent / "registry.json").assert_open_unlocked()
-            self._emit_activity(Activity.create(thread, state, detail))
+            self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
-        owner = snapshot.owner_identity(thread)
-        participant = snapshot.threads[owner.incarnation.name]
-        return self._observed(participant, owner,
-            self.activity.current(participant.name, active=participant.executing))
+        participant = snapshot.require(thread)
+        return self.all_activity((participant,), snapshot=snapshot)[participant.name]
 
     def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         if not incarnation.current(snapshot):
@@ -151,10 +149,13 @@ class AgentActivity:
             requested,
             active=frozenset(name for name, thread in requested.items() if thread.executing),
         )
-        return {
-            name: self._observed(thread, snapshot.owner_identity(name), events[name])
-            for name, thread in requested.items()
-        }
+        claims = self.registry.storage_rule.room_ledger.claims(
+            self._wire_lock_path.parent, requested.values())
+        observed = {name: self._observed(thread, snapshot.owner_identity(name), events[name])
+                    for name, thread in requested.items()}
+        for name, claim in claims.items():
+            observed[name] = claim.phase.project(observed[name], claim.work)
+        return observed
 
     def observe_recipients(
         self, recipients: Iterable[tuple[CommittedDelivery, FrozenRecipient]], *,

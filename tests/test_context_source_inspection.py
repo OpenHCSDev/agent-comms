@@ -278,7 +278,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     from agent_comms.cli_commands import TurnContextCliCommand
 
     command = TurnContextCliCommand(thread=owner.name, turn=2)
-    assert command.encode_result(command.apply(comms))["text_recorded"] is True
+    assert command.apply(comms).to_wire()["text_recorded"] is True
 
 
 def test_authored_sdk_observation_retains_read_identity_without_minting_native_proof(tmp_path):

@@ -50,7 +50,7 @@ from agent_comms.revision_views import NotificationsView, RegistrationsView, Sid
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
-from agent_comms.view_unread import IdleReplyPreparation
+from agent_comms.view_unread import ReplyIndexResult
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -65,7 +65,6 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-    from agent_comms.view_unread import ReplyIndexBatch
 
 
 
@@ -373,10 +372,10 @@ class OwnerRead(AwaitedRead):
         service.send(answer)
 
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
+        self.require_root(comms)
         try:
-            self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
-        except (OSError, ValueError, RuntimeError, RequestError) as error:
+        except (RequestError, CoordinationError) as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
@@ -414,36 +413,25 @@ class CancelRead(ObservationRequest):
 
 @dataclass(frozen=True)
 class TranscriptRequest[ResultT](ReadRequest):
-    """One bounded transcript page and the witness it was read under.
-
-    Without ``read_identity`` the source is captured now; with it, the page is
-    read under that published witness and is stale if the source moved on.
-    """
+    """Capture one bounded read; its owner keeps the page and witness together."""
 
     thread: str
     before: TranscriptCursor | None = None
     after: TranscriptCursor | None = None
     through: TranscriptCursor | None = None
-    read_identity: TranscriptReadIdentity | None = None
     historical_source: str | None = None
 
     def read(self, comms: Comms) -> ResultT:
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
     def page_read(self, comms: Comms) -> TranscriptRead:
-        transcripts = comms.transcripts
-        window = dict(before=self.before, after=self.after, through=self.through)
-        if self.read_identity is None:
-            read = transcripts.capture_page_read(
-                self.thread, historical_source=self.historical_source, **window
-            )
-        else:
-            if (self.historical_source is not None
-                    and self.historical_source != self.read_identity.historical_source):
-                raise StaleRevision("Published transcript belongs to another recorded source")
-            read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
-        # The read checks its witness before and after preparing the page.
-        return read
+        return comms.transcripts.capture_page_read(
+            self.thread,
+            before=self.before,
+            after=self.after,
+            through=self.through,
+            historical_source=self.historical_source,
+        )
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...
@@ -666,12 +654,12 @@ class SidebarReading(Observation[ObserveSidebar]):
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SendState = NoSidebarSent()
         self.published: PublishState = NoSidebarResult()
-        self.reply_completion: Future[ReplyIndexBatch] = IdleReplyPreparation.future
+        self.reply_completion: frozenset[Future[ReplyIndexResult]] = frozenset()
 
     def after_read(self, service: ObservationService) -> None:
-        preparation = service.comms.views.transcript_reads.preparation
+        state = service.comms.views.transcript_reads
         loop = asyncio.get_running_loop()
-        self.reply_completion = preparation.watch(
+        self.reply_completion = state.watch(
             self.reply_completion, lambda _: loop.call_soon_threadsafe(self.prepared, service)
         )
 
@@ -1150,10 +1138,12 @@ class ObservationService:
     async def watch(self) -> None:
         from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
 
-        source = ModifiedWatchSource(self.comms.root, frozenset(
-            os.fsencode(path.name) for group in WireRevision.source_paths(self.comms.views).values()
-            for path in group if path.parent == self.comms.root))
-        async for _ in WireWatch.observations(source):
+        paths = tuple(path for group in WireRevision.source_paths(self.comms.views).values()
+                      for path in group)
+        sources = tuple(ModifiedWatchSource(directory, frozenset(
+            os.fsencode(path.name) for path in paths if path.parent == directory))
+            for directory in dict.fromkeys(path.parent for path in paths))
+        async for _ in WireWatch.observations(*sources):
             self.observe_again()
 
     def observe_again(self) -> None:
@@ -1227,8 +1217,8 @@ def serve(route: CommsRoute, connection: Connection) -> None:
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))
-        except OSError:
-            pass
+        except BrokenPipeError:
+            pass  # The reader has gone; preserve the original service failure.
         raise
     finally:
         connection.close()

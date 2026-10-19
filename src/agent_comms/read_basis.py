@@ -302,7 +302,8 @@ if TYPE_CHECKING:
     from .messages import Message
     from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistrySnapshot, UserThreadLookup
+    from .threads import Thread
     from .registry_provenance import RegistryProvenance
     from .wire_log import OpenedWireSource
 
@@ -357,10 +358,12 @@ class ReadCursor:
     unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
 
     joined_sql = """cursors AS MATERIALIZED (
-        SELECT row.*,coalesce(read.high_water,0) AS high_water,
+        SELECT row.*,max(coalesce(read.high_water,0),coalesce(all_read.high_water,0)) AS high_water,
             coalesce(read.exceptions,'[]') AS exceptions FROM requests AS row
         LEFT JOIN read_cursors AS read ON read.actor=row.actor AND read.target=row.target
             AND (read.sender='' OR read.sender=row.sender)
+        LEFT JOIN read_cursors AS all_read ON all_read.actor=row.actor
+            AND all_read.target='' AND all_read.sender=''
     )"""
 
     def counted(self, scope: MessageDisplayScope, snapshot: RegistryProvenance
@@ -386,7 +389,10 @@ class ReadCursor:
         return cls({key: ConversationCursor.union(values) for key, values in grouped.items()})
 
     def for_conversation(self, conversation: Conversation) -> ConversationCursor:
-        return self.conversations.get(conversation, ConversationCursor())
+        return ConversationCursor.union((
+            self.conversations.get(AllConversation(), ConversationCursor()),
+            self.conversations.get(conversation, ConversationCursor()),
+        ))
 
     def add(self, displayed: Iterable[DisplayedConversation]) -> ReadCursor:
         conversations = dict(self.conversations)
@@ -421,6 +427,26 @@ class Conversation(DeclaredFamily, ABC, affix="Conversation"):
 
     @abstractmethod
     def in_targets(self, targets: Collection[str], snapshot: RegistryProvenance) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class AllConversation(Conversation):
+    """An explicit whole-bus read applies to every conversation in this source."""
+
+    def resolved(self, snapshot):
+        return self
+
+    def scope(self, snapshot):
+        return AllChannelDisplayScope('#any')
+
+    def sql_keys(self, snapshot):
+        return (('', ''),)
+
+    def recorded_keys(self, snapshot):
+        return (self,)
+
+    def in_targets(self, targets, snapshot):
+        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -621,8 +647,7 @@ class DMDisplayBasis:
         that the corresponding inbound tail was contiguous and visibly painted.
         """
         peer = CommandTarget.named(peer).require_dm_peer()
-        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading() as registry_document:
-            snapshot = registry_document.snapshot()
+        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading_snapshot() as snapshot:
             viewer_name = snapshot.canonical_name(viewer)
             peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
@@ -652,7 +677,8 @@ class DMDisplayBasis:
                 fetched_through=page.newest_seq or 0,
             )
             with registry.store.locked(mode=SharedLock()):
-                basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path))
+                basis.validate_identity(
+                    snapshot, RecordedBusIdentity.capture(bus.log.path), registry.user_thread())
             return replace(page, selection=DMSelection(basis))
 
     def identity(self, history_revision: FileRevision | None) -> DMDisplayIdentity:
@@ -698,17 +724,15 @@ class DMDisplayBasis:
         """
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(root / "wire", mode=SharedLock()), _store_lock(registry.store.path):
-            snapshot = registry.store._read_unlocked().snapshot()
-            self.validate_for(
-                root,
-                worktree,
-                peer,
-                through,
-                snapshot,
-                RecordedBusIdentity.capture(bus.log.path),
-            )
-            self.displayed.tail.mark(bus.reads, self.displayed, through)
+        with _store_lock(root / "wire", mode=SharedLock()):
+            user = registry.user_thread()
+            with registry.store.locked():
+                snapshot = registry.store.read_snapshot_unlocked()
+                self.validate_for(
+                    root, worktree, peer, through, snapshot,
+                    RecordedBusIdentity.capture(bus.log.path), user,
+                )
+                self.displayed.tail.mark(bus.reads, self.displayed, through)
 
     def validate_for(
         self,
@@ -718,6 +742,7 @@ class DMDisplayBasis:
         through: int,
         snapshot: RegistrySnapshot,
         bus_identity: RecordedBusIdentity,
+        user: UserThreadLookup[Thread],
     ) -> None:
         if (self.root, self.worktree, self.requested_peer) != (
             str(root.resolve()),
@@ -729,23 +754,23 @@ class DMDisplayBasis:
         info = root.stat()
         if (info.st_dev, info.st_ino) != self.root_identity:
             raise DMScopeChanged("DM root was replaced; refresh the page.")
-        self.validate_identity(snapshot, bus_identity)
+        self.validate_identity(snapshot, bus_identity, user)
 
     def validate_identity(
-        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity
+        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity,
+        user: UserThreadLookup[Thread],
     ) -> None:
         """Fetch and painted acknowledgement share actual identity/scope validation.
 
         Heartbeat, turn state and another view's read progress are not identity.
         """
+        selected = user.require(
+            DMScopeChanged("DM viewer/peer incarnation changed; refresh the page."))
         try:
-            selected = next(
-                human for thread in snapshot.threads.values() for human in thread.role.human(thread)
-            )
             viewer = snapshot.threads[self.viewer]
             target = snapshot.participant(self.requested_peer)
             scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
-        except (KeyError, StopIteration, UnregisteredThreadError) as error:
+        except (KeyError, UnregisteredThreadError) as error:
             raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.") from error
         if (
             selected.incarnation != self.viewer_identity
@@ -776,6 +801,24 @@ class MessageDisplayScope(ABC):
         return index.offsets(lower=lower, upper=upper, descending=descending,
                              predicate=self.index_predicate, before_offset=before_offset)
 
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document,
+                    through: int) -> DisplayBasis:
+        return self.capture_deliveries(reads, viewer, snapshot, source, index,
+                                       document=document, audience=self, through=through)
+
+    def capture_deliveries(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                           source: OpenedWireSource, index: BusPageIndex, *, document,
+                           audience: MessageDisplayScope, through: int) -> DisplayBasis:
+        prefixes: dict[Conversation, int] = {}
+        for row in index.latest_by_conversation(self, source.boundary, through=through):
+            if audience.includes_indexed(row):
+                conversation = self.read_key(row.sender, row.target, snapshot)
+                prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            tuple(DisplayedConversation(conversation, (), sequence)
+                  for conversation, sequence in prefixes.items()), source.bus_identity)
+
     @property
     @abstractmethod
     def index_predicate(self) -> tuple[str, tuple]:
@@ -791,6 +834,9 @@ class MessageDisplayScope(ABC):
         targets = self.index_targets
         return ((key, value) for key, value in cursor.conversations.items()
                 if key.in_targets(targets, snapshot))
+
+    def includes_indexed(self, row) -> bool:
+        return self.includes(row)
 
     @abstractmethod
     def includes(self, message: Message) -> bool:
@@ -879,14 +925,6 @@ class ChannelDisplayScope(MessageDisplayScope):
         targets = tuple(self.index_targets)
         return "target IN (" + ",".join("?" for _ in targets) + ")", targets
 
-    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
-            tuple(DisplayedConversation(ChannelConversation(target), (), row.seq)
-                  for target in self.targets
-                  if (row := index.latest_target(target, source.boundary)) is not None),
-            source.bus_identity)
-
     def identity(self, history_revision: FileRevision | None) -> ChannelDisplayIdentity:
         displayed = self.require_displayed()
         return ChannelDisplayIdentity(
@@ -904,8 +942,8 @@ class ChannelDisplayScope(MessageDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class AllChannelDisplayScope(ChannelDisplayScope):
-    """A complete wire view cannot reduce cursors to explicit target names."""
+class AllTargetsDisplayScope(ChannelDisplayScope):
+    """A scope that may match any target cannot reduce cursors to target names."""
 
     targets: frozenset[str] = frozenset()
 
@@ -917,7 +955,7 @@ class AllChannelDisplayScope(ChannelDisplayScope):
         return cursor.conversations.items()
 
     def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
-        return 0
+        return cursor.for_conversation(AllConversation()).high_water
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:
@@ -926,31 +964,34 @@ class AllChannelDisplayScope(ChannelDisplayScope):
     def includes(self, message: Message) -> bool:
         return True
 
+
+@dataclass(frozen=True, slots=True)
+class AllChannelDisplayScope(AllTargetsDisplayScope):
+    """Only the complete wire view can acknowledge every conversation at once."""
+
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        prefixes: dict[Conversation, int] = {}
-        for row in index.latest_by_conversation(self, source.boundary):
-            conversation = self.read_key(row.sender, row.target, snapshot)
-            prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
+                    source: OpenedWireSource, index: BusPageIndex, *, document,
+                    through: int) -> DisplayBasis:
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
-            tuple(DisplayedConversation(conversation, (), sequence)
-                  for conversation, sequence in prefixes.items()),
+            (DisplayedConversation(AllConversation(), (), through),),
             source.bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
-class MemberActivityDisplayScope(AllChannelDisplayScope):
+class MemberActivityDisplayScope(AllTargetsDisplayScope):
     """Member activity may match a sender, DM peer or mention on any target."""
 
     participant_names: frozenset[str] = frozenset()
 
-    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
+    def capture_deliveries(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                           source: OpenedWireSource, index: BusPageIndex, *, document,
+                           audience: MessageDisplayScope, through: int) -> DisplayBasis:
         # Mentions and authorship may select only part of a channel conversation.
         # Unlike the whole-bus view, they cannot grant its unseen prefix.
-        rows = self.offsets(index, lower=None, upper=None, descending=False,
-                            before_offset=source.boundary)
-        return reads.capture_indexed(viewer, rows, snapshot, source, index, document=document)
+        rows = self.offsets(index, lower=None, upper=through + 1,
+                            descending=False, before_offset=source.boundary)
+        return reads.capture_indexed(viewer, (row for row in rows if audience.includes_indexed(row)),
+                                     snapshot, source, index, document=document)
 
     @classmethod
     def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
@@ -970,10 +1011,17 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
                 (*targets, *names, *names, *names))
 
     def includes(self, message: Message) -> bool:
-        return (message.target in self.targets or message.sender in self.participant_names
+        return self._includes(message.sender, message.target,
+                              (mention.thread for mention in message.mentions))
+
+    def includes_indexed(self, row) -> bool:
+        return self._includes(row.sender, row.target, row.mentions)
+
+    def _includes(self, sender: str, target: str, mentions: Iterable[str]) -> bool:
+        return (target in self.targets or sender in self.participant_names
                 or any(name in self.participant_names
-                       for name in CommandTarget.named(message.target).direct_names)
-                or any(mention.thread in self.participant_names for mention in message.mentions))
+                       for name in CommandTarget.named(target).direct_names)
+                or any(name in self.participant_names for name in mentions))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1010,10 +1058,10 @@ class CapturedSelection:
         Finish reading the ledger before yielding: painted acknowledgement may
         write that same ledger while identity and membership remain acquired.
         """
-        with registry.store.reading() as document, catalog.reading() as channels:
+        with registry.store.reading_snapshot() as snapshot, catalog.reading() as channels:
             with reads.reading() as read_document:
                 selected = cls.capture(
-                    document.snapshot(), channels, reads, read_document, viewer, activity
+                    snapshot, channels, reads, read_document, viewer, activity
                 )
             yield selected
 

@@ -8,7 +8,7 @@ from functools import partial
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
-from .channel_coding_tools import CodingToolOwner
+from .channel_coding_tools import SelectedCodingToolOwner
 from .coordination_errors import CoordinationError, IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .coordination_tables.executions import ExecutionOrigin
@@ -20,7 +20,7 @@ from .optional_awareness_projection import OptionalAwarenessProjection
 from .native_pi import NativePiUnavailable
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
-from .selected_actions import BatchSelectedAction, SelectedAction
+from .selected_actions import BatchSelectedAction, NoSelectedTools, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_request import SelectedRequest
 from .selected_result import CoordinatedTurn
@@ -144,7 +144,7 @@ class SelectedAttempt:
             started.snapshot.require_wire_responses(),
         )
 
-    def tool_owner(self, session, input_id, action) -> CodingToolOwner:
+    def tool_owner(self, session, input_id, action) -> SelectedCodingToolOwner:
         participant = self.participant
         turn = participant.owner.require_active_turn()
         assignment = self.stage.assignments[0]
@@ -162,13 +162,13 @@ class SelectedAttempt:
             participant_generation=participant.identity.generation,
             attempt_ordinal=self.stage.execution.require_attempt().attempt_ordinal,
         )
-        return CodingToolOwner(
-            participant.comms,
-            participant.store,
-            claim_scope,
-            participant.owner.thread.name,
-            session.directory,
-            input_id,
+        return SelectedCodingToolOwner(
+            comms=participant.comms,
+            store=participant.store,
+            claim_scope=claim_scope,
+            owner_name=participant.owner.thread.name,
+            session_dir=session.directory,
+            input_id=input_id,
         )
 
     async def prepare(self, session, action, write_authority):
@@ -277,6 +277,7 @@ class SelectedConsideration:
             result = await request.claim_scope.execute(
                 execution,
                 model=participant.model,
+                selected_tool_mode=NoSelectedTools(),
                 observe_event=participant.dispatch,
             )
             await participant.transition(PublishingPhase())

@@ -72,6 +72,11 @@ if TYPE_CHECKING:
 class GoalAttemptError(RuntimeError):
     """A goal attempt cannot proceed as requested."""
 
+    diagnostic_text: ClassVar[str] = "Goal launch grant unavailable; explicit Retry required."
+
+    def diagnostic(self) -> str:
+        return self.diagnostic_text
+
 
 class StorageUncertainError(GoalAttemptError):
     """A write or durability/readback check failed; never launch from it."""
@@ -84,6 +89,8 @@ class ReservationConflictError(GoalAttemptError):
 class UnresolvedAttemptError(GoalAttemptError):
     """A blocked or in-flight attempt needs an explicit resolution."""
 
+    diagnostic_text = "Goal attempt unresolved; inspect diagnostics before Retry."
+
 
 class MissingGoalGenerationError(GoalAttemptError, ValueError):
     """Historical goal has no launch record; Retry must not invent authority."""
@@ -93,6 +100,9 @@ class MissingGoalGenerationError(GoalAttemptError, ValueError):
             f"Goal {goal_id} has no launch authority. Clear this goal and set it again. "
             "Retry cannot create a grant."
         )
+
+    def diagnostic(self) -> str:
+        return str(self)
 
 
 class StaleAttemptError(GoalAttemptError):

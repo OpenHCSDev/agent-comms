@@ -241,7 +241,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                 app = observer.observer.app
                 view = app.selected_session.conversation
                 assert view.agent.session_id == receiver.name
-                await view.compact_context('Preserve the original certified public source only.').wait()
+                await view.compact_context('Preserve the original checked public source only.').wait()
                 def committed_frame():
                     return 'Context compacted' in '\n'.join(
                         strip.text for strip in app.screen._compositor.render_strips())

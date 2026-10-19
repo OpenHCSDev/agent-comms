@@ -10,7 +10,7 @@ from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation
-from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, StoppedThreadPresentationStatus
+from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, InactiveThreadPresentationStatus
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -84,7 +84,8 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         return ordinary
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        return ThreadPresentation(title, "○", self.declared_name.title())
+        return ThreadPresentation(title, "○", self.declared_name.title(),
+                                  status=InactiveThreadPresentationStatus())
 
 
 class ActiveThreadPresence:
@@ -142,9 +143,6 @@ class StoppedThreadStatus(ThreadStatus):
     stopped = True
     receiving = False
 
-    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        return replace(super().presentation(title, activity), status=StoppedThreadPresentationStatus())
-
     def require_stopped(self) -> None:
         pass
     visible = True
@@ -185,7 +183,7 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
         """The CLI participant itself calls rename; it needs no bridge."""
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        return ThreadPresentation(title, "○", "CLI inbox · no bridge")
+        return replace(super().presentation(title, activity), summary="CLI inbox · no bridge")
 
 
 class ArchivedThreadStatus(ThreadStatus):

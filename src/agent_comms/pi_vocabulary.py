@@ -7,7 +7,7 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, FieldRepresentation
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         value = FieldCodec.decode(str | None, value)
         try:
             return cls.member_named(value)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnreportedStopReason
 
     @classmethod
@@ -66,17 +66,23 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
 
     @classmethod
-    def tracked(cls, session, message):
-        session.output.record_failure(cls.declared_failure(message))
-
-    @classmethod
     def require_failed_terminal(cls):
         # A saved tool round cannot establish whether the live owner accepted it.
         if cls.successful or cls.tool_round:
             raise ValueError("Saved assistant message did not end its turn as a failure")
 
 
-class PendingStopReason(PiStopReason):
+class UnfinishedPiStop:
+    """A message that ended without a terminal its session can take as the answer."""
+
+    @classmethod
+    async def apply(cls, session, message):
+        session.accept_unfinished_message(cls.declared_failure(message))
+        async for event in super().apply(session, message):
+            yield event
+
+
+class PendingStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
@@ -94,8 +100,10 @@ class StopStopReason(FinishedPiStop, PiStopReason):
     successful = True
 
     @classmethod
-    def tracked(cls, session, message):
+    async def apply(cls, session, message):
         session.accept_final_message(message)
+        async for event in super().apply(session, message):
+            yield event
 
 
 class FailedPiStop(FinishedPiStop):
@@ -123,9 +131,10 @@ class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
     tool_round = True
 
     @classmethod
-    def tracked(cls, session, message):
-        if not session.accept_tool_round(message):
-            return super().tracked(session, message)
+    async def apply(cls, session, message):
+        session.accept_tool_round(message)
+        async for event in super().apply(session, message):
+            yield event
 
 
 class ErrorStopReason(FailedPiStop, PiStopReason):
@@ -155,11 +164,11 @@ class AbortedStopReason(ErrorStopReason):
     explicit_abort = True
 
 
-class DeferredStopReason(PiStopReason):
+class DeferredStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
-class UnreportedStopReason(PiStopReason):
+class UnreportedStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
@@ -173,7 +182,7 @@ class CompactionReason(DeclaredFamily, affix="CompactionReason"):
         value = FieldCodec.decode(str | None, value)
         try:
             return cls.member_named(value)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownCompactionReason
 
 

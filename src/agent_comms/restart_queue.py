@@ -252,16 +252,16 @@ class RestartQueue:
             yield self.read(path)
 
 
-def enqueue(comms: Comms, name: str, *, launch_runtime: LaunchRuntime) -> QueuedRestart:
+def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
+            launch_runtime: LaunchRuntime) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     queue = RestartQueue(comms.root / DIRECTORY)
     with _store_lock(comms._wire_lock_path):
         snapshot = comms.registry.snapshot()
-        owner = comms.registry.require(name)
+        owner = selection.require_current(snapshot)
         status = snapshot.statuses[owner.name]
         owner.require_restart_owner(status)
-        selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
         target = RestartTarget.capture(comms, launch.environment, launch_runtime)
         target.require_available(comms)
@@ -287,6 +287,7 @@ def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
     return ParentedProcess.launch(
         (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
         env=target.runtime.encode(),
+        runtime=target.launch_runtime,
     )
 
 

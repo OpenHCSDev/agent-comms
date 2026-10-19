@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .catalog_store import ChannelCatalog
@@ -14,7 +14,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import SharedLock, _store_lock
@@ -27,6 +27,40 @@ from .storage_rules import StorageRule
 from .turn_lease import TurnCompletion, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
+
+
+class ProjectThreadSelection:
+    """The registry's complete answer, including absence and ambiguity."""
+
+    @classmethod
+    def from_threads(cls, threads: tuple[Thread, ...]) -> ProjectThreadSelection:
+        if not threads:
+            return NoProjectThread()
+        if len(threads) == 1:
+            return FoundProjectThread(threads[0])
+        return SeveralProjectThreads(threads)
+
+    def name_or(self, fallback: str) -> str:
+        """Keep the caller's existing identity unless one thread was selected."""
+        return fallback
+
+
+@dataclass(frozen=True, slots=True)
+class NoProjectThread(ProjectThreadSelection):
+    """There is no declared ACP thread at this project."""
+
+
+@dataclass(frozen=True, slots=True)
+class FoundProjectThread(ProjectThreadSelection):
+    thread: Thread
+
+    def name_or(self, fallback: str) -> str:
+        return self.thread.name
+
+
+@dataclass(frozen=True, slots=True)
+class SeveralProjectThreads(ProjectThreadSelection):
+    threads: tuple[Thread, ...]
 
 
 class Registration:
@@ -78,7 +112,7 @@ class Registration:
         Native session identity and context proof remain with their producers.
         """
         with _store_lock(self.store.path.parent / "wire", mode=SharedLock()), self.store.editing() as edit:
-            change = edit.document.prepare_native_source(original, session_file)
+            change = edit.prepare_native_source(original, session_file)
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
             # observed source must not rewrite this authorized turn's settings.
@@ -243,9 +277,8 @@ class Registration:
 
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
-        with self.store.reading() as document:
-            owner = RegistryOwner.capture_local(document.snapshot(), name)
-            return owner.thread, owner.claimed_generation
+        owner = RegistryOwner.capture_local(self.snapshot(), name)
+        return owner.thread, owner.claimed_generation
 
     def lease_live_turn_with_claim(
         self, expected: Thread, turn_id: str, *, expected_generation: int
@@ -255,7 +288,7 @@ class Registration:
         turn = TurnId.for_registration(turn_id)
         generation = GenerationCounter.require_positive(expected_generation)
         with self.store.editing() as edit:
-            owner = RegistryOwner.capture_local(edit.document.snapshot(), expected.name)
+            owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
             owner.require_claim(expected, generation)
             self._assert_maintenance_open_unlocked()
             leased, _ = edit.lease_turn(owner.thread, turn.value, None)
@@ -275,7 +308,7 @@ class Registration:
         turn = TurnId.for_registration(turn_id)
         generation = GenerationCounter.require_positive(expected_owner_generation)
         with self.store.editing() as edit:
-            snapshot = edit.document.snapshot()
+            snapshot = edit.original.snapshot
             owner = RegistryOwner.capture_local(snapshot, expected.name)
             owner.require_exact(snapshot, expected, generation)
             owner.thread.turn_record.read().require_idle()
@@ -295,7 +328,7 @@ class Registration:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         turn = TurnId.for_registration(turn_id)
         with self.store.editing() as edit:
-            owner = RegistryOwner.capture_local(edit.document.snapshot(), name)
+            owner = RegistryOwner.capture_local(edit.original.snapshot, name)
             owner.thread.turn_record.read().require_idle()
             self._assert_maintenance_open_unlocked()
             result = edit.lease_turn(owner.thread, turn.value, routing)
@@ -330,6 +363,31 @@ class Registration:
         with self.store.reading() as document:
             return document.status(name)
 
+    def session_thread(
+        self, project_path: Path, preferred: str | None = None,
+    ) -> ProjectThreadSelection:
+        """Select an unbound project's preferred name or sole declared ACP thread.
+
+        Preferred names keep their previous precedence, including non-ACP
+        threads. Bound sessions use strict lookup instead of project discovery.
+        """
+        project = Path(project_path).expanduser().resolve()
+        with self.store.reading() as document:
+            located = tuple(t for t in document.threads.values() if t.project_path == project)
+            if preferred:
+                selected = document.canonical_name(preferred)
+                for thread in located:
+                    if thread.name == selected:
+                        return FoundProjectThread(thread)
+            return ProjectThreadSelection.from_threads(tuple(
+                member for thread in located for member in thread.role.acp_thread(thread)
+            ))
+
+    def user_thread(self) -> UserThreadLookup[Thread]:
+        """The human answer from this stored revision, without copying its roster."""
+        with self.store.reading() as document:
+            return document.user_thread()
+
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
             return dict(document.threads)
@@ -343,8 +401,8 @@ class Registration:
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""
-        with self.store.reading() as document:
-            return document.snapshot()
+        with self.store.reading_snapshot() as snapshot:
+            return snapshot
 
     def active_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:

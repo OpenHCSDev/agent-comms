@@ -1,6 +1,5 @@
-"""Fresh canonical roots certify before publication or native source observation."""
+"""Fresh canonical roots check before publication or native source observation."""
 
-from bus_history import read_history
 import os
 from pathlib import Path
 
@@ -8,6 +7,7 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import PublicationActivationBlocked
@@ -15,6 +15,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
 from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
 from agent_comms.proven_source_coverage import SourceCoverage
+from agent_comms.cursor_owner import ActivationFloorCursor
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
 
@@ -24,7 +25,7 @@ def source_witness(bus):
         return verify_private_bus_checkpoint_unlocked(bus.log, bus.log.private_marker_unlocked())
 
 
-def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
+def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_reads):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
         install_native_runtime_schema(store)
@@ -34,25 +35,25 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
         assert comms.bus.log.read_metadata_unlocked(required=True).claims
         empty = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix()
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert empty.covered_seq == 0 and empty.injected_source_seqs == ()
         sent = comms.messaging.send_user_message(
             "bob", "fresh selected input", worktree=str(tmp_path)
         )
         before = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix()
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert before.blocked_seq == sent.seq and before.injected_source_seqs == ()
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
         selected = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix()
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
         assert source_witness(Comms(comms.root).bus).through_seq == sent.seq
 
 
-def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
+def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_reads):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
         install_native_runtime_schema(store)
@@ -62,13 +63,13 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         )
         with pytest.raises(IdentityConflict, match="bounded private initial scan"):
-            reader.read(limit=1)
-        page = reader.read(limit=1, partial=True)
+            reader.read(limit=1, source_reads=source_reads)
+        page = reader.read(limit=1, partial=True, source_reads=source_reads)
         assert page.more_sources and page.blocked_seq == first.seq
         assert page.covered_seq == 0 and page.injected_source_seqs == ()
-        assert [message.seq for message in read_history(comms)] == [first.seq, second.seq]
+        assert [message.seq for message in list(comms.views.history_page(ANY_CHANNEL).messages)] == [first.seq, second.seq]
         with pytest.raises(ValueError, match="received bool"):
-            reader.read(limit=True)
+            reader.read(limit=True, source_reads=source_reads)
 
 
 def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monkeypatch):
@@ -107,7 +108,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     not os.environ.get("AC_NATIVE_COPIED_PACKAGE"),
     reason="Prepared native package required; no provider request",
 )
-async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tmp_path):
+async def test_configured_acp_new_and_retained_attach_use_same_checked_root(tmp_path):
     comms = Comms(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(

@@ -42,11 +42,11 @@ class Load:
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Load:
-        from . import judge
+        from ..tools import CommsUnjudgedTool
         actor, now = comms.registry.require(commander).incarnation, time.time()
         owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
         return cls(len(owed), sum(t.overdue(now) for t in owed),
-                   len(judge.Edit.unjudged(comms, commander)), tuple(live_forks()))
+                   CommsUnjudgedTool.count(comms, commander), tuple(live_forks()))
 
     @property
     def total(self) -> float:

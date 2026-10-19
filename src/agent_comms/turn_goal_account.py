@@ -55,7 +55,7 @@ class VerifiedGoalSettlement(MroDispatch):
 
     @handles(CompletedGoal)
     def completion(self, state: CompletedGoal) -> None:
-        if self.goal.reported_turn == self.turn.value:
+        if self.goal.reports_turn(self.turn.value):
             self.permit.record_verified_completion(self.store, self.completion_witness)
 
 
@@ -127,7 +127,7 @@ class TurnGoalAccount:
         return snapshot.canonical_name(self.owner.name)
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
-        goal_id = self.comms.registry.require(self.thread_name).goal.active().reported_id()
+        goal_id = self.comms.registry.require(self.thread_name).goal.reported_id()
         permit = self.originated.get(goal_id, self.permit)
         if not permit.charge_for(goal_id, self.comms.goals, str(event.response_id), event.usage):
             self.unattributed_usage.append((str(event.response_id), event.usage))

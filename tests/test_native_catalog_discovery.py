@@ -9,6 +9,7 @@ from dataclasses import replace
 
 import pytest
 from agent_comms.native_startup import NativeStartup
+from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_vocabulary import OffThinkingLevel
 
 import agent_comms.backend as backend
@@ -24,8 +25,7 @@ from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 
 
-
-async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, monkeypatch):
+async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, monkeypatch, *, cursor_delivery):
     """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
     import hashlib
     import os
@@ -40,7 +40,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     from agent_comms.coordinator import Coordination
     from agent_comms.native_child import PiSessionChild
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
-    from agent_comms.native_entries import NativeEntry
+    from agent_comms.native_entries import NativeEvidenceScope
     from agent_comms.native_session_reopen import NativeSessionIdentity
     from agent_comms.selected_session import SavedSelectedSession
 
@@ -66,9 +66,13 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     ), cwd=native.project)
     session = SavedSelectedSession(created.path.parent,
         identity=NativeSessionIdentity(created.session_id, created.session_file))
-    execution = SelectedExecution(root=native.root,
+    execution = SelectedExecution(
+        root=native.root,
         wire_root_id=private_launch.wire_root_id,
-        owner_name="launch-ownership", native_package=package)
+        owner_name="launch-ownership",
+        native_package=package,
+        cursor_delivery=cursor_delivery,
+    )
     await Coordination.run_worker(execution.validate)
     launches, children = [], []
     for stage in range(2):
@@ -122,7 +126,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
 
     async def observe_saved_source():
         async with AsyncExitStack() as ownership:
-            evidence = ownership.enter_context(NativeEntry.open_input_evidence(session.path))
+            evidence = ownership.enter_context(NativeEvidenceScope()).for_source(session.path)
             readers.append(evidence)
 
             def observe():
@@ -309,7 +313,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         worktree=native_backend.project,
     )
     # The command result owner needs a session; this probe never opens its child.
-    session = backend.TurnSession(launch, "", native_session=PersistentPiSession(), startup=NativeStartup(native_backend.project))
+    session = NativeSessionPreparation(launch, native_session=PersistentPiSession(), startup=NativeStartup(native_backend.project))
     observed = []
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=10) as child:
         channel = PiRpcChannel(child.stdout)

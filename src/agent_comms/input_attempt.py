@@ -237,8 +237,8 @@ class StoredInput(InputAttempt):
         return TextDigest.of(self.source_text)
 
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
-        # Attributed original inputs own their recorded birth; neutral historical
-        # rows have only a name and never acquire an inferred incarnation.
+        # Input with a recorded author uses that author's creation time. Older
+        # rows with only a name do not get an inferred thread identity.
         return self.origin.matches_owner(self.owner, source_owner)
 
     def matches_claim(self, claim_scope: int) -> bool:
@@ -253,7 +253,7 @@ class StoredInput(InputAttempt):
         return self.sequence is None, self.sequence or 0
 
     def bus_sequences_through(self, through: int) -> tuple[int, ...]:
-        """Only a bus-backed input can contribute an original source coordinate."""
+        """Return this input's bus sequence only if it is within the requested limit."""
         return (self.sequence,) if self.sequence is not None and self.sequence <= through else ()
 
     def historical_notice(self, awaiting_keys: frozenset[str] | None) -> bool:

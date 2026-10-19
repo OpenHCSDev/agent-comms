@@ -11,9 +11,8 @@ from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
-from .native_package import VerifiedNativePackage
 from .native_pi import NativePiUnavailable, _session_location
-from .private_path import PrivateFileRole
+from .private_path import NativeSessionFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
 
@@ -23,10 +22,10 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SelectedSession:
-    """Selected native source before its first original input is written.
+    """Hold the chosen native session before writing its first input.
 
-    directory is an acquired private launch/tool resource. It is not a claim
-    that an already selected saved journal lives in that directory.
+    The directory is reserved for launch files and tools. A previously selected
+    saved journal may live elsewhere.
     """
     directory: Path
 
@@ -52,8 +51,6 @@ class SelectedSession:
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         environment = ThreadLaunch.strip(dict(os.environ))
-        environment.pop("AGENT_COMMS_SELECTED_TOOL_SOCKET", None)
-        environment.pop("AGENT_COMMS_SELECTED_TOOL_TOKEN", None)
         environment.update(original or {})
         configuration = RestartEnvironment.inherit(environment).for_agent(agent_dir)
         environment["PI_OFFLINE"] = "1"
@@ -75,11 +72,11 @@ class SelectedSession:
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @classmethod
-    def for_launch(cls, directory: Path, path: Path | None, package: VerifiedNativePackage) -> SelectedSession:
+    def for_launch(cls, directory: Path, path: Path | None) -> SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(package, str(path)))
+            identity=NativeSessionIdentity.locate(str(path)))
 
     @classmethod
     async def prepare(
@@ -95,16 +92,14 @@ class SelectedSession:
         for_launch remains a separate verified lookup.
         """
         def acquire() -> SelectedSession:
-            directory = participant.comms.root / "native-sessions" / participant.lookup
-            worktree = Path(participant.owner.thread.worktree).absolute()
-            if not worktree.is_dir():
-                raise IdentityConflict("registered participant worktree is unavailable")
-            directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+            directory = execution.session_directory
             thread = participant.owner.thread
             runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
-            return runtime.select_session(directory, execution)
+            return runtime.select_session(directory, execution, source_reads)
 
-        return await Coordination.run_worker(acquire)
+        with participant.cursor_delivery.measurements.operation("session_reopen"):
+            async with participant.cursor_delivery.reading() as source_reads:
+                return await Coordination.run_worker(acquire)
 
 
 @dataclass(frozen=True)
@@ -146,7 +141,7 @@ class SavedSelectedSession(SelectedSession):
         try:
             if self.path.resolve(strict=True) != self.path:
                 raise ValueError("redirected saved session")
-            PrivateFileRole.require(self.path.lstat())
+            NativeSessionFileRole.require(self.path.lstat())
         except (OSError, ValueError) as error:
             raise IdentityConflict("native start requires the exact saved session") from error
         return self.path

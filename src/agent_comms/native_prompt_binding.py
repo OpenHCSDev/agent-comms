@@ -1,11 +1,10 @@
-"""Versioned prelaunch expected-prompt binding for coordinated native inputs.
+"""Record which prompt Pi should receive before it launches.
 
-Written to a separate sidecar store BEFORE Pi launches, immediately after the
-input reservation commits. The binding records the native request-envelope digest
-joined to the stage, input ID and owner incarnation. Original source
-membership belongs to the native execution declaration, not this binding. It confers no authority by itself: a binding without a recorded
-live proof is unproven, and equality is only ever reported after the private
-session journal's durable user-message digest matches the binding.
+After reserving input, save the request hash with the send stage, input ID and
+process identity in a separate file. The execution record determines which
+messages belong to the input; this saved hash does not grant permission to run.
+Confirm a match only when the private session journal contains the same saved
+user-message hash and the required execution evidence has been recorded.
 """
 
 from __future__ import annotations

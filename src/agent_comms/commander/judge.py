@@ -20,7 +20,7 @@ from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
 from ..comms import Comms
-from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo
+from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, SlopKind, Derivation, SupersededVerdict
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec
 from ..tool_caller import ThreadCaller
@@ -121,23 +121,16 @@ class JudgeVerb(CommanderVerb):
     """A verb of `judge`."""
 
 
+@dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
     help = "every unit's unjudged edits in full, beside its current orders"
+    thread: str = option("thread", nargs="?", default="")
 
     def selects(self, edit: Edit) -> bool:
-        return True
+        return not self.thread or edit.thread == self.thread
 
     def run(self) -> None:
         show([edit for edit in Edit.unjudged(order.COMMS, ME) if self.selects(edit)])
-
-
-@dataclass(frozen=True, kw_only=True)
-class ShowUnitVerb(ShowVerb, declared_name="show-unit"):
-    help = "one unit's unjudged edits in full, beside its current orders"
-    thread: str = option("thread")
-
-    def selects(self, edit: Edit) -> bool:
-        return edit.thread == self.thread
 
 
 class AlarmVerb(JudgeVerb):
@@ -153,7 +146,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
     ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")
     why: str = option()
-    msg: str = option(help="BUSID of my order message to the unit")
+    msg: str = option(default="", help="BUSID of my order message to the unit")
     lines: tuple[str, ...] = option(
         "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
@@ -169,7 +162,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def run(self) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        orders = {todo.id: todo for todo in order.held_orders() if todo.sent_in(self.msg)}
+        orders = {todo.id: todo for todo in order.held_orders() if not self.msg or todo.sent_in(self.msg)}
         edits = {edit.id: edit for edit in Edit.unjudged(order.COMMS, ME) if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
@@ -184,7 +177,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         self.check_edits([edits[i] for i in ids])
         # Validate the whole batch through the operation owner before its first write.
         for i, todo in selected.items():
-            self.operation(todo, i).apply(todo)
+            self.operation(todo, i).prepare(order.COMMS.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
             result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
@@ -198,10 +191,15 @@ class VerdictVerb(JudgeVerb, RuledVerb):
 class OkVerb(VerdictVerb):
     help = "the edit serves the order"
     serves: str = option(help="exact words of the order")
+    no_owner: str = option("--no-owner", default="", help="12+ words with because and absolute file:line")
+    peer: str = option("--peer", default="", help="another sender's retained order message to the unit")
 
     def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        return AcceptedVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
-                               todo.held(), edit_id, quote=self.serves)
+        actor = order.COMMS.registry.require(ME).incarnation
+        if self.peer:
+            return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit_id,
+                                       quote=self.serves, peer=self.peer)
+        return AcceptedVerdict(todo.revision, actor, todo.held(), edit_id, quote=self.serves)
 
     def check_edits(self, edits: list[Edit]) -> None:
         for edit in edits:
@@ -209,42 +207,43 @@ class OkVerb(VerdictVerb):
             after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
             if added := order.forwarders_added(edit.added(), after):
                 sys.exit(f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')
-            if (extra := edit.branches_added()) > 0:
-                self.own_branches(f'Refused: edit {edit.id} adds {extra} branch(es)')
-
-    def own_branches(self, refusal: str) -> None:
-        sys.exit(refusal + '; send it back, or judge it ok-unowned with --no-owner'
-                 ' proving no type could own them')
+            AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
     def report(self, todos: tuple[Todo, ...]) -> None:
         pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class OkUnownedVerb(OkVerb, declared_name="ok-unowned"):
-    help = "the edit serves the order and its added branches have no type that could own them"
-    no_owner: str = option(help="12+ words with because and file:line")
+class SupersededVerb(VerdictVerb):
+    help = "the task moved to another unit; these edits are neither ok nor sent back"
+    by: str = option("--by", help="the replacing order's message")
 
-    def own_branches(self, refusal: str) -> None:
-        if not (len(self.no_owner.split()) >= 12 and re.search(r'\bbecause\b', self.no_owner)
-                and re.search(r'\S+\.py:\d+', self.no_owner)):
-            sys.exit(refusal + '; --no-owner needs 12+ words, because and file:line'
-                     ' proving no type could own them')
+    def operation(self, todo: Todo, edit_id: str) -> SupersededVerdict:
+        return SupersededVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
+                                 todo.held(), edit_id, replacement=self.by, reason=self.why)
+
+    def check_edits(self, edits: list[Edit]) -> None:
+        pass
+
+    def report(self, todos: tuple[Todo, ...]) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
+    msg: str = option(help="the required order message")
     roast: str = option(help="blunt, why it is stupid, with because")
     fix: str = option(help="owner and replacing shape")
-    slop_kind: str = option("--slop", help="|".join(order.Slop.KINDS))
+    slop_kind: str = option("--slop", help="|".join(SlopKind.names()))
     fact: str = option(help="the required fact, 4+ words")
     at: str = option(help="PATH:LINE where it is restated")
-    derive: str = option(help="|".join(order.Slop.MECHANISMS))
+    derive: str = option(help="|".join(Derivation.names()))
     by: str = option(help="PATH:LINE of the declaration that owns it")
 
-    def slop(self) -> order.Slop:
-        return order.Slop(self.slop_kind, self.fact, self.at, self.derive, self.by)
+    def slop(self) -> Slop:
+        return FieldCodec.decode(Slop, dict(kind=self.slop_kind, fact=self.fact,
+                                           at=self.at, derive=self.derive, by=self.by))
 
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,

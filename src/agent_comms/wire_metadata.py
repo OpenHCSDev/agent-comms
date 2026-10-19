@@ -61,13 +61,13 @@ class ArchivedAccess(WireAccess):
         return _connect(path, readonly=True)
 
     def verify_checkpoint(self, bus, marker, db, stream, path, *, mode):
-        from .private_bus_checkpoint import CertifiedSourceRead, PrefixCertificate, _tail
+        from .private_bus_checkpoint import CheckedRead, CheckedPrefix, _tail
 
-        # The immutable certificate binds the original bytes and sidecar, not
+        # The saved check binds the bus bytes and index file, not
         # the current writer's disposable index membership. No recovery writes
         # or suffix adoption are permitted in an archived source.
-        saved = PrefixCertificate.read_witness(db)
-        CertifiedSourceRead(bus.path, marker, db, stream, saved).require_current()
+        saved = CheckedPrefix.read_witness(db)
+        CheckedRead(bus.path, marker, db, stream, saved).require_current()
         if _tail(stream, saved.offset) != saved.tail:
             raise RelationViolationError("Archived source prefix tail changed.")
         return saved

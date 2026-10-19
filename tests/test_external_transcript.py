@@ -17,7 +17,7 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
     comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.finish(turn_id="t1", item_id="compaction",
-                      events=(NoticeTranscript("Compacting context…", timestamp=2.0),))
+                      events=(NoticeTranscript("Compacting context…", timestamp=2.0, position='compaction'),))
     read = comms.transcripts.capture_page_read("codex")
     assert read.content_current()
     # The identity crosses the ACP and observation wires.
@@ -28,10 +28,10 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
 
     # Finishing appends after what the read captured; the read stays current.
     transcript.finish(turn_id="t1", item_id="reply",
-                      events=(AssistantTranscript("Hello", timestamp=1.0),))
+                      events=(AssistantTranscript("Hello", timestamp=1.0, position='reply'),))
     # A watch that starts again republishes what Codex already finished.
     transcript.finish(turn_id="t1", item_id="reply",
-                      events=(AssistantTranscript("Hello", timestamp=1.0),))
+                      events=(AssistantTranscript("Hello", timestamp=1.0, position='reply'),))
     transcript.finish(turn_id="t1", item_id="hook", events=())
     assert read.content_current()
     page = comms.transcripts.thread_transcript_page("codex")
@@ -52,15 +52,15 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
     comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.draft(
-        turn_id="turn", item_id="reply", events=(AssistantTranscript("Writing"),)
+        turn_id="turn", item_id="reply", events=(AssistantTranscript("Writing", position='reply'),)
     )
     read = comms.transcripts.capture_page_read("codex")
     reading_draft = threading.Event()
     release = threading.Event()
     current_draft = StoreRead.current_draft
 
-    def pause_draft(source):
-        draft = current_draft(source)
+    def pause_draft(source, root, incarnation):
+        draft = current_draft(source, root, incarnation)
         reading_draft.set()
         assert release.wait(timeout=5)
         return draft
@@ -73,7 +73,7 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
             transcript.finish,
             turn_id="turn",
             item_id="reply",
-            events=(AssistantTranscript("Finished"),),
+            events=(AssistantTranscript("Finished", position='reply'),),
         )
         finish.result(timeout=5)
         release.set()
@@ -82,7 +82,7 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
     assert captured_page.events == ()
     assert captured_draft.events[0].text == "Writing"
     with transcript.reading() as records:
-        assert records.current_draft().external_row() is None
+        assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
 
 
 def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
@@ -96,7 +96,7 @@ def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
         assert not read.has_older(0) and not read.request_earlier(0)
         assert list(read.reverse(0)) == list(read.forward(0, 0)) == []
         assert read.turns(LastTurns(2)) == read.frames() == ()
-        assert read.current_draft().external_row() is None
+        assert read.current_draft(transcript.root, transcript.incarnation).external_row() is None
     transcript.end_turn()
     assert not transcript.path.exists()
 
@@ -105,13 +105,13 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("cli")
-    transcript.draft(turn_id="old", item_id="draft", events=(AssistantTranscript("old"),))
+    transcript.draft(turn_id="old", item_id="draft", events=(AssistantTranscript("old", position='draft'),))
     with transcript.reading() as records:
-        old = records.current_draft()
-    transcript.draft(turn_id="new", item_id="draft", events=(AssistantTranscript("new"),))
+        old = records.current_draft(transcript.root, transcript.incarnation)
+    transcript.draft(turn_id="new", item_id="draft", events=(AssistantTranscript("new", position='draft'),))
     old.end_turn(transcript)
     with transcript.reading() as records:
-        assert records.current_draft().turn_id == "new"
+        assert records.current_draft(transcript.root, transcript.incarnation).turn_id == "new"
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
@@ -127,26 +127,26 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hel"),))
+    transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hel", position='a'),))
     with transcript.reading() as records:
-        assert records.current_draft().events[0].text == "Hel"
+        assert records.current_draft(transcript.root, transcript.incarnation).events[0].text == "Hel"
         assert records.cut().offset == 0
-    transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hello"),))
-    transcript.finish(turn_id="t", item_id="other", events=(NoticeTranscript("Tool"),))
+    transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hello", position='a'),))
+    transcript.finish(turn_id="t", item_id="other", events=(NoticeTranscript("Tool", position='other'),))
     with transcript.reading() as records:
-        assert records.current_draft().item_id == "a"
+        assert records.current_draft(transcript.root, transcript.incarnation).item_id == "a"
     read = comms.transcripts.capture_page_read("codex")
     snapshot = TranscriptSnapshotUpdate.from_read(read)
     assert snapshot.draft.events[0].text == "Hello"
     assert [e.text for e in snapshot.page.events] == ["Tool"]
     assert decode_updates(encode_updates(snapshot)) == (snapshot,)
-    transcript.finish(turn_id="t", item_id="a", events=(AssistantTranscript("Hello!"),))
+    transcript.finish(turn_id="t", item_id="a", events=(AssistantTranscript("Hello!", position='a'),))
     with pytest.raises(StaleRevision):
         read.current_draft()
     with transcript.reading() as records:
-        assert records.current_draft().external_row() is None
+        assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
     assert [e.text for e in comms.transcripts.thread_transcript_page("codex").events] == ["Tool", "Hello!"]
-    transcript.draft(turn_id="t2", item_id="b", events=(AssistantTranscript("Interrupted"),))
+    transcript.draft(turn_id="t2", item_id="b", events=(AssistantTranscript("Interrupted", position='b'),))
     transcript.end_turn()
     with transcript.reading() as records:
-        assert records.current_draft().external_row() is None
+        assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None

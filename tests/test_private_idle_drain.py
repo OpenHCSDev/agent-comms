@@ -33,7 +33,7 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, monkeypatch):
+async def test_checked_observation_waits_and_joins_its_owned_worker(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     log = comms.bus.log
     # A busy original source is pending, not an unavailable inbox. Cancelling
@@ -51,7 +51,7 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
     assert observed[0] == observed[1]
 
     # Once acquired, cancellation must join the original callback before its
-    # descriptor closes. The worker consumes the certificate off the loop.
+    # descriptor closes. The worker consumes the prefix record off the loop.
     entered, finish = threading.Event(), threading.Event()
     loop_thread = threading.get_ident()
 
@@ -62,7 +62,7 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
         assert finish.wait(5)
         return source.committed_sequence()
 
-    task = asyncio.create_task(log.read_certified_async(consume))
+    task = asyncio.create_task(log.read_checked_async(consume))
     try:
         while not entered.is_set():
             await asyncio.sleep(0.01)
@@ -77,7 +77,7 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    with log.certified_read(blocking=False) as source:
+    with log.checked_read(blocking=False) as source:
         source.require_current()
 
     # A completed read must release physical ownership before its result is
@@ -98,15 +98,15 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
 
     with monkeypatch.context() as observation:
         observation.setattr(Coordination, "run_worker", observe_worker)
-        task = asyncio.create_task(log.read_certified_async(consume))
+        task = asyncio.create_task(log.read_checked_async(consume))
         while not entered.is_set():
             await asyncio.sleep(0.01)
         finish.set()
         # Deliberately keep this loop from processing the completed Future.
-        # The real worker/certificate/lock must nevertheless be closed.
+        # The real worker/prefix record/lock must nevertheless be closed.
         assert returned.wait(5)
         assert not task.done()
-        with log.certified_read(blocking=False) as source:
+        with log.checked_read(blocking=False) as source:
             source.require_current()
         await task
 
@@ -118,9 +118,9 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
         raise failure
 
     with pytest.raises(ValueError) as raised:
-        await log.read_certified_async(refuse)
+        await log.read_checked_async(refuse)
     assert raised.value is failure
-    with log.certified_read(blocking=False) as source:
+    with log.checked_read(blocking=False) as source:
         source.require_current()
 
 
@@ -371,16 +371,16 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
 
         # Only the coordination store changed: beta rereads its own rows there,
         # not the unchanged bus log or registry.
-        certified = []
-        read_certified = comms.bus.log.read_certified_async
+        checked = []
+        read_checked = comms.bus.log.read_checked_async
 
-        async def counted_certified(*args, **kwargs):
-            certified.append(args)
-            return await read_certified(*args, **kwargs)
+        async def counted_checked(*args, **kwargs):
+            checked.append(args)
+            return await read_checked(*args, **kwargs)
 
-        monkeypatch.setattr(comms.bus.log, "read_certified_async", counted_certified)
+        monkeypatch.setattr(comms.bus.log, "read_checked_async", counted_checked)
         await changed_elsewhere(registered_elsewhere)
-        assert certified == [] and decoded == [], "an unchanged bus or registry was reread"
+        assert checked == [] and decoded == [], "an unchanged bus or registry was reread"
         await changed_elsewhere(lambda: comms.threads.delete("unrelated"))
         assert len(drains) == settled, "another thread's registry change ran the tick"
         # A wake can stat the registry while another owner's write is still in

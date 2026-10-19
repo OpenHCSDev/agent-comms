@@ -79,9 +79,7 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
 
 
 @pytest.mark.asyncio
-async def test_operator_plan_and_tool_intent_are_exclusive(
-    private_directory, monkeypatch, nominal_broker_stub
-):
+async def test_operator_plan_and_tool_intent_are_exclusive(private_directory, monkeypatch, nominal_broker_stub, *, cursor_delivery):
     intent_type, _mode_type, _bound = nominal_broker_stub
     root, root_id, _comms, _initial, _ = _root(private_directory, direct=True)
     path = private_directory / "existing.py"
@@ -96,14 +94,13 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
             selected_existing_file_write=SelectedExistingFileWrite(
                 ExistingFileClaim(Path(path)), b"after"
             ),
+            cursor_delivery=cursor_delivery,
         ).run()
     assert path.read_text() == "before"
 
 
 @pytest.mark.asyncio
-async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instruction(
-    private_directory, monkeypatch
-):
+async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instruction(private_directory, monkeypatch, *, cursor_delivery):
     root, root_id, _comms, _initial, _ = _root(private_directory, direct=True)
     fake, calls = _fake_model()
     kwargs_seen = []
@@ -115,7 +112,11 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
     monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     assert (
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=private_directory
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=private_directory,
+            cursor_delivery=cursor_delivery,
         ).run()
     ).publications
     assert len(calls) == 1
@@ -127,7 +128,7 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
 
 
 @pytest.mark.asyncio
-async def test_real_owner_selected_tool_writes_existing_file_once(private_directory, monkeypatch):
+async def test_real_owner_selected_tool_writes_existing_file_once(private_directory, monkeypatch, *, cursor_delivery):
     root, root_id, comms, _initial, _people = _root(private_directory, direct=True, claims=True)
     path = private_directory / "notes.txt"
     path.write_text("before", encoding="utf-8")
@@ -146,6 +147,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_direct
         owner_name="beta",
         native_package=private_directory,
         selected_tool_intent=SelectedToolIntent(),
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.publications
     assert len(calls) == 1
@@ -158,9 +160,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_direct
 
 
 @pytest.mark.asyncio
-async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
-    private_directory, monkeypatch, nominal_broker_stub
-):
+async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(private_directory, monkeypatch, nominal_broker_stub, *, cursor_delivery):
     intent_type, mode_type, bound = nominal_broker_stub
     root, root_id, comms, initial, people = _root(private_directory, direct=True)
     fake, calls = _fake_model()
@@ -183,6 +183,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         owner_name="beta",
         native_package=private_directory,
         selected_tool_intent=intent_type(),
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.publications
     assert len(calls) == len(kwargs_seen) == len(bound) == 1
@@ -199,9 +200,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
 
 
 @pytest.mark.asyncio
-async def test_wrong_intent_or_observer_cannot_create_tool_mode(
-    private_directory, monkeypatch, nominal_broker_stub
-):
+async def test_wrong_intent_or_observer_cannot_create_tool_mode(private_directory, monkeypatch, nominal_broker_stub, *, cursor_delivery):
     intent_type, _mode_type, bound = nominal_broker_stub
     root, root_id, _comms, _initial, _ = _root(private_directory, mentioned=True)
     with pytest.raises(TypeError, match="nominal owner intent"):
@@ -211,6 +210,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
             owner_name="beta",
             native_package=private_directory,
             selected_tool_intent=object(),
+            cursor_delivery=cursor_delivery,
         ).run()
     assert (
         await runtime.SelectedExecution(
@@ -219,6 +219,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
             owner_name="alpha",
             native_package=private_directory,
             selected_tool_intent=intent_type(),
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )
@@ -226,7 +227,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
 
 
 @pytest.mark.asyncio
-async def test_opted_in_triage_remains_no_tools(private_directory, monkeypatch, nominal_broker_stub):
+async def test_opted_in_triage_remains_no_tools(private_directory, monkeypatch, nominal_broker_stub, *, cursor_delivery):
     intent_type, _mode_type, bound = nominal_broker_stub
     root, root_id, _comms, _initial, _ = _root(private_directory)
     fake, calls = _fake_model(decision="IGNORE")
@@ -243,6 +244,7 @@ async def test_opted_in_triage_remains_no_tools(private_directory, monkeypatch, 
         owner_name="alpha",
         native_package=private_directory,
         selected_tool_intent=intent_type(),
+        cursor_delivery=cursor_delivery,
     ).run()
     assert len(calls) == len(kwargs_seen) == 1
     assert kwargs_seen[0]["selected_tool_mode"].launch_arguments(private_directory) == ("--no-tools",)
@@ -252,9 +254,7 @@ async def test_opted_in_triage_remains_no_tools(private_directory, monkeypatch, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["unknown", "wrong_input", "stale_epoch"])
-async def test_selected_full_failure_never_reissues_or_forges_response(
-    private_directory, monkeypatch, nominal_broker_stub, failure
-):
+async def test_selected_full_failure_never_reissues_or_forges_response(private_directory, monkeypatch, nominal_broker_stub, failure, *, cursor_delivery):
     intent_type, _mode_type, bound = nominal_broker_stub
     root, root_id, comms, _initial, _people = _root(private_directory, direct=True)
     fake, calls = _fake_model(fail_on=1 if failure == "unknown" else None)
@@ -281,6 +281,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
             owner_name="beta",
             native_package=private_directory,
             selected_tool_intent=intent_type(),
+            cursor_delivery=cursor_delivery,
         ).run()
     assert (
         await runtime.SelectedExecution(
@@ -289,6 +290,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
             owner_name="beta",
             native_package=private_directory,
             selected_tool_intent=intent_type(),
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )

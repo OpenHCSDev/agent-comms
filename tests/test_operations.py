@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.channels import ANY_CHANNEL
 from agent_comms.activity import ActivityState
@@ -201,7 +202,7 @@ class TestThreadOps:
         ]
         assert events[2].raw_input == {"to": "child"}
         assert events[3].text == "sent"
-        row = next(row for row in wired.views.presence() if row["name"] == "transcript-thread")
+        row = next(row.to_wire() for row in wired.views.presence() if row.thread.name == "transcript-thread")
         assert row["resumable"] is True
 
     def test_thread_transcript_includes_saved_compaction_summary(self, wired, tmp_path):
@@ -245,7 +246,7 @@ class TestThreadOps:
         wired.agents.observe_runtime_info(
             "fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100))
         )
-        row = next(row for row in wired.views.who() if row["name"] == "fixer")
+        row = next(row.to_wire() for row in wired.views.who() if row.thread.name == "fixer")
         assert row["model"] == "configured/model"
         assert (row["context_used"], row["context_size"]) == (25, 100)
         assert wired.agents.agent_info_of("fixer").context_used == PiCount.from_wire(25)
@@ -268,15 +269,15 @@ class TestThreadOps:
             wired.agents.observe_runtime_info("ghost", AgentInfo(model="model"))
 
     def test_list_threads_shape(self, wired):
-        rows = {row["name"]: row for row in wired.views.list_threads()}
+        rows = {row.thread.name: row for row in wired.views.list_threads()}
         assert set(rows) == {"PR111", "fixer"}
-        assert rows["fixer"]["status"] == "running"
-        assert rows["fixer"]["parent"] == "PR111"
-        assert rows["fixer"]["pending"] == 0
+        assert rows["fixer"].status.declared_name == "running"
+        assert rows["fixer"].thread.parent == "PR111"
+        assert rows["fixer"].pending.value == 0
 
     def test_list_active_only(self, wired):
         wired.owners.stop("fixer")
-        names = {row["name"] for row in wired.views.list_threads(active_only=True)}
+        names = {row.thread.name for row in wired.views.list_threads(active_only=True)}
         assert names == {"PR111"}
 
     @pytest.mark.parametrize("counted", [True, False])
@@ -285,10 +286,10 @@ class TestThreadOps:
         views = wired.views
         rows = {
             "detail": views.thread_detail(
-                "fixer", CountedRead() if counted else UncountedRead()).encoded(),
-            "roster": next(row for row in (views.who() if counted else views.presence())
-                           if row["name"] == "fixer"),
-            **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
+                "fixer", CountedRead() if counted else UncountedRead()).to_wire(),
+            "roster": next(row.to_wire() for row in (views.who() if counted else views.presence())
+                           if row.thread.name == "fixer"),
+            **({"list": next(row.to_wire() for row in views.list_threads() if row.thread.name == "fixer")}
                if counted else {}),
         }
         record = rows["detail"]
@@ -372,7 +373,7 @@ class TestThreadOps:
         wired.owners.stop("fixer")
         wired.threads.archive("fixer")
         assert wired.registry.status("fixer").declared_name == "archived"
-        assert not any(row["name"] == "fixer" for row in wired.views.who())
+        assert not any(row.thread.name == "fixer" for row in wired.views.who())
         assert "fixer" not in wired.registry.active_threads()
         assert [message.body for message in list(wired.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)] == [
             "kept after archive"
@@ -397,7 +398,7 @@ class TestThreadOps:
         assert wired.registry.require("fixer").parent == "planner"
         assert wired.agents.activity_of("planner", snapshot=wired.registry.snapshot()).detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == "test/model"
-        assert wired.ledger.read()["owner"] == "planner"
+        assert wired.ledger.read().entries["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
         wired.messaging.send("fixer", "PR111", "old alias routes").message.message_id
@@ -566,13 +567,13 @@ class TestLedgerOps:
 
     def test_merge_records_author(self, wired):
         wired.ledger.merge({"k": "v"}, author="PR111")
-        assert wired.ledger.read()["last_updated_by"] == "PR111"
+        assert wired.ledger.read().entries["last_updated_by"] == "PR111"
 
 
 class TestPollAndWire:
     def test_poll_snapshot(self, wired):
         wired.messaging.send("PR111", "fixer", "hello").message.message_id
-        snap = wired.views.poll(NamedThreadTarget("fixer")).encoded()
+        snap = wired.views.poll(NamedThreadTarget("fixer")).to_wire()
         assert snap["thread"]["name"] == "fixer"
         assert len(snap["inbox"]) == 1
         assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
@@ -582,7 +583,7 @@ class TestPollAndWire:
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll(CallingThreadTarget()).encoded()
+        snap = wired.views.poll(CallingThreadTarget()).to_wire()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):

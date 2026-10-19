@@ -44,9 +44,7 @@ tmp_path = private_root_fixture
      (False, False, False, True)],
     ids=["reply", "saved-restart", "contended-reply", "rejected-triage-continuity", "parallel-channel"],
 )
-async def test_native_channel_reply_automatically_reaches_original_sender(
-    tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast
-):
+async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads):
     package = pinned_native_package()
     requests = []
     failures = []
@@ -412,8 +410,13 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
 
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 rejected = read_historical_native_inputs(
-                    store, wire_root_id=root_id,
-                    recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup, source_seq=reply.seq,
+                    store,
+                    wire_root_id=root_id,
+                    recipient_lookup=RecordedThreadIncarnation(
+                        "fixture", owner.created_at
+                    ).lookup,
+                    source_seq=reply.seq,
+                    source_reads=source_reads,
                 )
                 assert len(rejected) == 1 and rejected[0].proves_triage_source(rejected)
                 claim = store.assignments.get(rejected[0].assignment_id)
@@ -508,7 +511,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             }, indent=2) + "\n")
 
 
-async def test_selected_validation_cancellation_joins_before_claim(tmp_path, monkeypatch):
+async def test_selected_validation_cancellation_joins_before_claim(tmp_path, monkeypatch, *, cursor_delivery):
     """Pause real package validation; cancellation cannot escape its worker."""
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.native_pi import NativePiUnavailable
@@ -532,8 +535,13 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
             completed.set()
 
     monkeypatch.setattr(SelectedExecution, "validate", observed_validation)
-    execution = SelectedExecution(root=comms.root, wire_root_id=root_id,
-                                  owner_name="unregistered", native_package=Path(pin))
+    execution = SelectedExecution(
+        root=comms.root,
+        wire_root_id=root_id,
+        owner_name="unregistered",
+        native_package=Path(pin),
+        cursor_delivery=cursor_delivery,
+    )
     task = asyncio.create_task(execution.run())
     try:
         assert await asyncio.to_thread(entered.wait, 5)
@@ -555,8 +563,13 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     # A separate invalid acquisition still refuses before participant/claim
     # selection; no cancellation or prior validation grants it trust.
     monkeypatch.setattr(SelectedExecution, "validate", validate)
-    invalid = SelectedExecution(root=comms.root, wire_root_id=root_id,
-                                owner_name="unregistered", native_package=tmp_path)
+    invalid = SelectedExecution(
+        root=comms.root,
+        wire_root_id=root_id,
+        owner_name="unregistered",
+        native_package=tmp_path,
+        cursor_delivery=cursor_delivery,
+    )
     with pytest.raises(NativePiUnavailable):
         await invalid.run()
     assert comms.registry.snapshot() == before

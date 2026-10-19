@@ -3,7 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
-from bus_history import read_history
+from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
@@ -43,6 +43,7 @@ from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from bus_history import read_history
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -208,7 +209,7 @@ async def configured_pure_channel(arguments):
         overlap = False
         async with asyncio.timeout(arguments.observation_seconds):
             while True:
-                with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                with Coordination(str(service.root/'coordination.sqlite3')) as store, NativeEvidenceScope() as source_reads:
                     with store.session.read():
                         db = store.session._connection
                         claims = WakeAssignment.select(db,
@@ -271,8 +272,13 @@ async def configured_pure_channel(arguments):
                             reply, = service.bus.log.messages_for_references((rows[0].reference,))
                             assert reply.sender == claim.recipient and '12' in reply.body
                             receipts.extend(rows)
-                            history = read_historical_native_inputs(store,wire_root_id=root_id,
-                                recipient_lookup=claim.recipient_lookup,source_seq=claim.wire_seq)
+                            history = read_historical_native_inputs(
+                                store,
+                                wire_root_id=root_id,
+                                recipient_lookup=claim.recipient_lookup,
+                                source_seq=claim.wire_seq,
+                                source_reads=source_reads,
+                            )
                             assert len(history) == 2 and all(
                                 item.expected_prompt_equality_established for item in history)
                         cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
@@ -500,7 +506,7 @@ async def configured_mixed_routes(arguments):
                 if diagnostics:
                     diagnostic = json.loads(diagnostics[0].read_text())
                     raise AssertionError(diagnostic.get('source_error',diagnostic.get('reason')))
-                with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                with Coordination(str(service.root/'coordination.sqlite3')) as store, NativeEvidenceScope() as source_reads:
                     db = store.session._connection
                     inputs = NativeRuntimeInput.select(db)
                     if inputs and late is None:
@@ -538,8 +544,13 @@ async def configured_mixed_routes(arguments):
                         assert '23' in service.bus.log.messages_for_references((late_receipts[0].reference,))[0].body
                         lookup = RecordedThreadIncarnation("fixture", service.registry.require(name).created_at).lookup
                         for original in (*originals,late):
-                            history = read_historical_native_inputs(store,wire_root_id=root_id,
-                                recipient_lookup=lookup,source_seq=original.seq)
+                            history = read_historical_native_inputs(
+                                store,
+                                wire_root_id=root_id,
+                                recipient_lookup=lookup,
+                                source_seq=original.seq,
+                                source_reads=source_reads,
+                            )
                             assert len(history) == 1 and history[0].expected_prompt_equality_established
                         assert len(cursors) == 1 and cursors[0].covered_seq >= late.seq
                         proof = {'captured_originals':len(originals),'routes':['#team','human'],
@@ -550,9 +561,14 @@ async def configured_mixed_routes(arguments):
                             'original_cursor_covers_late':True}
                         break
                 await asyncio.sleep(.03)
-        with Coordination(str(service.root/'coordination.sqlite3')) as store:
-            history = read_historical_native_inputs(store,wire_root_id=root_id,
-                recipient_lookup=lookup,source_seq=originals[0].seq)
+        with Coordination(str(service.root/'coordination.sqlite3')) as store, NativeEvidenceScope() as source_reads:
+            history = read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=lookup,
+                source_seq=originals[0].seq,
+                source_reads=source_reads,
+            )
         with NativeEntry.open_evidence(history[0].context.session_file) as evidence:
             _, entries = evidence.observe()
         tool_results = [entry.message for entry in entries if entry.is_message and
@@ -615,9 +631,14 @@ async def retained_owner():
         owner = service.registry.require(name)
         await agent.load_session(owner.worktree, name)
         assert await asyncio.to_thread(sys.stdin.readline) == 'GO\n'
-        execution = SelectedExecution(root=service.root,
-            wire_root_id=launch.wire_root_id, owner_name=name,
-            native_package=launch.native_package, session_file=Path(owner.session_file))
+        execution = SelectedExecution(
+            root=service.root,
+            wire_root_id=launch.wire_root_id,
+            owner_name=name,
+            native_package=launch.native_package,
+            session_file=Path(owner.session_file),
+            cursor_delivery=agent.cursors.delivery(name),
+        )
         result = await agent.turns.run_selected(name, execution)
         assert result.cursor_status == 'proven', result
         await agent.cursors.publish(name, name, selected_status=result.cursor_status)
@@ -639,7 +660,7 @@ class WireReadContention(ClaimContention, declared_name='wire'):
     @classmethod
     @contextmanager
     def ownership(cls, service, owners):
-        with service.bus.log.certified_read():
+        with service.bus.log.checked_read():
             yield True
 
 
@@ -1085,15 +1106,20 @@ async def run(arguments):
             assert replies[1].body == 'Separate late-wave answer: 20+3=23.'
             assert provider.posts == 4
             lookup = RecordedThreadIncarnation("fixture", service.registry.require(names[0]).created_at).lookup
-            with Coordination(str(service.root/'coordination.sqlite3')) as store:
+            with Coordination(str(service.root/'coordination.sqlite3')) as store, NativeEvidenceScope() as source_reads:
                 inputs = NativeRuntimeInput.select(store.session._connection)
                 assert len(inputs) == 4
                 memberships = [row.execution.source_assignment_ids(store.session._connection, row.input_id)
                                for row in inputs]
                 assert sorted(len(members) for members in memberships) == [1,1,arguments.wave_size,arguments.wave_size]
                 for original in (*cutover.originals, late_original):
-                    evidence = read_historical_native_inputs(store, wire_root_id=root_id,
-                        recipient_lookup=lookup,source_seq=original.seq)
+                    evidence = read_historical_native_inputs(
+                        store,
+                        wire_root_id=root_id,
+                        recipient_lookup=lookup,
+                        source_seq=original.seq,
+                        source_reads=source_reads,
+                    )
                     assert len(evidence) == 2
                     assert all(proof.expected_prompt_equality_established for proof in evidence)
                     assert len({proof.assignment_id for proof in evidence}) == 1

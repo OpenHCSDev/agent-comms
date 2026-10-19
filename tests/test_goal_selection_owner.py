@@ -1,4 +1,4 @@
-"""Current goal consumers over the original certified private-bus producer."""
+"""Current goal consumers over the original checked private-bus producer."""
 
 import os
 
@@ -118,7 +118,7 @@ def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeyp
     assert comms.registry.require("worker").goal == replacement
 
 
-def test_certified_reply_consumes_only_original_wait(selected_goal):
+def test_checked_reply_consumes_only_original_wait(selected_goal):
     comms, original = selected_goal
     peer = comms.agents.begin_turn("peer", "original-peer-work").turn_lease
     owner = None

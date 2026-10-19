@@ -6,7 +6,11 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+from .channel_coding_tools import CodingToolOwner
+from .messages import ClaimNoticeKind
 
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
@@ -41,8 +45,7 @@ _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnedSend:
-    comms: Comms
+class OwnedSend(CodingToolOwner):
     inputs: InputDrain
     goal_store: GoalAttemptStore
     session_id: str
@@ -168,6 +171,39 @@ class OwnedSend:
         except InputAlreadyCleared:
             decision = RefusedSend()
         yield decision
+
+    def verify(self, store, turn, snapshot) -> None:
+        """Recheck the running original without binding it or consuming its wait again."""
+        from .native_tool_call import SelectedToolDenied
+
+        if not turn.started_input or not turn.accepts_output:
+            raise SelectedToolDenied("Native tool has no started original input")
+        canonical = snapshot.canonical_name(self.thread.name)
+        current = snapshot.threads.get(canonical)
+        try:
+            self._check_owner(current, snapshot, canonical, self.original, turn.command.message)
+            self._require_context(self.original, current, self.comms.goals.goal_wait(canonical))
+        except (ReservationViolationError, InputAlreadyCleared) as error:
+            raise SelectedToolDenied(str(error)) from error
+
+    def claim_resource(self, store, turn, resource, slot, prior):
+        from .store_files import _store_lock
+
+        with _store_lock(self.comms._wire_lock_path):
+            snapshot = self.comms.registry.snapshot()
+            self.verify(store, turn, snapshot)
+            owner = snapshot.require(self.owner_name)
+            canonical = resource.normalized(Path(self.thread.worktree))
+            with self.comms.bus.log.checked_read() as source:
+                if prior is not None and source.claim(canonical) == prior:
+                    return prior
+            committed = self.comms.bus.publisher.publish_claim_envelope(
+                ClaimNoticeKind.claimed(owner),
+                worktree=Path(self.thread.worktree),
+                incarnation=str(owner.created_at),
+                claims=(resource,),
+            )
+            return committed.require_claim_transition().claimed(canonical)
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)

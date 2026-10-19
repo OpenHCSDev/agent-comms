@@ -41,9 +41,7 @@ tmp_path = private_root_fixture
     "after_cutover, selected_write, triage",
     [(False, False, False), (True, False, False), (False, True, False), (False, False, True)],
 )
-async def test_native_full_four_tools_publish_and_release(
-    tmp_path, monkeypatch, after_cutover, selected_write, triage
-):
+async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, after_cutover, selected_write, triage, *, cursor_delivery, source_reads):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
@@ -216,6 +214,7 @@ async def test_native_full_four_tools_publish_and_release(
         owner_name="beta",
         native_package=Path(package),
         selected_tool_intent=SelectedToolIntent() if selected_write else None,
+        cursor_delivery=cursor_delivery,
     )
     try:
         outcome = await asyncio.wait_for(execution.run(), 40)
@@ -239,7 +238,7 @@ async def test_native_full_four_tools_publish_and_release(
             )
             assert assignment.wire_seq == initial.message.seq
             cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
-                owner_name="beta"
+                owner_name="beta", source_reads=source_reads
             )
             assert cursor is not None
             assert cursor.injected_seq == initial.message.seq
@@ -248,8 +247,11 @@ async def test_native_full_four_tools_publish_and_release(
             proofs = read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", owner.created_at
+                ).lookup,
                 source_seq=initial.message.seq,
+                source_reads=source_reads,
             )
             assert len(proofs) == 1 + triage
             assert {type(proof.execution) for proof in proofs} == ({TriageNativeExecution, FullNativeExecution} if triage else {FullNativeExecution})
@@ -273,8 +275,11 @@ async def test_native_full_four_tools_publish_and_release(
                     read_historical_native_inputs(
                         store,
                         wire_root_id=root_id,
-                        recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup,
+                        recipient_lookup=RecordedThreadIncarnation(
+                            "fixture", owner.created_at
+                        ).lookup,
                         source_seq=old_seq,
+                        source_reads=source_reads,
                     )
                     == ()
                 )

@@ -86,6 +86,7 @@ class OwnerFollowingInputs(FollowingInputs):
         original = SelectedOriginalInput.answering(session.command.message)
         sender = OwnedSend(
             comms=inputs.comms,
+            owner_name=thread.name,
             inputs=inputs,
             goal_store=await Coordination.run_worker(inputs.comms.goals.open_goal_store),
             session_id=self.session_id,

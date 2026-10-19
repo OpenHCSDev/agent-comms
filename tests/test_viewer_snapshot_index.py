@@ -1,6 +1,5 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
-from bus_history import read_history
 from agent_comms.wire_log import WireLog
 
 from conftest import publish_initial
@@ -22,7 +21,7 @@ from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable, StaleRevision
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
 from agent_comms.wire_log import CurrentSnapshotOpening, OpenedWireSnapshot
@@ -148,7 +147,18 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         ]
         return {path.name: path.read_bytes() for path in paths if path.exists()}
 
+    stale = projection_bytes()
+    # A same-size rewrite revokes the activity checkpoint's source revision.
+    # The roster legitimately repairs it once before route/display preparation.
+    comms.views.presentation.roster(viewer.name)
     before = projection_bytes()
+    activity_name = comms.bus.activity_index.path.name
+    assert before[activity_name] != stale[activity_name]
+    assert {name: value for name, value in before.items() if name != activity_name} == {
+        name: value for name, value in stale.items() if name != activity_name
+    }
+    assert json.loads(before[activity_name])["channels"] == json.loads(stale[activity_name])["channels"]
+    assert json.loads(before[activity_name])["sent"] == json.loads(stale[activity_name])["sent"]
 
     receiver, connection = Pipe()
     service = ObservationService(comms, connection)
@@ -157,6 +167,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     results = []
     original_snapshot = comms.views.viewer_snapshot
     from agent_comms.bus_route_counts import RouteIndexRebuilding
+    from agent_comms.private_path import FileRevision
     from agent_comms.ui_model.observation import ReadAnswered, ReadRequest
 
     class ForegroundRead(ReadRequest):
@@ -165,6 +176,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
 
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     attempts = []
+    activity_revision = FileRevision.from_stat(comms.bus.activity_index.path.stat())
 
     def complete(*args, **kwargs):
         # The service can finish both stages in one observation. Inspect the
@@ -197,6 +209,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         assert completed.snapshot == expected
         assert completed.snapshot.unread_pending == frozenset()
         assert len(attempts) == 2
+        assert FileRevision.from_stat(comms.bus.activity_index.path.stat()) == activity_revision
         assert service.interest.observations[SidebarReading].request is request
     finally:
         connection.close()
@@ -502,9 +515,12 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     @contextmanager
     def append_before_open(*args, **kwargs):
         # _display_snapshot already holds the wire lock at this boundary.
-        appended.append(comms.bus.publisher.publish_ordinary(
-            Message("bob", "#team", "raced append", InfoKind), origin=AgentOrigin()
-        ))
+        # Publication reads activity through this same log. Its nested read
+        # uses the saved opener rather than re-entering the append hook.
+        with patch.object(comms.bus.log, 'opened_wire_snapshot', original):
+            appended.append(comms.bus.publisher.publish_ordinary(
+                Message("bob", "#team", "raced append", InfoKind), origin=AgentOrigin()
+            ))
         with original(*args, **kwargs) as boundary:
             yield boundary
 
@@ -596,7 +612,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         comms.views.transcript_reads.close()
 
 
-def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_path):
+def test_checked_display_retains_original_cut_and_persists_changed_scope(tmp_path):
     from test_private_bus_checkpoint import _root
     from test_turn_context_wire import manifest
 
@@ -610,7 +626,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
         second = publish_initial(comms, 'sender', '#team', '@Alice next')
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     assert source.stream.closed
-    assert [message.message_id for message in read_history(comms)] == [
+    assert [message.message_id for message in comms.views.channel_display_page('#any').messages] == [
         first.message_id, second.message_id
     ]
 
@@ -620,13 +636,17 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
     current = json.loads(checkpoint.read_text())
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.read_basis import MemberActivityDisplayScope
+    with comms.views.presentation.snapshot(viewer=NamedViewer(viewer)) as (basis, _):
+        expected_scope = basis.scope('#team')
+    assert isinstance(expected_scope, MemberActivityDisplayScope)
     assert next(scope for scope in current['scopes']
-                if scope['channel'] == '#team')['any_mode'] is True
+                if scope['channel'] == '#team') == FieldCodec.encode(expected_scope)
 
 
-def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, thread_registration):
+def test_unchecked_opened_cut_still_rejects_unknown_observation(tmp_path, *, thread_registration):
     from agent_comms.turn_context import RecordedContextManifest
-    from agent_comms.message_reference import MessageReference
     from agent_comms.wire_log import OpenedWireSnapshot, WireLog
     from agent_comms.wire_record import (
         AuthoredObservationWireRecord,
@@ -647,11 +667,9 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
         assert type(source) is OpenedWireSnapshot
         assert list(source.public_records()) == []
     log.path.write_text(json.dumps({'observation': {'kind': 'unknown'}}) + '\n')
-    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-        with pytest.raises((ValueError, TypeError, KeyError)):
-            list(source.public_records())
-        with pytest.raises((ValueError, TypeError, KeyError)):
-            source.messages_for_references((MessageReference(1, '0' * 32),))
+    with pytest.raises(StoredHistoryUnreadable, match='Stored bus history cannot be decoded'):
+        with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()):
+            pytest.fail('Unknown observations must be rejected before exposing a history cut')
 
 
 def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
@@ -672,5 +690,5 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
         assert source.through == first.seq < source.metadata.last_seq
         assert comms.bus.pending_counts_opened(source, basis) == {'#team': 1}
     with pytest.raises(RelationViolationError, match='differs from its durable marker'):
-        with comms.bus.log.certified_read() as source:
+        with comms.bus.log.checked_read() as source:
             source.require_current()

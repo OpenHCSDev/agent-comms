@@ -1,4 +1,4 @@
-"""Installed ordinary saved-owner startup, channel click and certified history.
+"""Installed ordinary saved-owner startup, channel click and checked history.
 
 Uses the existing physical recorder and real app/ACP/root. No input or provider
 call is submitted; canonical painted-view ledger updates are expected.
@@ -22,12 +22,12 @@ def main():
     args = parser.parse_args()
     candidate = args.candidate.resolve(strict=True)
     assert candidate == Path(sys.prefix).resolve()
-    spec = importlib.util.spec_from_file_location('certified_sequence_recorder', args.recorder)
+    spec = importlib.util.spec_from_file_location('checked_sequence_recorder', args.recorder)
     recorder = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = recorder
     spec.loader.exec_module(recorder)
 
-    class CertifiedSequenceChannelJourney(recorder.PhysicalJourney):
+    class checkedSequenceChannelJourney(recorder.PhysicalJourney):
         @classmethod
         def script(cls, options):
             mark = recorder.marker_command()
@@ -79,8 +79,8 @@ def main():
     ledger = ReadLedger.path_in(root)
     ledger_before = ledger.read_bytes() if ledger.exists() else b''
     (output / 'read-ledger-before.private').write_bytes(ledger_before)
-    arguments = [str(args.recorder), '--output', str(output / 'physical'), '--owner', 'Arendt-certified508',
-                 '--capture-target', 'existing_thread', '--journey', CertifiedSequenceChannelJourney.declared_name,
+    arguments = [str(args.recorder), '--output', str(output / 'physical'), '--owner', 'Arendt-checked508',
+                 '--capture-target', 'existing_thread', '--journey', checkedSequenceChannelJourney.declared_name,
                  '--capture-state', '--review-timing', 'deferred', '--fps', '15', '--width', '1280', '--height', '900',
                  '--fit-window', '--startup-wait', '12', '--max-duration', '55', '--finalize-seconds', '16',
                  '--tail-seconds', '2', '--', '/home/ts/bin/toad-comms', args.thread]

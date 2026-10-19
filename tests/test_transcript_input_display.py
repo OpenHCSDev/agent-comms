@@ -25,6 +25,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
         content.append({"type": "image", "mimeType": "image/png", "data": "secret-image"})
     return {
         "type": "message",
+        "timestamp": "2026-10-19T00:00:00.000Z",
         "id": native_id[:8],
         "message": {"role": role, "inputId": native_id, "content": content},
     }
@@ -137,7 +138,7 @@ def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
                 {"type": "text", "text": "After reasoning."},
             ],
         }
-    ).transcript_events(TranscriptProjection())
+    ).transcript_events(TranscriptProjection(position="assistant"))
     assert [(event.declared_name, event.text) for event in events] == [
         ("assistant", "## Summary\n\n**Bold text**\n\n- First\n- Second\n"),
         ("thinking", "separate reasoning"),

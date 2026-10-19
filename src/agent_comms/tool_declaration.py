@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from collections.abc import Mapping
 from typing import ClassVar, Self
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tool_call import SelectedToolDenied
 
@@ -48,25 +48,22 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def for_name(cls, name: str) -> type[ToolDeclaration] | UndeclaredTool:
         try:
             return cls.member_named(name.lower())
-        except ValueError:
+        except UnknownFamilyMember:
             return UndeclaredTool(name)
 
     @classmethod
-    def parse_arguments(cls, arguments: Mapping[str, object]) -> Self:
+    def parse_arguments(cls, arguments: Mapping[str, object], *, call_id: str) -> Self:
         if cls.family_discriminator in arguments:
             raise SelectedToolDenied("Native arguments cannot contain a family selector")
         selected = {cls.family_discriminator: cls.declared_name}
-        try:
-            return FieldCodec.decode(cls, {**selected, **arguments})
-        except MalformedRecord as error:
-            raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
+        return FieldCodec.decode_bound(cls, {**selected, **arguments}, call_id=call_id)
 
     @classmethod
-    def record(cls, name: str, arguments: object) -> ToolDeclaration | None:
+    def record(cls, name: str, arguments: object, *, call_id: str) -> ToolDeclaration | None:
         """The call decoded once as Core's tool record, or None when Core does not decode it."""
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
-            return cls.for_name(name).parse_arguments(decoded)
+            return cls.for_name(name).parse_arguments(decoded, call_id=call_id)
         except (MalformedRecord, SelectedToolDenied):
             return None
 

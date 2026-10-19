@@ -12,7 +12,6 @@ from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
-from .connector_store import ConnectorStore
 from .goal_management import Goals
 from .history_views import HistoryViews
 from .message_bus import MessageBus
@@ -20,23 +19,10 @@ from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
-from .relationships import RelationshipStore, ThreadRelationships
-from .read_ledger import ReadLedger
-from .registry_store import RegistryStore
-from .runtime_info import RuntimeInfoStore
-from .shared_ledger import SharedLedger
-from .store_files import StoreLockOwner
-from .wire_log import WireLog
+from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
 from .thread_configuration import ThreadConfiguration
 from .transcripts import Transcripts
-
-
-# The composition root declares the acquisition relation once, using its owners.
-StoreLockOwner.declare_lock_order(
-    MessageBus, WireLog, RegistryStore, ChannelCatalog, ReadLedger,
-    RelationshipStore, RuntimeInfoStore, SharedLedger, CollaborationLedger, ConnectorStore,
-)
 
 
 class Comms:
