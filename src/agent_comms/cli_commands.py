@@ -609,7 +609,7 @@ class NativeContextInspection(CliResult):
 
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
-    DeclaredFamily, DeclaredOptions, affix="CliCommand", discovery_package="agent_comms"
+    DeclaredFamily, DeclaredOptions, Command, affix="CliCommand", discovery_package="agent_comms"
 ):
     multiple_targets: ClassVar[bool] = False
 
@@ -856,7 +856,7 @@ class SendCliCommand(Send, CliCommand):
         return False
 
     def apply(self, ctx: Comms) -> MessageSentResult:
-        return MessageSentResult(super().apply(ctx))
+        return MessageSentResult(self.send(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)

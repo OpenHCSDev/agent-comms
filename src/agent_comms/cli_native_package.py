@@ -9,6 +9,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from .cli_commands import DeclaredOptions, option
+from .command import Command
 from .declared_family import DeclaredFamily
 from .native_package import (
     install_declared_sources,
@@ -23,7 +24,7 @@ from .storage_rules import StoragePath, StorageRule
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativePackageVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+class NativePackageVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One verb: its options are its fields, its parser comes from them, apply() does the work."""
 
     @abstractmethod

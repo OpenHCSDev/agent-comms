@@ -26,6 +26,7 @@ from uuid import uuid4
 from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
+from ..command import Command
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
@@ -648,7 +649,7 @@ def overdue():
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
+class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
     fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
 

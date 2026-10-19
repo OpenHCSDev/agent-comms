@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import asyncio
 import json
 import os
@@ -44,7 +45,6 @@ from agent_comms.cli_protocol import (
     WatchLine,
     raise_child_exit,
 )
-from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
 from agent_comms.coordination_database import CoordinationStore
@@ -429,7 +429,7 @@ def option(
     return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
-class DeclaredOptions(Command):
+class DeclaredOptions:
     """option() fields own a declaration's argparse subcommand and its decoding from the namespace.
 
     A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
@@ -518,9 +518,9 @@ class Send(DeclaredOptions, Operation):
     sender: str = option("--from", default="")
     target: str = option("--to")
     body: str = option("--body")
-    type: type[MessageKind] = option("--type", default=InfoKind,
+    type: builtins.type[MessageKind] = option("--type", default=InfoKind,
         choices=SendableMessageKind.names(), editor=ChoiceTargetField)
-    role: type[SendableRole] = option("--role", default=ConversationRole)
+    role: builtins.type[SendableRole] = option("--role", default=ConversationRole)
     report: SendReport = option("--report", default=MissingReport(),
         help="Change report fields as a JSON object", type=FieldCodec.parse)
 
@@ -530,12 +530,12 @@ class Send(DeclaredOptions, Operation):
             sender=args.sender, target=args.target, body=args.body,
             type=args.type, role=args.role, report=args.report))
 
-    def apply(self, ctx: Comms) -> SendResult:
+    def send(self, ctx: Comms) -> SendResult:
         return self.report.send(ctx, self)
 
     async def execute(self, bridge: CliBridge) -> None:
         await bridge.show_sent(await asyncio.to_thread(
-            replace(self, sender=bridge.binding.bus).apply, bridge.comms))
+            replace(self, sender=bridge.binding.bus).send, bridge.comms))
 
 
 class Inbox(Operation[OperationBridge]):

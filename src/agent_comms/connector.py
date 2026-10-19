@@ -38,6 +38,7 @@ from aiohttp import web
 from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions, option
+from .command import Command
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily
@@ -502,7 +503,7 @@ class Connector:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One connector command: its options are its fields, and its parser comes from them."""
 
     @abstractmethod
