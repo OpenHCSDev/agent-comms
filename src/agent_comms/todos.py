@@ -336,10 +336,6 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     @abstractmethod
     def pushes(self, since: float) -> Iterator[tuple[str, float]]: ...
 
-    def missing(self, source: ProgressSource) -> Iterator[MissingCheckoutProgress]:
-        """Only a missing checkout is progress of its own kind."""
-        return iter(())
-
 
 class MissingCheckout(ProgressCheckout):
     """A retired checkout contributes no local history, not a failed Git read."""
@@ -352,10 +348,6 @@ class MissingCheckout(ProgressCheckout):
 
     def pushes(self, since: float) -> Iterator[tuple[str, float]]:
         return iter(())
-
-    def missing(self, source: ProgressSource) -> Iterator[MissingCheckoutProgress]:
-        yield MissingCheckoutProgress(
-            at=max((source.since, *(pr.updated_at for pr in source.requests("open")))))
 
 
 class PresentCheckout(ProgressCheckout):
@@ -567,16 +559,6 @@ class Moving(Stalling):
 
     def distance_readings(self) -> DistanceReadings:
         return self.readings
-
-
-@dataclass(frozen=True, kw_only=True)
-class MissingCheckoutProgress(Moving, FoundProgress):
-    precedence: ClassVar[int] = 2
-    state: ClassVar[str] = "ordered checkout is missing"
-
-    @classmethod
-    def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return source.checkout.missing(source)
 
 
 @dataclass(frozen=True)
