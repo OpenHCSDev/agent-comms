@@ -61,11 +61,12 @@ class RuntimeForkRequest(ForkSessionRequest):
     runtime: LaunchRuntime = field(metadata={"wire_exclude": True})
 
 
-class RuntimeForkHelper(ForkSessionHelper):
-    @classmethod
-    def runtime_for(cls, request) -> LaunchRuntime:
-        return request.runtime
+    @property
+    def launch_runtime(self) -> LaunchRuntime:
+        return self.runtime
 
+
+class RuntimeForkHelper(ForkSessionHelper):
     @classmethod
     def launch(cls, request, environment):
         return ((str(request.runtime.interpreter), "-I", "-c",

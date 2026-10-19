@@ -10,12 +10,18 @@ import stat
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
-from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import (
+    AbstractAsyncContextManager,
+    ExitStack,
+    asynccontextmanager,
+    contextmanager,
+    suppress,
+)
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -27,6 +33,7 @@ with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode 
 if TYPE_CHECKING:
     import sqlite3
 
+    from .child_process import Platform
     from .private_bus_checkpoint import (
         CheckpointNeedsRepair,
         PrefixWitness,
@@ -34,7 +41,6 @@ if TYPE_CHECKING:
     )
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
-    from .child_process import Platform
 
 
 class LockMode(ABC):
@@ -256,10 +262,8 @@ class StoreLockOwner(StoreOwner, declared_name=None):
         return _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
                            mode=mode, contention=contention, lock_type=self.lock_type)
 
-    def locked_async(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
-                     mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
-        return _async_store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
-                                 mode=mode, contention=contention, lock_type=self.lock_type)
+    def locked_async(self) -> AbstractAsyncContextManager[StoreLock]:
+        return _async_store_lock(self.path, lock_type=self.lock_type)
 
 
 def store_lock_path(store_path: Path) -> Path:
@@ -340,7 +344,7 @@ async def _async_store_lock(
     mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
     lock_type: type[StoreLock] = StoreLock,
-):
+) -> AsyncIterator[StoreLock]:
     """Borrow the same physical resource without blocking its owner event loop.
 
     Cancellation during acquisition closes only the unacquired descriptor. The

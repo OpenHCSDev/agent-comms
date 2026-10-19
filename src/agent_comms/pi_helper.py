@@ -44,6 +44,10 @@ class SessionHelperRequest:
     package: str
     file: str
 
+    @property
+    def launch_runtime(self) -> LaunchRuntime:
+        return LaunchRuntime.running()
+
 
 class PiHelper(DeclaredFamily, affix="Helper"):
     """A helper declares only its packaged program and input/output records.
@@ -74,10 +78,6 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         return cls.node_launch(Path(request.package), environment)
 
     @classmethod
-    def runtime_for(cls, request) -> LaunchRuntime:
-        return LaunchRuntime.running()
-
-    @classmethod
     def node_launch(cls, package: Path, environment: dict[str, str]):
         node = shutil.which("node")
         if node is None:
@@ -95,7 +95,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         return (*command, "--input-type=module", "--eval", cls.script.read_text()), environment
 
     @classmethod
-    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
+    async def run(cls, request: SessionHelperRequest, *, cwd: Path, env: dict[str, str] | None = None):
         command, environment = cls.launch(request, dict(os.environ if env is None else env))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
         outcome = await BoundedRun.run(
@@ -104,7 +104,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
             timeout=cls.timeout_for(request),
             cwd=cwd,
             env=environment,
-            runtime=cls.runtime_for(request),
+            runtime=request.launch_runtime,
         )
         if not outcome.outcome.successful:
             raise cls.failure(request, outcome)

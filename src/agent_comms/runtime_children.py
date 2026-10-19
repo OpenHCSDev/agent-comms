@@ -1,17 +1,25 @@
 """Children started by one runtime prefix; unrelated to bus observations."""
+
 from __future__ import annotations
 
 import os
 import time
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from .child_process import (ChildRegistration, ChildRetirementFailed, GroupLeader,
-                            IdentityMismatchError, RecordedRuntimeGroup, Platform, ProcessIdentity)
+from .child_process import (
+    ChildRegistration,
+    ChildRetirementFailed,
+    GroupLeader,
+    IdentityMismatchError,
+    Platform,
+    ProcessIdentity,
+    RecordedRuntimeGroup,
+)
 from .declared_family import DeclaredFamily
 from .field_codec import PathText
 from .launch_runtime import CallingThreadUnavailable, LaunchRuntime, ThreadLaunch
@@ -41,6 +49,7 @@ class ThreadChildInitiator(ChildInitiator):
 @dataclass(frozen=True)
 class ApplicationChildInitiator(ChildInitiator):
     """A non-thread application must not invent a thread identity."""
+
     process: ProcessIdentity
 
     def describe(self) -> str:
@@ -99,7 +108,9 @@ class RuntimeChildren(DeclaredFamily, affix="RuntimeChildren"):
         return replace(self, records=(*self.records, child))
 
     def finished(self, identity: ProcessIdentity) -> RuntimeChildren:
-        return replace(self, records=tuple(child for child in self.records if child.identity != identity))
+        return replace(
+            self, records=tuple(child for child in self.records if child.identity != identity)
+        )
 
 
 @dataclass(frozen=True)
@@ -127,13 +138,16 @@ class RuntimeChildReservation:
         return cls(store, children, ChildInitiator.capture())
 
     def record(self, identity: ProcessIdentity) -> None:
-        child = RuntimeChild(GroupLeader(identity.pid, identity.start_time), self.initiator, self.store.path.parent)
+        child = RuntimeChild(
+            GroupLeader(identity.pid, identity.start_time), self.initiator, self.store.path.parent
+        )
         self.store._publish_unlocked(self.children.add(child))
 
 
 @dataclass(frozen=True, slots=True)
 class RuntimeChildrenStore(RootFile, ChildRegistration, LockedStore[RuntimeChildren]):
     """One file at the selected prefix covers children from every bus root."""
+
     filename: ClassVar[str] = "runtime_children.json"
     record_type = RuntimeChildren
     json_indent = 2
@@ -143,14 +157,16 @@ class RuntimeChildrenStore(RootFile, ChildRegistration, LockedStore[RuntimeChild
 
     @classmethod
     @contextmanager
-    def launching(cls, runtime: LaunchRuntime):
+    def launching(cls, runtime: LaunchRuntime) -> Iterator[RuntimeChildReservation]:
         store = cls.at(runtime.prefix)
         with store.locked():
             yield RuntimeChildReservation.capture(store)
 
     @classmethod
     @asynccontextmanager
-    async def launching_async(cls, runtime: LaunchRuntime):
+    async def launching_async(
+        cls, runtime: LaunchRuntime
+    ) -> AsyncIterator[RuntimeChildReservation]:
         store = cls.at(runtime.prefix)
         async with store.locked_async():
             yield RuntimeChildReservation.capture(store)
