@@ -32,7 +32,6 @@ from .order import CommanderVerb, RuledVerb
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
 
 
-@dataclass(frozen=True)
 class Hunk(ReplacementEdit):
 
     def branches_added(self) -> int:
@@ -45,7 +44,6 @@ class Hunk(ReplacementEdit):
                 + ''.join(f'+ {line}\n' for line in self.new_text.splitlines()))
 
 
-@dataclass(frozen=True)
 class Edit(EditCall):
     """The Core result row, decoded at the commander's tool boundary."""
     hunks: tuple[Hunk, ...]
