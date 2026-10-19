@@ -310,7 +310,7 @@ class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
     def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
         for resource in self.claims:
             if resource in previous and previous[resource].live(registry):
-                raise ClaimConflict(previous[resource])
+                previous[resource].require_holder(self.owner, self.incarnation)
         return self.project(previous)
 
     def project(self, previous: ClaimProjection) -> ClaimProjection:
@@ -355,6 +355,10 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         self, scope: ClaimScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
     ) -> ClaimOwner:
         return self if self.claim_scope.reuses(scope) and self.live(registry) else publish()
+
+    def require_holder(self, owner: str, incarnation: str) -> None:
+        if (self.owner, self.incarnation) != (owner, incarnation):
+            raise ClaimConflict(self)
 
     def live(self, registry: RegistrySnapshot) -> bool:
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))

@@ -22,7 +22,7 @@ from .envelope_claim_transitions import (
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
-from .native_tool_transport import ToolTransport
+from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
 from .selected_claim import (
     publish_selected_resource_claim,
@@ -127,14 +127,14 @@ class CodingToolMode(NativeToolMode):
         thread = self.owner.comms.registry.require(self.owner.owner_name)
         return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
 
-    async def open_transport(self, turn, ownership) -> ToolTransport:
+    async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         return await CodingToolSocket.open(turn, ownership, self.owner)
 
 class CodingToolSocket(ToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
 
-    def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
-        super().__init__(directory, token)
+    def __init__(self, listener: ToolListener, owner: CodingToolOwner, *, pid: int) -> None:
+        super().__init__(listener, pid=pid)
         self.owner = owner
         self.completions = set()
 
@@ -148,7 +148,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         if (
             type(value) is not dict
             or set(value) != {"token", "call_id", "name", "arguments"}
-            or value["token"] != self.token
+            or value["token"] != self.listener.token
         ):
             raise SelectedToolDenied("Coding request is not authenticated")
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
@@ -167,12 +167,12 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 
-    async def _close(self):
-        await super()._close()
+    async def _drain_calls(self):
         if self.completions:
             await asyncio.gather(*tuple(self.completions))
         for call in self.calls.values():
             await asyncio.to_thread(call.progress.room.abandon)
 
-    def failure_response(self, error: Exception) -> dict[str, object]:
+    @staticmethod
+    def failure_response(error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}
