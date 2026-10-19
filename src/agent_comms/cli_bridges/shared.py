@@ -36,7 +36,7 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalPage, ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tools import (
-    BashTool, EditTool, GlobTool, GrepTool, ReadTool, ReplacementEdit, WriteTool)
+    BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool)
 from agent_comms.messages import Message, MessageKind, InfoKind
 from agent_comms.send_result import SendResult
 from agent_comms.message_reference import MessageReference
@@ -44,7 +44,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
-from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_declaration import ReplacementEdit, ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
