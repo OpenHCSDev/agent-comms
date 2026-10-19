@@ -314,7 +314,4 @@ class ToolTransport(Generic[Call]):
                 )
         finally:
             writer.close()
-            try:
-                await writer.wait_closed()
-            finally:
-                self._handlers.discard(task)
+            self._handlers.discard(task)
