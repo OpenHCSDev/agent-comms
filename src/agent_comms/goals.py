@@ -23,7 +23,7 @@ from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalAction, GoalActionContext
+    from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
     from .goal_presentation import ThreadGoalExecution
     from .goal_waits import GoalWait, GoalWaits
     from .agent_activity import AgentActivity
@@ -389,6 +389,14 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_model_block(self) -> None:
         pass
 
+    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
+        """Only a thread holding owner requests records a claude-ai directive."""
+        return goal
+
+    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
+                           now: float) -> tuple[RequestDirective, ...]:
+        return ()
+
     @abstractmethod
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
@@ -406,9 +414,27 @@ class UnorderedGoalOrder(GoalOrder):
 
 
 @dataclass(frozen=True)
+class RequestDirective:
+    """One claude-ai message to the commander that the request answers. It is acted on once an
+    order sent after it serves the request, or the request closes; until then it is due by its
+    deadline."""
+
+    window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
+    seq: int
+    deadline: float
+    served: int  # orders serving the request when the directive arrived
+
+    def overdue(self, served: int, now: float) -> bool:
+        return served == self.served and self.deadline < now
+
+
+@dataclass(frozen=True)
 class RequestGoalOrder(GoalOrder):
     """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open."""
+    request stays open until no order serving it is open. Each claude-ai directive the commander
+    receives is recorded on it when it arrives."""
+
+    directives: tuple[RequestDirective, ...] = ()
 
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
@@ -426,6 +452,19 @@ class RequestGoalOrder(GoalOrder):
 
     def serving(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> tuple[Todo, ...]:
         return tuple(todo for todo in goals.todos.for_request(owner, goal.id) if todo.pending)
+
+    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
+        """A closed request is replaced by one the directive opens; an open one records it."""
+        if goal.state.terminal:
+            return directive.request(goal, ctx)
+        served = len(ctx.goals.todos.for_request(ctx.thread.incarnation, goal.id))
+        return replace(goal, revision=goal.revision + 1, order=replace(
+            self, directives=(*self.directives, directive.directive(served))))
+
+    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
+                           now: float) -> tuple[RequestDirective, ...]:
+        served = len(goals.todos.for_request(owner, goal.id))
+        return tuple(directive for directive in self.directives if directive.overdue(served, now))
 
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation

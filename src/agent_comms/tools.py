@@ -1069,6 +1069,7 @@ class CommsSendTool(ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
         body = VerdictAudience(self.audience).addressed(self.target, self.body)
         result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 
 

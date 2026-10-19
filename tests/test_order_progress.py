@@ -263,7 +263,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', 'p3.png')))
     read = script.progress()
     assert script.install_lines(held, read, 1000.0) == ['INSTALL not planned; waiting: P1 worker, P2 worker']
-    PlannedInstallDeadline(RecordedEventTime(2000.0)).plan(comms.root)
+    PlannedInstallDeadline(RecordedEventTime(2000.0), 'worker').plan(comms.root)
     due = time.strftime('%H:%M', time.localtime(2000.0))
     assert script.install_lines(held, read, 1000.0) == [f'INSTALL due {due}; waiting: P1 worker, P2 worker']
     assert script.install_lines(held, read, 2001.0) == [

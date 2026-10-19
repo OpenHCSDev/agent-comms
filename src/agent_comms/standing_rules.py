@@ -17,6 +17,7 @@ from .rule_reviews import RuleReviews
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .goals import Goal, RequestDirective
     from .storage_rules import StorageRule
     from .todos import Todo
 
@@ -115,6 +116,35 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
 
     def began(self) -> float:
         return self.since
+
+
+@dataclass(frozen=True)
+class DirectiveUnacted(DatedStandingRule):
+    """A claude-ai directive recorded on an open request, past its deadline with no order since."""
+
+    goal: Goal
+    directive: RequestDirective
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        thread, now = comms.registry.require(commander), time.time()
+        return tuple(
+            cls(goal, directive)
+            for goal in thread.goal.active()
+            for directive in goal.order.overdue_directives(
+                goal, comms.goals, thread.incarnation, now
+            )
+        )
+
+    def began(self) -> float:
+        return self.directive.deadline
+
+    def line(self) -> str:
+        due = time.strftime("%H:%M", time.localtime(self.directive.deadline))
+        return (
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.goal.id},"
+            f" due {due} -> order its next step or mark the request done"
+        )
 
 
 @dataclass(frozen=True)

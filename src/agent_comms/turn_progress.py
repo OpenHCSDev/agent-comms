@@ -15,7 +15,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
-from .acp_failure import RequestFailure
+from .acp_failure import NativeTurnOutcome
 from .thread_identity import ClaimedIdentity
 from .comms import Comms
 from .coordinator import Coordination
@@ -121,7 +121,7 @@ class TurnProgress(events.AgentEventConsumer):
     def thread_name(self) -> str:
         return self.sessions.bindings[self.session_id]
 
-    async def report_failure(self, error: Exception) -> RequestFailure | None:
+    async def report_failure(self, error: Exception) -> NativeTurnOutcome:
         """Attempt existing ACP error publication once without hiding the original fault."""
         diagnostic = record_terminal_failure(
             self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
@@ -136,9 +136,9 @@ class TurnProgress(events.AgentEventConsumer):
         if self.result is not None:
             # A transport/cleanup fault cannot reconstruct an already resolved
             # native failure. Keep the reported failure and separate diagnostic.
-            return self.result.outcome.request_failure
+            return self.result.outcome
         await self.consume(events.Done(text=detail, ok=False))
-        return self.result.outcome.request_failure
+        return self.result.outcome
 
 
     @handles(events.SteeringInterrupted)
