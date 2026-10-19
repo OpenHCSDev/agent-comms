@@ -287,6 +287,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     record = {
         "type": "prompt",
         "message": "see",
+        "ownerTools": {"path": "/unused/test-tool-socket", "token": "test-token"},
         "images": [{"type": "image", "data": "YWJj", "mimeType": "image/png"}],
     }
     command = PiCommand.from_wire(record)
