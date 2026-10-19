@@ -553,7 +553,8 @@ class ServiceProcess:
     pid: int
 
     @classmethod
-    def listening(cls, port: int) -> ServiceProcess:
+    def listeners(cls, port: int) -> tuple[ServiceProcess, ...]:
+        """The process listening on ``port``; none when nothing listens there."""
         local = f"{bytes(reversed(socket.inet_aton(LOOPBACK))).hex().upper()}:{port:04X}"
         sockets = {
             f"socket:[{row[9]}]"
@@ -563,7 +564,13 @@ class ServiceProcess:
         for descriptor in Path("/proc").glob("[0-9]*/fd/*") if sockets else ():
             with suppress(OSError):
                 if os.readlink(descriptor) in sockets:
-                    return cls(int(descriptor.parts[2]))
+                    return (cls(int(descriptor.parts[2])),)
+        return ()
+
+    @classmethod
+    def listening(cls, port: int) -> ServiceProcess:
+        for process in cls.listeners(port):
+            return process
         raise ValueError(f"No process listens on {LOOPBACK}:{port}")
 
     @property

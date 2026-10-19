@@ -69,9 +69,10 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
 
     allow = CodingToolOwner.allow
 
-    async def observed_claim(owner, round_number, call):
-        await allow(owner, round_number, call)
+    async def observed_claim(owner, turn, round_number, call):
+        reservation = await allow(owner, turn, round_number, call)
         claims.append((round_number, call.call_id))
+        return reservation
 
     result = TrackedTurnSession.result
 
