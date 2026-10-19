@@ -25,6 +25,7 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
         return False
 
     terminal: ClassVar[bool] = False
+    preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
     failed: ClassVar[bool] = False
@@ -110,6 +111,7 @@ class TerminalAttempt(AttemptState):
     def disposition(self, snapshot, attempt): ...
 
     terminal = True
+    preserve_check = False
 
     @property
     def lease_expires_at_ms(self):
@@ -324,6 +326,8 @@ class AttemptFailedAttempt(RetryPredecessor, UnsuccessfulTerminal):
 
 
 class UnknownOutcomeAttempt(UnsuccessfulTerminal):
+    preserve_check = True
+
     @property
     def release_wording(self) -> str:
         return "Released files after a turn with unknown outcome; read them before editing"
