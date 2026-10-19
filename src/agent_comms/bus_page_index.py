@@ -286,11 +286,10 @@ class BusPageIndex(TypedStore):
 
     def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
         predicate, parameters = scope.index_predicate
-        sender_key = "CASE WHEN target LIKE '#%' THEN '' ELSE sender END"
         return LatestConversation.read(self.connection.execute(
-            f'SELECT target, {sender_key} AS sender, MAX(seq) AS seq '
+            f'SELECT target, sender, MAX(seq) AS seq '
             f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND ({predicate}) '
-            f'GROUP BY target, {sender_key}', (before_offset, *parameters),
+            f'GROUP BY target, sender', (before_offset, *parameters),
         ))
 
     def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,

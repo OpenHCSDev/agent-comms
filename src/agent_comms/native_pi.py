@@ -29,7 +29,6 @@ from .native_input_record import NativeInputCommit
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
-from .native_tools import NativeExecutableTool
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 
 if TYPE_CHECKING:
@@ -536,7 +535,7 @@ class NativePiRpcLaunch:
     ) -> NativePiRpcLaunch:
         """Prepare managed ACP/headless execution; native evidences remain separate."""
         try:
-            arguments = NativeArguments.parse(arguments).rpc()
+            arguments = NativeArguments.parse(arguments).managed_rpc(package.path)
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         runtime = LaunchRuntime.running()
@@ -562,8 +561,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
-        arguments = (*NativeExecutableTool.extension_arguments(package.path), *arguments,
-                     "--session-dir", str(session.directory))
+        arguments += ("--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))
@@ -583,7 +581,8 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         if saved != self.session.path:
             return None
-        return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
+        return self._managed(self.package,
+            NativeArguments.parse(arguments).managed_rpc(self.package.path),
             worktree, environment, self.session, self.runtime, root)
 
     @classmethod
