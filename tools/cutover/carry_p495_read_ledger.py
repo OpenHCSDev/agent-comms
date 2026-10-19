@@ -40,7 +40,7 @@ class PreviousReadDocument:
 
 
 class ReadLedgerConversations(Carry):
-    after = "carry_goal_wait_targets"
+    after = "carry_earlier_projects"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
