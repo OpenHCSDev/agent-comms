@@ -13,23 +13,23 @@ import math, os, sys, time
 from dataclasses import dataclass
 
 from ..comms import Comms
+from . import order
 from .config import CommanderConfig
 
+FORKS = f'{CommanderConfig.installed().state}/forks'
 PER_COMMANDER = 6
 BEAT_AGE = 10 * 60
 
 
 def live_forks() -> list[str]:
-    config = CommanderConfig.installed()
-    os.makedirs(config.forks, exist_ok=True)
-    return [n[:-5] for n in os.listdir(config.forks) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{config.forks}/{n}') < BEAT_AGE]
+    os.makedirs(FORKS, exist_ok=True)
+    return [n[:-5] for n in os.listdir(FORKS) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{FORKS}/{n}') < BEAT_AGE]
 
 
 def beat(name: str):
-    config = CommanderConfig.installed()
-    os.makedirs(config.forks, exist_ok=True)
-    with open(f'{config.forks}/{name}.beat', 'a'):
-        os.utime(f'{config.forks}/{name}.beat')
+    os.makedirs(FORKS, exist_ok=True)
+    with open(f'{FORKS}/{name}.beat', 'a'):
+        os.utime(f'{FORKS}/{name}.beat')
 
 
 @dataclass(frozen=True)
@@ -42,11 +42,11 @@ class Load:
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Load:
-        from . import judge
+        from ..tools import CommsUnjudgedTool
         actor, now = comms.registry.require(commander).incarnation, time.time()
         owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
         return cls(len(owed), sum(t.overdue(now) for t in owed),
-                   len(judge.Edit.unjudged(comms, commander)), tuple(live_forks()))
+                   CommsUnjudgedTool.count(comms, commander), tuple(live_forks()))
 
     @property
     def total(self) -> float:
@@ -72,6 +72,5 @@ class Load:
 
 
 def main(a):
-    config = CommanderConfig.installed()
-    load = Load.of(config.comms, config.commander)
+    load = Load.of(order.COMMS, order.ME)
     print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')

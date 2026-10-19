@@ -6,7 +6,6 @@ import subprocess
 import sys
 import time
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -24,7 +23,7 @@ from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
-    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, RecordHuntTodo, StrikeReason, Todo, UnreadProgress)
+    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, StrikeReason, Todo, UnreadProgress)
 from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
@@ -34,7 +33,10 @@ from test_commander_problem_orders import create, native_judge_edits
 @pytest.fixture
 def standing(commander, commander_script):
     """The commander-file members reloaded against the scratch commander config."""
-    module = importlib.import_module("agent_comms.commander.standing")
+    from agent_comms.commander import capacity, judge
+    for module in (judge, capacity):
+        importlib.reload(module)
+    module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
     state = CommanderConfig.installed().state
     return commander[0], state, module
 
@@ -108,7 +110,7 @@ def test_hunt_due_until_a_hunt_is_recorded(commander):
     hunt = CleanHunt(FileLine(__file__, 1), "This source reads the same rows on every event "
                      "without changing any owned fact.", RecordedEventTime(time.time()))
     actor = comms.registry.require("lead").incarnation
-    CommsTodoTool(id="P1", operation=RecordHuntTodo(todo.revision, actor, hunt)).apply(comms, caller)
+    comms.goals.todos.record_hunt(actor, hunt)
     assert lines(comms, HuntDue) == []
 
 
@@ -387,9 +389,8 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    CommanderConfig.installed().model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)}).write(Path.home())
-    CommanderConfig.installed.cache_clear()
+    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update={"repos": (
+        Repo(checkout=checkout, github="fleet/growth"),)}))
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "

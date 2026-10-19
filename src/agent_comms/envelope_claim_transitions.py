@@ -239,10 +239,10 @@ class ClaimTransition:
                           self.seq, self.message_id, self.claim_scope)
 
     def apply(self, previous: ClaimProjection) -> ClaimProjection:
-        """Apply atomically to the affected certified resources.
+        """Update claims for the affected resources together.
 
-        Unrelated resources do not affect legality. The checkpoint supplies only
-        the touched rows and the original claim high-water, not a replayed bus.
+        Check only the rows being changed and the last processed claim sequence.
+        Unrelated resources do not affect the update, and no bus replay is needed.
         """
         if self.seq <= previous.last_seq:
             raise ClaimTransitionError("Claim sequence must increase.")

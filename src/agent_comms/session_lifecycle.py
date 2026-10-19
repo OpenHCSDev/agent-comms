@@ -39,6 +39,7 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
+from .thread_identity import AcpThreadRole
 from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
@@ -153,6 +154,7 @@ class SessionLifecycle:
             model=self.agent_args.model,
             thinking_level=self.agent_args.thinking,
             auto_title_pending=True,
+            role=AcpThreadRole,
         )
         self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
         return self.acquire_declared_thread(thread)
@@ -303,17 +305,21 @@ class SessionLifecycle:
                 or self.display_titles.get(session_id) != thread.title
                 or self.worktrees.get(session_id) != thread.worktree
             ):
-                await self.runtime.session_update(
-                    session_id=session_id,
-                    update=SessionInfoUpdate(
-                        session_update="session_info_update",
-                        title=thread.title,
-                        field_meta=await self.metadata(name, session_id=session_id),
-                    ),
-                )
+                await self.publish_metadata(session_id, title=thread.title)
                 self.titles[session_id], self.display_titles[session_id] = name, thread.title
                 self.worktrees[session_id] = thread.worktree
             return name
+
+    async def publish_metadata(self, session_id: str, *, title: str | None = None) -> None:
+        """Publish the complete current session state through its existing transport."""
+        await self.runtime.session_update(
+            session_id=session_id,
+            update=SessionInfoUpdate(
+                session_update="session_info_update",
+                title=title,
+                field_meta=await self.metadata(self.require(session_id), session_id=session_id),
+            ),
+        )
 
     async def observe_native_configuration(
         self, session_id: str, thread_name: str, event: events.NativeMetadataObservation

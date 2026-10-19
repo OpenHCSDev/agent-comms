@@ -72,7 +72,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     @classmethod
     @abstractmethod
     def source_membership_sql(cls) -> str:
-        """Project original input membership from this stage's canonical relation."""
+        """Select the assignments included in this stage's input."""
 
     def source_assignment_ids(self, db, input_id) -> tuple[str, ...]:
         from .coordination_tables.assignments import WakeAssignment

@@ -1,4 +1,5 @@
 """Real selected native tools over an isolated retained source; localhost only."""
+from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 
 import asyncio
@@ -60,8 +61,7 @@ class ReadProvider(LoopbackProvider):
 
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel"])
-async def test_installed_retained_native_read_round_preserves_original_inputs(
-        tmp_path, monkeypatch, outcome, native_runtime_package):
+async def test_installed_retained_native_read_round_preserves_original_inputs(tmp_path, monkeypatch, outcome, native_runtime_package, *, cursor_delivery):
     source = Path(SOURCE).absolute()
     original = FileRevision.from_stat(source.stat())
     original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -152,8 +152,12 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(
     started = time.perf_counter()
     try:
         execution = SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta",
-            native_package=native_runtime_package, session_file=saved,
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            session_file=saved,
+            cursor_delivery=cursor_delivery,
         )
         task = asyncio.create_task(execution.run())
         if outcome == "complete":
@@ -170,8 +174,12 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(
             before = provider.posts
             try:
                 replay = await SelectedExecution(
-                    root=root, wire_root_id=root_id, owner_name="beta",
-                    native_package=native_runtime_package, session_file=saved,
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=native_runtime_package,
+                    session_file=saved,
+                    cursor_delivery=cursor_delivery,
                 ).run()
             except CoordinationError:
                 replay = None
@@ -184,7 +192,7 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(
         assert sizes_after_decode[0] > captured_sizes[0], "Fast native append during initial decoding must be exercised"
         assert saved.read_bytes().startswith(source.read_bytes())
         if outcome == "complete":
-            assert list(comms.views.full_history_page().messages)[-1].body == provider.text
+            assert read_history(comms)[-1].body == provider.text
         assert all(not child.alive() for child in children)
         assert all(reader.source.stream.closed and not reader.entries for reader in readers)
         acknowledgement = {

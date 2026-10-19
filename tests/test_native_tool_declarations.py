@@ -1,16 +1,15 @@
 """One tool declaration controls presentation without granting coding authority."""
 
 from dataclasses import dataclass
-from pathlib import Path
 import asyncio
 import json
 
 import acp
 import pytest
-from acp.schema import ToolCallStart
+from acp.schema import ToolCallStart, TextContentBlock
 
 import agent_comms.agent_events as events
-import agent_comms.backend as backend
+from agent_comms.turn_progress import TurnProgress
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import ReplacementEdit
@@ -43,15 +42,16 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     )
     with pytest.raises(ValueError):
         CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
-    examples = (ReadTool(path="file"), BashTool(command="pwd"),
-        EditTool(path="file", edits=(ReplacementEdit("before", "after"),)),
-        WriteTool(path="file", content="value"))
+    examples = (ReadTool(call_id="case", path="file"), BashTool(call_id="case", command="pwd"),
+        EditTool(call_id="case", path="file", edits=(ReplacementEdit("before", "after"),)),
+        WriteTool(call_id="case", path="file", content="value"))
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
-        event = events.ToolStart.from_call("case", tool.declared_name, call.tool.arguments)
+        assert type(call) is type(tool)
+        event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
         assert event.kind == tool.acp_kind and event.args == tool.arguments
-        assert call.tool == tool and tool.reads() in event.title
+        assert call.call_id == "case" and call.arguments == tool.arguments and tool.reads() in event.title
     unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
@@ -66,8 +66,8 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
 
     arguments = {"pattern": "shared preview"}
     event = events.ToolStart.from_call("pattern-case", name, arguments)
-    recorded = ToolStartTranscript(tool_call_id="pattern-case", tool_name=name, raw_input=arguments,
-                                   tool=ToolDeclaration.record(name, arguments))
+    recorded = ToolStartTranscript(position=0, tool_call_id="pattern-case", tool_name=name, raw_input=arguments,
+                                   tool=ToolDeclaration.record(name, arguments, call_id="pattern-case"))
     assert (event.title, event.kind) == (f"{label} shared preview", "search")
     assert (recorded.title, recorded.kind) == (event.title, event.kind)
     owner, received = acp_tools
@@ -87,13 +87,13 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     ("edit", "Edit", "edit"), ("write", "Write", "edit"),
 ])
 def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
-    from agent_comms.channel_coding_tools import CodingCall
+    from agent_comms.native_tool_call import CodingCall
     from agent_comms.native_tool_call import SelectedToolDenied
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     foreign = {"file_path": "external.txt"}
-    start = ToolStartTranscript(tool_call_id="saved", tool_name=name, raw_input=foreign)
-    end = ToolEndTranscript(tool_call_id="saved", tool_name=name, text="saved result")
+    start = ToolStartTranscript(position=0, tool_call_id="saved", tool_name=name, raw_input=foreign)
+    end = ToolEndTranscript(position=1, tool_call_id="saved", tool_name=name, text="saved result")
     assert (start.title, start.kind, start.raw_input) == (label, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
     assert events.ToolStart.from_call("saved", name, foreign).title == label
@@ -101,14 +101,15 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     for invalid in (17, None, [["path", "external.txt"]]):
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(ToolStartTranscript, {**FieldCodec.encode(start), "raw_input": invalid})
+    refused = CodingCall.decode("execution", name, foreign)
     with pytest.raises(SelectedToolDenied):
-        CodingCall.decode("execution", name, foreign)
+        refused.allowed_claim()
 
 
 def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
     from agent_comms.cli_bridges.opencode_parts import ToolPart
-    from agent_comms.cli_bridges.shared import ToolCall
+    from agent_comms.tool_calls import ToolCall
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_tools import FilePatchTool
     from agent_comms.transcript_events import TranscriptEvent
@@ -123,38 +124,60 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
         "messageID": "message", "callID": "open-code", "tool": "read",
         "state": {"status": "pending", "input": {"filePath": "open-code.txt"}}})
     call = part.state.call(part)
-    assert call.title == "Read open-code.txt" and call.tool == ReadTool(path="open-code.txt")
-    recorded, _ = call.finished("saved", True)
+    assert call.title == "Read open-code.txt" and call.tool == ReadTool(call_id="open-code", path="open-code.txt")
+    recorded, _ = call.finished("saved", True, 0)
     assert recorded.title == call.title and recorded.raw_input == {"path": "open-code.txt"}
     opaque = {"external": ["not", "Pi"]}
-    scalar, _ = ToolCall("opaque", "external_custom", opaque).finished("saved", True)
+    scalar, _ = ToolCall("opaque", "external_custom", opaque).finished("saved", True, 0)
     assert scalar.title == "external_custom" and scalar.raw_input == opaque
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
-    from agent_comms.channel_coding_tools import CodingCall
-    from agent_comms.native_tools import NativeExecutableTool
+    from agent_comms.native_tool_call import CodingCall
+    from agent_comms.native_tools import NativeToolDeclaration, NativeExecutableTool, NativeRequestTools
     from agent_comms.tools import CommsSendTool, ToolRequest
 
+    schemas = NativeRequestTools.catalog()
+    assert {schema["name"] for schema in schemas} == {
+        request.declared_name for request in ToolRequest.members_with(ToolRequest)
+    }
+    assert json.loads(json.dumps(schemas)) == schemas
     assert ToolRequest.__registry__ is CodingTool.__registry__ is ToolDeclaration.__registry__
     assert isinstance(ToolDeclaration.for_name("EXTERNAL_UNKNOWN"), UndeclaredTool)
     assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
     assert "undeclared" not in ToolDeclaration.names()
     assert all(isinstance(member.label, str) for member in ToolDeclaration.members_with(ToolDeclaration))
-    assert set(NativeExecutableTool.members_with(NativeExecutableTool)) == (
+    assert set(NativeToolDeclaration.members_with(NativeToolDeclaration)) == (
         set(CodingTool.members_with(CodingTool)) | set(ToolRequest.members_with(ToolRequest))
     )
     for request in ToolRequest.members_with(ToolRequest):
         arguments = {"from": "source", "to": "destination", "body": "decode-only"}
         call = CodingCall.decode("isolated-call", request.declared_name, arguments)
-        assert call.tool is request and call.arguments == arguments
-        assert call.tool.claim is None
+        assert isinstance(call, NativeExecutableTool) and call.declared_name == request.declared_name
+        assert call.call_id == "isolated-call" and call.arguments == arguments
+        assert call.allowed_claim() is None
+        assert call.digest() == f'{request.declared_name} {json.dumps(arguments)}'
     from agent_comms.field_codec import FieldCodec
 
     assert isinstance(FieldCodec.decode(ToolRequest, {"tool": "comms_send", "from": "source",
         "to": "destination", "body": "decode-only"}), CommsSendTool)
     with pytest.raises(ValueError):
         ToolRequest.member_named("read")
+
+
+def test_native_call_fields_are_not_model_arguments():
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_tool_call import CodingCall, SelectedToolDenied
+
+    arguments = {"path": "file.py", "content": "value"}
+    call = CodingCall.decode("owned-call", "write", arguments)
+    assert type(call) is WriteTool and call.call_id == "owned-call"
+    assert call.arguments == arguments
+    assert FieldCodec.encode(call) == {"tool": "write", **arguments}
+    assert set(FieldCodec.record_schema(WriteTool)["properties"]) == set(arguments)
+    refused = CodingCall.decode("owned-call", "write", {**arguments, "call_id": "foreign"})
+    with pytest.raises(SelectedToolDenied, match="call_id"):
+        refused.allowed_claim()
 
 
 async def test_actual_native_read_tool_reaches_official_acp_with_declared_presentation(
@@ -217,34 +240,22 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
             await writer.wait_closed()
 
     monkeypatch.setattr(native.provider, "handle", request_read)
-    async with asyncio.timeout(25):
-        records = [
-            event
-            async for event in backend.stream_agent_events(
-                "pi",
-                [
-                    "--provider",
-                    "response-local",
-                    "--model",
-                    "fixture",
-                    "--thinking",
-                    "off",
-                    "--offline",
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-prompt-templates",
-                    "--tools",
-                    "read",
-                ],
-                "Read owned.txt once and answer",
-                str(native.project),
-                root=Path(str(native.project)), session_file=str(native.session),
-                persistent_session=native.persistent,
-                native_start=native.started,
-            )
-        ]
-    assert records[-1].ok, records[-1]
+    records = []
+    consume = TurnProgress.consume
+
+    async def observed(progress, event):
+        records.append(event)
+        await consume(progress, event)
+
+    monkeypatch.setattr(TurnProgress, "consume", observed)
+    await native.author_history()
+    original_inputs = len(native.saved_inputs())
+    async with native.open_owner(runtime_enabled=True, native_options=()) as (agent, session):
+        async with asyncio.timeout(25):
+            await agent.prompt(session, [TextContentBlock(
+                type="text", text="Read owned.txt once and answer",
+            )])
+    assert any(isinstance(event, events.Done) and event.ok for event in records), records
     starts = [event for event in records if isinstance(event, events.ToolStart)]
     ends = [event for event in records if isinstance(event, events.ToolEnd)]
     assert len(starts) == len(ends) == 1
@@ -254,7 +265,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     expected_title = f"Read {source}"
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
-    assert len(native.starts) == len(native.saved_inputs()) == 1
+    assert len(native.saved_inputs()) == original_inputs + 1
     assert native.provider.posts == 2 and source.read_text() == "ACTUAL_READ_CONTENT\n"
 
     owner, received = acp_tools

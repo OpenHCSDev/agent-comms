@@ -25,8 +25,6 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "AGENT_COMMS_PROJECT_REQUEST",
     "AGENT_COMMS_PROJECT_SOCKET",
     "AGENT_COMMS_ROOT",
-    "AGENT_COMMS_SELECTED_TOOL_SOCKET",
-    "AGENT_COMMS_SELECTED_TOOL_TOKEN",
     "AGENT_COMMS_THREAD",
     "PI_PARENT_ID",
     "PI_SESSION_FILE",
@@ -34,7 +32,6 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_TASK",
     "PI_WORKTREE",
 })
-
 
 
 def reader(root: Path) -> Comms:
@@ -61,6 +58,21 @@ def pytest_addoption(parser):
 
     parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
                      help="Root of the native test environments stack/bin/pi-native-test-env builds")
+
+
+@pytest.fixture
+def source_reads():
+    from agent_comms.native_entries import NativeEvidenceScope
+
+    with NativeEvidenceScope() as scope:
+        yield scope
+
+
+@pytest.fixture
+def cursor_delivery(source_reads):
+    from agent_comms.cursor_publication import CursorDelivery
+
+    return CursorDelivery(source_reads=source_reads)
 
 
 @pytest.fixture(scope="session")
@@ -122,6 +134,12 @@ def declared_native_package(tmp_path, monkeypatch):
     package = deployment / "node_modules/@earendil-works/pi-coding-agent"
     (package / "dist").mkdir(parents=True)
     (package / "dist/cli.js").write_text("// This fixture never starts Node.\n")
+    from agent_comms.native_tools import NativeToolDeclaration
+
+    for tool in NativeToolDeclaration.members_with(NativeToolDeclaration):
+        extension = tool.native_extension(package)
+        extension.parent.mkdir(parents=True, exist_ok=True)
+        extension.write_text("// Construction-only native tool extension.\n")
     manifest = tmp_path / "pin"
     manifest.write_text(native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n")
     monkeypatch.setattr(native_package, "MANIFEST", manifest)
@@ -174,7 +192,7 @@ def delayed_launch(monkeypatch: pytest.MonkeyPatch):
 
     from agent_comms.child_process import Platform
 
-    with Platform.current().launch((sys.executable, "-c", "pass"), ()) as launch:
+    with Platform.current().launch((sys.executable, "-c", "pass"), (), LaunchRuntime.running()) as launch:
         launch_type = type(launch)
     original_verify = launch_type.verify_async
     original_release = launch_type.release
@@ -248,7 +266,7 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order: ())
 
     for created, name in enumerate(("lead", "worker"), 1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     return comms, ThreadCaller("lead")
@@ -257,6 +275,7 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture
 def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """The order script installed for lead on the commander bus, with a git checkout its orders check."""
+    import importlib
     import subprocess
     import sys
 
@@ -274,15 +293,18 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         disk=tmp_path).write(tmp_path)
     CommanderConfig.installed.cache_clear()
     from agent_comms.commander import order
-    yield order, repo
+    yield importlib.reload(order), repo
     CommanderConfig.installed.cache_clear()
 
 
 @pytest.fixture
 def tool_watch(commander_script):
     """The tool-call watcher reading the commander config commander_script installed."""
-    from agent_comms.commander import tool_watch
-    return tool_watch
+    import importlib
+
+    from agent_comms.commander import judge, tool_watch
+    importlib.reload(judge)
+    return importlib.reload(tool_watch)
 
 
 @pytest.fixture
@@ -390,7 +412,6 @@ def native_rpc_fixture(monkeypatch):
             SelectedSession.for_launch(
                 Path(worktree),
                 Path(session_file) if session_file is not None else None,
-                package,
             ),
             package,
             root=Path(root), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),

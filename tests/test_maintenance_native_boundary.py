@@ -22,7 +22,7 @@ from test_coordinated_runtime import _root
 
 
 @pytest.mark.asyncio
-async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path, tmp_path_factory, *, native_runtime_package) -> None:
+async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path, tmp_path_factory, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     received = tmp_path / "received.jsonl"
     child_pid = tmp_path / "child-pid"
@@ -70,7 +70,12 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path,
 
     with patch.object(native_pi.NativePiRpcLaunch, 'tracked', side_effect=launch), pytest.raises(RelationViolationError, match='Maintenance'):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert comms.owners.maintenance.read().phase == MaintenancePhase.member_named("paused")
     writes = [json.loads(line) for line in received.read_text().splitlines()]

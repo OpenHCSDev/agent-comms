@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
+
+from agent_comms.read_ledger import NoReadNotice, ReadNotice
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
@@ -23,16 +25,13 @@ from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
 @dataclass(frozen=True)
 class PersonUnread(ConversationPreparation):
-    """Which unread count a person shows: its own transcript while it runs natively, else the bus."""
+    """Native people keep their saved-reply count even while stopped; external people use the bus."""
 
     person: ThreadView
     snapshot: CoordinationSnapshot
 
     def native(self) -> UnreadPresentation:
-        name = self.person.thread.name
-        if self.person.status.active:
-            return UnreadPresentation.for_thread(self.snapshot, name)
-        return UnreadPresentation.for_bus(self.snapshot, name)
+        return UnreadPresentation.for_thread(self.snapshot, self.person.thread.name)
 
     def external(self) -> UnreadPresentation:
         return UnreadPresentation.for_bus(self.snapshot, self.person.thread.name)
@@ -104,8 +103,8 @@ class SidebarObservation(ABC):
     def channel_order(self) -> type[ChannelSort]:
         return NameChannelSort
 
-    def read_marker_notice(self) -> str:
-        return ""
+    def read_marker_notice(self) -> ReadNotice:
+        return NoReadNotice()
 
     def channel_unread(self, target: str) -> UnreadPresentation:
         return UnobservedUnread()
@@ -149,8 +148,8 @@ class ObservedSidebar(SidebarObservation):
     def channel_order(self) -> type[ChannelSort]:
         return self.snapshot.channel_order
 
-    def read_marker_notice(self) -> str:
-        return self.snapshot.read_marker_notice or ""
+    def read_marker_notice(self) -> ReadNotice:
+        return self.snapshot.read_marker_notice
 
     def channel_unread(self, target: str) -> UnreadPresentation:
         return UnreadPresentation.for_channel(self.snapshot, target)

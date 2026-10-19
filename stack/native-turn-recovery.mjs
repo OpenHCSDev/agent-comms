@@ -1,5 +1,6 @@
 /** Safe recovery belongs to the native run, not the caller or the input journal. */
 import { setTimeout as sleep } from 'node:timers/promises';
+import { OwnerToolConnection } from '../owner_tool_socket.mjs';
 
 class RecoveryBudget {
     static retries = 3;
@@ -122,6 +123,7 @@ class BackoffNothingProduced extends RefusedNothingProduced {
 /** Explicit absence of a native run; never a partially initialized active run. */
 export class InactiveNativeTurnRun {
     static shared = new InactiveNativeTurnRun();
+    get ownerTools() { return OwnerToolConnection.unavailable; }
     get tracked() { return false; }
     get retrying() { return false; }
     include() { return this; }
@@ -141,7 +143,7 @@ export class NativeTurnRun {
         // AgentSession supplies its existing classifier, including context-
         // overflow exclusion. Tracked and untracked runs share that authority.
         this.retryable = retryable;
-        this.inputs = new Set();
+        this.inputs = new Map();
         this.state = new NothingProduced(this);
     }
     finishRetry(success, finalError, attempt) {
@@ -150,11 +152,13 @@ export class NativeTurnRun {
         this.emit({ type: 'native_retry_end', success,
             attempt, ...(finalError ? { finalError } : {}) });
     }
+    get ownerTools() { return [...this.inputs.values()].at(-1)?.ownerTools ?? OwnerToolConnection.unavailable; }
     get tracked() { return this.inputs.size > 0; }
     get retrying() { return this.state.retrying; }
     include(messages, claims) {
         for (const message of messages) {
-            if (message.role === 'user' && claims.has(message.inputId)) this.inputs.add(message.inputId);
+            if (message.role === 'user' && claims.has(message.inputId))
+                this.inputs.set(message.inputId, claims.get(message.inputId));
         }
         return this;
     }
@@ -191,5 +195,5 @@ export class NativeTurnRun {
         return refusal.recover(message);
     }
     cancel() { this.state.cancel(); }
-    close() { this.state.close(); }
+    close() { this.state.close(); this.inputs.clear(); }
 }

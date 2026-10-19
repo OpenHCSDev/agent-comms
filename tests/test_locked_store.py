@@ -1,5 +1,4 @@
-"""Real canonical locks, durable WaitDocument bytes, and bounded process tests."""
-
+"""Canonical locks and durable bytes through a real declared document store."""
 from __future__ import annotations
 
 import json
@@ -11,59 +10,34 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.locked_store import LockedStore
-from agent_comms.store_files import ExclusiveLock, SharedLock, StoreLockOwner, _store_lock
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.pi_counts import PiCount
+from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
+from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
 
 
-@dataclass(frozen=True, slots=True)
-class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
-    """A JSON transaction exemplar, independent of the indexed wait store."""
-    @property
-    def record_type(self):
-        return dict[str, RecordedGoalWait]
-
-    def empty(self):
-        return {}
-
-    def record(self, wait):
-        self.update(lambda rows: {**rows, wait.goal_id: wait})
-
-    def clear(self, goal_id, *, wait_id=None):
-        removed = False
-
-        def change(rows):
-            nonlocal removed
-            current = rows.get(goal_id)
-            if current is None or (wait_id is not None and current.wait_id != wait_id):
-                return rows
-            removed = True
-            return {key: row for key, row in rows.items() if key != goal_id}
-
-        self.update(change)
-        return removed
+def observation(thread="goal"):
+    return AgentRuntimeInfo(thread=thread, timestamp=122.0, context_used=PiCount.from_wire(2))
 
 
+def record(store, value):
+    store.update(lambda document: RuntimeInfoDocument({**document.observations, value.thread: value}))
 
-StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order, WaitDocument)
 
+def clear(store, thread, *, timestamp=None):
+    removed = False
 
-def wait(goal_id="goal"):
-    return RecordedGoalWait(
-        goal_id,
-        "wait",
-        2,
-        7,
-        (GoalWaitTarget(RecordedThreadIncarnation("worker", 123.0)),),
-        RecordedThreadIncarnation("owner", 122.0),
-        (3,),
-        "turn",
-        4,
-    )
+    def change(document):
+        nonlocal removed
+        current = document.observations.get(thread)
+        if current is None or (timestamp is not None and current.timestamp != timestamp):
+            return document
+        removed = True
+        return RuntimeInfoDocument({key: row for key, row in document.observations.items() if key != thread})
+
+    store.update(change)
+    return removed
 
 
 def _hold_lock(path, mode, ready, release):
@@ -75,7 +49,7 @@ def _hold_lock(path, mode, ready, release):
 
 def _read(path, started, done):
     started.set()
-    WaitDocument(path).read()
+    RuntimeInfoStore(path).read()
     done.set()
 
 
@@ -83,21 +57,20 @@ def _record(path, start, prefix):
     if not start.wait(10):
         raise TimeoutError("writer was not started")
     for index in range(12):
-        WaitDocument(path).record(wait(f"{prefix}-{index}"))
+        record(RuntimeInfoStore(path), observation(f"{prefix}-{index}"))
 
 
 def _record_under_wire(path, ready):
     with _store_lock(path.parent / "wire"):
-        store = WaitDocument(path)
-        store.record(wait())
-        assert store.read() == {"goal": wait()}
-        assert store.clear("goal", wait_id="wait")
+        store = RuntimeInfoStore(path)
+        record(store, observation())
+        assert store.read().observations == {"goal": observation()}
+        assert clear(store, "goal", timestamp=122.0)
     ready.set()
 
 
 @contextmanager
 def process(target, *args):
-    # spawn does not inherit a parent's flock descriptor or pytest threads.
     child = multiprocessing.get_context("spawn").Process(target=target, args=args)
     child.start()
     try:
@@ -121,66 +94,65 @@ def event():
 
 def test_abstract_parent_and_real_adopter(tmp_path):
     @dataclass(frozen=True, slots=True)
-    class AbstractDocument(LockedStore[dict[str, RecordedGoalWait]]):
+    class AbstractDocument(LockedStore[RuntimeInfoDocument]):
         pass
 
     for owner in (LockedStore, AbstractDocument):
         with pytest.raises(TypeError, match="abstract"):
             owner(tmp_path / "document")
-    assert WaitDocument.read is LockedStore.read
-    assert WaitDocument.update is LockedStore.update
+    assert RuntimeInfoStore.read is LockedStore.read
+    assert RuntimeInfoStore.update is LockedStore.update
 
 
-def test_current_wait_persistence_and_noop(tmp_path):
-    store = WaitDocument(tmp_path / "goal_waits.json")
-    assert store.read() == {}
+def test_current_observation_persistence_and_noop(tmp_path):
+    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    assert store.read() == RuntimeInfoDocument()
     assert not store.path.exists()
-    assert not store.clear("absent")
+    assert not clear(store, "absent")
     assert not store.path.exists()
-    store.record(wait())
+    record(store, observation())
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
-    assert store.read() == {"goal": wait()}
+    assert store.read().observations == {"goal": observation()}
     before = store.path.stat()
-    assert not store.clear("goal", wait_id="stale")
+    assert not clear(store, "goal", timestamp=999.0)
     assert store.path.stat() == before
-    assert store.clear("goal", wait_id="wait")
-    assert store.read() == {}
+    assert clear(store, "goal", timestamp=122.0)
+    assert store.read() == RuntimeInfoDocument()
 
 
 def test_mode_preserved_and_new_inode_published(tmp_path):
-    store = WaitDocument(tmp_path / "goal_waits.json")
-    store.record(wait())
+    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    record(store, observation())
     store.path.chmod(0o640)
     inode = store.path.stat().st_ino
-    store.record(replace(wait(), revision=3))
+    record(store, replace(observation(), context_used=PiCount.from_wire(3)))
     assert store.path.stat().st_ino != inode
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
-    assert store.read()["goal"].revision == 3
+    assert store.read().observations["goal"].context_used == PiCount.from_wire(3)
     assert sorted(path.name for path in tmp_path.iterdir()) == [
-        ".goal_waits.json.lock",
-        "goal_waits.json",
+        ".runtime_info.json.lock", "runtime_info.json",
     ]
 
 
-def test_unknown_wait_fields_are_rejected_without_rewriting_saved_data(tmp_path):
-    store = WaitDocument(tmp_path / "goal_waits.json")
-    data = FieldCodec.encode({"goal": wait()})
+def test_unknown_observation_fields_are_rejected_without_rewriting_saved_data(tmp_path):
+    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    data = RuntimeInfoDocument({"goal": observation()}).to_wire()
     data["goal"]["future_field"] = {"not_authoritative_here": True}
     store.path.write_text(json.dumps(data))
     before = store.path.read_bytes()
     with pytest.raises(ValueError, match="Unknown fields"):
         store.read()
     with pytest.raises(ValueError, match="Unknown fields"):
-        store.record(wait())
+        record(store, observation())
     assert store.path.read_bytes() == before
 
 
 @pytest.mark.parametrize("existing", [False, True])
 @pytest.mark.parametrize("stage", ["file_sync", "replace", "directory_sync"])
 def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing, stage):
-    store = WaitDocument(tmp_path / "goal_waits.json")
+    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
     if existing:
-        store.record(wait())
+        record(store, observation())
         store.path.chmod(0o640)
     original_fsync = os.fsync
     original_replace = os.replace
@@ -204,7 +176,7 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
     monkeypatch.setattr(os, "fsync", fsync)
     monkeypatch.setattr(os, "replace", publish)
     with pytest.raises(OSError, match="injected"):
-        store.record(replace(wait(), revision=999))
+        record(store, replace(observation(), context_used=PiCount.from_wire(999)))
     if existing:
         assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
     else:
@@ -214,35 +186,40 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
 
 
 def test_callback_and_encoding_fail_before_publication(tmp_path):
-    store = WaitDocument(tmp_path / "goal_waits.json")
-    store.record(wait())
+    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    record(store, observation())
 
-    def fail(rows):
+    def fail(document):
         raise RuntimeError("change failed")
 
     with pytest.raises(RuntimeError, match="change failed"):
         store.update(fail)
     with pytest.raises(ValueError, match="Expected <class 'float'>, received float"):
-        store.record(replace(wait(), owner=RecordedThreadIncarnation("owner", float("nan"))))
-    # The failed callback/encoder released the lock.
-    store.record(replace(wait(), revision=3))
+        replace(observation(), timestamp=float("nan"))
+    original = store.path.read_bytes()
+    invalid = observation()
+    object.__setattr__(invalid, "timestamp", float("nan"))
+    with pytest.raises(TypeError, match="Expected <class 'float'>, received float"):
+        record(store, invalid)
+    assert store.path.read_bytes() == original
+    record(store, replace(observation(), context_used=PiCount.from_wire(3)))
 
 
 def test_invalid_boundary_is_not_overwritten(tmp_path):
-    store = WaitDocument(tmp_path / "goal_waits.json")
-    data = FieldCodec.encode({"goal": wait()})
-    data["goal"]["revision"] = True
+    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    data = RuntimeInfoDocument({"goal": observation()}).to_wire()
+    data["goal"]["context_used"] = True
     text = json.dumps(data)
     store.path.write_text(text)
     with pytest.raises(ValueError, match="Expected"):
-        store.record(wait())
+        record(store, observation())
     assert store.path.read_text() == text
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
 def test_shared_readers_overlap_and_exclude_writer(tmp_path):
-    path = tmp_path / "goal_waits.json"
-    WaitDocument(path).record(wait())
+    path = tmp_path / "runtime_info.json"
+    record(RuntimeInfoStore(path), observation())
     ready1, ready2, release = event(), event(), event()
     with (
         process(_hold_lock, path, SharedLock(), ready1, release),
@@ -261,7 +238,7 @@ def test_shared_readers_overlap_and_exclude_writer(tmp_path):
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
 def test_exclusive_writer_blocks_snapshot_and_other_writer(tmp_path):
-    path = tmp_path / "goal_waits.json"
+    path = tmp_path / "runtime_info.json"
     ready, release, started, done = event(), event(), event(), event()
     with process(_hold_lock, path, ExclusiveLock(), ready, release):
         try:
@@ -278,15 +255,15 @@ def test_exclusive_writer_blocks_snapshot_and_other_writer(tmp_path):
 
 
 def test_concurrent_writers_keep_all_rows(tmp_path):
-    path, start = tmp_path / "goal_waits.json", event()
+    path, start = tmp_path / "runtime_info.json", event()
     with process(_record, path, start, "first"), process(_record, path, start, "second"):
         start.set()
-    assert set(WaitDocument(path).read()) == {
+    assert set(RuntimeInfoStore(path).read().observations) == {
         f"{prefix}-{index}" for prefix in ("first", "second") for index in range(12)
     }
 
 
-def test_wire_nesting_does_not_reacquire_goal_lock(tmp_path):
+def test_wire_nesting_does_not_reacquire_document_lock(tmp_path):
     done = event()
-    with process(_record_under_wire, tmp_path / "goal_waits.json", done):
+    with process(_record_under_wire, tmp_path / "runtime_info.json", done):
         assert done.wait(5)

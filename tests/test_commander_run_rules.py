@@ -4,7 +4,6 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.change_report import FileLine
-from agent_comms.commander.config import CommanderConfig
 from agent_comms.field_codec import FieldCodec
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ApplicationOrderRun, GoalRef, MechanicalOrderRun, Todo, TodoStore
@@ -52,8 +51,8 @@ def test_send_refuses_missing_run_but_mechanical_orders_are_exempt(commander_scr
     body.write_text(f'Problem: P1\nOwner: {__file__}:1\nCheck: {repo} :: printf 0 -> 1\n'
                     '1. Repair the counter value.\nBanned: no second store\nReport: the count\n')
     kwargs = dict(clean=True, new=('P1', 'The real thread list disappears after opening saved history'))
-    with pytest.raises(SystemExit, match='Works when:'):
-        script.send('worker', '23:59', str(body), 'request', **kwargs)
+    with pytest.raises(ValueError, match='Works when:'):
+        script.send('worker', '23:59', body.read_text(), **kwargs)
     assert script.todos() == ()
-    script.send('worker', '23:59', str(body), 'request', mechanical=True, **kwargs)
-    assert isinstance(CommanderConfig.installed().comms.goals.todos.get('P1').order.run, MechanicalOrderRun)
+    script.send('worker', '23:59', body.read_text(), mechanical=True, **kwargs)
+    assert isinstance(script.COMMS.goals.todos.get('P1').order.run, MechanicalOrderRun)

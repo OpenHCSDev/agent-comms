@@ -1,5 +1,6 @@
 """Selected execution and ACP followups share one live input lifetime."""
 
+from bus_history import read_history
 from agent_comms.messages import NoticeRole
 import asyncio
 from contextlib import asynccontextmanager, nullcontext
@@ -92,7 +93,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
             with pytest.raises(NativePiTerminalFailure, match="Scripted provider failure") as failed:
                 await asyncio.wait_for(wake, 12)
             assert isinstance(failed.value.failure, ModelRequestFailed)
-            notice = list(comms.views.full_history_page().messages)[-1]
+            notice = read_history(comms)[-1]
             assert isinstance(notice.role, NoticeRole) and notice.type is AlertKind
             assert notice.target == "sender" and "No automatic retry" in notice.body
             assert "Scripted provider failure" in drain_diagnostic(comms, "beta").reason
@@ -106,7 +107,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert "beta" not in agent.turns.turn_tasks
         assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == before_goal
-        # The completed selected reply consumes its certified dependency wait;
+        # The completed selected reply consumes its checked dependency wait;
         # a queued owner input keeps its claim_scope/goal authority across that change.
         from agent_comms.goal_waits import NoGoalWait
 

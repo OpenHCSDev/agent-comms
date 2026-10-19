@@ -27,11 +27,11 @@ if TYPE_CHECKING:
 class PreparedSession(UnwrittenPrompt):
     acknowledged = False
 
-    def permits_retention(self, session: backend.TurnSession) -> bool:
+    def permits_retention(self, session: backend.NativeSession) -> bool:
         return session.output.clean
 
     async def deliver_to(
-        self, inputs: FollowingInputs, session: backend.TurnSession,
+        self, inputs: FollowingInputs, session: backend.NativeSession,
     ) -> bool:
         session.native.forget_context()
         state = session.native.attestation.state
@@ -51,7 +51,7 @@ class PreparedSession(UnwrittenPrompt):
         return True
 
 
-class NativeSessionPreparation(backend.TurnSession):
+class NativeSessionPreparation(backend.NativeSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
     prompt_type = PreparedSession
 
@@ -98,7 +98,8 @@ class NativeSessionPreparation(backend.TurnSession):
             package=package, root=root,
             environment=environment, session_file=session_file,
         ))
-        preparation = cls(launch, "", persistent_session=persistent, startup=NativeStartup.for_launch(launch))
+        preparation = cls(launch, persistent_session=persistent,
+                          startup=NativeStartup.for_launch(launch))
         async with session_writer_fence(launch.session.session_file):
             try:
                 async with aclosing(preparation.run()) as stream:

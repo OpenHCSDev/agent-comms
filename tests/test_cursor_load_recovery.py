@@ -1,8 +1,10 @@
 """A contended trusted load must not suppress its later real cursor recovery."""
 
+from bus_history import read_history
 import asyncio
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -38,6 +40,29 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
     assert seen == [owned, owned]
     publication.close()
     assert not publication.deliveries and not owned.readers
+
+
+async def test_selected_settlement_uses_the_publication_reader_and_lock(tmp_path, monkeypatch):
+    publication = CursorPublication(Comms(tmp_path / "wire"), object())
+    delivery = publication.delivery("reader")
+    seen = []
+
+    async def advance(_bus, *, source_reads, **_identity):
+        seen.append(source_reads)
+        return None
+
+    monkeypatch.setattr("agent_comms.cursor_publication.NativeSourceCursor.advance_async", advance)
+    participant = SimpleNamespace(
+        bus=object(), root_id="root", identity=SimpleNamespace(generation=1),
+        owner=SimpleNamespace(thread=object(), claimed_generation=1),
+    )
+    async with delivery.observation_lock:
+        pending = asyncio.create_task(delivery.advance(participant, "input"))
+        await asyncio.sleep(0)
+        assert not seen
+    assert await pending is None
+    assert seen == [publication.delivery("reader").source_reads]
+    publication.close()
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
@@ -126,7 +151,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         for _ in range(20):
             await agent.inputs.drain_inbox(owner.name)
         assert agent.cursors.delivery(owner.name).revision == settled_revision
-        assert list(comms.views.full_history_page().messages) == []  # No input submitted or replayed.
+        assert read_history(comms) == []  # No input submitted or replayed.
     finally:
         drains = [state.drain_task for state in agent.inputs.drained.values() if state.drain_task]
         for task in drains:

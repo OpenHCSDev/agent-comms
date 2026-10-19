@@ -5,6 +5,11 @@ from contextlib import asynccontextmanager
 from agent_comms.acp import CommsAgent
 
 
+class FakeClient:
+    async def session_update(self, **kwargs):
+        pass
+
+
 def native_model(*, decision="FULL", fail_on=None):
     """Use the shared model boundary with the production selected-session owner."""
     from test_coordinated_runtime import _fake_model
@@ -39,10 +44,12 @@ def canonical_agent(comms, **options):
         metadata = comms.bus.log.read_metadata_unlocked()
     if not metadata.private:
         comms.messaging.initialize_private_initial_protocol()
-    return CommsAgent(
+    agent = CommsAgent(
         comms,
         **options,
     )
+    agent.on_connect(FakeClient())
+    return agent
 
 
 async def reply_turn_finished(owner, session):

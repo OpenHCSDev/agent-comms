@@ -127,11 +127,13 @@ class Excursion(TurnPhase, declared_name=None):
 
 
 class PromptAcceptancePhase(TurnPhase):
+    activity_state = ActivityState.STARTING
     stall_reason = "prompt_acceptance_timeout"
     label = "Waiting for input start"
 
 
 class PreparingPhase(TurnPhase):
+    activity_state = ActivityState.STARTING
     label = "Preparing input"
 
 

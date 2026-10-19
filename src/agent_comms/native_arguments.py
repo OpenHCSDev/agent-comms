@@ -97,6 +97,29 @@ class ExtensionArgument(NamedOption, ValueArgument):
     short = "-e"
 
 
+class ModelProvider(DeclaredFamily, affix="Provider"):
+    """Provider declarations own command permission; unknown names are refused."""
+
+    may_command: ClassVar[bool]
+
+
+class NoSelectedModel(ModelProvider, declared_name=None):
+    """External commanders without a native model remain valid commanders."""
+    may_command = True
+
+
+class AnthropicProvider(ModelProvider, declared_name="anthropic"):
+    may_command = True
+
+
+class OpenAIProvider(ModelProvider, declared_name="openai"):
+    may_command = True
+
+
+class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
+    may_command = False
+
+
 @dataclass(frozen=True)
 class SelectedModel:
     provider: str
@@ -116,6 +139,10 @@ class SelectedModel:
             raise IdentityConflict("Selected owner has no configured provider/model")
         provider, model = selection.split("/", 1)
         return cls(provider, model)
+
+    @property
+    def provider_type(self) -> type[ModelProvider]:
+        return ModelProvider.member_named(self.provider)
 
     @property
     def qualified(self) -> str:
@@ -288,6 +315,11 @@ class NativeArguments:
                 or ExtensionArgument(str(extension)) in self.entries)
 
     @property
+    def provider_type(self) -> type[ModelProvider]:
+        provider = self.value(ProviderArgument)
+        return NoSelectedModel if provider is None else ModelProvider.member_named(provider)
+
+    @property
     def model(self) -> str | None:
         selected = self.value(ModelArgument)
         provider = self.value(ProviderArgument)
@@ -306,7 +338,7 @@ class NativeArguments:
         )
 
     def with_model(self, selected: str | None) -> NativeArguments:
-        if selected is None or "/" not in selected:
+        if selected is None:
             return self
         return self.replace(ProviderArgument).replace(
             ModelArgument, *SelectedModel.decode(selected).arguments
@@ -316,10 +348,10 @@ class NativeArguments:
         return self.replace(ThinkingArgument, *selected.native_arguments(ThinkingArgument))
 
     def managed_rpc(self, package: Path) -> tuple[str, ...]:
-        """Managed sessions load the protocol extensions; ephemeral RPC does not."""
-        from .native_tools import NativeExecutableTool
+        """Managed sessions load only the packaged extensions, never discovered copies of them."""
+        from .native_tools import NativeToolDeclaration
 
-        return (*NativeExecutableTool.extension_arguments(package), *self.rpc())
+        return ("--no-extensions", *NativeToolDeclaration.extension_arguments(package), *self.rpc())
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:

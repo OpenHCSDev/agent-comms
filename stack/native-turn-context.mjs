@@ -1,5 +1,6 @@
 /** Observe SDK Context values; never edit, load, queue, or replay model input. */
 import { createHash } from 'node:crypto';
+import { OwnerToolConnection } from '../owner_tool_socket.mjs';
 import { estimateTokens } from './compaction/compaction.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
 
@@ -71,10 +72,17 @@ class InputContribution {
 
 /** The existing one-use input claim also owns its read-only source coordinates. */
 export class NativeInputClaim {
-    constructor(digest, contributions) { this.digest=digest; this.contributions=contributions; }
-    static capture(digest, request, contributions=[]) {
+    constructor(digest, contributions, ownerTools) {
+        this.digest=digest; this.contributions=contributions; this.ownerTools=ownerTools;
+    }
+    static capture(digest, request, contributions=[], ownerTools) {
         const bytes=Buffer.from(request.text);
-        return new this(digest,contributions.map(source=>InputContribution.capture(source,request,bytes)));
+        return new this(digest,contributions.map(source=>InputContribution.capture(source,request,bytes)),
+            OwnerToolConnection.capture(ownerTools));
+    }
+    requireOwnerTools(value) {
+        if (!this.ownerTools.same(OwnerToolConnection.capture(value)))
+            throw new TypeError('Native input tool connection changed');
     }
     observe(message, native, journal) {
         const blocks=typeof message.content==='string'

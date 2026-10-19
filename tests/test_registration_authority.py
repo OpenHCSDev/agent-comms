@@ -19,10 +19,12 @@ def registered(root):
     return comms.registry
 
 
-def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path):
+@pytest.mark.parametrize('capture_idle', [False, True])
+def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, capture_idle):
     registry = registered(tmp_path)
+    initial, claim_scope = registry.live_owner_with_claim('owner')
     leased, _ = registry.lease_local_turn('owner', 'first')
-    captured, claim_scope = registry.live_owner_with_claim('owner')
+    captured = initial if capture_idle else leased
     generation = registry.snapshot().owner_generations['owner']
     assert registry.release_turn(leased.turn_lease)[0]
     registry.register(replace(registry.require('owner'), title='metadata', tags=frozenset({'new'})))
@@ -38,7 +40,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path):
     )
     assert current_claim == claim_scope
     assert claimed.title == 'metadata'
-    assert claimed.active_turn.id == 'second'
+    assert claimed.turn_record.read().id == 'second'
     assert registry.release_turn(claimed.turn_lease)[0]
 
 
@@ -70,9 +72,8 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     registry = registered(tmp_path)
     leased, _ = registry.lease_local_turn('owner', 'turn')
     with registry.store.editing() as edit:
-        edit.document.threads['owner'] = replace(
-            leased, active_turn=replace(leased.active_turn, claimed_generation=99),
-        )
+        record = edit.document.threads['owner'].turn_record
+        record._publish_unlocked(replace(record.read(), claimed_generation=99))
         edit.commit()
     with pytest.raises(RelationViolationError, match='turn claim_scope'):
         registry.live_owner_with_claim('owner')

@@ -13,8 +13,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from cutover import carry
-from cutover.carry import Carried
+from . import carry
+from .carry import Carried
 
 from agent_comms.goals import OrderCheck
 from agent_comms.todos import Todo, TodoStore
@@ -36,7 +36,6 @@ def revision_free(command: str) -> str:
 class CheckRevisions(carry.TodoRows):
     """Each open order's check line drops the checkout that chose its revision."""
 
-    after = "carry_problem_goal_prose"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

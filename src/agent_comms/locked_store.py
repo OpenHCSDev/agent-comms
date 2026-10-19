@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -27,10 +28,8 @@ class JsonDocument(ABC, Generic[T]):
     json_sort_keys: ClassVar[bool] = False
     json_suffix: ClassVar[str] = ""
 
-    @property
-    @abstractmethod
-    def record_type(self) -> type[T]:
-        """The declaration decoded by FieldCodec, including container types."""
+    record_type: ClassVar[type]
+    """The declaration decoded by FieldCodec, including container types."""
 
     @abstractmethod
     def empty(self) -> T:
@@ -166,11 +165,49 @@ class RuntimeFile(RootFile):
         return frozenset(declared)
 
 
+class DocumentConversion(ABC):
+    """A store's declared converter names the old schemas it can actually read."""
+
+    source_fingerprints: ClassVar[frozenset[str]] = frozenset()
+
+    @classmethod
+    @abstractmethod
+    def converted(cls, raw: dict) -> dict:
+        """Convert a supported old document before the current codec validates it."""
+        raise NotImplementedError
+
+
 @dataclass(frozen=True, slots=True)
 class LockedStore(StoreLockOwner, JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
+    conversion: ClassVar[type[DocumentConversion]] = DocumentConversion
+
+    @staticmethod
+    def _canonical_schema(value):
+        """Schema sets have no order; tuple positions and default arrays do."""
+        if isinstance(value, dict):
+            result = {}
+            for key, child in value.items():
+                if key in ("properties", "$defs", "patternProperties", "dependentSchemas"):
+                    child = {name: LockedStore._canonical_schema(schema) for name, schema in child.items()}
+                elif key not in ("default", "examples", "const", "enum"):
+                    child = LockedStore._canonical_schema(child)
+                if key in ("required", "enum", "anyOf", "oneOf", "allOf") and isinstance(child, list):
+                    child = sorted(child, key=lambda item: json.dumps(item, sort_keys=True))
+                result[key] = child
+            return result
+        if isinstance(value, list):
+            return [LockedStore._canonical_schema(child) for child in value]
+        return value
+
+    @classmethod
+    def format_fingerprint(cls) -> str:
+        """The stored declaration, never a manually maintained version number."""
+        schema = LockedStore._canonical_schema(FieldCodec.value_schema(cls.record_type))
+        encoded = json.dumps(schema, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        return hashlib.sha256(encoded.encode()).hexdigest()
 
     @contextmanager
     def reading(self, *sources, blocking: bool = True) -> Iterator[T]:

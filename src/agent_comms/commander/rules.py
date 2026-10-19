@@ -6,21 +6,27 @@ directories (the packaged rules first, then the project's own memory), and paper
 review and answer (CommsRuleReviewTool); its RulesDue member refuses every commander action in order and prints
 RULES DUE in rotate until the last review is answered and fresh.
 
-  agent-comms-commander rules review [--as FORK]                 print the rules, draw three
-  agent-comms-commander rules answer N "<10+ words>" [--as FORK]  answer drawn rule N with what this tick does about it
+  agent-comms-commander rules review [--fork FORK]                 print the rules, draw three
+  agent-comms-commander rules answer N "<10+ words>" [--fork FORK]  answer drawn rule N with what this tick does about it
 
 Every fork reviews for itself (forks must know correct maintenance, not carry dogma): a fork's
 actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
 """
 import glob, os, random, re, sys
+from dataclasses import dataclass
+
+from ..cli_commands import option
 
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
+from .order import COMMS, CommanderVerb
 
-
+CONFIG = CommanderConfig.installed()
+ME = CONFIG.commander
+SKILL = str(CONFIG.skill)
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
 # Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
@@ -34,9 +40,8 @@ def principles() -> list[str]:
 
 
 def rules() -> list[str]:
-    config = CommanderConfig.installed()
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(config.skill).read(), re.M)]
-    for path in [path for directory in config.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
+    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(SKILL).read(), re.M)]
+    for path in [path for directory in CONFIG.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
         text = open(path).read()
         if re.search(r'^\s*type: feedback', text, re.M):
             desc = re.search(r'^description: (.+)$', text, re.M)
@@ -45,13 +50,11 @@ def rules() -> list[str]:
 
 
 def record(who: str, entry: RuleReviewEntry) -> None:
-    read: StandingRulesRead = ThreadCaller(who).invoke(
-        CommsRuleReviewTool(entry=entry), CommanderConfig.installed().comms)
+    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), COMMS)
     print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
-def review(who: str):
-    config = CommanderConfig.installed()
+def review(who: str = ME):
     every = rules()
     for i, r in enumerate(every, 1):
         print(f'{i:3}. {r}')
@@ -59,34 +62,51 @@ def review(who: str):
     print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:
         print(f'  - {r}')
-    drawn = random.sample(paper, DRAWN) if who != config.commander else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    drawn = random.sample(paper, DRAWN) if who != ME else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
     pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
-    record(who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != config.commander else 2))
+    record(who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != ME else 2))
     print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
         print(f'  {n}. {r}')
 
 
-def answer(n: int, text: str, who: str):
+def answer(n: int, text: str, who: str = ME):
     record(who, AnsweredRuleReviewEntry(n, text))
 
 
+class RulesVerb(CommanderVerb):
+    """Rules use the shared acting-commander declaration and gate."""
+
+
+class ReviewVerb(RulesVerb):
+    help = "print the standing rules and draw the required review"
+
+    def run(self) -> None:
+        review(self.who)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AnswerVerb(RulesVerb):
+    help = "answer a drawn rule for the acting commander"
+    n: int = option("n", help="the drawn rule number")
+    text: str = option("text", help="how this tick obeys or breaks that rule")
+
+    def run(self) -> None:
+        answer(self.n, self.text, self.who)
+
+
+class StaleVerb(RulesVerb):
+    help = "show whether the acting commander's rule review is due"
+
+    def run(self) -> None:
+        print('\n'.join(due.why for due in RulesDue.violations(COMMS, self.who)) or 'fresh')
+
+
 def main(a):
-    config = CommanderConfig.installed()
-    who = config.commander
-    if '--as' in a:
-        i = a.index('--as'); who = a[i + 1]; del a[i:i + 2]
     try:
-        if a == ['review']:
-            review(who)
-        elif a[:1] == ['answer'] and len(a) == 3 and a[1].isdigit():
-            answer(int(a[1]), a[2], who)
-        elif a == ['stale']:
-            print('\n'.join(due.why for due in RulesDue.violations(config.comms, who)) or 'fresh')
-        else:
-            sys.exit(__doc__)
+        RulesVerb.parse(a, __doc__).apply()
     except ValueError as refused:  # Core owns what a review and an answer may say
         sys.exit(f'REFUSED: {refused}')

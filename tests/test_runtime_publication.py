@@ -30,14 +30,27 @@ def test_cli_failure_leaves_links_untouched(tmp_path, monkeypatch, command):
     route = LocalRoute(tmp_path / "bus")
 
     with pytest.raises(RuntimeError, match="Runtime CLI refused publication"):
-        publication.publish(route.root, ())
+        publication.require_cli(route.root)
 
     assert link.readlink() == Path("previous-command")
     assert current.readlink() == Path("previous-runtime")
     assert (link.lstat(), current.lstat()) == before
 
 
-def test_publication_ends_retired_runtime_processes_and_keeps_the_new_runtimes(
+def test_pending_carries_refuse_before_cli_or_maintenance(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    current = StoppedOwnerInstallation.current_pointer()
+    current.parent.mkdir(parents=True)
+    current.symlink_to(Path(sys.executable).parent.resolve().parent)
+    root = tmp_path / "private-bus"
+    publication = RuntimePublication(tmp_path / "uninstalled", {})
+    with pytest.raises(RuntimeError, match="tools/upgrade_bus.py"):
+        publication.publish(root, checkout=Path(__file__).resolve().parents[1])
+    assert not (root / "registry.json").exists()
+    assert not (root / "runtime-publication.json").exists()
+
+
+def test_pointer_publication_does_not_kill_unselected_runtime_processes(
         tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     runtimes = {name: tmp_path / name for name in ("previous-runtime", "runtime")}
@@ -50,12 +63,11 @@ def test_publication_ends_retired_runtime_processes_and_keeps_the_new_runtimes(
     retired, kept = (subprocess.Popen([runtime / "bin/python", "-c", "import time; time.sleep(60)"])
                      for runtime in runtimes.values())
     try:
-        ended = RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links(())
-        assert [process.identity.pid for process in ended] == [retired.pid]
-        assert retired.wait(timeout=10) == -signal.SIGTERM
+        RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links()
+        assert retired.poll() is None
         assert kept.poll() is None and current.readlink() == runtimes["runtime"].resolve()
         with pytest.raises(ValueError, match="would retire the runtime it publishes"):
-            RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links(())
+            RuntimePublication(runtimes["runtime"].resolve(), {}).publish_links()
     finally:
         for child in (retired, kept):
             child.kill()

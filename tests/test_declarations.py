@@ -1,4 +1,5 @@
 
+from bus_history import read_history
 import json
 import os
 import subprocess
@@ -67,7 +68,7 @@ class TestAgentRuntimeInfo:
         store = RuntimeInfoStore(tmp_path / "runtime.json")
         store.observe("a", 1.0, AgentInfo(model="provider/model", context_size=PiCount.from_wire(100)))
         store.observe("a", 1.0, ContextUsageObservation(context_used=PiCount.from_wire(25)))
-        assert store.read()["a"] == info
+        assert store.read().observations["a"] == info
 
     def test_unknown_context_stays_unknown(self):
         assert AgentRuntimeInfo(thread="a", context_size=PiCount.from_wire(100), timestamp=1.0).context_reading() == UnmeasuredContext()
@@ -603,7 +604,7 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     assert [row.seq for row in messages] == [1, 2, 3]
     assert len({row.message_id for row in messages}) == 3
     reopened = Comms(tmp_path)
-    assert list(reopened.views.full_history_page().messages) == messages
+    assert read_history(reopened) == messages
     reopened.registry.rename("a", "renamed")
     monkeypatch.setattr(reopened.bus.log, "full_history_snapshot", lambda: pytest.fail("full scan"))
     newest = reopened.views.history_page(CommandTarget.named("b"), PageBounds(limit=1), viewer="renamed")
@@ -625,7 +626,7 @@ class TestSharedLedger:
     def test_merge_and_read(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
         ledger.merge({"a": 1}, author="x")
-        assert ledger.read()["a"] == 1
+        assert ledger.read().entries["a"] == 1
 
     def test_rejects_non_string_keys(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
@@ -635,12 +636,12 @@ class TestSharedLedger:
     def test_persistence_roundtrip(self, tmp_path: Path):
         path = tmp_path / "ledger.json"
         SharedLedger(path).merge({"k": "v"}, author="x")
-        assert SharedLedger(path).read()["k"] == "v"
+        assert SharedLedger(path).read().entries["k"] == "v"
 
     def test_records_author(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
         ledger.merge({}, author="me")
-        assert ledger.read()["last_updated_by"] == "me"
+        assert ledger.read().entries["last_updated_by"] == "me"
 
 
 class TestCurrentThread:

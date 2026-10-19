@@ -1,5 +1,6 @@
 """IRC model: channels, DMs, presence, history views."""
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.channel_targets import CommandTarget
 import pytest
 
@@ -9,6 +10,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from bus_history import read_history
 
 
 @pytest.fixture
@@ -105,17 +107,17 @@ class TestHistory:
         chat.messaging.send("PR111", "#ci", "one").message.message_id
         chat.messaging.send("fixer", "#ci", "two").message.message_id
         chat.messaging.send("PR111", "#all", "three").message.message_id
-        assert [m.body for m in list(chat.views.channel_history_page("#ci").messages)] == ["one", "two"]
+        assert [m.body for m in read_history(chat, "#ci")] == ["one", "two"]
 
     def test_global_channel_history(self, chat):
         chat.messaging.send("PR111", "#all", "hello").message.message_id
-        assert [m.body for m in list(chat.views.channel_history_page("#all").messages)] == ["hello"]
+        assert [m.body for m in read_history(chat, "#all")] == ["hello"]
         with pytest.raises(ValueError, match="not a channel"):
-            list(chat.views.channel_history_page("broadcast").messages)
+            read_history(chat, "broadcast")
 
     def test_channel_history_rejects_dm_target(self, chat):
         with pytest.raises(ValueError, match="not a channel"):
-            list(chat.views.channel_history_page("fixer").messages)
+            read_history(chat, "fixer")
 
 
 class TestChannelsDerived:
@@ -156,7 +158,7 @@ class TestPresence:
         assert Registration(path).last_seen("a") == seen
 
     def test_who_shape(self, chat):
-        rows = {row["name"]: row for row in chat.views.who()}
+        rows = {row.thread.name: row.to_wire() for row in chat.views.who()}
         assert rows["PR111"]["status"] == "running"
         assert rows["PR111"]["tags"] == ["ci"]
         assert rows["PR111"]["last_seen"] > 0

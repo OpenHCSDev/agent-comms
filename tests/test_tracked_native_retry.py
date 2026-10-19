@@ -11,12 +11,23 @@ from agent_comms.turn_goal_permission import InactiveGoalPermission
 from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure, NativePiUnavailable
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_failure import ModelRequestFailed, RetryableProviderFailure
+from agent_comms.turn_usage import UsageAccount
+from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
+
+
+def tracked_turn(output, terminal):
+    turn = object.__new__(TrackedTurnSession)
+    turn.output, turn.terminal = output, terminal
+    turn.usage, turn.explicit_interrupt = UsageAccount(), False
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    turn.watchdog.launching(lambda: 0.0, None)
+    turn.watchdog.tick()
+    return turn
 
 
 async def test_recovered_native_request_replaces_prior_refusal_terminal():
-    turn = object.__new__(TrackedTurnSession)
-    turn.output = TurnOutput(failure=ModelRequestFailed("provider refusal"))
-    turn.terminal = PendingTrackedTerminal()
+    turn = tracked_turn(TurnOutput(failure=ModelRequestFailed("provider refusal")),
+                        PendingTrackedTerminal())
 
     event = NativeRetryEnd.from_wire({
         "type": "native_retry_end", "success": True, "attempt": 1
@@ -25,7 +36,7 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
     assert event.to_wire() == {
         "type": "native_retry_end", "success": True, "attempt": 1
     }
-    await turn.native_retry_finished(event)
+    await turn.apply_native_event(event)
 
     assert turn.output.failure is None
     assert turn.output.retry_result is None
@@ -34,9 +45,7 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
 
 @pytest.mark.parametrize("previous", [None, ModelRequestFailed("prior refusal")])
 async def test_exhausted_native_request_records_required_final_error(previous):
-    turn = object.__new__(TrackedTurnSession)
-    turn.output = TurnOutput(failure=previous)
-    turn.terminal = PendingTrackedTerminal()
+    turn = tracked_turn(TurnOutput(failure=previous), PendingTrackedTerminal())
     event = NativeRetryEnd.from_wire({
         "type": "native_retry_end",
         "success": False,
@@ -51,16 +60,17 @@ async def test_exhausted_native_request_records_required_final_error(previous):
         "attempt": 3,
         "finalError": "final refusal",
     }
-    await turn.native_retry_finished(event)
+    await turn.apply_native_event(event)
 
     assert turn.output.declared_failure == ModelRequestFailed("final refusal")
     with pytest.raises(NativePiTerminalFailure, match="final refusal") as caught:
         turn.output.raise_if_failed(None, SelectedModel("configured", "model"))
     assert not isinstance(caught.value.failure, RetryableProviderFailure)
-    PiMessage.from_wire({
+    message = PiMessage.from_wire({
         "role": "assistant", "content": [], "stopReason": "error",
         "errorMessage": "final refusal",
-    }).tracked_end(turn)
+    })
+    [event async for event in message.stop_reason.apply(turn, message)]
     assert turn.output.declared_failure == ModelRequestFailed("final refusal")
 
 
@@ -119,11 +129,10 @@ def test_midtool_delivered_message_does_not_erase_pending_selected_answer():
 
 
 async def test_successful_provider_recovery_does_not_discard_retained_requested_answer():
-    turn = object.__new__(TrackedTurnSession)
-    turn.output = TurnOutput(failure=ModelRequestFailed("503 overloaded"))
-    turn.terminal = following(DeliveredFollowingInput).continue_response(
-        CompletedTrackedTerminal("Requested answer"), ["Requested answer"])
-    await turn.native_retry_finished(NativeRetryEnd.from_wire({
+    turn = tracked_turn(TurnOutput(failure=ModelRequestFailed("503 overloaded")),
+                        following(DeliveredFollowingInput).continue_response(
+                            CompletedTrackedTerminal("Requested answer"), ["Requested answer"]))
+    await turn.apply_native_event(NativeRetryEnd.from_wire({
         "type": "native_retry_end", "success": True, "attempt": 1,
     }))
     assert turn.output.failure is None

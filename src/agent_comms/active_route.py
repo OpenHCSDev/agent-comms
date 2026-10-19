@@ -13,13 +13,14 @@ import stat
 import sys
 import time
 import uuid
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
@@ -30,6 +31,11 @@ class CommsRoute(ABC):
     """A resolved selection, not a service or permission to mutate its root."""
 
     root: Path
+
+    @classmethod
+    def current(cls, path: Path | None = None) -> CommsRoute:
+        """The published route, independent of any client root override."""
+        return read_active_route(path) or LocalRoute.default()
 
     def observe_root(self) -> Path:
         return self.root.resolve()
@@ -46,8 +52,7 @@ class CommsRoute(ABC):
         Independent private roots do not participate in default publication.
         Refuse a publication in progress rather than park a half-open client.
         """
-        published = read_active_route()
-        current_root = published.root if published else Path.home() / ".agent-comms"
+        current_root = CommsRoute.current().root
         if self.root.resolve() == current_root.resolve():
             with guard_default_route_write(self.root, blocking=False):
                 yield
@@ -59,6 +64,10 @@ class CommsRoute(ABC):
 @dataclass(frozen=True, slots=True)
 class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
+
+    @classmethod
+    def default(cls) -> LocalRoute:
+        return cls(Path.home() / ".agent-comms")
 
 
 
@@ -138,7 +147,7 @@ def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRou
         return LocalRoute(Path(root).expanduser().absolute())
     if "AGENT_COMMS_ROOT" in os.environ:
         return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute())
-    return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
+    return CommsRoute.current()
 
 
 class RoutePublicationUnknownError(RelationViolationError):
@@ -148,7 +157,7 @@ class RoutePublicationUnknownError(RelationViolationError):
 @contextmanager
 def guard_original_root_write(root: Path) -> Iterator[None]:
     """Fence a cooperating write through the historical root after migration."""
-    original_root = Path.home() / ".agent-comms"
+    original_root = LocalRoute.default().root
     if root.expanduser().resolve() == original_root.resolve():
         with guard_default_route_write(original_root):
             yield
@@ -228,7 +237,7 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
             raise ValueError("active comms route directory changed or is not owned")
         if stat.S_IMODE(info.st_mode) != 0o700:
             os.fchmod(directory, 0o700)
-        route = read_active_route(path) or LocalRoute(Path.home() / ".agent-comms")
+        route = CommsRoute.current(path)
         # Local roots may be created under this guard. ActiveRoute owns the
         # stronger observation of an already published root and its identity.
         if expected_root.expanduser().resolve() != route.observe_root():
@@ -238,12 +247,45 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
         os.close(directory)
 
 
-@dataclass(frozen=True, slots=True)
-class RouteLockHolder:
+class RouteLockHolder(DeclaredFamily, affix="LockHolder"):
     """An observed Linux flock owner; diagnosis, not authority to signal it."""
 
+    @abstractmethod
+    def describe(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class IdentifiedLockHolder(RouteLockHolder):
     pid: int
+
+    def describe(self) -> str:
+        return f"PID {self.pid}: {self.detail()}"
+
+    @abstractmethod
+    def detail(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RunningLockHolder(IdentifiedLockHolder):
     command: str
+
+    def detail(self) -> str:
+        return self.command
+
+
+class ExitedLockHolder(IdentifiedLockHolder):
+    def detail(self) -> str:
+        return "process exited"
+
+
+class EmptyCommandLockHolder(IdentifiedLockHolder):
+    def detail(self) -> str:
+        return "empty command"
+
+
+class UnidentifiedLockHolder(RouteLockHolder):
+    def describe(self) -> str:
+        return "kernel did not identify the owner"
 
 
 def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
@@ -260,18 +302,16 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
             fields = line.split()
             if len(fields) < 8 or fields[1] != 'FLOCK' or fields[5] != identity:
                 continue
-            try:
-                pid = int(fields[4])
-            except ValueError:
-                continue
+            pid = int(fields[4])
             if pid < 0:
-                holders.append(RouteLockHolder(pid, '<kernel did not identify owner>'))
+                holders.append(UnidentifiedLockHolder())
                 continue
             try:
                 command = Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0', b' ').decode('utf-8', 'replace').strip()
-            except OSError:
-                command = '<process exited or inaccessible>'
-            holders.append(RouteLockHolder(pid, command or '<empty command>'))
+            except FileNotFoundError:
+                holders.append(ExitedLockHolder(pid))
+            else:
+                holders.append(RunningLockHolder(pid, command) if command else EmptyCommandLockHolder(pid))
     return tuple(holders)
 
 
@@ -280,11 +320,8 @@ def acquire_exclusive_route_lock(directory: int) -> None:
     try:
         fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        try:
-            holders = route_lock_holders(directory)
-            detail = '; '.join(f'PID {holder.pid}: {holder.command}' for holder in holders)
-        except OSError as diagnosis:
-            detail = f'holder inspection failed: {diagnosis}'
+        holders = route_lock_holders(directory)
+        detail = '; '.join(holder.describe() for holder in holders)
         print(
             f'Waiting for default-route readers: '
             f'{detail or "unknown (lock changed during inspection)"}',
@@ -313,7 +350,7 @@ def replace_unreadable_active_route(route: ActiveRoute, path: Path | None = None
     with _route_directory(route, path) as (path, directory):
         try:
             current = read_active_route(path)
-        except (ValueError, OSError):
+        except MalformedRecord:
             backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
             _publish_active_route_locked(route, path, directory, backup=backup)
             return backup
@@ -413,5 +450,4 @@ def _publish_active_route_locked(
                 ) from error
     finally:
         if temporary is not None:
-            with suppress(OSError):
-                os.unlink(temporary, dir_fd=directory)
+            os.unlink(temporary, dir_fd=directory)

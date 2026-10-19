@@ -9,11 +9,27 @@ from math import isfinite
 from typing import TYPE_CHECKING, TypeVar
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, FieldRepresentation
 
 if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
 Event = TypeVar("Event", bound="TranscriptEvent")
+
+
+class GeneratedTimestamp(FieldRepresentation):
+    """Read a generated SQL timestamp as its recorded or unrecorded fact."""
+
+    accepts_null = True
+
+    @classmethod
+    def decode(cls, value: object) -> EventTime:
+        timestamp = FieldCodec.decode(float | None, value)
+        return UnrecordedEventTime() if timestamp is None else RecordedEventTime(timestamp)
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        raise TypeError("A generated timestamp is read from its event, never written")
 
 
 @dataclass(frozen=True)
@@ -42,6 +58,15 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def capture(cls, timestamp: float) -> EventTime:
         """Capture a recorded Unix-seconds fact, never the read time."""
         return RecordedEventTime(timestamp)
+
+    def since(self, timestamp: float) -> bool:
+        return False
+
+    def before(self, timestamp: float) -> bool:
+        return False
+
+    def clock(self) -> str:
+        return "-"
 
     def require_recorded(self, label: str) -> None:
         raise ValueError(f"{label} requires a recorded time.")
@@ -86,6 +111,15 @@ class RecordedEventTime(EventTime):
 
     def require_recorded(self, label: str) -> None:
         pass
+
+    def since(self, timestamp: float) -> bool:
+        return self.at >= timestamp
+
+    def before(self, timestamp: float) -> bool:
+        return self.at < timestamp
+
+    def clock(self) -> str:
+        return time.strftime("%H:%M:%S", time.localtime(self.at))
 
     def recorded_at(self, label: str) -> float:
         return self.at

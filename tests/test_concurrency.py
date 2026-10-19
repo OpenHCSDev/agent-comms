@@ -20,6 +20,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
+from bus_history import read_history
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -131,7 +132,7 @@ class TestConcurrentWire:
             [(str(root), sender, 40) for sender in senders],
         )
 
-        messages = list(wire(root).views.full_history_page(PageBounds(limit=len(senders) * 40)).messages)
+        messages = read_history(wire(root), bounds=PageBounds(limit=len(senders) * 40))
         assert len(messages) == len(senders) * 40
         assert [message.seq for message in messages] == list(range(1, len(messages) + 1))
         assert len({message.body for message in messages}) == len(messages)
@@ -153,10 +154,10 @@ class TestConcurrentWire:
             [(str(root), name) for name in names],
         )
         comms = wire(root)
-        assert set(comms.agents.runtime_info.read()) == set(names)
+        assert set(comms.agents.runtime_info.read().observations) == set(names)
         snapshot = comms.registry.snapshot()
         assert set(comms.agents.all_activity(snapshot.threads.values(), snapshot=snapshot)) == set(names)
-        assert {name: comms.ledger.read()[name] for name in names} == {
+        assert {name: comms.ledger.read().entries[name] for name in names} == {
             name: "ready" for name in names
         }
 

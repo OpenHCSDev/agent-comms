@@ -203,7 +203,7 @@ class CalibrationReport(CliResult):
         return tuple(ProbabilityFrequency(answer, probability, reviewed, observed)
             for (answer, probability), (reviewed, observed) in counts.items())
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return self.public_report()
 
     def public_report(self) -> dict[str, object]:

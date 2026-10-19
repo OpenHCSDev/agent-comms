@@ -7,7 +7,8 @@ machine with ``agent-comms-connector approve REQUEST``, and tokens are kept only
 under ``~/.local/state/agent-comms/connector/``.
 
 Usage:
-  agent-comms-connector serve [--root ROOT] [--issuer URL]
+  agent-comms-connector serve [--root ROOT] [--port PORT] [--issuer URL]
+  agent-comms-connector round_trip ROOT RUNTIME [--port PORT]
   agent-comms-connector pending
   agent-comms-connector approve REQUEST
   agent-comms-connector revoke
@@ -22,9 +23,12 @@ import hashlib
 import html
 import json
 import secrets
+import sys
 import time
+import urllib.request
 from abc import abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
@@ -36,19 +40,19 @@ from pydantic import JsonValue
 from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
-from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
-    AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode, RegisteredClient, digest,
+    CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode,
+    RegisteredClient, digest,
 )
 from .messages import Message
 from .standing_rules import RulesDue
 from .todos import DirectiveText
 from .tool_caller import ThreadCaller
-from .tools import ReadTool, ToolRequest
+from .tools import CommsChannelsTool, ReadTool, ToolRequest
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -78,7 +82,6 @@ CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
-CODE_SECONDS = 300
 
 
 def declared(record: type, values: Mapping[str, object]) -> dict[str, object]:
@@ -179,6 +182,12 @@ class ToolCall:
     arguments: dict[str, object] = field(default_factory=dict)
     meta: dict[str, object] = field(default_factory=dict, metadata={"wire_name": "_meta"})
 
+    @classmethod
+    def of(cls, tool: type[ToolRequest]) -> ToolCall:
+        """A call of a tool the connector exposes, by the name it exposes it under."""
+        (name,) = (name for name, exposed in Connector.exposed().items() if exposed is tool)
+        return cls(name)
+
 
 @dataclass(frozen=True, kw_only=True)
 class McpMessage(DeclaredFamily, affix="Message"):
@@ -268,24 +277,56 @@ class ToolsListMessage(McpRequest, declared_name="tools/list"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolsCallMessage(McpRequest, declared_name="tools/call"):
+class ToolsCallMessage(McpMessage, declared_name="tools/call"):
+    id: int | str
     params: ToolCall
 
-    async def result(self, connector: Connector) -> dict[str, JsonValue]:
+    async def answer(self, connector: Connector) -> web.Response:
+        return web.json_response(
+            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector), Path(sys.executable)))
+        )
+
+    async def result(self, connector: Connector) -> ToolsCallResult:
         tool = Connector.exposed().get(self.params.name)
         if tool is None:
-            return connector.refused(
+            return ToolsCallResult.refused(
                 ValueError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except (ValueError, OSError, CoordinationError) as error:
-            return connector.refused(error)
-        return {
-            "content": [{"type": "text", "text": json.dumps(reply)}],
-            "structuredContent": reply,
-            "isError": False,
-        }
+        except UnregisteredThreadError as error:
+            return ToolsCallResult.refused(error)
+        return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+
+
+@dataclass(frozen=True)
+class TextContent:
+    text: str
+    type: Literal["text"] = "text"
+
+
+@dataclass(frozen=True)
+class ToolsCallResult:
+    """A tool's encoded reply, or the refusal standing in its place."""
+
+    content: tuple[TextContent, ...]
+    is_error: bool = field(metadata={"wire_name": "isError"})
+    structured_content: dict[str, JsonValue] = field(
+        default_factory=dict,
+        metadata={"wire_name": "structuredContent", "wire_omit_default": True},
+    )
+
+    @classmethod
+    def refused(cls, error: BaseException) -> ToolsCallResult:
+        return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
+
+
+@dataclass(frozen=True)
+class ToolsCallReply:
+    id: int | str
+    result: ToolsCallResult
+    interpreter: Annotated[Path, PathText]
+    jsonrpc: Literal["2.0"] = "2.0"
 
 
 @dataclass(frozen=True)
@@ -304,23 +345,22 @@ class Connector:
     def exposed() -> dict[str, type[ToolRequest]]:
         return {tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)}
 
+    @contextmanager
+    def opened_wire(self) -> Iterator[Comms]:
+        """The connector's caller must exist at startup and at each later call."""
+        with client_wire(self.root) as comms:
+            comms.registry.require(CALLER.name)
+            yield comms
+
     def invoke(
         self, tool: type[ToolRequest], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
-        with client_wire(self.root) as comms:
+        with self.opened_wire() as comms:
             return tool.invoke(comms, arguments, caller=CALLER)
 
-    def refused(self, error: BaseException) -> dict[str, JsonValue]:
-        return {
-            "content": [
-                {"type": "text", "text": CoreError.from_exception(error).model_dump_json()}
-            ],
-            "isError": True,
-        }
-
     def application(self) -> web.Application:
-        with client_wire(self.root) as comms:
-            comms.registry.require(CALLER.name)
+        with self.opened_wire():
+            pass
         app = web.Application()
         app.add_routes(
             [
@@ -363,7 +403,7 @@ class Connector:
             registration = FieldCodec.decode(
                 ClientRegistration, declared(ClientRegistration, await request.json())
             )
-        except (MalformedRecord, ValueError) as error:
+        except (MalformedRecord, json.JSONDecodeError) as error:
             return OAuthError("invalid_redirect_uri", str(error)).response()
         client_id = secrets.token_urlsafe(16)
         self.store.update(
@@ -432,7 +472,7 @@ class Connector:
     async def token(self, request: web.Request) -> web.Response:
         try:
             grant = TokenGrant.received(await request.post())
-        except (MalformedRecord, ValueError) as error:
+        except MalformedRecord as error:
             return OAuthError("invalid_request", str(error)).response()
         exchanged: list[dict[str, JsonValue]] = []
 
@@ -457,7 +497,7 @@ class Connector:
             )
         try:
             message = McpMessage.received(await request.json())
-        except (MalformedRecord, ValueError) as error:
+        except (MalformedRecord, json.JSONDecodeError) as error:
             return web.json_response(
                 {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": str(error)}}
             )
@@ -491,6 +531,7 @@ class ServeVerb(ConnectorVerb):
     root: Annotated[Path, PathText] | None = option(
         "--root", default=None, help="Comms root (default: the active route)"
     )
+    port: int = option("--port", default=PORT, help="The loopback port it listens on")
     issuer: str = option(
         "--issuer",
         default=f"http://{LOOPBACK}:{PORT}",
@@ -503,34 +544,41 @@ class ServeVerb(ConnectorVerb):
             app = connector.application()
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
-        web.run_app(app, host=LOOPBACK, port=PORT, access_log=None)
+        web.run_app(app, host=LOOPBACK, port=self.port, access_log=None)
         return 0
 
 
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
-    """What an upgrade proves last: claude.ai's message to the owner, sent through the
-    connector's tool calls, reads back through them; the owner sees it unread."""
+    """Explicit qualification for a configured connector: its service runs the selected
+    runtime and its loopback read agrees with this bus. Native-only installs do not need it."""
 
-    help = "Send a message through the connector's tool calls and read it back"
+    help = "Read the bus through the running connector service and compare"
     root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
+    runtime: Annotated[Path, PathText] = option("runtime", help="The Python the service runs")
+    port: int = option("--port", default=PORT, help="The service's loopback port")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        connector = Connector(ctx, f"http://{LOOPBACK}:{PORT}", self.root)
-        body = f"Upgrade round trip {secrets.token_hex(8)}: the connector reads the upgraded bus"
-        calls = (
-            ToolCall("comms_send", {"from": CALLER.name, "to": "user", "body": body}),
-            ToolCall("comms_inbox", {"thread": "user", "target": CALLER.name, "ack": False}),
-        )
-        replies = [
-            asyncio.run(ToolsCallMessage(jsonrpc="2.0", id=call, params=params).result(connector))
-            for call, params in enumerate(calls)
-        ]
-        if refused := [reply for reply in replies if reply.get("isError")]:
-            return f"The connector round trip was refused: {json.dumps(refused[0])}"
-        if body not in json.dumps(replies[-1].get("structuredContent")):
-            return f"The connector sent {body!r} but did not read it back"
-        print(json.dumps({"round_trip": body}))
+        read = ToolCall.of(CommsChannelsTool)
+        call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
+        with ctx.granted("upgrade round trip") as token:
+            request = urllib.request.Request(
+                f"http://{LOOPBACK}:{self.port}/mcp",
+                data=json.dumps(FieldCodec.encode(call)).encode(),
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(request, timeout=60) as response:
+                response = FieldCodec.decode(ToolsCallReply, json.load(response))
+        running = response.interpreter
+        reply = response.result
+        if running != self.runtime:
+            return f"The connector service runs {running}, not the installed {self.runtime}"
+        if reply.is_error:
+            return f"The connector round trip was refused: {reply.content[0].text}"
+        with client_wire(self.root) as comms:
+            if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
+                return f"The service on port {self.port} reads another bus than {self.root}"
+        print(json.dumps({"round_trip": f"{call.params.name} read alike through {running}"}))
         return 0
 
 
@@ -563,10 +611,7 @@ class ApproveVerb(ConnectorVerb):
                 grants, requests=grants.requests | {self.request: replace(held, approved=True)}
             )
 
-        try:
-            ctx.update(approved)
-        except KeyError:
-            return f"No authorization {self.request!r} is waiting."
+        ctx.update(approved)
         return 0
 
 

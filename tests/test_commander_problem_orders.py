@@ -21,11 +21,10 @@ from cutover.carry import CarryChain
 from agent_comms.change_report import FileLine
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import BoundedRun
-from agent_comms.commander.config import CommanderConfig
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
+from agent_comms.goal_actions import BlockedGoalAction, CompletedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.progress_claims import WorkingClaim
@@ -38,7 +37,7 @@ from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
+    AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
 from agent_comms.turn_context import GoalSegment
 
@@ -133,7 +132,7 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
     assert rows[0].deadline == RecordedEventTime(3000)
 
 
-def test_strike_time_and_clean_ordered_hunts_belong_to_problem(commander):
+def test_strike_time_and_clean_ordered_hunts_keep_their_owners(commander):
     comms, caller = commander
     todo = create(commander, 'P1')
     actor = comms.registry.require('lead').incarnation
@@ -145,18 +144,18 @@ def test_strike_time_and_clean_ordered_hunts_belong_to_problem(commander):
     why = 'This source reads the same rows on every event without changing any owned fact.'
     for hunt in (CleanHunt(FileLine(__file__, 1), why, RecordedEventTime(600)),
                  OrderedHunt(FileLine(__file__, 1), why, RecordedEventTime(700), 'order-P1')):
-        current = comms.goals.todos.get('P1')
-        CommsTodoTool(id='P1', operation=RecordHuntTodo(current.revision, actor, hunt)).apply(comms, caller)
+        comms.goals.todos.record_hunt(actor, hunt)
         assert FieldCodec.decode(Hunt, FieldCodec.encode(hunt)) == hunt
-    assert len(comms.goals.todos.get('P1').hunts) == 2
+    assert len(comms.goals.todos.hunts_for_commander(actor)) == 2
 
 
-def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
+def test_delivery_checks_once_and_preserves_the_units_goal(commander):
     comms, caller = commander
     marker = comms.root / 'check-calls'
     create(commander, 'P1', f"printf x >> '{marker}'; printf 0; exit 1", 0)
     create(commander, 'P2')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    original_goal = comms.registry.require('worker').goal
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert marker.read_text() == 'x'
     assert comms.registry.require('worker').goal.state.active
     assert not comms.goals.todos.get('P1').pending
@@ -164,15 +163,15 @@ def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
     goal = comms.registry.require('worker').goal
     rendered = '\n'.join(goal.instructions_for(comms.goals, comms.registry.require('worker').incarnation))
     assert 'Problem: P1' not in rendered and 'Problem: P2' in rendered
-    CommsOrderDoneTool(problem='P2', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
-    assert isinstance(comms.registry.require('worker').goal.state, CompletedGoal)
+    CommsOrderDoneTool(problem='P2', order_id=comms.goals.todos.get('P2').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    assert comms.registry.require('worker').goal == original_goal
 
 
 def test_failed_check_keeps_problem_pending(commander):
     comms, caller = commander
     original = create(commander, 'P1', 'printf 9', 1)
-    with pytest.raises(ValueError, match='printed 9, not its expected count 1'):
-        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    with pytest.raises(ValueError, match=r'The order check is 8 away from CountCheckResult\(expected=1\)\.'):
+        CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P1') == original
     assert comms.registry.require('worker').goal.state.active
 
@@ -180,7 +179,7 @@ def test_failed_check_keeps_problem_pending(commander):
 def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(commander):
     comms, caller = commander
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
     CommsProblemCloseTool(problem='P1', works='The installed application now retains both queued orders through tab returns.',
@@ -219,7 +218,7 @@ def test_commit_delivery_records_the_actual_clean_commit_time(commander):
     commit = git('rev-parse', 'HEAD')
     git('update-ref', 'refs/remotes/origin/main', commit)
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit, delivered_commit=commit), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=CommitDelivery(commit=commit, delivered_commit=commit), claims=working(comms)).apply(comms, caller)
     delivery = comms.goals.todos.get('P1').order.delivery
     assert delivery.commit == delivery.delivered == commit
     assert delivery.at == RecordedEventTime(float(git('show', '-s', '--format=%ct', 'HEAD')))
@@ -239,7 +238,7 @@ def test_delivered_order_is_not_transferred(commander, tmp_path):
     marker = comms.root / 'check-calls'
     create(commander, 'P1', f"printf x >> '{marker}'; printf 1")
     create(commander, 'P2')
-    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=CommitDelivery(
         commit=commit, delivered_commit=commit), claims=working(comms)).apply(comms, caller)
     assert marker.read_text() == 'x'
 
@@ -287,11 +286,12 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     create(commander, 'P1', deadline=2000)
     create(commander, 'P2', deadline=2000)
     with pytest.raises(ValueError, match='no origin branch'):
-        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=delivered), claims=working(comms)).apply(comms, caller)
+        CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=CommitDelivery(commit=merge, delivered_commit=delivered), claims=working(comms)).apply(comms, caller)
     git('update-ref', 'refs/remotes/origin/work', delivered)
-    script.done('P1', merge, delivered)
+    script.done('P1', delivered, seen=working(comms)[0].screenshot)
     met = comms.goals.todos.get('P1')
-    assert (met.order.delivery.delivered, met.order.delivery.at) == (delivered, RecordedEventTime(1000))
+    assert (met.order.delivery.commit, met.order.delivery.delivered, met.order.delivery.at) == (
+        merge, delivered, RecordedEventTime(1000))
     assert script.struck(met, 'worker') == 0
 
     git('checkout', '-q', '-b', 'side', delivered)
@@ -303,8 +303,10 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     late = git('rev-parse', 'HEAD')
     git('update-ref', 'refs/remotes/origin/main', late)
     with pytest.raises(ValueError, match='not in the checked commit'):
-        CommsOrderDoneTool(problem='P2', delivery=CommitDelivery(commit=late, delivered_commit=side), claims=working(comms)).apply(comms, caller)
-    script.done('P2', late, late)
+        CommsOrderDoneTool(problem='P2', order_id=comms.goals.todos.get('P2').order.id, delivery=CommitDelivery(commit=late, delivered_commit=side), claims=working(comms)).apply(comms, caller)
+    with pytest.raises(SystemExit, match='not in .* HEAD'):
+        script.done('P2', side, seen=working(comms)[0].screenshot)
+    script.done('P2', late, seen=working(comms)[0].screenshot)
     struck = comms.goals.todos.get('P2')
     assert script.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
 
@@ -326,7 +328,7 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
         git('commit', '-q', '--allow-empty', '-m', f'{pid} delivered', at=at)
         delivered = git('rev-parse', 'HEAD')
         git('update-ref', 'refs/remotes/origin/main', delivered)
-        script.done(pid, delivered, delivered)
+        script.done(pid, delivered, seen=working(comms)[0].screenshot)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 0
     (strike,) = comms.goals.todos.get('P2').strikes
     assert strike.reason.startswith(f'P2 order order-P2 late by 35 s: due {clock(2000)}, '
@@ -349,9 +351,9 @@ def test_a_main_merge_is_never_the_delivered_commit(commander):
     git('update-ref', 'refs/remotes/origin/main', merge)
     create(commander, 'P1')
     with pytest.raises(ValueError, match='is a merge'):
-        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=merge), claims=working(comms)).apply(comms, caller)
+        CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=CommitDelivery(commit=merge, delivered_commit=merge), claims=working(comms)).apply(comms, caller)
     answer = git('rev-parse', 'work')
-    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=answer), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=CommitDelivery(commit=merge, delivered_commit=answer), claims=working(comms)).apply(comms, caller)
     assert not comms.goals.todos.get('P1').pending
 
 
@@ -381,12 +383,14 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     due = '23:59'
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body), 'request')
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body), f'{__file__}:1')
     created = comms.goals.todos.get('P1')
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    script.send('worker', due, str(body), 'request')  # the same holder again without --clean is a send-back
+    numbered = body.read_text().replace('Problem: NEW', f'Problem: {created.id}')
+    # Without --clean this replaces the prior order and counts a send-back.
+    script.send('worker', due, numbered, replaces=created.messages[-1].message_id)
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
@@ -394,13 +398,13 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
     assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
 
-    script.hunt(f'{__file__}:1', 'P1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
-    assert [h.sent for h in comms.goals.todos.get('P1').hunts] == [sent_back.order.id]
+    script.hunt(f'{__file__}:1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
+    assert [h.sent for h in comms.goals.todos.hunts_for_commander(comms.registry.require('lead').incarnation)] == [sent_back.order.id]
 
     (repo / 'count.txt').write_text('1\n')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'fix')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
-    script.done('P1', git('rev-parse', 'HEAD'), git('rev-parse', 'HEAD'))
+    script.done('P1', git('rev-parse', 'HEAD'), seen=working(comms)[0].screenshot)
     assert not comms.goals.todos.get('P1').pending
 
     artifact = repo.parent / 'seen.png'
@@ -423,7 +427,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
 
 
 def problem(script, body):
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, 'request')
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, f'{__file__}:1')
 
 
 def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
@@ -434,10 +438,13 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
-    script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed', 'lead at review')
-    script.send('worker', '23:59', body, 'request')
+    script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
+    numbered = Path(body).read_text().replace('Problem: NEW', 'Problem: P1')
+    script.send('worker', '23:59', numbered,
+                replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', body, 'request')
+    script.send('worker', '23:59', numbered,
+                replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
 
@@ -449,10 +456,11 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
     (repo / 'count.txt').write_text('0\n')
     problem(script, order_body(repo))
     create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
-    script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed', 'lead at review')
+    script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed')
     assert [script.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
-    script.hunt(f'{__file__}:1', 'P2', 'P1 rereads the counter per event; this read of the P2 path found it clean', None)
-    assert [len(comms.goals.todos.get(pid).hunts) for pid in ('P1', 'P2')] == [0, 1]
+    why = 'P1 rereads the counter per event; this read of the P2 path found it clean'
+    script.hunt(f'{__file__}:1', why, '')
+    assert comms.goals.todos.hunts_for_commander(comms.registry.require('lead').incarnation)[0].why == why
     done = replace(comms.goals.todos.get('P2'), state=DoneTodoState)
     with pytest.raises(TodoError, match='P2 is done'):
         done.state.require_open(done)
@@ -467,9 +475,8 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
-    CommanderConfig.installed().model_copy(update={'repos': (
-        script.Repo(checkout=toad, github='OpenHCSDev/toad'),)}).write(Path.home())
-    CommanderConfig.installed.cache_clear()
+    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={'repos': (
+        script.Repo(checkout=toad, github='OpenHCSDev/toad'),)}))
     (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
     edit = 'Delete src/agent_comms/acp_ingress.py.'
     with pytest.raises(SystemExit, match=rf"\['{toad}'\] import"):
@@ -505,12 +512,12 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
                     "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected', 'lead at review')
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
+    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
-    with pytest.raises(SystemExit, match='does not pass undelivered work'):
+    with pytest.raises(ValueError, match='The order check is 1 away'):
         script.correct_check('P1', corrected, why)  # main still holds 0
     with pytest.raises(TodoConflict):
         CommsOrderCheckTool(problem='P1', check=OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)),
@@ -521,8 +528,8 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('commit', '-qam', 'fix')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     fixed = git('rev-parse', 'HEAD')
-    with pytest.raises(ValueError, match='printed 0, not its expected count 1'):
-        script.done('P1', fixed, fixed)
+    with pytest.raises(ValueError, match=r'The order check is 1 away from CountCheckResult\(expected=1\)\.'):
+        script.done('P1', fixed, seen=working(comms)[0].screenshot)
     script.correct_check('P1', corrected, why)
     current = comms.goals.todos.get('P1')
     assert (current.order.id, current.assignment, current.deadline, current.strikes) == (
@@ -530,7 +537,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     [record] = current.order.check_corrections
     assert (record.previous, record.check, record.reason) == (
         sent.order.check, OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)), why)
-    script.done('P1', fixed, fixed)
+    script.done('P1', fixed, seen=working(comms)[0].screenshot)
     assert not comms.goals.todos.get('P1').pending
     assert comms.goals.todos.get('P1').order.check_corrections == (record,)
 
@@ -544,9 +551,10 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
                     "Works when: the installed app shows the counter at one after restart\n"
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    assert script.held_orders() == () and 'Problem: NEW' in body.read_text()
+    original = body.read_bytes()
+    with pytest.raises(ValueError, match='Jargon'):
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
+    assert script.held_orders() == () and body.read_bytes() == original
 
 
 def test_commander_refuses_a_check_that_prints_no_count(commander_script):
@@ -558,13 +566,13 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='the check printed no integer'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
     assert script.held_orders() == ()
 
 
 @pytest.mark.parametrize('printed, refused', [
     ("printf 'no count here'", 'The order check printed no integer, so no count of 1.'),
-    ('echo 2', 'The order check printed 2, not its expected count 1.'),
+    ('echo 2', 'The order check is 1 away from CountCheckResult(expected=1).'),
     ('echo found 1', None),
 ])
 def test_a_count_check_refuses_saying_whether_it_printed_no_integer_or_the_wrong_count(tmp_path, printed, refused):
@@ -607,7 +615,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     create(commander, 'P1')
     posted = []
     monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
-    script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit', 'lead at review')
+    script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit')
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and script.struck(current, 'worker') == 0
@@ -763,7 +771,7 @@ def test_committed_send_reports_correction_failure_to_tool_and_cli(commander, mo
     decoded = PublishedMessageToolDetails.from_wire(reply)
     assert decoded.id == decoded.message.source.message_id
     assert 'P563 forced correction write failure' in decoded.correction.error
-    cli = SendCliCommand(sender='worker', target='lead', body='A separate fresh CLI message').apply(comms).encoded()
+    cli = SendCliCommand(sender='worker', target='lead', body='A separate fresh CLI message').apply(comms).to_wire()
     assert 'was sent' in cli['message']
     assert 'P563 forced correction write failure' in cli['correction']['error']
     assert cli['id'] in cli['notices'][0]
@@ -801,7 +809,8 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     import importlib
     from agent_comms.commander import request
     comms, caller = commander
-    standing = importlib.import_module('agent_comms.commander.standing')
+    request = importlib.reload(request)
+    standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
     def stalled():
         return [rule.line() for rule in standing.RequestStalled.violations(comms, 'lead')]
     assert stalled() == [
@@ -814,7 +823,7 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
         request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     with pytest.raises(ValueError, match='still open'):
         request.RequestAddVerb(text='A second owner request while the first is open').run()
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert stalled() == [
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
@@ -859,7 +868,7 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
         ' -> order its next step or mark the request done']
     create(commander, 'P1')
     assert unacted(directive.deadline + 1) == []
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
     reviewed()  # the clock now stands past the first deadline
     seq = direct('lead', 'A second directive after the first request is done.')
@@ -879,12 +888,33 @@ def stray(commander, problem, generation):
         order=order(comms.root, 'order-' + problem), goal=GoalRef('lead', lead.created_at, 'request'))
 
 
+def test_imported_order_completion_uses_order_identity_and_keeps_goal(commander):
+    comms, caller = commander
+    todo = stray(commander, 'P603', 'rts-order:source')
+    original_goal = comms.registry.require('worker').goal
+    request = CommsOrderDoneTool(problem=todo.id, order_id=todo.order.id,
+        delivery=OperationDelivery(), claims=working(comms))
+    with pytest.raises(ValueError, match='order changed'):
+        replace(request, order_id='replaced-order').apply(comms, caller)
+    assert comms.goals.todos.get(todo.id) == todo
+    request.apply(comms, caller)
+    assert not comms.goals.todos.get(todo.id).pending
+    assert comms.registry.require('worker').goal == original_goal
+    with pytest.raises(ValueError, match='Only an open order'):
+        request.apply(comms, caller)
+
+
 def completed_with_pending(commander):
     """ci-1370's shape: the Goal completed on its only problem, then later problems were stored under it
     and under a Goal that was never published."""
     comms, caller = commander
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    # This fixture models a retained pre-fix registry, not a new completion.
+    with comms.registry.store.editing() as edit:
+        worker = edit.document.threads['worker']
+        edit.document.threads['worker'] = replace(worker, goal=replace(worker.goal, state=CompletedGoal()))
+        edit.commit()
     goal = comms.registry.require('worker').goal
     assert isinstance(goal.state, CompletedGoal)
     stray(commander, 'P2', goal.id)
@@ -904,7 +934,7 @@ def test_goal_stays_open_while_problems_pend(commander):
     create(commander, 'P1')
     create(commander, 'P2', deadline=2000)
     stray(commander, 'P3', 'never-published')
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.registry.require('worker').goal.state.active
     other = comms.goals.todos.get('P3')
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P2', order=order(comms.root, 'revised'),
@@ -912,7 +942,7 @@ def test_goal_stays_open_while_problems_pend(commander):
         expected_revision=comms.goals.todos.get('P2').revision)).apply(comms, caller)
     assert comms.goals.todos.get('P2').order.id == 'revised'
     assert comms.goals.todos.get('P3') == other
-    CommsOrderDoneTool(problem='P2', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P2', order_id=comms.goals.todos.get('P2').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.registry.require('worker').goal.state.active
 
 
@@ -941,8 +971,8 @@ def test_column_carries_run_before_order_validation(commander):
         list(Todo.stream(db))
     repo = Path(__file__).parents[1]
     names = [step.name for step in CarryChain.at(repo, 'HEAD').steps]
-    members = {'carry_todo_messages': ('TodoMessages', 3),
-               'carry_todo_corrections': ('TodoCorrections', 0),
+    members = {'carry_todo_corrections': ('TodoCorrections', 0),
+               'carry_todo_messages': ('TodoMessages', 3),
                'carry_order_run': ('OrderRuns', 0),
                'carry_todo_open_indexes': ('TodoOpenIndexes', 0)}
     assert [name for name in names if name in members] == list(members)
@@ -994,11 +1024,35 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     create(commander, 'P1', owner='parted')
     create(commander, 'P2', owner='watching')
     comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
-    importlib.import_module('agent_comms.commander.rotate')
+    rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
-        standing = importlib.import_module('agent_comms.commander.standing')
+        standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
         lines = [rule.line() for rule in standing.Detached.violations(comms, 'lead')]
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
+
+
+def test_dropped_problem_links_through_the_unordered_lifecycle(commander):
+    from agent_comms.todos import LocatedProblemFinding, UnlocatedProblemFinding
+    comms, caller = commander
+    original_finding = LocatedProblemFinding(FileLine(__file__, 1))
+    for pid, at, finding in (('P1', 100, original_finding), ('P2', 200, UnlocatedProblemFinding())):
+        CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+            problem=pid, order=replace(order(comms.root, 'order-' + pid),
+                at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120), finding=finding),
+            request='request', deadline=RecordedEventTime(1000), commander='lead',
+            repo='OpenHCSDev/agent-comms', text='Fix ' + pid)).apply(comms, caller)
+    old_message = order_message(commander, 'P1', 'The earlier counter order')
+    new_message = order_message(commander, 'P2', 'The newer counter order')
+    lead = comms.registry.require('lead').incarnation
+    comms.goals.todos.drop(lead, 'worker', old_message, new_message)
+    dropped = comms.goals.todos.get('P1')
+    assert dropped.holder is None and not dropped.pending
+    comms.goals.todos.link(lead, 'P1', 'worker', new_message)
+    linked = comms.goals.todos.get('P1')
+    assert linked.holder == 'worker' and linked.pending
+    assert linked.order.id == comms.goals.todos.get('P2').order.id
+    assert linked.order.finding == original_finding
+    assert comms.goals.todos.get('P2').order.finding == UnlocatedProblemFinding()
 
 
 def order_message(commander, problem, text):
@@ -1041,7 +1095,7 @@ def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, command
     comms, _ = commander
     create(commander, 'P1')
     create(commander, 'P2')
-    judge = importlib.import_module('agent_comms.commander.judge')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='edit-1', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P2 was the last order; this one repairs the existing owner')
@@ -1059,7 +1113,7 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
 
     comms, _ = commander
     create(commander, 'P1')
-    judge = importlib.import_module('agent_comms.commander.judge')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
     recorded = native_judge_edits(commander, judge, edits)
@@ -1071,8 +1125,8 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
     assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
     assert not saved.strikes
-    assert judge.Edit.unjudged(comms, 'lead') == []
-    assert not (CommanderConfig.installed().state / 'verdicts.jsonl').exists()
+    assert importlib.reload(judge).Edit.unjudged(comms, 'lead') == []
+    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
 @pytest.mark.parametrize('verb', ['ok', 'back'])
@@ -1081,7 +1135,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
     from pathlib import Path
 
     comms, _ = commander
-    judge = importlib.import_module('agent_comms.commander.judge')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='orphan-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     recorded = native_judge_edits(commander, judge, [edit])
     fields = dict(ids=('orphan-edit:0000',),
@@ -1092,7 +1146,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
-    assert not (CommanderConfig.installed().state / 'verdicts.jsonl').exists()
+    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
 def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_script, monkeypatch):
@@ -1101,7 +1155,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
 
     comms, _ = commander
     create(commander, 'P1')
-    judge = importlib.import_module('agent_comms.commander.judge')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='bad-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
@@ -1121,7 +1175,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     assert judge.Edit.unjudged(comms, 'lead') == []
     audience = SendBackVerdict.audience.of('worker', saved.goal)
     assert [to for to, _ in posted] == [audience, audience]
-    assert not (CommanderConfig.installed().state / 'verdicts.jsonl').exists()
+    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
 @pytest.mark.parametrize('kind', [AcceptedVerdict, SendBackVerdict])
@@ -1187,7 +1241,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
     goal = worker.goal
     assert (goal.text, goal.progress) == (ProblemGoalOrder.text, '')
     assert [line.split(':')[0] for line in GoalSegment.capture(worker, goal, comms.goals).progress.splitlines()] == ['P1', 'P2']
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     why = 'The unit kept a second copy of the goal text.'
     CommsVerdictTool(id='P2', operation=SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation,
         todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
@@ -1201,7 +1255,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
 
 VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
-    'ok-unowned': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner' --no-owner proof",
+    'superseded': "e1:ab --line one --why 'The task moved to a different implementation owner' --by m2",
     'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
             " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
 }
@@ -1210,12 +1264,17 @@ VERDICT_LINES = {
 def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander, commander_script):
     """Every verdict member refuses a line missing any fact it declares, and its verdict reads back from the order."""
     comms, caller = commander
-    judge = importlib.import_module('agent_comms.commander.judge')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     assert set(judge.VerdictVerb.names()) == set(VERDICT_LINES)
     create(commander, 'P1')
+    comms.registry.declare(comms.registry.new_thread('replacement', frozenset(), str(comms.root), created_at=3.0))
+    replacing = create(commander, 'P2', owner='replacement')
+    CommsTodoTool(id='P2', operation=OrderMessage(replacing.revision,
+        comms.registry.require('lead').incarnation, 'm2')).apply(comms, caller)
     for name, line in VERDICT_LINES.items():
         argv = [name, *shlex.split(line)]
-        for at in [i for i, token in enumerate(argv) if token.startswith('--')]:
+        for at in [i for i, token in enumerate(argv)
+                   if token.startswith('--') and (token != '--msg' or name == 'back')]:
             with pytest.raises(SystemExit):
                 judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
         operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
@@ -1231,7 +1290,7 @@ def test_close_quotes_the_works_line(commander):
         problem='P1', order=replace(order(comms.root, 'order-P1'), run=run), request='request',
         deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P1',
     )).apply(comms, caller)
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
     delivered = comms.goals.todos.get('P1')
@@ -1264,12 +1323,12 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     (copied / 'flag.py').write_text('def checked(value):\n    if value is None:\n        raise ValueError\n')
     callers.write_text('from flag import checked\n\ndef read(v):\n    try:\n        checked(v)\n'
                        '    except ValueError:\n        return 0\n    return 1\n')
-    with pytest.raises(ValueError, match='printed 1, not its expected count 0'):
-        CommsOrderDoneTool(problem='P520', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    with pytest.raises(ValueError, match=r'The order check is 1 away from CountCheckResult\(expected=0\)\.'):
+        CommsOrderDoneTool(problem='P520', order_id=comms.goals.todos.get('P520').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P520') == pending
     (copied / 'flag.py').unlink()
     callers.write_text('def read(v):\n    return int(v is not None)\n')
-    CommsOrderDoneTool(problem='P520', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P520', order_id=comms.goals.todos.get('P520').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert not comms.goals.todos.get('P520').pending
 
 
@@ -1282,7 +1341,7 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
 
     def guarded(*targets):
         command = 'agent-comms send --from lead ' + ' '.join(f'--to {target}' for target in targets) + ' --body hi'
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([])
         return capsys.readouterr().out
 
@@ -1303,7 +1362,7 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
                                                           command, kind):
     """lead's registered process runs in Claude session s1. With no install planned, tactical work
     run in s1 is refused with the instruction to plan one; once the install is planned for worker,
-    it is refused with the order to send worker. The same command from another session, and an
+    it is refused with the order to send worker, and once it is planned for lead it runs. The same command from another session, and an
     order whose body names the command, pass. Once lead's process is gone no session can be
     classified, so every session is refused with the read error."""
     import io, os, subprocess
@@ -1319,7 +1378,7 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
                                        process_identity=ProcessIdentity.capture(process.pid)))
 
         def guarded(command, session):
-            hook = {'session_id': session, 'tool_input': {'command': command}}
+            hook = {'session_id': session, 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}}
             monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(hook)))
             send_guard.main([])
             return capsys.readouterr().out
@@ -1334,6 +1393,8 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
         assert 'order send --to worker' in refused['permissionDecisionReason']
         assert guarded(command, 's2') == ''
         assert guarded(f'agent-comms-commander order send --to worker --body "run {command}"', 's1') == ''
+        PlannedInstallDeadline(RecordedEventTime(2000.0), 'lead').plan(comms.root)
+        assert guarded(command, 's1') == ''
     finally:
         process.kill()
         process.wait()
@@ -1348,7 +1409,7 @@ def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_
     create(commander, 'P1')
     for command in ('agent-comms send --from user --to lead --body "agent-comms send --from lead --to worker"',
                     'agent-comms send --from user --to lead --body "x; agent-comms send --from lead --to worker"'):
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([])
         assert capsys.readouterr().out == ''
 
@@ -1388,7 +1449,7 @@ def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, 
         push_work(git)
 
     def deliver():
-        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+        CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
 
     claims = []
     for claim, missing, provide in (
@@ -1401,7 +1462,7 @@ def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, 
             CommsGoalTool(goal_id='request', status=ActiveGoalAction, progress='claimed',
                           claims=(claim,)).apply(comms, caller)
         with pytest.raises(ValueError, match=re.escape(missing)):
-            CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=(claim,)).apply(comms, caller)
+            CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=(claim,)).apply(comms, caller)
         provide()
         claims.append(claim)
     report = CommsGoalTool(goal_id='request', status=ActiveGoalAction, progress='claimed', claims=tuple(claims))
@@ -1422,12 +1483,12 @@ def test_a_done_report_with_no_claim_is_refused_and_a_merged_claim_passes_claim_
     push_work(git)
     merged = (MergedClaim(git('rev-parse', 'HEAD')),)
     for report, refused in (
-        (CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=()), 'A delivered report needs a claim'),
+        (CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=()), 'A delivered report needs a claim'),
         (CommsGoalTool(goal_id='request', status=CompletedGoalAction, progress='done'), 'A completed report needs a claim'),
     ):
         with pytest.raises(ValueError, match=re.escape(refused)):
             report.apply(comms, caller)
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=merged).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=merged).apply(comms, caller)
     assert isinstance(comms.goals.todos.get('P1').order, DeliveredProblemOrder)
     report = CommsGoalTool(goal_id='request', status=CompletedGoalAction, progress='done', claims=merged)
     assert isinstance(report.apply(comms, caller).goal.state, CompletedGoal)

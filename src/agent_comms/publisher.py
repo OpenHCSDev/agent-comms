@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
@@ -44,23 +45,22 @@ from .mentions import ThreadMention
 from .messages import Message
 from .private_bus_checkpoint import (
     install_private_bus_checkpoint,
-    opened_private_checkpoint_unlocked,
 )
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import StoreLock, _store_lock
+from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
 
-    from .private_bus_checkpoint import CertifiedSourceRead
+    from .private_bus_checkpoint import CheckedRead
     from .registration import Registration
 
 from .catalog_document import CatalogDocument
 from .channels import Channel
 from .catalog_store import ChannelCatalog
-from .wire_log import WireLog
+from .wire_log import WireLog, WireStoreLock
 from .wire_metadata import WireMetadata
 
 
@@ -100,7 +100,7 @@ class Publisher:
         target: NamedTarget,
         sequence: int,
         snapshot: RegistrySnapshot,
-        original_source: CertifiedSourceRead | None = None,
+        original_source: CheckedRead | None = None,
     ) -> Message:
         if original_source is not None:
             original_source.require_marker(self.log.private_marker_unlocked())
@@ -158,7 +158,7 @@ class ClaimWrites(PrivateWrites):
 
     def _publish_claim_envelope_unlocked(
         self,
-        bus_lock: StoreLock,
+        bus_lock: WireStoreLock,
         snapshot: RegistrySnapshot,
         message: Message,
         *,
@@ -249,7 +249,7 @@ class InitialWrites(PrivateWrites):
                 self._initialize_private_protocol_unlocked()
             return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
-    def initialize_private_protocol(self) -> str:
+    def initialize_private_protocol(self, *, history: Sequence[Message] = ()) -> str:
         """Marker issuer for a NEW, isolated bus root only.
 
         Existing unmarked logs require an explicit offline rewrite. This issuer
@@ -257,10 +257,21 @@ class InitialWrites(PrivateWrites):
         """
         self.log.path.parent.mkdir(parents=True, exist_ok=True)
         with self.log.locked():
-            return self._initialize_private_protocol_unlocked()
+            return self._initialize_private_protocol_unlocked(history=history)
 
-    def _initialize_private_protocol_unlocked(self) -> str:
+    def _initialize_private_protocol_unlocked(self, *, history: Sequence[Message] = ()) -> str:
         self.log.require_fresh_private_root_unlocked()
+        # Selected public history precedes this root's first writable sequence. It is
+        # display content, never a copied delivery or permission to run old input.
+        previous = 0
+        rows = []
+        for message in history:
+            if message.seq <= previous:
+                raise ValueError("Initial history must have ascending unique sequences")
+            previous = message.seq
+            rows.append(json.dumps(message.to_wire(), ensure_ascii=False) + "\n")
+        if rows:
+            _atomic_write_text(self.log.path, "".join(rows), fsync_parent=True)
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
@@ -277,7 +288,8 @@ class InitialWrites(PrivateWrites):
             guard.create_pending()
             self.log.write_metadata_unlocked(
                 WireMetadata(
-                    last_seq=0,
+                    last_seq=previous,
+                    claimed_after_seq=previous,
                     writer_protocol_version=1,
                     wire_root_id=root_id,
                     claim_envelopes_version=1,
@@ -297,7 +309,7 @@ class InitialWrites(PrivateWrites):
             return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
     def _publish_initial_cohort_unlocked(
-        self, bus_lock: StoreLock, message: Message, *, origin: InitialOrigin, activity: ActivityClocks
+        self, bus_lock: WireStoreLock, message: Message, *, origin: InitialOrigin, activity: ActivityClocks
     ) -> Message:
         """An ordinary initial cohort under the held bus lock."""
         if message.claim_transition is not None:
@@ -307,14 +319,7 @@ class InitialWrites(PrivateWrites):
             metadata = self.log.private_marker_unlocked()
             metadata.access.require_append()
 
-            # Fresh initialization occurs after lock acquisition and has no
-            # acquired source. Existing roots already borrowed this exact cut
-            # from the lock's durability owner; keep using it until append.
-            source = bus_lock.source
-            if source is None:
-                source = resources.enter_context(
-                    opened_private_checkpoint_unlocked(self.log, metadata)
-                )
+            source = resources.enter_context(bus_lock.current_source(self.log, metadata))
             source.require_marker(metadata)
             previous_sequence = source.committed_sequence()
             if metadata.last_seq >= MAX_WIRE_SEQ:

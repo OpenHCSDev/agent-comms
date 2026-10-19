@@ -10,7 +10,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import ActiveTurn
+from agent_comms.turn_lease import NoFinishedTurn
 
 
 @pytest.mark.parametrize('transition', ['metadata', 'session', 'restart', 'stop', 'new-turn'])
@@ -19,32 +19,37 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     thread = registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'turn')
+    lease = leased.require_turn_lease()
     before = registry.snapshot()
     updated = leased
     kwargs = {}
     advances_owner = False
-    preserves_lease = True
+    preserves_record = True
     if transition == 'metadata':
         updated = replace(leased, title='new title', tags=frozenset({'changed'}))
     elif transition == 'session':
         updated = replace(leased, session_file=str(tmp_path / 'new.jsonl'))
     elif transition == 'restart':
         kwargs['new_owner'] = True
-        advances_owner, preserves_lease = True, False
+        advances_owner = True
     elif transition == 'stop':
         kwargs['status'] = StoppedThreadStatus()
         advances_owner = True
     elif transition == 'new-turn':
-        updated = replace(leased, active_turn=ActiveTurn('imported', leased.require_process().pid))
-        preserves_lease = False
+        assert registry.release_turn(lease)[0]
+        updated, _ = registry.lease_local_turn('owner', 'imported')
+        preserves_record = False
     registry.register(updated, **kwargs)
     after = registry.snapshot()
     assert (after.owner_generations['owner'] > before.owner_generations['owner']) == advances_owner
     assert (after.claimed_generations['owner'] > before.claimed_generations['owner']) == advances_owner
-    assert (after.threads['owner'].turn_lease == leased.turn_lease) == preserves_lease
-    released, completion = registry.release_turn(leased.turn_lease)
-    assert released == preserves_lease
-    assert (completion is not None) == (preserves_lease and not advances_owner)
+    assert (after.threads['owner'].turn_record == lease.record) == preserves_record
+    assert (after.threads['owner'].turn_lease == lease) == (preserves_record and not advances_owner)
+    # P482 (1b9feceea) lets the original lease retire a revoked record, but
+    # never attest completion after restart/stop revoked its input claim.
+    released, completion = registry.release_turn(lease)
+    assert released == preserves_record
+    assert (completion != NoFinishedTurn()) == (preserves_record and not advances_owner)
 
 
 def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
@@ -52,11 +57,12 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
     thread = registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'same-id')
+    lease = leased.require_turn_lease()
     registry.rename('owner', 'renamed')
-    released, finished = registry.release_turn(leased.turn_lease)
+    released, finished = registry.release_turn(lease)
     assert released and finished.identity.incarnation.name == 'renamed'
     next_turn, _ = registry.lease_local_turn('renamed', 'same-id')
-    assert registry.release_turn(leased.turn_lease) == (False, None)
+    assert registry.release_turn(lease) == (False, NoFinishedTurn())
     assert registry.require('renamed').turn_lease == next_turn.turn_lease
 
 
@@ -84,7 +90,7 @@ def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
         registry.register(registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
     selected = tuple((before.threads[name], before.claimed_generations[name]) for name in ("first", "second"))
-    registry.register(replace(before.threads["second"], active_turn=ActiveTurn("busy", os.getpid())))
+    registry.lease_local_turn('second', 'busy')
     protected = registry.snapshot()
     with pytest.raises(RelationViolationError, match="idle before restart"):
         registry.fence_idle_owners(selected)

@@ -1,4 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
+from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -43,9 +44,7 @@ tmp_path = private_root_fixture
      (False, False, False, True)],
     ids=["reply", "saved-restart", "contended-reply", "rejected-triage-continuity", "parallel-channel"],
 )
-async def test_native_channel_reply_automatically_reaches_original_sender(
-    tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast
-):
+async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads):
     package = pinned_native_package()
     requests = []
     failures = []
@@ -279,9 +278,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             from agent_comms.coordination_tables.assignments import WakeAssignment
             from agent_comms.coordinator import Coordination
 
-            await until(lambda: len(list(comms.views.channel_history_page("#team").messages)) == 3,
+            await until(lambda: len(read_history(comms, "#team")) == 3,
                         "Both independent native replies published")
-            replies = list(comms.views.channel_history_page("#team").messages)[1:]
+            replies = read_history(comms, "#team")[1:]
             assert {row.sender for row in replies} == {"answerer", "answerer2"}
             assert all(row.body == "ROUNDTRIP_NATIVE_REPLY" for row in replies)
             assert len({row.message_id for row in replies}) == 2
@@ -301,7 +300,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             assert len({row[1] for row in rows}) == 3
             await asyncio.sleep(1.2)
             assert 7 <= len(requests) <= 8 and not failures
-            assert len(list(comms.views.channel_history_page("#team").messages)) == 3
+            assert len(read_history(comms, "#team")) == 3
             # The real request reader owns every timing sample. They must
             # survive independently of registry phase changes and publication.
             observations = [json.loads(line)
@@ -333,9 +332,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             return
         await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(
-            lambda: len(list(comms.views.channel_history_page("#team").messages)) >= 2, "B published actual reply"
+            lambda: len(read_history(comms, "#team")) >= 2, "B published actual reply"
         )
-        reply = list(comms.views.channel_history_page("#team").messages)[-1]
+        reply = read_history(comms, "#team")[-1]
         assert reply.sender == "answerer" and reply.body == "ROUNDTRIP_NATIVE_REPLY"
         # No user prompt, explicit inbox drain, participant insertion, or selected claim seeding.
         try:
@@ -401,7 +400,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         await asyncio.sleep(1.2)  # Beyond the watcher fallback interval; no recursive wake/replay.
         assert len(requests) == seed_count + 2 and not failures
         await until(
-            lambda: len(list(comms.views.channel_history_page("#team").messages)) == 2 + reject_triage,
+            lambda: len(read_history(comms, "#team")) == 2 + reject_triage,
             "Canonical reply and any rejected-result alert published",
         )
         if reject_triage:
@@ -411,14 +410,19 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
 
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 rejected = read_historical_native_inputs(
-                    store, wire_root_id=root_id,
-                    recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup, source_seq=reply.seq,
+                    store,
+                    wire_root_id=root_id,
+                    recipient_lookup=RecordedThreadIncarnation(
+                        "fixture", owner.created_at
+                    ).lookup,
+                    source_seq=reply.seq,
+                    source_reads=source_reads,
                 )
                 assert len(rejected) == 1 and rejected[0].proves_triage_source(rejected)
                 claim = store.assignments.get(rejected[0].assignment_id)
                 assert type(claim.lifecycle) is FailedAssignment
                 rejected_input = rejected[0].input_id
-            assert "invalid triage decision" in list(comms.views.channel_history_page("#team").messages)[-1].body
+            assert "invalid triage decision" in read_history(comms, "#team")[-1].body
             fresh = comms.messaging.send("answerer", "#team", "CONTINUITY_FRESH_SOURCE").message
             await until(lambda: len(requests) == 3, "Fresh channel source authorized without retrying rejected input")
             await until(
@@ -507,7 +511,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             }, indent=2) + "\n")
 
 
-async def test_selected_validation_cancellation_joins_before_claim(tmp_path, monkeypatch):
+async def test_selected_validation_cancellation_joins_before_claim(tmp_path, monkeypatch, *, cursor_delivery):
     """Pause real package validation; cancellation cannot escape its worker."""
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.native_pi import NativePiUnavailable
@@ -531,8 +535,13 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
             completed.set()
 
     monkeypatch.setattr(SelectedExecution, "validate", observed_validation)
-    execution = SelectedExecution(root=comms.root, wire_root_id=root_id,
-                                  owner_name="unregistered", native_package=Path(pin))
+    execution = SelectedExecution(
+        root=comms.root,
+        wire_root_id=root_id,
+        owner_name="unregistered",
+        native_package=Path(pin),
+        cursor_delivery=cursor_delivery,
+    )
     task = asyncio.create_task(execution.run())
     try:
         assert await asyncio.to_thread(entered.wait, 5)
@@ -554,8 +563,13 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     # A separate invalid acquisition still refuses before participant/claim
     # selection; no cancellation or prior validation grants it trust.
     monkeypatch.setattr(SelectedExecution, "validate", validate)
-    invalid = SelectedExecution(root=comms.root, wire_root_id=root_id,
-                                owner_name="unregistered", native_package=tmp_path)
+    invalid = SelectedExecution(
+        root=comms.root,
+        wire_root_id=root_id,
+        owner_name="unregistered",
+        native_package=tmp_path,
+        cursor_delivery=cursor_delivery,
+    )
     with pytest.raises(NativePiUnavailable):
         await invalid.run()
     assert comms.registry.snapshot() == before

@@ -14,13 +14,12 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .channel_targets import ChannelTarget
-from .commander import order
+from .child_process import CountPrinted, NoIntegerPrinted
 from .commander.send_guard import TacticalCommand
-from .connector import DirectorCaller
 from .declared_family import DeclaredFamily
-from .goals import NoIntegerPrinted, OrderCheck
+from .goals import OrderCheck
 from .standing_rules import BoardDisagrees, PlanIdle, StandingRule
-from .todos import StrikeTodo, VoidStrikeTodo
+from .todos import PlainText, StorageStrikeTodo, Todo, TodoStore, VoidStrikeTodo
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"
 COMMANDER_SKILL = "../../src/agent_comms/skills/comms-commander/SKILL.md"
@@ -45,33 +44,24 @@ class RuleCheck(PatternCheck):
 
 
 @dataclass(frozen=True)
-class RefusalCheck(PatternCheck):
-    """A refusal, held as the function or class that refuses."""
+class CallableCheck(PatternCheck):
+    """The existing implementation that checks state or refuses the action."""
 
-    refusal: Callable[..., object]
-    surface: ClassVar[str]
+    check: Callable[..., object]
 
     def cite(self) -> str:
-        return f"{self.surface} in `{self.refusal.__module__}.{self.refusal.__qualname__}`"
-
-
-class VerbRefusal(RefusalCheck):
-    surface = "verb refusal"
-
-
-class ToolRefusal(RefusalCheck):
-    surface = "tool refusal"
+        return f"check in `{self.check.__module__}.{self.check.__qualname__}`"
 
 
 @dataclass(frozen=True)
 class PendingCheck(PatternCheck):
-    """The open problem whose change adds the pattern's check; that change replaces this."""
+    """A check absent from this checkout; its implementation replaces this citation."""
 
     problem: str
     change: str
 
     def cite(self) -> str:
-        return f"none yet: {self.problem} ({self.change}) adds it"
+        return f"not enforced here: {self.problem} ({self.change})"
 
 
 class PatternSource(ABC):
@@ -193,17 +183,14 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
     @classmethod
     def catalog(cls) -> str:
         members = cls.members_with(BehaviourPattern)
-        cited = {
-            failure: [
-                m.declared_name for m in members if any(isinstance(s, failure) for s in m.sources)
-            ]
-            for failure in PostmortemFailure.members_with(PostmortemFailure)
-        }
         failures = "".join(
             f"- [Failure {failure.number}]({POSTMORTEM}), {failure.title}: "
-            + (", ".join(f"`{name}`" for name in names) if names else "no pattern checks it yet")
+            + (", ".join(
+                f"`{member.declared_name}`" for member in members
+                if any(isinstance(source, failure) for source in member.sources)
+            ) or "no pattern cites it yet")
             + "\n"
-            for failure, names in cited.items()
+            for failure in PostmortemFailure.members_with(PostmortemFailure)
         )
         return (
             "# Behaviour catalog\n\n"
@@ -214,6 +201,9 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
             " looks like in state, readable without trusting a report) and the existing checks"
             " that enforce it. Patterns in code, rather than in behaviour, are the refactor-audit"
             " skill's catalog (`refactor-audit/references/patterns/README.md`).\n\n"
+            "A pending check records a known gap, not enforcement. Adding a pattern means"
+            " adding one `BehaviourPattern` subclass; membership and this document derive"
+            " from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.\n\n"
             f"The [Codex postmortem]({POSTMORTEM}) names these failures; each pattern cites the"
             " ones it checks:\n\n"
             f"{failures}\n" + "\n".join(member.section() for member in members)
@@ -242,7 +232,7 @@ class TacticalCommandPattern(BehaviourPattern):
         "The commander's own session runs an install, maintenance, connector restart or carry"
         " command instead of ordering a unit to."
     )
-    checks = (ToolRefusal(TacticalCommand),)
+    checks = (CallableCheck(TacticalCommand.install_refusals),)
     sources = (ProblemFix("P171", "cba7b09c3"),)
 
 
@@ -251,27 +241,24 @@ class PlainTextPattern(BehaviourPattern):
         "A commander order, strike, roast or directive whose words outside cited spans match"
         " the declared jargon list in `PlainText`."
     )
-    checks = (
-        VerbRefusal(order.refuse),
-        ToolRefusal(DirectorCaller.require_directive),
-    )
+    checks = (CallableCheck(PlainText.refused),)
     sources = (CommanderRule("Hate jargon."), CeremonyFailure())
 
 
 class UndeclaredAudiencePattern(BehaviourPattern):
     signature = "A send to a channel, which reaches many threads, names no thread as its audience."
-    checks = (ToolRefusal(ChannelTarget.addressed),)
+    checks = (CallableCheck(ChannelTarget.addressed),)
     sources = (Commit("dc4fb3bfa"), CeremonyFailure())
 
 
 class RepeatedStrikePattern(BehaviourPattern):
     signature = (
-        "A second strike for one miss: the same actor, owner and reason as a live strike, or a"
+        "A second storage strike with the same actor, owner and reason as a live strike, or a"
         " send-back strike on an order already struck since it was sent."
     )
     checks = (
-        ToolRefusal(StrikeTodo.repeats),
-        VerbRefusal(order.send),
+        CallableCheck(StorageStrikeTodo.repeats),
+        CallableCheck(Todo.struck_on_order),
     )
     sources = (ProblemFix("P184", "7af14a520"),)
 
@@ -281,10 +268,7 @@ class StrikeInErrorPattern(BehaviourPattern):
         "A strike recorded in error is deleted, or voided while not live, instead of a void"
         " recorded beside it with a plain reason."
     )
-    checks = (
-        VerbRefusal(order.unstrike),
-        ToolRefusal(VoidStrikeTodo.apply),
-    )
+    checks = (CallableCheck(VoidStrikeTodo.apply),)
     sources = (ProblemFix("P47", "15d435152"),)
 
 
@@ -294,9 +278,9 @@ class UncountedCheckPattern(BehaviourPattern):
         " integer, or already prints its target before any work."
     )
     checks = (
-        VerbRefusal(OrderCheck.parse),
-        VerbRefusal(NoIntegerPrinted),
-        VerbRefusal(order.correct_check),
+        CallableCheck(OrderCheck.parse),
+        CallableCheck(NoIntegerPrinted.unproven),
+        CallableCheck(CountPrinted.unproven),
     )
     sources = (
         ProblemFix("P114", "d889df612"),
@@ -307,13 +291,11 @@ class UncountedCheckPattern(BehaviourPattern):
 
 class StrikeOnNamedProblemPattern(BehaviourPattern):
     signature = (
-        "A strike or hunt recorded on a problem other than the one given as its argument, such"
-        " as one moved by a problem number inside its reason."
+        "A strike recorded on a problem other than the one given as its argument, such"
+        " as one moved by a problem number inside its reason. Hunts are commander records,"
+        " not strikes on a problem."
     )
-    checks = (
-        VerbRefusal(order.strike),
-        VerbRefusal(order.hunt),
-    )
+    checks = (CallableCheck(TodoStore.apply),)
     sources = (ProblemFix("P194", "b26843727"), CommanderRule("Strikes, then fire."))
 
 
@@ -336,7 +318,7 @@ class CommanderOverloadedPattern(BehaviourPattern):
         "The commander's unread backlog is over the limit while no second commander is forked"
         " to share it."
     )
-    checks = (PendingCheck("P199", "branch cn-phase-0/P199"),)
+    checks = (PendingCheck("P199", "#1750, closed without merge"),)
     sources = (SeedCatalog(15),)
 
 
@@ -345,7 +327,7 @@ class DeadProviderPattern(BehaviourPattern):
         "A unit's latest turn ended in a usage or credit limit on its own model and the unit"
         " still runs on that model."
     )
-    checks = (PendingCheck("P200", "#1746"),)
+    checks = (PendingCheck("P200", "#1746, closed without merge"),)
     sources = (SeedCatalog(16),)
 
 

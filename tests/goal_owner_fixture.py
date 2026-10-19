@@ -5,7 +5,7 @@ from agent_comms.comms import Comms
 
 
 def canonical_goal_wire(root):
-    """Create an empty real certified source for goal/wait fixture operations."""
+    """Create an empty real checked source for goal/wait fixture operations."""
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
     return comms

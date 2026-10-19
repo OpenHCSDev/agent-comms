@@ -80,7 +80,7 @@ def test_authorities_do_not_import_presentation_or_recover_policy_cases():
         "owner_epochs"
         not in operations[
             operations.index("    def dm_display_page") : operations.index(
-                "    def channel_history_page"
+                "    def channel_display_page"
             )
         ]
     )

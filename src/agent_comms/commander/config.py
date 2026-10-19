@@ -6,14 +6,29 @@ hardcodes a home directory, a bus root or a unit name.
 from __future__ import annotations
 
 import subprocess
-from functools import cache, cached_property
+from dataclasses import dataclass
+from functools import cache
 from importlib.resources import files
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
 from ..comms import Comms
-from ..thread_identity import ThreadIncarnation
+from ..errors import RelationViolationError
+from ..native_arguments import NativeArguments
+from ..threads import Thread
+
+
+class CommanderRole:
+    """The shared eligibility check for registration and every commander verb."""
+
+    @staticmethod
+    def require_commander(thread: Thread) -> None:
+        if not NativeArguments(()).with_model(thread.model).provider_type.may_command:
+            raise RelationViolationError(
+                f"Thread {thread.name!r} with declared model {thread.model!r} "
+                "cannot command: no Codex commander."
+            )
 
 
 class Repo(BaseModel):
@@ -34,7 +49,7 @@ class Repo(BaseModel):
         return cls(checkout=checkout.resolve(), github='/'.join(github))
 
 
-class CommanderConfig(BaseModel):
+class CommanderConfig(CommanderRole, BaseModel):
     model_config = ConfigDict(frozen=True)
 
     commander: str
@@ -64,38 +79,30 @@ class CommanderConfig(BaseModel):
     def installed(cls) -> CommanderConfig:
         return cls.model_validate_json(cls.path().read_text())
 
-    @cached_property
-    def comms(self) -> Comms:
-        """The bus whose Todo store owns problems, orders, deadlines and strikes, opened on first
-        use."""
-        return Comms(self.root)
-
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        """The commander thread's current incarnation, read from the registry on each use."""
-        return self.comms.registry.require(self.commander).incarnation
-
-    @property
-    def review_catch(self) -> str:
-        """Who caught a struck miss, and at which stage, when the strike names no one else."""
-        return f'{self.commander} at review'
-
-    @property
-    def activity(self) -> Path:
-        return self.state / 'activity.log'
-
-    @property
-    def forks(self) -> Path:
-        return self.state / 'forks'
-
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
+        self.require_commander(Comms(self.root).registry.require(self.commander))
         path = self.path(home)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.write_text(self.model_dump_json(indent=1) + '\n')
-        for directory in (self.state, self.forks, self.state / 'orders', self.worktrees,
+        for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
-        if not self.activity.exists():
-            self.activity.write_text('')
         return path
+
+
+@dataclass(frozen=True)
+class Commander:
+    """This machine's commander thread and the bus whose Todo store owns its problems and orders."""
+
+    name: str
+    comms: Comms
+
+    @classmethod
+    def of(cls, config: CommanderConfig) -> Commander:
+        return cls(config.commander, Comms(config.root))
+
+    def units(self) -> frozenset[str]:
+        """The threads this commander gives orders to; the owner, claude-ai and peer commanders
+        are not among them."""
+        return self.comms.goals.todos.units(self.comms.registry.require(self.name).incarnation)

@@ -3,6 +3,46 @@
 // connection owner ending the socket makes its outcome unavailable.
 import { createConnection } from "node:net";
 
+class UnavailableOwnerToolConnection {
+  same(other) { return other === this; }
+
+  request() {
+    return Promise.reject(new Error("Tool owner is unavailable; no tool was started."));
+  }
+}
+
+export class OwnerToolConnection {
+  static unavailable = Object.freeze(new UnavailableOwnerToolConnection());
+
+  static capture(value) {
+    if (value === undefined) return this.unavailable;
+    if (!value || Object.keys(value).sort().join(",") !== "path,token" ||
+        typeof value.path !== "string" || !value.path ||
+        typeof value.token !== "string" || !/^[0-9a-f]{64}$/.test(value.token)) {
+      throw new TypeError("Invalid per-input tool connection");
+    }
+    return new this(value.path, value.token);
+  }
+
+  #path;
+  #token;
+
+  constructor(path, token) {
+    this.#path = path;
+    this.#token = token;
+  }
+
+  same(other) {
+    return other instanceof OwnerToolConnection && this.#path === other.#path && this.#token === other.#token;
+  }
+
+  request(payload, maxRequest, maxResponse, unavailable) {
+    const request = Buffer.from(JSON.stringify({ ...payload, token: this.#token }) + "\n", "utf8");
+    if (request.length > maxRequest) throw new Error("Native tool request exceeds bound");
+    return requestOwnerTool(this.#path, request, maxResponse, unavailable);
+  }
+}
+
 export function requestOwnerTool(path, request, maxResponse, unavailable) {
   return new Promise((resolve, reject) => {
     const socket = createConnection(path);

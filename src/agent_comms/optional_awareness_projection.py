@@ -114,7 +114,7 @@ class OptionalAwarenessProjection:
         generation: int,
         claimed_generation: int,
     ) -> OptionalAwarenessProjection:
-        with index.log.certified_read() as source:
+        with index.log.checked_read() as source:
             after_seq = source.marker.claimed_after_seq
         return cls(index, after_seq, through_seq, generation, claimed_generation,
                    registry=registry)
@@ -132,9 +132,7 @@ class OptionalAwarenessProjection:
             reading = self._reader.submit(self, initial, assignment, owner)
         except RuntimeError:
             self._build_slot.release()
-            return OmittedAwareness.capture(reason="builder unavailable").segments(
-                self.max_text_bytes
-            )
+            raise
         # The executor's Future owns both the value and the original defect.
         # Cancellation of the waiter cannot release a still-running read's slot.
         reading.add_done_callback(lambda _: self._build_slot.release())
@@ -286,7 +284,7 @@ class OptionalAwarenessProjection:
         _require_no_private_owner_rename(self.index.log.path.parent)
         registry = self.registry
         with _store_lock(registry.store.path, blocking=False):
-            snapshot = registry.store._read_unlocked().snapshot()
+            snapshot = registry.store.read_snapshot_unlocked()
             RegistryOwner(
                 thread=owner,
                 claimed_generation=self.expected_claimed_generation,

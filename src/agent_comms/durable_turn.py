@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from functools import partial
 
 from . import pi_events as pi
-from .agent_events import NativePhaseChanged
+from .agent_events import NativePhaseChanged, PromptAccepted
 from .attempt_states import (
     AttemptFailedAttempt,
     CompactionAttempt,
@@ -39,12 +39,12 @@ class DurableTurn(MroDispatch):
     @contextmanager
     def using_attempts(self, attempts):
         """Borrow only this operation's connection; keep the original fence owner."""
-        original = self.attempts
+        previous = self.attempts
         self.attempts = attempts
         try:
             yield
         finally:
-            self.attempts = original
+            self.attempts = previous
 
     async def consume_handlers(self, event, handlers, *args, **kwargs):
         return await Coordination.run_async(
@@ -76,9 +76,9 @@ class DurableTurn(MroDispatch):
         ).value
         self.fence = result.fence
 
-    @handles(pi.Response)
+    @handles(PromptAccepted)
     def accepted(self, event):
-        if event.id == "native-prompt" and event.success and self.current.starting:
+        if self.current.starting:
             self.advance(PromptAcceptedAttempt)
 
     @handles(pi.ContextCommitted)

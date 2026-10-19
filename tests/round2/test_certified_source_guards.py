@@ -1,4 +1,4 @@
-"""Native source observation has one certified reader and bootstrap phase."""
+"""Native source observation has one checked reader and bootstrap phase."""
 
 import ast
 from pathlib import Path

@@ -674,7 +674,7 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
         response = case.bus.log.read_keyed_response(intent)
         original = case.bus.log.read_delivery_cohort(case.root_id, case.origin_seq)
         assert response.answers == (original.message.reference, follow_up.reference)
-        with case.bus.log.certified_read() as source:
+        with case.bus.log.checked_read() as source:
             replies = tuple(source.replies((original.message.reference, follow_up.reference)))
         assert [reply.message.reference for reply in replies] == [response.reference] * 2
     finally:

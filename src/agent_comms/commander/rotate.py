@@ -7,6 +7,7 @@ from ..tools import CommsStandingRulesTool, StandingRulesRead
 from ..todos import Todo
 from .config import CommanderConfig
 
+CONFIG = CommanderConfig.installed()
 
 def broken_rules(after=0.0):
     """Every standing rule that broke after ``after``, as Core's StandingRule family derives it."""
@@ -23,7 +24,6 @@ def owed_orders() -> dict[str, list[Todo]]:
 
 
 def main(a):
-    config = CommanderConfig.installed()
     turn, since = 0, 0.0  # since: the previous wake; a rule that stays broken is said once
     while True:
         now = time.time()
@@ -35,7 +35,7 @@ def main(a):
             read = order.progress()
             orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)} ({read[t.id].line})"
                                for t in owed[unit])
-            edits = judge.Edit.unjudged(config.comms, config.commander)
+            edits = judge.Edit.unjudged(order.COMMS, order.ME)
             waiting = sum(edit.thread == unit for edit in edits)
             print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {waiting} -> read its git state and newest turn, judge, push or hunt", flush=True)
         for line in broken_rules(since):

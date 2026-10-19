@@ -179,8 +179,8 @@ class Goals:
             sequences=sequences, limit=len(sequences), ascending=True,
         )
         earlier = request.capture_many(self.bus.log, lookup, (request,))[0] if sequences else ()
-        # Keep older UNKNOWNs, but discover unreserved replies only after this
-        # dependency scope's recorded wait. Certification owns both identities.
+        # Keep older UNKNOWN inputs, but look for new replies only after this
+        # dependency's recorded wait. Capture checks both participant identities.
         replies = {
             InputDispositions.bus_key(original.message, thread): original.message
             for original in chain(
@@ -373,7 +373,7 @@ class Goals:
         wait = self.waits.for_goal(goal, self.waits.read())
         if not wait.owner_matches(current.incarnation.require_recorded()):
             return False
-        with self.bus.log.certified_read() as source:
+        with self.bus.log.checked_read() as source:
             original = source.delivery(reference.seq)
             if original.message.reference != reference:
                 raise ValueError("Dependency reply source reference changed.")

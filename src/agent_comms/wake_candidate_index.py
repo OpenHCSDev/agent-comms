@@ -452,7 +452,6 @@ class WakeCandidateIndex(TypedStore):
         after_seq: int,
         required_through_seq: int,
         limit: int = 32,
-        delivery_only: bool = False,
     ) -> CandidatePage:
         """Read only a bounded WAL page; caller MUST verify bus+SQL+owner.
 
@@ -461,7 +460,7 @@ class WakeCandidateIndex(TypedStore):
         """
         request = CandidateQuery.capture(root_id=root_id, recipient_lookup=recipient_lookup,
                      after_seq=after_seq, required_through_seq=required_through_seq,
-                     limit=limit, delivery_only=delivery_only)
+                     limit=limit)
         try:
             with self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source, self.snapshot() as db:
                 checkpoint = CandidateCheckpoint.current(db).require_fresh(request)
@@ -470,12 +469,8 @@ class WakeCandidateIndex(TypedStore):
                     db.execute(
                         f'SELECT * FROM "{Candidate.declared_name}" '
                         "WHERE recipient_lookup=? AND source_seq>? "
-                        + (
-                            "AND wake_mode IS NULL "
-                            if request.delivery_only
-                            else "AND wake_mode IS NOT NULL "
-                        )
-                        + "ORDER BY source_seq LIMIT ?",
+                        "AND wake_mode IS NOT NULL "
+                        "ORDER BY source_seq LIMIT ?",
                         (request.recipient_lookup, request.after_seq, request.limit + 1),
                     )
                 )
