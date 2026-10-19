@@ -12,8 +12,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
+from .owner_cutover import StoppedOwnerInstallation
 from .plan_phases import PlanPhase
 from .rule_reviews import RuleReviews
+from .running_processes import ProcessTable, RunningProcess
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -276,3 +278,36 @@ class DiskLow(UndatedStandingRule):
             f"DISK LOW: {self.rule.volume} has {self.free_gib:.1f} GiB free (cleanup due under"
             f" {self.rule.cleanup_gib:g} GiB{floor}) -> put a cleanup owner on it now"
         )
+
+
+@dataclass(frozen=True)
+class UnownedWork(UndatedStandingRule):
+    """Agent-comms work that no registered thread's process holds, itself or through an ancestor;
+    an open order's work runs under the thread holding it. Core ends work on a retired runtime,
+    a sibling of the current one, and names the rest."""
+
+    table: ProcessTable
+    process: RunningProcess
+    retired: bool
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        table, current = ProcessTable.read(), StoppedOwnerInstallation.current_pointer().resolve()
+        threads = comms.registry.snapshot().threads.values()
+        holders = tuple(thread.process_identity for thread in threads)
+        return tuple(
+            cls(table, process, any(runtime != current and runtime.parent == current.parent
+                                    for runtime in process.runtimes()))
+            for process in table.running.values()
+            if process.runtimes() and process.identity not in table.reader()
+            and not table.held(process, holders))
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        if self.retired:
+            self.table.end((self.process,))
+
+    def line(self) -> str:
+        fate = "it runs on a retired runtime, so Core ends it" if self.retired else (
+            "give it an owner or end it")
+        return (f"UNOWNED WORK: pid {self.process.identity.pid} ({self.process.command}) runs for"
+                f" no registered thread or open order -> {fate}")
