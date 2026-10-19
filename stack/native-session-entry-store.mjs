@@ -14,6 +14,46 @@ function revision(stat) {
 /** One entry's selectors, never its message body or summary. */
 export class EntryMetadata {
     static initialSettings = Object.freeze({model: null, thinkingLevel: 'off'});
+    static treeColumns = {
+        timestamp: ['TEXT', '$.timestamp'], role: ['TEXT', '$.role'],
+        hasText: ['INTEGER', '$.hasText'], stopReason: ['TEXT', '$.stopReason'],
+        toolCalls: ['TEXT', '$.toolCalls'], searchText: ['TEXT', '$.searchText'],
+        labelTarget: ['TEXT', '$.label.targetId'], labelText: ['TEXT', '$.label.label'],
+        labelTimestamp: ['TEXT', '$.label.timestamp'],
+    };
+    static *textParts(content) {
+        if (typeof content === 'string') { yield content; return; }
+        if (Array.isArray(content)) for (const part of content)
+            if (part && typeof part === 'object' && part.type === 'text') yield part.text ?? '';
+    }
+    static text(content) { return [...this.textParts(content)].join(''); }
+    static preview(content) {
+        let value = '';
+        for (const part of this.textParts(content)) {
+            value += part.slice(0, 200 - value.length);
+            if (value.length === 200) break;
+        }
+        return value;
+    }
+    static searchTextFor(entry) {
+        switch (entry.type) {
+            case 'message': return [entry.message.role, this.preview(entry.message.content), entry.message.role === 'bashExecution' ? entry.message.command : ''].join(' ');
+            case 'custom_message': return [entry.customType, typeof entry.content === 'string' ? entry.content : this.preview(entry.content)].join(' ');
+            case 'compaction': return 'compaction';
+            case 'branch_summary': return ['branch summary', entry.summary].join(' ');
+            case 'session_info': return ['title', entry.name].join(' ');
+            case 'model_change': return ['model', entry.modelId].join(' ');
+            case 'thinking_level_change': return ['thinking', entry.thinkingLevel].join(' ');
+            case 'custom': return ['custom', entry.customType].join(' ');
+            case 'label': return ['label', entry.label ?? ''].join(' ');
+            default: return '';
+        }
+    }
+    static byteDigest(chunks) {
+        const digest = createHash('sha256');
+        for (const chunk of chunks) digest.update(chunk);
+        return digest.digest('hex');
+    }
     inheritSettings(parent) {
         if (!this.contextSettings && parent) this.contextSettings = {
             model: this.model ?? parent.model,
@@ -28,7 +68,13 @@ export class EntryMetadata {
         this.sequence = sequence;
         this.offset = offset;
         this.length = length;
+        this.timestamp = entry.timestamp;
         this.role = entry.message?.role ?? null;
+        this.hasText = [...EntryMetadata.textParts(entry.message?.content)].some(text => text.trim().length > 0);
+        this.stopReason = entry.message?.stopReason ?? null;
+        this.toolCalls = this.role === 'assistant' && Array.isArray(entry.message.content)
+            ? entry.message.content.filter(part => part && part.type === 'toolCall').map(part => ({id: part.id, name: part.name})) : [];
+        this.searchText = EntryMetadata.searchTextFor(entry);
         this.inputId = entry.message?.inputId ?? null;
         this.inputDigest = entry.message?.inputDigest ?? null;
         this.firstKeptEntryId = entry.firstKeptEntryId ?? null;
@@ -89,10 +135,12 @@ export class EntryStore {
     }
     append(entry) {
         this.validate(entry);
-        const coordinates = this.appendCoordinates(entry);
+        const [sequence, offset, length, digest] = this.appendCoordinates(entry);
         const parent = entry.parentId === null ? undefined : this.settingsMetadata(entry.parentId);
         if (entry.parentId !== null && !parent) throw new Error('Invalid native append ancestry');
-        this.storeAppended(entry, this.metadataFor(entry, ...coordinates, parent));
+        const meta = this.metadataFor(entry, sequence, offset, length, parent);
+        meta.digest = digest;
+        this.storeAppended(entry, meta);
     }
     appendCoordinates(entry) { throw new Error('EntryStore.appendCoordinates must be implemented'); }
     storeAppended(entry, metadata) { throw new Error('EntryStore.storeAppended must be implemented'); }
@@ -125,12 +173,15 @@ export class EntryStore {
         return header;
     }
     *entries() { for (const meta of this.chronologicalMetadata()) yield this.get(meta.id); }
+    *treeMetadata() { yield* this.chronologicalMetadata(); }
     tree() {
         const nodes = new Map(), labels = new Map(), roots = [];
-        for (const entry of this.entries()) {
+        for (const meta of this.treeMetadata()) {
+            const entry = {id: meta.id, parentId: meta.parentId, type: meta.type,
+                timestamp: meta.timestamp, role: meta.role, hasText: Boolean(meta.hasText),
+                stopReason: meta.stopReason, toolCalls: meta.toolCalls, searchText: meta.searchText};
             nodes.set(entry.id, {entry, children: [], label: undefined, labelTimestamp: undefined});
-            const label = EntryMetadata.labelFor(entry);
-            if (label) labels.set(label.targetId, label);
+            if (meta.label) labels.set(meta.label.targetId, meta.label);
         }
         for (const node of nodes.values()) {
             const label = EntryMetadata.liveLabel(labels.get(node.entry.id));
@@ -350,10 +401,15 @@ export class DiskEntryStore extends EntryStore {
             this.#fd = openSync(this.file, 'r');
             this.#db = new DatabaseSync(index);
             this.#db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA mmap_size=0; PRAGMA busy_timeout=10000;');
-            this.#db.exec(`CREATE TABLE IF NOT EXISTS source(revision TEXT NOT NULL);
+            const columns = new Set(this.#db.prepare('PRAGMA table_xinfo(entries)').all().map(column => column.name));
+            if (columns.size && !Object.keys(EntryMetadata.treeColumns).every(name => columns.has(name)))
+                this.#db.exec('DROP TABLE entries; DROP TABLE source;');
+            const treeColumns = Object.entries(EntryMetadata.treeColumns).map(([name, [type, path]]) =>
+                `${name} ${type} GENERATED ALWAYS AS(json_extract(selectors,'${path}')) STORED`).join(',');
+            this.#db.exec(`CREATE TABLE IF NOT EXISTS source(revision TEXT NOT NULL, headerDigest TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
-                input_id TEXT, selectors TEXT NOT NULL);
+                input_id TEXT, selectors TEXT NOT NULL, ${treeColumns});
                 CREATE INDEX IF NOT EXISTS entry_input ON entries(input_id);
                 CREATE INDEX IF NOT EXISTS entry_parent ON entries(parent,sequence);
                 CREATE INDEX IF NOT EXISTS entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence DESC);
@@ -457,6 +513,18 @@ export class DiskEntryStore extends EntryStore {
                 yield EntryMetadata.fromIndex(row);
         } finally { this.assertCurrent(); }
     }
+    *treeMetadata() {
+        this.assertCurrent();
+        this.#writeIndex(() => { while (this.#readPrevious()) {} });
+        const fields = Object.keys(EntryMetadata.treeColumns).join(',');
+        try {
+            for (const row of this.#db.prepare(`SELECT id,parent AS parentId,type,${fields} FROM entries ORDER BY sequence`).iterate()) {
+                row.toolCalls = JSON.parse(row.toolCalls);
+                row.label = row.labelTarget === null ? null : {targetId: row.labelTarget, label: row.labelText, timestamp: row.labelTimestamp};
+                yield row;
+            }
+        } finally { this.assertCurrent(); }
+    }
     *children(parentId) {
         this.assertCurrent();
         try {
@@ -524,11 +592,10 @@ export class DiskEntryStore extends EntryStore {
             }
         } finally { this.assertCurrent(); }
     }
-    *#forwardEntries() {
-        // Whole-history consumers need every payload, not a selector-index build
-        // followed by one random read and another metadata decode per payload.
+    *#forwardEntries() { for (const record of this.#forwardRecords()) yield record.entry; }
+    *#forwardRecords(startPosition = this.#headerEnd) {
         const buffer = Buffer.allocUnsafe(1024 * 1024);
-        let position = this.#headerEnd, parts = [], size = 0;
+        let position = startPosition, recordStart = startPosition, parts = [], size = 0;
         while (position < this.#extent) {
             const count = readSync(this.#fd, buffer, 0, Math.min(buffer.length, this.#extent - position), position);
             if (!count) throw new Error('Incomplete native entry');
@@ -537,8 +604,8 @@ export class DiskEntryStore extends EntryStore {
             while ((newline = chunk.indexOf(10, start)) !== -1) {
                 const part = chunk.subarray(start, newline);
                 const raw = parts.length ? Buffer.concat([...parts, part], size + part.length) : part;
-                yield this.#decode(raw);
-                start = newline + 1; parts = []; size = 0;
+                yield {entry: this.#decode(raw), raw, offset: recordStart, length: raw.length};
+                start = newline + 1; recordStart = position + start; parts = []; size = 0;
             }
             if (start < count) {
                 const part = Buffer.from(chunk.subarray(start));
@@ -550,7 +617,7 @@ export class DiskEntryStore extends EntryStore {
         }
         if (size) throw new Error('Incomplete native entry');
     }
-    #index(entry, offset, length) {
+    #index(entry, offset, length, raw) {
         this.validate(entry);
         // Byte offsets supply ordering; no lifetime row counter is needed.
         const existing = this.knownMetadata(entry.id);
@@ -559,6 +626,7 @@ export class DiskEntryStore extends EntryStore {
             return existing;
         }
         const meta = this.metadataFor(entry, offset, offset, length);
+        meta.digest = EntryMetadata.byteDigest([raw]);
         const parent = this.knownMetadata(entry.parentId);
         if (parent && parent.sequence >= meta.sequence) throw new Error('Invalid native entry ancestry');
         this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, offset, length, meta.inputId, JSON.stringify(meta));
@@ -633,7 +701,7 @@ export class DiskEntryStore extends EntryStore {
                 return undefined;
             }
             const {raw, offset} = next.value;
-            const meta = this.#index(this.#decode(raw), offset, raw.length);
+            const meta = this.#index(this.#decode(raw), offset, raw.length, raw);
             this.#last ??= meta.id;
             return meta;
         } catch (error) {
@@ -649,11 +717,21 @@ export class DiskEntryStore extends EntryStore {
         if (this.#revision) throw new Error('Unrecognized native revision; open a fresh store');
         this.#extent = Number(before.size);
         this.#revision = revision(before);
-        if (this.#db.prepare('SELECT revision FROM source').get()?.revision !== this.#revision) {
-            this.#db.exec('DELETE FROM entries; DELETE FROM source;');
-            this.#db.prepare('INSERT INTO source VALUES(?)').run(this.#revision);
-        }
         this.#readHeader();
+        const cached = this.#db.prepare('SELECT revision,headerDigest FROM source').get();
+        const headerDigest = EntryMetadata.byteDigest(this.#bytes(0, this.#headerEnd));
+        if (!cached) this.#db.prepare('INSERT INTO source VALUES(?,?)').run(this.#revision, headerDigest);
+        else if (cached.revision !== this.#revision) {
+            const end = this.#db.prepare('SELECT offset+length+1 AS end FROM entries ORDER BY sequence DESC LIMIT 1').get()?.end ?? this.#headerEnd;
+            if (this.#extent < end || cached.headerDigest !== headerDigest)
+                throw new Error('Native session prefix changed');
+            for (const row of this.#db.prepare('SELECT offset,length,selectors FROM entries ORDER BY sequence').iterate()) {
+                if (EntryMetadata.byteDigest(this.#bytes(row.offset, row.length)) !== JSON.parse(row.selectors).digest)
+                    throw new Error('Native indexed entry changed');
+            }
+            for (const record of this.#forwardRecords(end)) this.#index(record.entry, record.offset, record.length, record.raw);
+            this.#db.prepare('UPDATE source SET revision=?').run(this.#revision);
+        }
         const oldest = this.#db.prepare('SELECT offset FROM entries ORDER BY sequence LIMIT 1').get();
         this.#last = this.#db.prepare('SELECT id FROM entries ORDER BY sequence DESC LIMIT 1').get()?.id ?? null;
         this.#lines = this.#backwardLines(oldest?.offset ?? this.#extent);
@@ -664,6 +742,22 @@ export class DiskEntryStore extends EntryStore {
         this.assertCurrent();
     }
     /** Extend only after SessionManager's existing writer fence appended these exact bytes. */
+    *#bytes(start, length) {
+        const buffer = Buffer.allocUnsafe(Math.min(1024 * 1024, length));
+        while (length) {
+            const count = readSync(this.#fd, buffer, 0, Math.min(buffer.length, length), start);
+            if (!count) throw new Error('Incomplete native indexed bytes');
+            yield buffer.subarray(0, count);
+            start += count; length -= count;
+        }
+    }
+    copyEntries(entries, write) {
+        return this.#writeIndex(() => {
+            for (const entry of entries) { write(entry); this.append(entry); }
+            this.#db.prepare('UPDATE source SET revision=?').run(this.#revision);
+            return this;
+        });
+    }
     appendCoordinates(entry) {
         const before = this.#extent;
         const current = fstatSync(this.#fd, { bigint: true });
@@ -676,7 +770,7 @@ export class DiskEntryStore extends EntryStore {
             throw new Error('Native appended entry differs');
         this.#extent = Number(current.size);
         this.#revision = revision(current);
-        return [before, before, encoded.length - 1];
+        return [before, before, encoded.length - 1, EntryMetadata.byteDigest([saved.subarray(0, -1)])];
     }
     storeAppended(entry, meta) {
         if (this.knownMetadata(meta.id)) throw new Error('Duplicate native entry identity');

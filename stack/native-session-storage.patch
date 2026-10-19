@@ -2445,3 +2445,308 @@
              this.leafId = entry.id;
              this._pr48LoadedRevision = this.persist ? pr48DiskRevision(this.sessionFile) : null;
          });
+--- a/dist/modes/interactive/components/tree-selector.js
++++ b/dist/modes/interactive/components/tree-selector.js
+@@ -1,3 +1,4 @@
++import { EntryMetadata } from '../../../core/session-entry-store.js';
+ import { Container, getKeybindings, Input, Spacer, sliceByColumn, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi, } from "@earendil-works/pi-tui";
+ import { theme } from "../theme/theme.js";
+ import { DynamicBorder } from "./dynamic-border.js";
+@@ -56,7 +57,8 @@
+     onCancel;
+     onCopy;
+     onLabelEdit;
+-    constructor(tree, currentLeafId, maxVisibleLines, initialSelectedId, initialFilterMode) {
++    constructor(tree, currentLeafId, maxVisibleLines, initialSelectedId, initialFilterMode, readEntry) {
++        this.readEntry = readEntry;
+         this.currentLeafId = currentLeafId;
+         this.maxVisibleLines = maxVisibleLines;
+         this.filterMode = initialFilterMode ?? "default";
+@@ -159,19 +161,8 @@
+         }
+         while (stack.length > 0) {
+             const [node, indent, justBranched, showConnector, isLast, gutters, isVirtualRootChild] = stack.pop();
+-            // Extract tool calls from assistant messages for later lookup
+             const entry = node.entry;
+-            if (entry.type === "message" && entry.message.role === "assistant") {
+-                const content = entry.message.content;
+-                if (Array.isArray(content)) {
+-                    for (const block of content) {
+-                        if (typeof block === "object" && block !== null && "type" in block && block.type === "toolCall") {
+-                            const tc = block;
+-                            this.toolCallMap.set(tc.id, { name: tc.name, arguments: tc.arguments });
+-                        }
+-                    }
+-                }
+-            }
++            for (const call of entry.toolCalls) this.toolCallMap.set(call.id, {name: call.name, entryId: entry.id});
+             result.push({ node, indent, showConnector, isLast, gutters, isVirtualRootChild });
+             const children = node.children;
+             const multipleChildren = children.length > 1;
+@@ -242,9 +233,9 @@
+             const isCurrentLeaf = entry.id === this.currentLeafId;
+             // Skip assistant messages with only tool calls (no text) unless error/aborted
+             // Always show current leaf so active position is visible
+-            if (entry.type === "message" && entry.message.role === "assistant" && !isCurrentLeaf) {
+-                const msg = entry.message;
+-                const hasText = this.hasTextContent(msg.content);
++            if (entry.type === "message" && entry.role === "assistant" && !isCurrentLeaf) {
++                const msg = entry;
++                const hasText = msg.hasText;
+                 const isErrorOrAborted = msg.stopReason && msg.stopReason !== "stop" && msg.stopReason !== "toolUse";
+                 // Only hide if no text AND not an error/aborted message
+                 if (!hasText && !isErrorOrAborted) {
+@@ -262,11 +253,11 @@
+             switch (this.filterMode) {
+                 case "user-only":
+                     // Just user messages
+-                    passesFilter = entry.type === "message" && entry.message.role === "user";
++                    passesFilter = entry.type === "message" && entry.role === "user";
+                     break;
+                 case "no-tools":
+                     // Default minus tool results
+-                    passesFilter = !isSettingsEntry && !(entry.type === "message" && entry.message.role === "toolResult");
++                    passesFilter = !isSettingsEntry && !(entry.type === "message" && entry.role === "toolResult");
+                     break;
+                 case "labeled-only":
+                     // Just labeled entries
+@@ -430,62 +421,7 @@
+         this.visibleChildrenMap = visibleChildren;
+     }
+     /** Get searchable text content from a node */
+-    getSearchableText(node) {
+-        const entry = node.entry;
+-        const parts = [];
+-        if (node.label) {
+-            parts.push(node.label);
+-        }
+-        switch (entry.type) {
+-            case "message": {
+-                const msg = entry.message;
+-                parts.push(msg.role);
+-                if ("content" in msg && msg.content) {
+-                    parts.push(this.extractContent(msg.content));
+-                }
+-                if (msg.role === "bashExecution") {
+-                    const bashMsg = msg;
+-                    if (bashMsg.command)
+-                        parts.push(bashMsg.command);
+-                }
+-                break;
+-            }
+-            case "custom_message": {
+-                parts.push(entry.customType);
+-                if (typeof entry.content === "string") {
+-                    parts.push(entry.content);
+-                }
+-                else {
+-                    parts.push(this.extractContent(entry.content));
+-                }
+-                break;
+-            }
+-            case "compaction":
+-                parts.push("compaction");
+-                break;
+-            case "branch_summary":
+-                parts.push("branch summary", entry.summary);
+-                break;
+-            case "session_info":
+-                parts.push("title");
+-                if (entry.name)
+-                    parts.push(entry.name);
+-                break;
+-            case "model_change":
+-                parts.push("model", entry.modelId);
+-                break;
+-            case "thinking_level_change":
+-                parts.push("thinking", entry.thinkingLevel);
+-                break;
+-            case "custom":
+-                parts.push("custom", entry.customType);
+-                break;
+-            case "label":
+-                parts.push("label", entry.label ?? "");
+-                break;
+-        }
+-        return parts.join(" ");
+-    }
++    getSearchableText(node) { return [node.label ?? '', node.entry.searchText].join(' '); }
+     invalidate() { }
+     getSearchQuery() {
+         return this.searchQuery;
+@@ -610,7 +546,7 @@
+         return lines;
+     }
+     getEntryDisplayText(node, isSelected) {
+-        const entry = node.entry;
++        const entry = this.readEntry(node.entry.id);
+         let result;
+         const normalize = (s) => s.replace(/[\n\t]/g, " ").trim();
+         switch (entry.type) {
+@@ -619,12 +555,12 @@
+                 const role = msg.role;
+                 if (role === "user") {
+                     const msgWithContent = msg;
+-                    const content = normalize(this.extractContent(msgWithContent.content));
++                    const content = normalize(EntryMetadata.preview(msgWithContent.content));
+                     result = theme.fg("accent", "user: ") + content;
+                 }
+                 else if (role === "assistant") {
+                     const msgWithContent = msg;
+-                    const textContent = normalize(this.extractContent(msgWithContent.content));
++                    const textContent = normalize(EntryMetadata.preview(msgWithContent.content));
+                     if (textContent) {
+                         result = theme.fg("success", "assistant: ") + textContent;
+                     }
+@@ -643,7 +579,9 @@
+                     const toolMsg = msg;
+                     const toolCall = toolMsg.toolCallId ? this.toolCallMap.get(toolMsg.toolCallId) : undefined;
+                     if (toolCall) {
+-                        result = theme.fg("muted", this.formatToolCall(toolCall.name, toolCall.arguments));
++                        const owner = this.readEntry(toolCall.entryId);
++                        const call = owner.message.content.find(block => block.type === 'toolCall' && block.id === toolMsg.toolCallId);
++                        result = theme.fg("muted", this.formatToolCall(toolCall.name, call.arguments));
+                     }
+                     else {
+                         result = theme.fg("muted", `[${toolMsg.toolName ?? "tool"}]`);
+@@ -717,24 +655,8 @@
+         const year = date.getFullYear().toString().slice(-2);
+         return `${year}/${month}/${day} ${time}`;
+     }
+-    extractContent(content) {
+-        return this.extractFullContent(content).slice(0, 200);
+-    }
+-    extractFullContent(content) {
+-        if (typeof content === "string")
+-            return content;
+-        if (!Array.isArray(content))
+-            return "";
+-        let result = "";
+-        for (const block of content) {
+-            if (typeof block === "object" && block !== null && "type" in block && block.type === "text") {
+-                result += block.text;
+-            }
+-        }
+-        return result;
+-    }
+     getEntryCopyText(node) {
+-        const entry = node.entry;
++        const entry = this.readEntry(node.entry.id);
+         let text;
+         switch (entry.type) {
+             case "message":
+@@ -742,14 +664,14 @@
+                     text = entry.message.command;
+                 }
+                 else if ("content" in entry.message) {
+-                    text = this.extractFullContent(entry.message.content);
++                    text = EntryMetadata.text(entry.message.content);
+                     if (!text && entry.message.role === "assistant") {
+                         text = entry.message.errorMessage;
+                     }
+                 }
+                 break;
+             case "custom_message":
+-                text = this.extractFullContent(entry.content);
++                text = EntryMetadata.text(entry.content);
+                 break;
+             case "compaction":
+                 text = entry.summary;
+@@ -759,20 +681,6 @@
+                 break;
+         }
+         return text?.trim() ? text : undefined;
+-    }
+-    hasTextContent(content) {
+-        if (typeof content === "string")
+-            return content.trim().length > 0;
+-        if (Array.isArray(content)) {
+-            for (const c of content) {
+-                if (typeof c === "object" && c !== null && "type" in c && c.type === "text") {
+-                    const text = c.text;
+-                    if (text && text.trim().length > 0)
+-                        return true;
+-                }
+-            }
+-        }
+-        return false;
+     }
+     formatToolCall(name, args) {
+         const shortenPath = (p) => {
+@@ -1183,11 +1091,11 @@
+             this.labelInput.focused = value;
+         }
+     }
+-    constructor(tree, currentLeafId, terminalHeight, onSelect, onCancel, onLabelChange, initialSelectedId, initialFilterMode) {
++    constructor(tree, currentLeafId, terminalHeight, onSelect, onCancel, onLabelChange, initialSelectedId, initialFilterMode, readEntry) {
+         super();
+         this.onLabelChangeCallback = onLabelChange;
+         const maxVisibleLines = Math.max(5, Math.floor(terminalHeight / 2));
+-        this.treeList = new TreeList(tree, currentLeafId, maxVisibleLines, initialSelectedId, initialFilterMode);
++        this.treeList = new TreeList(tree, currentLeafId, maxVisibleLines, initialSelectedId, initialFilterMode, readEntry);
+         this.treeList.onSelect = onSelect;
+         this.treeList.onCancel = onCancel;
+         this.treeList.onCopy = (text) => this.onCopy?.(text);
+--- a/dist/modes/interactive/interactive-mode.js
++++ b/dist/modes/interactive/interactive-mode.js
+@@ -4455,7 +4455,7 @@
+             }, (entryId, label) => {
+                 this.sessionManager.appendLabelChange(entryId, label);
+                 this.ui.requestRender();
+-            }, initialSelectedId, initialFilterMode);
++            }, initialSelectedId, initialFilterMode, this.sessionManager.getEntry.bind(this.sessionManager));
+             selector.onCopy = async (text) => {
+                 if (!text) {
+                     this.showError("Selected entry has no text to copy");
+--- a/dist/core/session-manager.js
++++ b/dist/core/session-manager.js
+@@ -949,13 +949,13 @@
+                     const fd = openSync(file, 'wx', 0o600);
+                     try {
+                         writeFileSync(fd, JSON.stringify(header) + '\n');
+-                        for (const entry of source.branch(leafId)) writeFileSync(fd, JSON.stringify(entry) + '\n');
++                        next = new DiskEntryStore(file);
++                        next.copyEntries(source.branch(leafId), entry => writeFileSync(fd, JSON.stringify(entry) + '\n'));
+                         fsyncSync(fd);
+                         acSyncParents(dirname(file));
+                     } catch (cause) { throw new Error("Native branch outcome unknown; no replay", {cause}); }
+                     finally { closeSync(fd); }
+                 });
+-                next = new DiskEntryStore(file);
+             } else next = new MemoryEntryStore(header, source.branch(leafId));
+             // Labels may have been changed on another branch after this leaf.
+             this.entryStore = next;
+@@ -1049,7 +1049,9 @@
+                         entryCount++;
+                     };
+                     writeEntry(header);
+-                    for (const entry of source.entries()) writeEntry(entry);
++                    const indexed = new DiskEntryStore(file);
++                    try { indexed.copyEntries(source.entries(), writeEntry); }
++                    finally { indexed.close(); }
+                     source.assertCurrent();
+                     fsyncSync(fd);
+                     acSyncParents(dirname(file));
+--- a/dist/core/session-manager.d.ts
++++ b/dist/core/session-manager.d.ts
+@@ -107,8 +107,19 @@
+ /** Raw file entry (includes header) */
+ export type FileEntry = SessionHeader | SessionEntry;
+ /** Tree node for getTree() - defensive copy of session structure */
++export interface SessionTreeEntry {
++    id: string;
++    parentId: string | null;
++    type: SessionEntry['type'];
++    timestamp: string;
++    role: string | null;
++    hasText: boolean;
++    stopReason: string | null;
++    toolCalls: {id: string; name: string}[];
++    searchText: string;
++}
+ export interface SessionTreeNode {
+-    entry: SessionEntry;
++    entry: SessionTreeEntry;
+     children: SessionTreeNode[];
+     /** Resolved label for this entry, if any */
+     label?: string;
