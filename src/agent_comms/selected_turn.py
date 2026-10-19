@@ -55,6 +55,7 @@ class SelectedPrompt:
         frame = SelectedWakeSegment.capture(
             tuple((source.delivery, source.assignment) for source in participant.batch.sources),
             participant.owner.thread,
+            participant.comms.goals,
             sent_outcomes=self.sent_outcomes(),
         )
         return self.context(
@@ -69,6 +70,7 @@ class SelectedPrompt:
                 for source, assignment in zip(participant.batch.sources, assignments, strict=True)
             ),
             participant.owner.thread,
+            participant.comms.goals,
             obligations=obligations,
             sent_outcomes=self.sent_outcomes(),
         )

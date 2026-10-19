@@ -207,7 +207,7 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     comms.registry.rename(viewer, "human")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
     comms.messaging.send("alice", "bob", "before threshold").message.message_id
-    comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+    comms.views.mark_user_view_read("#api", worktree=str(tmp_path))
     comms.channels.set_channel_any_mode("#api", True)
     # The previously hidden DM was never painted, so enabling the broader
     # projection must expose it as unread despite the exact-channel marker.
@@ -217,7 +217,7 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     # The old user sender is still an alias of the current human viewer.
     comms.messaging.send_user_message("#api", "human owned", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 2
-    comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+    comms.views.mark_user_view_read("#api", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
 
 
@@ -381,7 +381,7 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
 
     def mark_then_append():
         started.set()
-        comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
+        comms.views.mark_user_view_read("#api", worktree=str(tmp_path))
         comms.messaging.send("bob", "#api", "row2").message.message_id
         finished.set()
 
@@ -431,16 +431,10 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
         for _ in range(20):
             page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
             if page.newest_seq is not None:
-                comms.views.mark_channel_view_read(
-                    "#api", worktree=str(tmp_path),
-                    mark=ReadThrough(page.newest_seq, page.display_scope),
-                )
+                comms.views.mark_page_read(page, worktree=str(tmp_path))
             dm = comms.views.dm_display_page("alice", worktree=str(tmp_path))
             assert bodies(dm) == ["DM original"]
-            comms.views.mark_dm_view_read(
-                "alice", worktree=str(tmp_path), through=dm.newest_seq,
-                expected_display_basis=dm.display_basis,
-            )
+            comms.views.mark_page_read(dm, worktree=str(tmp_path))
     finally:
         writer.join(timeout=10)
     assert finished.is_set() and not writer.is_alive() and not failures
@@ -448,10 +442,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     assert bodies(page) == [f"burst {n}" for n in range(20)]
     comms.registry.rename("alice", "renamed")
     with pytest.raises(DMScopeChanged, match="incarnation changed"):
-        comms.views.mark_dm_view_read(
-            "alice", worktree=str(tmp_path), through=dm.newest_seq,
-            expected_display_basis=dm.display_basis,
-        )
+        comms.views.mark_page_read(dm, worktree=str(tmp_path))
 
 
 def test_views_answer_how_far_the_bus_has_grown(tmp_path):

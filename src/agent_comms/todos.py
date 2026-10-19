@@ -729,6 +729,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         self.first_call_deadline.require_deadline()
 
     pending: ClassVar[bool]
+    line: ClassVar[str]
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
@@ -810,6 +811,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
+    line: ClassVar[str] = "Open"
 
     def require_transfer(self, todo: Todo) -> None:
         pass
@@ -827,6 +829,7 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Delivered, waiting on install"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
@@ -852,6 +855,7 @@ class DeliveredProblemOrder(ProblemOrder):
 class InstalledProblemOrder(DeliveredProblemOrder):
     works: str
     artifact: str
+    line: ClassVar[str] = "Installed"
 
     def __post_init__(self):
         super().__post_init__()
@@ -878,6 +882,7 @@ class WithdrawnProblemOrder(ProblemOrder):
     why: str
     superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
     pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Withdrawn"
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
@@ -1591,14 +1596,6 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
-    def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
-        """Each pending problem's progress and latest verdict, as its Goal shows them."""
-        pulls = PullRequests(todos)
-        return "\n".join(
-            " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
-                        *(verdict.line for verdict in todo.verdicts[-1:])))
-            for todo in todos if todo.pending)
-
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
         return any(todo.pending for todo in self._open(
@@ -1625,6 +1622,14 @@ class TodoStore(TypedStore):
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+
+    def units(self, commander: ThreadIncarnation) -> frozenset[str]:
+        """The threads this commander gives orders to: everyone who holds or held one of its
+        problems."""
+        return frozenset(
+            assignment.owner for todo in self.history_for_commander(commander)
+            for assignment in (todo.assignment, *(release.previous for release in todo.released))
+            if assignment)
 
     def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         states = TodoState.open_names()
