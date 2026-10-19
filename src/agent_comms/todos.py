@@ -281,6 +281,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """An open pull request nobody has touched for five minutes."""
         return False
 
+    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
+        """The held order this progress leaves waiting on the fleet's install."""
+        return ()
+
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -399,6 +403,9 @@ class MergedProgress(FoundProgress):
     @property
     def line(self) -> str:
         return f"merged as {self.sha}, record done"
+
+    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
+        return (todo,)
 
 
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
@@ -778,6 +785,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         """How this order retired its problem without delivery, as the record and board say."""
         return ()
 
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        """The order waiting on the fleet's install to record it working."""
+        return ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
@@ -785,6 +796,10 @@ class PendingProblemOrder(ProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         pass
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        """An undelivered order waits on install once its PR merged."""
+        return read[todo.id].waiting_on_install(todo)
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
@@ -812,6 +827,9 @@ class DeliveredProblemOrder(ProblemOrder):
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return (todo,)
+
 
 @dataclass(frozen=True, kw_only=True)
 class InstalledProblemOrder(DeliveredProblemOrder):
@@ -830,6 +848,9 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
     def require_close(self):
         pass
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
