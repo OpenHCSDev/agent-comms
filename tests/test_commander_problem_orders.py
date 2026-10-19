@@ -19,6 +19,7 @@ from dataclasses import replace
 from cutover.carry import CarryChain
 
 from agent_comms.change_report import FileLine
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
@@ -380,7 +381,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
-    sent = next(m.body for m in comms.views.dm_history_page('lead', 'worker').messages if m.message_id == link.message_id)
+    sent = next(m.body for m in comms.views.history_page(CommandTarget.named('worker'), viewer='lead').messages if m.message_id == link.message_id)
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
     assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
 
@@ -1267,14 +1268,16 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
 ])
 def test_tactical_refused_from_the_commander_session_only(commander, commander_script, monkeypatch, capsys,
                                                           command, kind):
-    """lead's registered process runs in Claude session s1: tactical work run there is refused with
-    the order to send its owner; the same command from another session, and an order whose body
-    names the command, pass."""
+    """lead's registered process runs in Claude session s1 and worker holds the installer problem:
+    tactical work run in s1 is refused with the order to send worker; the same command from another
+    session, and an order whose body names the command, pass. Once lead's process is gone no session
+    can be classified, so every session is refused with the read error."""
     import io, os, subprocess
     from dataclasses import replace
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.commander import send_guard
     comms, _ = commander
+    create(commander, 'P168')
     process = subprocess.Popen(['sleep', '60'], env={**os.environ, 'CLAUDE_CODE_SESSION_ID': 's1'})
     try:
         comms.registry.declare(replace(comms.registry.require('lead'),
@@ -1288,10 +1291,24 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
 
         refused = json.loads(guarded(command, 's1'))['hookSpecificOutput']
         assert refused['permissionDecision'] == 'deny'
-        assert f"{kind.capitalize()} is bus-upgrade's work" in refused['permissionDecisionReason']
-        assert 'order send --to bus-upgrade' in refused['permissionDecisionReason']
+        assert f"{kind.capitalize()} is worker's work, as holder of P168" in refused['permissionDecisionReason']
+        assert 'order send --to worker' in refused['permissionDecisionReason']
         assert guarded(command, 's2') == ''
-        assert guarded(f'agent-comms-commander order send --to bus-upgrade --body "run {command}"', 's1') == ''
+        assert guarded(f'agent-comms-commander order send --to worker --body "run {command}"', 's1') == ''
     finally:
         process.kill()
         process.wait()
+    unclassified = json.loads(guarded(command, 's2'))['hookSpecificOutput']['permissionDecisionReason']
+    assert f'{kind.capitalize()} refused: the guard cannot tell whether this session is lead' in unclassified
+    assert f'/proc/{process.pid}/environ' in unclassified
+
+
+def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_script, monkeypatch, capsys):
+    import io
+    from agent_comms.commander import send_guard
+    create(commander, 'P1')
+    for command in ('agent-comms send --from user --to lead --body "agent-comms send --from lead --to worker"',
+                    'agent-comms send --from user --to lead --body "x; agent-comms send --from lead --to worker"'):
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
+        send_guard.main([])
+        assert capsys.readouterr().out == ''
