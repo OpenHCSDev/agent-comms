@@ -12,13 +12,24 @@ from agent_comms.work_branches import (
 
 
 def _page(field, nodes, after=None):
-    return json.dumps({"data": {"repository": {field: {
-        "nodes": nodes, "pageInfo": {"hasNextPage": after is not None, "endCursor": after}}}}})
+    return json.dumps(
+        {
+            "data": {
+                "repository": {
+                    field: {
+                        "nodes": nodes,
+                        "pageInfo": {"hasNextPage": after is not None, "endCursor": after},
+                    }
+                }
+            }
+        }
+    )
 
 
 def test_branches_off_main_carry_only_their_own_pr_issue_and_checkout(comms, tmp_path, monkeypatch):
-    comms.registry.declare(comms.registry.new_thread(
-        name="unit", tags=frozenset(), worktree=str(tmp_path / "unit")))
+    comms.registry.declare(
+        comms.registry.new_thread(name="unit", tags=frozenset(), worktree=str(tmp_path / "unit"))
+    )
     (tmp_path / "unit").mkdir()
     commits = {
         "main": (0, "2026-10-16T10:00:00Z"),
@@ -29,10 +40,23 @@ def test_branches_off_main_carry_only_their_own_pr_issue_and_checkout(comms, tmp
         "merged": (0, "2026-10-16T13:00:00Z"),
     }
     pages = {
-        "issues": [_page("issues", [{"number": 7, "linkedBranches": {
-            "nodes": [{"ref": {"name": "fix/issue"}}]}}])],
-        "pulls": [_page("pullRequests", [{"number": 9, "headRefName": "fix/pr"}], after="c1"),
-                  _page("pullRequests", [])],
+        "issues": [
+            _page(
+                "issues",
+                [{"number": 7, "linkedBranches": {"nodes": [{"ref": {"name": "fix/issue"}}]}}],
+            )
+        ],
+        "pulls": [
+            _page(
+                "pullRequests",
+                [
+                    {"number": 9, "headRefName": "fix/pr", "isCrossRepository": False},
+                    {"number": 10, "headRefName": "base", "isCrossRepository": True},
+                ],
+                after="c1",
+            ),
+            _page("pullRequests", []),
+        ],
     }
 
     def run(self, *command, input=None):
@@ -43,8 +67,10 @@ def test_branches_off_main_carry_only_their_own_pr_issue_and_checkout(comms, tmp
         if command[:2] == ("git", "for-each-ref"):
             return "\n".join(f"{name} {date} {ahead} 0" for name, (ahead, date) in commits.items())
         if command[:2] == ("git", "worktree"):
-            return (f"worktree {tmp_path / 'unit'}\nHEAD 1\nbranch refs/heads/fix/a\n\n"
-                    f"worktree {tmp_path / 'stray'}\nHEAD 2\nbranch refs/heads/base\n")
+            return (
+                f"worktree {tmp_path / 'unit'}\nHEAD 1\nbranch refs/heads/fix/a\n\n"
+                f"worktree {tmp_path / 'stray'}\nHEAD 2\nbranch refs/heads/base\n"
+            )
         assert command[:3] == ("gh", "api", "graphql")
         return pages["pulls" if "pullRequests(" in command[4] else "issues"].pop(0)
 
@@ -62,16 +88,30 @@ def test_branches_off_main_carry_only_their_own_pr_issue_and_checkout(comms, tmp
 
 
 def test_live_remote_heads_fetch_missing_objects_without_using_stale_tracking_refs(
-    comms, tmp_path, monkeypatch,
+    comms,
+    tmp_path,
+    monkeypatch,
 ):
     origin, publisher, reader = (tmp_path / name for name in ("origin.git", "publisher", "reader"))
     for path in (publisher, reader):
         path.mkdir()
 
     def git(path, *arguments):
-        return subprocess.run(["git", "-C", str(path), "-c", "user.name=probe",
-            "-c", "user.email=probe@example.invalid", *arguments], check=True,
-            capture_output=True, text=True).stdout.strip()
+        return subprocess.run(
+            [
+                "git",
+                "-C",
+                str(path),
+                "-c",
+                "user.name=probe",
+                "-c",
+                "user.email=probe@example.invalid",
+                *arguments,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
 
     subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
     git(publisher, "init", "-q", "-b", "main")

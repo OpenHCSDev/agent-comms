@@ -186,7 +186,10 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_unjudged": {},
         "comms_fire": {
             "unit": "worker",
-            "reason": "The scratch unit changed the saved file without reading its original contents first.",
+            "reason": (
+                "The scratch unit changed the saved file without reading "
+                "its original contents first."
+            ),
         },
         "comms_correct_wording": {
             "unit": "worker",
@@ -419,6 +422,9 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                 service.terminate()
                 service.communicate(timeout=15)
     assert len(rows) == len(names)
+    (output / "completed.json").write_text(
+        json.dumps({"tools": len(rows), "completed": True}) + "\n"
+    )
 
 
 if __name__ == "__main__":

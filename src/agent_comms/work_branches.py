@@ -97,6 +97,13 @@ class Connection[Node](ForgeAnswer):
 class ForgePullRequest(ForgeAnswer):
     number: int
     head_ref_name: str
+    is_cross_repository: bool
+
+    @property
+    def branch_links(self) -> tuple[tuple[str, PullRequestBranchLink], ...]:
+        # A fork's identically spelled branch is not this origin's branch.
+        return () if self.is_cross_repository else (
+            (self.head_ref_name, PullRequestBranchLink(self.number)),)
 
 
 class ForgeRefName(ForgeAnswer):
@@ -149,7 +156,7 @@ query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequests(states: OPEN, first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
-      nodes { number headRefName }
+      nodes { number headRefName isCrossRepository }
     }
   }
 }"""
@@ -257,7 +264,8 @@ query($owner: String!, $name: String!, $after: String) {
         }
         links: dict[str, list[BranchLink]] = {}
         for pull in self._pages(self._PULLS, ForgeQuery[PullsRepository], owner=owner, name=name):
-            links.setdefault(pull.head_ref_name, []).append(PullRequestBranchLink(pull.number))
+            for branch, link in pull.branch_links:
+                links.setdefault(branch, []).append(link)
         for issue in self._pages(
             self._ISSUES, ForgeQuery[IssuesRepository], owner=owner, name=name
         ):
@@ -279,7 +287,8 @@ query($owner: String!, $name: String!, $after: String) {
                     WorkBranch(
                         branch,
                         ahead,
-                        datetime.fromisoformat(date).astimezone(UTC).isoformat().replace("+00:00", "Z"),
+                        datetime.fromisoformat(date).astimezone(UTC).isoformat().replace(
+                            "+00:00", "Z"),
                         tuple(links.get(branch, ())),
                         tuple(self._checkout(snapshot, path) for path in worktrees.get(branch, ())),
                     )
