@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .field_codec import FieldCodec
 from .pi_vocabulary import ServiceTier
 from .tool_result import DeclaredReply
 
@@ -22,10 +21,6 @@ class CliResult(DeclaredReply):
 
     def exit_code(self) -> int:
         return 0
-
-    def to_wire(self) -> object:
-        """The CLI's JSON; a record with its own wire form overrides it."""
-        return FieldCodec.encode(self)
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,7 @@ from .cli_commands import (
     ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
     PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
     ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
+    HistoryCliCommand,
     _json_object, option,
 )
 from .thread_execution import (
@@ -51,6 +52,8 @@ from .standing_rules import RulesDue, StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
 from .message_page import PageBounds
+from .history_result import HistoryPageResult
+from .page_traversal import PageCursor
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
 from .presentation import ChannelView
@@ -331,7 +334,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except MalformedRecord as error:
             raise MalformedRecord(f"Invalid {cls.declared_name} arguments: {error}") from error
-        return FieldCodec.encode(caller.invoke(request, comms))
+        return FieldCodec.encode(caller.invoke(request, comms).to_wire())
 
     @abstractmethod
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -1141,6 +1144,24 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
 class StandbyRequest:
     goal_id: str = tool_field("Current goal for scoped standby review")
     wait_for: tuple[str, ...] = tool_field("Declared dependencies for standby review")
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHistoryTool(ReadTool, ToolRequest):
+    label = "Conversation history"
+    description = ("Read one bounded, newest-first page of a two-participant conversation. "
+                   "Pass before from the previous page to read older messages. Does not acknowledge messages.")
+    peer: str = tool_field("Other participant's thread name; channels are not accepted")
+    participant: str = tool_field("Participant reading the conversation; omit to use the caller", default="")
+    limit: int = tool_field("Maximum messages in this page", default=20)
+    before: PageCursor | None = tool_field("Exclusive older-page cursor from the previous result", default=None)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> HistoryPageResult:
+        peer = comms.registry.require(self.peer).name
+        return HistoryCliCommand(
+            target=f"@{peer}", me=caller.subject(self.participant),
+            limit=self.limit, before=self.before,
+        ).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)

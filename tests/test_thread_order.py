@@ -31,7 +31,7 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     comms.owners.acquire_thread("alpha", owner_pid=os.getpid())
     comms.threads.heartbeat("alpha")
     comms.registry.declare(comms.registry.new_thread(name='alpha', tags=frozenset(), worktree=str(tmp_path)))
-    people = {person["name"]: person for person in comms.views.presence()}
+    people = {person.thread.name: person.to_wire() for person in comms.views.presence()}
     assert people["alpha"]["created_at"] == 100
     assert people["alpha"]["last_activity"] == 300
     assert people["beta"]["last_activity"] == 0
