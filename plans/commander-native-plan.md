@@ -206,4 +206,4 @@ Toad is a view of Core, so the commander's page is one more view over Core's ans
 
 ## Order and dependencies
 
-The phases and what each waits for are declared once, in `src/agent_comms/plan_phases.py` (the `PlanPhase` family). An order names the phase it serves with a `Serves: <phase>` line, stored as `ProblemOrder.serves`; a phase is done when every order serving it is closed. Each rotation prints `PLAN IDLE` for every phase whose dependencies are done and that has no open order (`PlanIdle` in `src/agent_comms/standing_rules.py`).
+The phases and what each waits for are declared once, in `src/agent_comms/plan_phases.py` (the `PlanPhase` family). An order names the phase it serves with a `Serves: <phase>` line, stored as `ProblemOrder.serves`. A phase is done when its explicitly declared full-phase checked task has accepted installed evidence; closing related subtasks does not complete the phase. Earlier delivered phases record their delivery on their declarations. Each rotation prints `PLAN IDLE` for every phase whose dependencies are done and that has no open order (`PlanIdle` in `src/agent_comms/standing_rules.py`).

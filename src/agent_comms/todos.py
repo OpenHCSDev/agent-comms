@@ -1313,6 +1313,7 @@ class LocatedProblemFinding(ProblemFinding):
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
+    accepted: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
@@ -1619,6 +1620,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 class InstalledProblemOrder(DeliveredProblemOrder):
     works: str
     artifact: str
+    accepted: ClassVar[bool] = True
     line: ClassVar[str] = "Installed"
 
     def __post_init__(self):

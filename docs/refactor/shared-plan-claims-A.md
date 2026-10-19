@@ -2,7 +2,8 @@
 
 The original A dependency design below is superseded by the A2 correction at
 this file's end: views wait on their source phases, not cutover. A2's completion
-rule and executable parity gate remain in progress; B has not started.
+rule is now corrected; its executable parity gate remains in progress. B has not
+started.
 
 Owner: pi-plan-claims. Branch: feat/shared-plan-claims. Base: 011084fc5.
 This checkpoint changes commander-native dependency declarations only. Shared
@@ -181,3 +182,41 @@ that owned disposable directory is retired after the run.
 A2's executable per-matrix-row comparison is newly authorized. It is not yet
 implemented. No failing parity rows or passing parity acceptance are asserted
 by this view-dependency checkpoint. B remains after A2.
+
+### A2 completion-rule repair
+
+Integrated `work_dispatch.py` exactly from pi-cn-phase7's d123d18e2 (Git blob
+67cccd2507bf12f5f69748a81c10675677912309), its imports/task declaration, and the
+`ProblemOrder.accepted` declarations. No phase-7 enforcement or trace changes
+were imported. pi-cn-phase7 retains ownership of dispatch implementation and its
+verification. No production task briefs or automatic launches were added here.
+
+`PlanPhase.done` now asks its declared task about acceptance of the tasks serving
+that phase. An unspecified full-phase task returns false. `CheckedPhaseTask`
+matches the exact declared problem identity and requires a closed installed
+order; a withdrawn/folded order is not accepted. Review queue is explicitly a
+previously delivered phase, owner-confirmed as #1654, not inferred from a closed
+subset of its subtasks. The Markdown plan now describes this same rule.
+
+Actual Core output after the completion-rule correction:
+
+```text
+A2 completion correction; retained commander orders: 214
+Core ready: record_plane
+Core next startable (ready, no open order): (none)
+review_queue done= True after= record_plane
+cutover done= False after= record_plane,review_queue,control_plane
+story done= False after= record_plane
+commander_page done= False after= record_plane,control_plane
+P149 accepted= True
+Story task= UnspecifiedPhaseTask
+```
+
+P149 is still legitimately closed; the story phase no longer falsely reads done.
+Three focused tests passed (3 passed, 16 deselected, one existing timeout-option
+warning, 7.26 seconds), covering phase/view prerequisites, exact whole-phase
+acceptance versus closed subtasks/withdrawal/wrong-phase records, and PlanIdle.
+The owned run directory was
+`/home/ts/.cache/agent-scratch/pi-plan-claims/a2-completion-check/pytest`; disposable
+run output is removed after acceptance of this check. No original records changed.
+The full parity comparison remains unimplemented, so A2 as a whole is unfinished.

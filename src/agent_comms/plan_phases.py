@@ -3,7 +3,8 @@
 This family is the one owner of the plan's order and dependencies;
 ``plans/commander-native-plan.md`` points here. An order names the phase it
 serves in ``ProblemOrder.serves``; an order outside the plan serves
-``UnplannedPhase``. A phase is done when every order serving it is closed.
+``UnplannedPhase``. A phase is done only when its declared full-phase task is accepted; closing
+related subtasks does not establish completion of the phase.
 """
 
 from __future__ import annotations
@@ -12,9 +13,11 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .work_dispatch import UnspecifiedPhaseTask
 
 if TYPE_CHECKING:
     from .todos import Todo
+    from .work_dispatch import PhaseTask
 
 
 class OrderPhase(DeclaredFamily, affix="Phase"):
@@ -27,6 +30,7 @@ class UnplannedPhase(OrderPhase):
 
 class PlanPhase(OrderPhase, declared_name=None):
     after: ClassVar[tuple[type[PlanPhase], ...]] = ()
+    task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
 
     @classmethod
     def serving(cls, todos: Iterable[Todo]) -> tuple[Todo, ...]:
@@ -34,8 +38,7 @@ class PlanPhase(OrderPhase, declared_name=None):
 
     @classmethod
     def done(cls, todos: Iterable[Todo]) -> bool:
-        serving = cls.serving(todos)
-        return bool(serving) and not any(todo.state.open for todo in serving)
+        return cls.task.done(cls.serving(todos))
 
     @classmethod
     def ordered(cls, todos: Iterable[Todo]) -> bool:
@@ -78,8 +81,9 @@ class RecordPlanePhase(PlanPhase):
     after = (RetainedStorePhase,)
 
 
-class ReviewQueuePhase(PlanPhase):
+class ReviewQueuePhase(MergedPhase):
     after = (RecordPlanePhase,)
+    delivered = "41e4ec7319432755d75dcd8dbbab35839a4eb005 (#1654)"
 
 
 class ControlPlanePhase(PlanPhase):
