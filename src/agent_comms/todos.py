@@ -98,6 +98,13 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
+    def strikes(
+        self, todo: Todo, order_id: str, actor: ThreadIncarnation
+    ) -> tuple[StrikeTodo, ...]:
+        """An operation has no commit time: recording it later is the commander's delay, so its
+        lateness is judged at the OVERDUE alarm and its delivery strikes nobody."""
+        return ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
@@ -127,6 +134,15 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
             await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
+
+    def strikes(
+        self, todo: Todo, order_id: str, actor: ThreadIncarnation
+    ) -> tuple[StrikeTodo, ...]:
+        """A commit delivered after the order's deadline strikes its holder once."""
+        lateness = self.at.lateness(todo.deadline)
+        reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
+                  f"(caught by {actor.name} at review)")
+        return (StrikeTodo(todo.revision, actor, todo.held(), reason),) * lateness.late()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -792,19 +808,6 @@ class FairText(OrderWords):
                "implementation or state) and the declaration that derives it.")
 
 
-class DeadlineText(OrderWords):
-    """A clock time in an order is the latest acceptable moment, never when work
-    starts or waits until: the commander kept writing "retry at 13:00" and units
-    sat idle until a time nothing required. The text names the event that starts
-    the work and gives the time only as "by HH:MM"."""
-
-    REFUSED = re.compile(r"\b(?:at|until|wait(?:s|ing)? (?:for|until)|starting|from"
-                         r"|resumes? at|retr(?:y|ies) at)\s+\d{1,2}:\d{2}\b", re.I)
-    refusal = ("{1} schedules work at a clock time. A time is only a ceiling: name "
-               "the event that starts the work (the moment the turns are idle) and "
-               "the time as \"by HH:MM\".")
-
-
 class HierarchyText(OrderWords):
     """A forwarder restates an implementation pair, so the cure is the hierarchy, never a route: text may not keep
     a forwarder, and a Banned: item may forbid removing classes, bases or parents but not adding them."""
@@ -923,7 +926,7 @@ class DirectiveText:
     connector's send refuse a text failing any of these."""
 
     OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
-        FairText, HierarchyText, PlainText, OrderText, DefectText, DeadlineText)
+        FairText, HierarchyText, PlainText, OrderText, DefectText)
 
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
@@ -1883,7 +1886,10 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
+        return replace(current, order=current.order.delivered(self.delivery),
+                       strikes=(*current.strikes,
+                                *self.delivery.strikes(current, self.order_id, self.actor)),
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)

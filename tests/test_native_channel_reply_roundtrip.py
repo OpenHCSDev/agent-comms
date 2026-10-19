@@ -1,4 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
+from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -277,9 +278,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             from agent_comms.coordination_tables.assignments import WakeAssignment
             from agent_comms.coordinator import Coordination
 
-            await until(lambda: len(list(comms.views.channel_history_page("#team").messages)) == 3,
+            await until(lambda: len(read_history(comms, "#team")) == 3,
                         "Both independent native replies published")
-            replies = list(comms.views.channel_history_page("#team").messages)[1:]
+            replies = read_history(comms, "#team")[1:]
             assert {row.sender for row in replies} == {"answerer", "answerer2"}
             assert all(row.body == "ROUNDTRIP_NATIVE_REPLY" for row in replies)
             assert len({row.message_id for row in replies}) == 2
@@ -299,7 +300,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             assert len({row[1] for row in rows}) == 3
             await asyncio.sleep(1.2)
             assert 7 <= len(requests) <= 8 and not failures
-            assert len(list(comms.views.channel_history_page("#team").messages)) == 3
+            assert len(read_history(comms, "#team")) == 3
             # The real request reader owns every timing sample. They must
             # survive independently of registry phase changes and publication.
             observations = [json.loads(line)
@@ -331,9 +332,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             return
         await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(
-            lambda: len(list(comms.views.channel_history_page("#team").messages)) >= 2, "B published actual reply"
+            lambda: len(read_history(comms, "#team")) >= 2, "B published actual reply"
         )
-        reply = list(comms.views.channel_history_page("#team").messages)[-1]
+        reply = read_history(comms, "#team")[-1]
         assert reply.sender == "answerer" and reply.body == "ROUNDTRIP_NATIVE_REPLY"
         # No user prompt, explicit inbox drain, participant insertion, or selected claim seeding.
         try:
@@ -399,7 +400,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         await asyncio.sleep(1.2)  # Beyond the watcher fallback interval; no recursive wake/replay.
         assert len(requests) == seed_count + 2 and not failures
         await until(
-            lambda: len(list(comms.views.channel_history_page("#team").messages)) == 2 + reject_triage,
+            lambda: len(read_history(comms, "#team")) == 2 + reject_triage,
             "Canonical reply and any rejected-result alert published",
         )
         if reject_triage:
@@ -421,7 +422,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 claim = store.assignments.get(rejected[0].assignment_id)
                 assert type(claim.lifecycle) is FailedAssignment
                 rejected_input = rejected[0].input_id
-            assert "invalid triage decision" in list(comms.views.channel_history_page("#team").messages)[-1].body
+            assert "invalid triage decision" in read_history(comms, "#team")[-1].body
             fresh = comms.messaging.send("answerer", "#team", "CONTINUITY_FRESH_SOURCE").message
             await until(lambda: len(requests) == 3, "Fresh channel source authorized without retrying rejected input")
             await until(
