@@ -135,6 +135,9 @@ class FieldPlan:
     def decoded(self, data: object) -> dict[str, object]:
         return self.decoded_using(data, self.value.decode)
 
+    def decoded_bound(self, data, context):
+        return self.decoded(data)
+
     def decoded_selected(self, data, keys, selections):
         return self.decoded_using(data, lambda value: self.value.decode_keys(value, keys, selections))
 
@@ -157,6 +160,33 @@ class FieldPlan:
         if default is MISSING:
             raise MalformedRecord(f"Missing required field {self.key}")
         return default
+
+
+class ContextFieldPlan(FieldPlan):
+    """A constructor value supplied by the caller, never by wire data."""
+
+    def contribute(self, fields):
+        return ()
+
+    @property
+    def wire_keys(self):
+        return ()
+
+    def encoded(self, value, *, key=None):
+        return {}
+
+    def decoded_bound(self, data, context):
+        if self.name not in context:
+            raise MalformedRecord(f"Missing decode context: {self.name}")
+        return {self.name: self.value.decode(context[self.name])}
+
+
+class BoundFieldPlan(FieldPlan):
+    """A nested record receives its context from declared sibling fields."""
+
+    def decoded_bound(self, data, context):
+        bound = {name: data[source] for name, source in self.declared.metadata["wire_bind"].items()}
+        return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, bound))
 
 
 class InlineFieldPlan(FieldPlan):
@@ -770,6 +800,10 @@ class FieldCodec(Sealed):
         return result
 
     @classmethod
+    def decode_bound(cls, target: type[T], data: object, **context: object) -> T:
+        return cast(T, compile_decoder(target).decode_bound(data, context))
+
+    @classmethod
     def decode_record(cls, target: type[T], data: object) -> T:
         """Decode declared fields without reentering the record's wire representation."""
         return cast(T, _RecordDecoder(target).decode(data))
@@ -997,6 +1031,10 @@ class FieldCodec(Sealed):
 
     @classmethod
     def _field_plan(cls, field: Field[object], annotation: object) -> type[FieldPlan]:
+        if field.metadata.get("wire_context"):
+            return ContextFieldPlan
+        if field.metadata.get("wire_bind"):
+            return BoundFieldPlan
         if not field.metadata.get("wire_inline"):
             return (cls._representation(annotation)[1] or FieldRepresentation).field_plan
         family = isinstance(annotation, type) and issubclass(annotation, DeclaredFamily)
@@ -1043,6 +1081,9 @@ class ValueDecoder[T](ABC):
 
     @abstractmethod
     def decode(self, data: object) -> T: ...
+
+    def decode_bound(self, data, context):
+        return self.decode(data)
 
     field_names: ClassVar[tuple[str, ...]] = ()
 
@@ -1250,11 +1291,14 @@ class UnionDecoder[T](ValueDecoder[T]):
         return self.alternatives[0].argument_options()
 
     def decode(self, data: object) -> T:
+        return self.decode_bound(data, {})
+
+    def decode_bound(self, data, context) -> T:
         first_error = None
         try:
             for alternative in self.alternatives:
                 try:
-                    return alternative.decode(data)
+                    return alternative.decode_bound(data, context)
                 except MalformedRecord as error:
                     if first_error is None:
                         first_error = error
@@ -1402,8 +1446,11 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         }
 
     def decode(self, data):
+        return self.decode_bound(data, {})
+
+    def decode_bound(self, data, context):
         member, payload = self.member(data)
-        return _member_decoder(member).decode(payload)
+        return _member_decoder(member).decode_bound(payload, context)
 
 @dataclass(frozen=True, slots=True)
 class _RecordDecoder(ValueDecoder[Any]):
@@ -1434,9 +1481,12 @@ class _RecordDecoder(ValueDecoder[Any]):
         return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
 
     def decode(self, data):
-        return self.decode_selected(data, {}, fields=self.field_names)
+        return self.decode_bound(data, {})
 
-    def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
+    def decode_bound(self, data, context):
+        return self.decode_selected(data, {}, fields=self.field_names, context=context)
+
+    def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={}):
         data = self.checked(data)
         target = self.target
         values = {}
@@ -1445,7 +1495,7 @@ class _RecordDecoder(ValueDecoder[Any]):
                 continue
             key = (target, entry.name)
             values.update(entry.decoded_selected(data, selections[key], selections)
-                          if key in selections else entry.decoded(data))
+                          if key in selections else entry.decoded_bound(data, context))
         return FieldCodec.construct(target, values)
 
 @dataclass(frozen=True, slots=True)

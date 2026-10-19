@@ -169,9 +169,10 @@ def test_native_call_fields_are_not_model_arguments():
     call = CodingCall.decode("owned-call", "write", arguments)
     assert type(call) is WriteTool and call.call_id == "owned-call"
     assert call.arguments == arguments
-    assert FieldCodec.encode(call) == {"tool": "write", "call_id": "owned-call", **arguments}
+    assert FieldCodec.encode(call) == {"tool": "write", **arguments}
+    assert set(FieldCodec.record_schema(WriteTool)["properties"]) == set(arguments)
     refused = CodingCall.decode("owned-call", "write", {**arguments, "call_id": "foreign"})
-    with pytest.raises(SelectedToolDenied, match="call identity"):
+    with pytest.raises(SelectedToolDenied, match="call_id"):
         refused.allowed_claim()
 
 

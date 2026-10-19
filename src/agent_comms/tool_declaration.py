@@ -52,16 +52,11 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def parse_arguments(cls, arguments: Mapping[str, object], **context: object) -> Self:
+    def parse_arguments(cls, arguments: Mapping[str, object], *, call_id: str) -> Self:
         if cls.family_discriminator in arguments:
             raise SelectedToolDenied("Native arguments cannot contain a family selector")
-        bound = {key: context[declared.name]
-                 for declared, key in FieldCodec.record_fields(cls)
-                 if declared.metadata.get("arguments_exclude") and declared.name in context}
-        if bound.keys() & arguments.keys():
-            raise MalformedRecord("Native arguments cannot replace the call identity")
         selected = {cls.family_discriminator: cls.declared_name}
-        return FieldCodec.decode(cls, {**selected, **arguments, **bound})
+        return FieldCodec.decode_bound(cls, {**selected, **arguments}, call_id=call_id)
 
     @classmethod
     def record(cls, name: str, arguments: object, *, call_id: str) -> ToolDeclaration | None:

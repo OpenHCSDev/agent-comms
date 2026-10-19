@@ -333,7 +333,7 @@ class ToolStartTranscript(ToolTranscript):
 
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
     tool: tool_declaration.ToolDeclaration | None = field(
-        default=None, metadata={"wire_omit_default": True})
+        default=None, metadata={"wire_omit_default": True, "wire_bind": {"call_id": "tool_call_id"}})
 
     @property
     def title(self) -> str:

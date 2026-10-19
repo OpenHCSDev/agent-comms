@@ -189,7 +189,7 @@ class CallProgress:
 class NativeToolCall(ABC):
     """A fixed call payload with one changing execution record."""
 
-    call_id: str = field(metadata={"arguments_exclude": True})
+    call_id: str
     progress: CallProgress = field(default_factory=CallProgress, init=False, compare=False, repr=False)
     start_wait_seconds: ClassVar[int] = 10
     declared_name: ClassVar[str]

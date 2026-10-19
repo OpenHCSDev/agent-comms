@@ -492,7 +492,7 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
 
     arguments = {"from": "sender", "to": "receiver", "body": "hello"}
     event = ToolStartTranscript(
-        tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
+        position=0, tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
         tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
     )
     encoded = FieldCodec.encode(event)

@@ -44,6 +44,7 @@ class NativeToolDeclaration(ToolDeclaration):
 class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     """A decoded tool is the live call; runtime fields are not model arguments."""
 
+    call_id: str = field(metadata={"wire_context": True})
     claim: ClassVar[None] = None
 
     @classmethod
