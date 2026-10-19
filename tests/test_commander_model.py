@@ -45,7 +45,7 @@ def test_status_source_never_requests_acceptance_measurement(commander, monkeypa
     def forbidden(self):
         pytest.fail('A read-only commander page executed an acceptance measurement')
     monkeypatch.setattr(ProgressSource, 'readings', forbidden)
-    source = StatusProgressSource(todo, comms.root, PullRequests((todo,)))
+    source = StatusProgressSource.of(todo, comms.registry.storage_rule, PullRequests((todo,)))
     assert not source.readings().readings
     model = CommanderModel.read(comms, ObserveCommander(
         str(comms.root), comms.registry.require(caller.name).incarnation))
@@ -56,7 +56,7 @@ def test_card_derives_commit_cadence_against_deadline_without_storing_momentum(c
     comms, caller = commander
     todo = replace(create(commander, 'P1'), deadline=RecordedEventTime(300))
     points = (ProgressPoint('first', 100), ProgressPoint('second', 160))
-    order = CommanderOrder(todo, ProgressSource(todo, comms.root, PullRequests((todo,))).progress(),
+    order = CommanderOrder(todo, ProgressSource.of(todo, comms.registry.storage_rule, PullRequests((todo,))).progress(),
                            False, points, 170)
     card = UnitCard(comms.registry.require('worker').incarnation, (order,), CardDetail())
     momentum, = card.momentum

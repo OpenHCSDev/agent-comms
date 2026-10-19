@@ -397,11 +397,91 @@ class UnreadTrend(DistanceTrend):
 
 
 @dataclass(frozen=True)
+class ProgressCheckout(DeclaredFamily, affix="Checkout"):
+    """The local history available when an order's progress is captured."""
+    path: Path
+
+    @abstractmethod
+    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]: ...
+
+    @abstractmethod
+    def readings(self, source: ProgressSource) -> DistanceReadings: ...
+
+    @abstractmethod
+    def cadence_commits(self, since: float) -> tuple[ProgressPoint, ...]: ...
+
+    @abstractmethod
+    def latest_commit(self) -> str: ...
+
+
+class MissingCheckout(ProgressCheckout):
+    """A retired checkout contributes no local history, not a failed Git read."""
+
+    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]:
+        return iter(())
+
+    def readings(self, source: ProgressSource) -> DistanceReadings:
+        return DistanceReadings()
+
+    def cadence_commits(self, since: float) -> tuple[ProgressPoint, ...]:
+        return ()
+
+    def latest_commit(self) -> str:
+        return "Checkout unavailable; no local commit evidence."
+
+
+class PresentCheckout(ProgressCheckout):
+    def git(self, *args: str) -> str:
+        run = subprocess.run(("git", "-C", str(self.path), *args),
+                             capture_output=True, text=True, timeout=60)
+        if run.returncode:
+            raise ValueError(f"git {args[0]} failed: {run.stderr.strip()}")
+        return run.stdout
+
+    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]:
+        """Newest branch commit; a Git failure in a present checkout remains an error."""
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(since))
+        for line in self.git("log", "-1", f"--since={after}", "--format=%H %ct",
+                             "HEAD", "--not", *excluded).splitlines():
+            sha, at = line.split()
+            yield sha, float(at)
+
+    def readings(self, source: ProgressSource) -> DistanceReadings:
+        """The order's base and newest branch commit bound its distance trend."""
+        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
+        commits = self.branch_commits(source.since, base, 2)
+        points = [ProgressPoint(base, source.since), *commits][-2:]
+        return DistanceReadings(tuple(
+            DistanceReading(point.at, source.distance(self, base, point.sha)) for point in points))
+
+    def latest_commit(self) -> str:
+        return self.git("log", "-1", "--format=%h %s").strip()
+
+    def cadence_commits(self, since: float) -> tuple[ProgressPoint, ...]:
+        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
+        return self.branch_commits(since, base, CommitMomentum.window)
+
+    def branch_commits(self, since: float, base: str, limit: int) -> tuple[ProgressPoint, ...]:
+        """Decode the bounded order-time branch window once for all readers."""
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(since))
+        return tuple(point for line in reversed(self.git(
+            "log", f"--max-count={limit}", "--first-parent", f"--since={after}",
+            f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())
+            if (point := ProgressPoint.listed(line)).at >= since)
+
+
+@dataclass(frozen=True)
 class ProgressSource:
-    """What an order's progress is read from: its unit's checkout and the repository's PRs."""
+    """An order's local checkout capability and independently retained PR references."""
     todo: Todo
-    checkout: Path
+    checkout: ProgressCheckout
     pulls: PullRequests
+
+    @classmethod
+    def of(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> Self:
+        path = storage.order_checkout(todo.held().owner, todo.id)
+        checkout = PresentCheckout(path) if path.is_dir() else MissingCheckout(path)
+        return cls(todo, checkout, pulls)
 
     @property
     def since(self) -> float:
@@ -415,59 +495,28 @@ class ProgressSource:
                     NoCommitProgress())
 
     def requests(self, state: str) -> list[PullRequest]:
-        """The order's explicit PR references survive checkout removal or branch reuse."""
+        """Explicit PR references survive checkout removal or branch reuse."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
                 if self.todo.order.id in pr.orders and pr.updated_at >= self.since]
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
-        """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since={after}",
-             "--format=%H %ct", "HEAD", "--not", *excluded),
-            capture_output=True, text=True, timeout=30)
-        for line in log.stdout.splitlines() if not log.returncode else ():
-            sha, at = line.split()
-            yield sha, float(at)
-
-    def git(self, *args: str) -> str:
-        run = subprocess.run(("git", "-C", str(self.checkout), *args),
-                             capture_output=True, text=True, timeout=60)
-        if run.returncode:
-            raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
-        return run.stdout
+        return self.checkout.commits(self.since, *excluded)
 
     def latest_commit(self) -> str:
         """The checkout's latest actual commit, even when it predates this order."""
-        return self.git("log", "-1", "--format=%h %s").strip()
+        return self.checkout.latest_commit()
 
     def readings(self) -> DistanceReadings:
-        """The order's base, then each branch commit since the order; the last two are read."""
-        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
-        commits = self.branch_commits(base, 2)
-        points = [ProgressPoint(base, self.since), *commits][-2:]
-        return DistanceReadings(tuple(
-            DistanceReading(point.at, self.distance(base, point.sha)) for point in points))
+        return self.checkout.readings(self)
 
     def cadence_commits(self) -> tuple[ProgressPoint, ...]:
-        """Bounded branch evidence since the order; never run its acceptance check."""
-        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
-        return self.branch_commits(base, CommitMomentum.window)
+        return self.checkout.cadence_commits(self.since)
 
-    def branch_commits(self, base: str, limit: int) -> tuple[ProgressPoint, ...]:
-        """Decode the bounded order-time branch window once for all readers."""
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        return tuple(point for line in reversed(self.git(
-            "log", f"--max-count={limit}", "--first-parent", f"--since={after}",
-            f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())
-            if (point := ProgressPoint.listed(line)).at >= self.since)
-
-    def distance(self, base: str, sha: str) -> int:
-        """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
-        ``base`` has not touched."""
+    def distance(self, checkout: PresentCheckout, base: str, sha: str) -> int:
+        """Run the order's check and count its untouched edits at a present revision."""
         check = self.todo.order.check
-        touched = self.git("diff", "--name-only", base, sha).split()
-        run = check.at(sha, str(self.checkout))
+        touched = checkout.git("diff", "--name-only", base, sha).split()
+        run = check.at(sha, str(checkout.path))
         return check.result.distance(run) + self.todo.order.untouched(touched)
 
 
@@ -488,9 +537,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
         """The first found member by its declared precedence; with none found, no commit yet."""
-        owner = todo.holder
-        assert owner, "Only a held order has progress."
-        return ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls).progress()
+        return ProgressSource.of(todo, storage, pulls).progress()
 
     @property
     @abstractmethod
@@ -2346,7 +2393,7 @@ class TodoStore(TypedStore):
         pulls = PullRequests(todos)
         for todo in todos:
             progress = OrderProgress.read(todo, storage, pulls)
-            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            source = ProgressSource.of(todo, storage, pulls)
             for merged in progress.missing_merges(source):
                 yield todo, merged
 

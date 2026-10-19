@@ -213,7 +213,7 @@ class CommanderModel:
         grouped: dict[ThreadIncarnation, list[CommanderOrder]] = {}
         for todo in todos:
             unit = todo.held().owner_identity
-            source = StatusProgressSource(todo, storage.order_checkout(unit.name, todo.id), pulls)
+            source = StatusProgressSource.of(todo, storage, pulls)
             grouped.setdefault(unit, []).append(
                 CommanderOrder(
                     todo, source.progress(), todo.overdue(now), source.cadence_commits(), now
@@ -230,9 +230,7 @@ class CommanderModel:
             if unit in request.expanded:
                 commits = []
                 for order in current:
-                    source = StatusProgressSource(
-                        order.todo, storage.order_checkout(unit.name, order.todo.id), pulls
-                    )
+                    source = StatusProgressSource.of(order.todo, storage, pulls)
                     commit = source.latest_commit()
                     commits.append(f"{order.todo.id}: {commit}")
                 detail = OpenCardDetail(
