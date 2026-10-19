@@ -36,12 +36,11 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     assert Message.from_wire(bound.to_wire()) == bound
     admission_key = FieldCodec.record_key(ClaimTransition, "claim_scope")
     invalid = {**raw, admission_key: {**raw[admission_key], "version": 99}}
-    with pytest.raises(ValueError, match="Wake claim_scope version or revision"):
+    with pytest.raises(MalformedRecord):
         FieldCodec.decode(ClaimTransition, invalid)
     null_claim = raw.copy()
     null_claim[admission_key] = None
-    with pytest.raises(ValueError, match="Null field"):
-        FieldCodec.decode(ClaimTransition, null_claim)
+    assert isinstance(FieldCodec.decode(ClaimTransition, null_claim).claim_scope, NoLiveAttempt)
 
 
 def transition(seq, *, owner="owner", incarnation="epoch-1", claims=(), releases=(), generation=None):

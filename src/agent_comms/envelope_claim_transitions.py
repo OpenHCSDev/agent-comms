@@ -207,7 +207,6 @@ class OwnedAttemptClaim(LiveAttemptClaim):
 
     turn_id: str
     owner_claimed_generation: int = field(metadata={"wire_name": 'owner_admission_generation'})
-    operation_id: Annotated[str, Id128Text]
     version: Literal[2] = field(default=2, metadata={"wire_required": True})
 
     def __post_init__(self) -> None:
@@ -233,7 +232,6 @@ class SelectedAttemptClaim(LiveAttemptClaim):
     wake_revision: int
     recipient_lookup: str
     execution_id: Annotated[str, BoundedText]
-    operation_id: Annotated[str, Id128Text]
     owner_claimed_generation: int = field(metadata={"wire_name": 'owner_admission_generation'})
     turn_id: str
     participant_generation: int
