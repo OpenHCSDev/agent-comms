@@ -12,7 +12,9 @@ from agent_comms.acp_failure import ACPFailure, ProviderConnectionFailure, Reque
 from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
-from agent_comms.pi_payloads import AfterMessageStreamStartStage, UnrecognizedTransportStage
+from agent_comms.pi_payloads import (
+    AfterMessageStreamStartStage, CodelessProviderDiagnosticError, UnrecognizedTransportStage,
+)
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
 
@@ -110,10 +112,21 @@ def test_native_1006_decodes_code_without_parsing_error_prose():
     assert isinstance(failure, RetryableProviderFailure)
 
 
-def test_native_close_without_code_fails_at_rpc_boundary():
+def test_native_close_without_code_uses_the_declared_codeless_state():
     record = observed()
     del record["message"]["diagnostics"][0]["error"]["code"]
-    with pytest.raises(ValueError, match="Missing required fields.*code"):
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    diagnostic, = event.message.diagnostics
+    assert isinstance(diagnostic.error, CodelessProviderDiagnosticError)
+    assert diagnostic.error.description == "WebSocketCloseError"
+    assert "code" not in diagnostic.error.to_wire()
+
+
+@pytest.mark.parametrize("code", [None, True, {}])
+def test_present_malformed_code_is_not_treated_as_codeless(code):
+    record = observed()
+    record["message"]["diagnostics"][0]["error"]["code"] = code
+    with pytest.raises(ValueError):
         PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
 
 
