@@ -43,7 +43,7 @@ from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
-from .private_bus_checkpoint import RecordedContextManifestSources
+from .private_bus_checkpoint import CheckedRead, RecordedContextManifestSources
 from .store_files import (
     ExclusiveLock,
     LockMode,
@@ -211,7 +211,7 @@ class AbsentWireSnapshot(WireSnapshot, AbsentPath):
         return hashlib.sha256(b"").hexdigest()
 
     def checked(self, source) -> OpenedWireSnapshot:
-        raise RelationViolationError("Opened read differs from its certified source cut")
+        raise RelationViolationError("Opened read differs from its checked source cut")
 
     def records(self) -> Iterator[WireRecord]:
         return iter(())
@@ -281,7 +281,7 @@ class OpenedWireSnapshot(WireSnapshot):
         if (self.revision != FileRevision.from_file(source.stream)
                 or os.fstat(self.stream.fileno()).st_dev != source.witness.device
                 or self.boundary != source.witness.offset):
-            raise RelationViolationError("Opened read differs from its certified source cut")
+            raise RelationViolationError("Opened read differs from its checked source cut")
         return replace(self)
 
     def records(self) -> Iterator[WireRecord]:
@@ -422,7 +422,7 @@ class ConversationSourceWindowRequest:
         """Read one conversation high-water without reconstructing a delivery."""
         if not log.path.exists() and not log.metadata_path.exists():
             return 0
-        with log.certified_read() as source:
+        with log.checked_read() as source:
             return source.conversation_frontier(lookup)
 
     @classmethod
@@ -435,7 +435,7 @@ class ConversationSourceWindowRequest:
         """Copy each selection from one source; consumers decode after release."""
         if not log.path.exists() and not log.metadata_path.exists():
             return tuple(iter(()) for request in requests)
-        with log.certified_read() as source:
+        with log.checked_read() as source:
             return tuple(request.capture(source, lookup) for request in requests)
 
 
@@ -445,7 +445,7 @@ class SnapshotOpening(ABC):
 
 
 class CurrentSnapshotOpening(SnapshotOpening):
-    def through(self, log: WireLog, lock: StoreLock) -> int:
+    def through(self, log: WireLog, lock: WireStoreLock) -> int:
         return 0
 
     @contextmanager
@@ -458,17 +458,13 @@ class CurrentSnapshotOpening(SnapshotOpening):
             )
             through = self.through(log, lock)
             opened = log._open_snapshot_unlocked(resources, metadata, through)
-            if lock.source is not None:
-                source = lock.certified_read()
-                source.require_marker(metadata)
-                source.require_open_prefix()
-                opened = opened.checked(source)
+            opened = lock.check_snapshot(opened, metadata)
         yield opened
 
 
 class SequencedSnapshotOpening(CurrentSnapshotOpening):
-    def through(self, log: WireLog, lock: StoreLock) -> int:
-        return log.committed_sequence_unlocked(lock)
+    def through(self, log: WireLog, lock: WireStoreLock) -> int:
+        return lock.committed_sequence(log)
 
 
 class SavedPrefixOpening(SnapshotOpening):
@@ -489,12 +485,12 @@ class WireStoreLock(StoreLock):
 
     @classmethod
     @contextmanager
-    def open_source(cls, path: Path, mode: LockMode):
+    def hold(cls, path: Path, descriptor: int, mode: LockMode):
         log = WireLog(path)
         private_marker = log._claim_marker_unlocked()
         if private_marker is None:
-            log._sync_page_index_unlocked(mode)
-            yield None
+            log._sync_page_index_unlocked(mode, log.read_metadata_unlocked())
+            yield WireStoreLock(descriptor)
             return
         marker_info = log.metadata_path.lstat()
         if (
@@ -507,7 +503,46 @@ class WireStoreLock(StoreLock):
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
         with opened_private_checkpoint_unlocked(log, private_marker, mode=mode) as source:
-            log._sync_page_index_unlocked(mode)
+            log._sync_page_index_unlocked(mode, source.marker)
+            yield CheckedWireStoreLock(descriptor, source)
+
+    def check_snapshot(self, opened: WireSnapshot, metadata: WireMetadata) -> WireSnapshot:
+        return opened
+
+    def committed_sequence(self, log: WireLog) -> int:
+        return log.read_metadata_unlocked().last_seq
+
+    @contextmanager
+    def current_source(self, log: WireLog, metadata: WireMetadata) -> Iterator[CheckedRead]:
+        """Open a checked read after a plain bus lock initialized its private bus."""
+        with WireStoreLock.hold(log.path, self.descriptor, ExclusiveLock()) as refreshed:
+            source = refreshed.checked_read
+            source.require_marker(metadata)
+            yield source
+
+
+@dataclass(frozen=True)
+class CheckedWireStoreLock(WireStoreLock):
+    """A bus lock with an opened, checked read for its entire use."""
+
+    checked_read: CheckedRead
+
+    def check_snapshot(self, opened: WireSnapshot, metadata: WireMetadata) -> WireSnapshot:
+        self.checked_read.require_marker(metadata)
+        self.checked_read.require_open_prefix()
+        return opened.checked(self.checked_read)
+
+    def committed_sequence(self, log: WireLog) -> int:
+        return self.checked_read.committed_sequence()
+
+    @contextmanager
+    def current_source(self, log: WireLog, metadata: WireMetadata) -> Iterator[CheckedRead]:
+        """Refresh the checked read after an append without releasing the bus lock."""
+        if self.checked_read.marker == metadata:
+            self.checked_read.require_open_prefix()
+            yield self.checked_read
+            return
+        with super().current_source(log, metadata) as source:
             yield source
 
 
@@ -529,13 +564,13 @@ class WireLog(StoreLockOwner):
         return index
 
     @contextmanager
-    def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
+    def checked_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
         """Open the bus and index under a shared lock and check that they agree."""
         with self.locked(mode=SharedLock(), blocking=blocking, contention=contention) as lock:
-            with self._certified_source(lock) as source:
+            with self._checked_source(lock) as source:
                 yield source
 
-    async def read_certified_async(self, read: Callable):
+    async def read_checked_async(self, read: Callable):
         """Acquire cancellably, then consume the whole source in its worker.
 
         Return detached observations only. Verification and the callback share
@@ -564,20 +599,20 @@ class WireLog(StoreLockOwner):
                 lock_file.fileno(), platform, mode=mode,
             )
             return await Coordination.run_worker(
-                partial(self._read_certified, lock_file, platform, read, mode),
+                partial(self._read_checked, lock_file, platform, read, mode),
             )
 
-    def _read_certified(self, lock_file, platform, read, mode):
+    def _read_checked(self, lock_file, platform, read, mode):
         with lock_file, _held_store_source(self.path, lock_file, platform, None,
                                            mode=mode, lock_type=self.lock_type) as lock:
-            with self._certified_source(lock) as source:
+            with self._checked_source(lock) as source:
                 return read(source)
 
     @contextmanager
-    def _certified_source(self, lock: StoreLock):
+    def _checked_source(self, lock: CheckedWireStoreLock):
         """Sync and async acquisition consume the same marker/currentness owner."""
         marker = self.private_marker_unlocked()
-        source = lock.certified_read()
+        source = lock.checked_read
         source.require_marker(marker)
         yield source
         source.require_current()
@@ -595,7 +630,7 @@ class WireLog(StoreLockOwner):
         or passing them to the caller.
         """
         request = AddressedPage(lookup=lookup, after_seq=after_seq)
-        with self.certified_read() as source:
+        with self.checked_read() as source:
             witness, captured, more = source.addressed_page(self, request)
         while True:
             originals = tuple(captured)
@@ -603,7 +638,7 @@ class WireLog(StoreLockOwner):
             if not more:
                 return
             request = replace(request, after_seq=originals[-1].message.seq)
-            with self.certified_read() as source:
+            with self.checked_read() as source:
                 _, captured, more = source.addressed_page(self, request, prefix=witness)
 
     def record_context(self, manifest) -> None:
@@ -611,7 +646,7 @@ class WireLog(StoreLockOwner):
         previous = RecordedContextManifestSources.latest(self, manifest.thread)
         with self.locked() as lock:
             marker = self.private_marker_unlocked()
-            for record in lock.certified_read().context_records(manifest, previous):
+            for record in lock.checked_read.context_records(manifest, previous):
                 self.append_private_unlocked(marker, record.to_wire())
 
     def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
@@ -632,7 +667,7 @@ class WireLog(StoreLockOwner):
 
         with (
             _store_lock(self.path.parent / "wire", mode=SharedLock()),
-            self.certified_read() as source,
+            self.checked_read() as source,
         ):
             snapshot = registry.snapshot()
             owner = snapshot.require(name)
@@ -679,7 +714,7 @@ class WireLog(StoreLockOwner):
 
     def claim_projection(self) -> ClaimProjection:
         """Read the current resource claims from the checked bus index."""
-        with self.certified_read() as source:
+        with self.checked_read() as source:
             return source.claim_projection()
 
     def private_marker_unlocked(self) -> WireMetadata:
@@ -763,10 +798,10 @@ class WireLog(StoreLockOwner):
             os.close(directory_fd)
         from .private_bus_checkpoint import (
             append_private_bus_checkpoint_unlocked,
-            certificate_enabled,
+            checked_prefix_exists,
         )
 
-        if certificate_enabled(self.path):
+        if checked_prefix_exists(self.path):
             try:
                 append_private_bus_checkpoint_unlocked(self, metadata, encoded, record)
             except (OSError, sqlite3.Error, ValueError) as error:
@@ -775,14 +810,14 @@ class WireLog(StoreLockOwner):
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
-        self._sync_page_index_unlocked(ExclusiveLock())
+        self._sync_page_index_unlocked(ExclusiveLock(), metadata)
         StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""
         if type(wire_seq) is not int or not 0 < wire_seq <= MAX_WIRE_SEQ:
             raise ValueError("wire_seq must be a positive SQLite-range integer.")
-        with self.certified_read() as source:
+        with self.checked_read() as source:
             if wire_root_id != source.witness.root_id:
                 raise RelationViolationError("Initial wire root does not match the bus marker.")
             return source.delivery(wire_seq)
@@ -817,7 +852,7 @@ class WireLog(StoreLockOwner):
 
     def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
         """Read-only exact acknowledgement resolution; never append or repair an absent row."""
-        with self.certified_read() as source:
+        with self.checked_read() as source:
             return source.keyed_receipt(intent)
 
     def _prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...]:
@@ -874,38 +909,27 @@ class WireLog(StoreLockOwner):
         """Keep the bus lock and checked index open together while reading a message window."""
         if not references:
             return ()
-        with self.certified_read() as source:
+        with self.checked_read() as source:
             originals = source.references(references)
         return tuple(originals)
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
         with self.locked(mode=SharedLock()) as lock:
-            return self.committed_sequence_unlocked(lock)
-
-    def committed_sequence_unlocked(self, lock: StoreLock) -> int:
-        """Read the last committed sequence from the bus opened by this lock.
-
-        Use through_seq from the checked index, not a page's latest_source_seq
-        or a reserved marker sequence. Refuse private claim streams when their
-        required index check is missing.
-        """
-        if lock.source is not None:
-            return lock.certified_read().committed_sequence()
-        return self.read_metadata_unlocked().last_seq
+            return lock.committed_sequence(self)
 
     def _claim_marker_unlocked(self) -> WireMetadata | None:
         metadata = self.read_metadata_unlocked()
-        from .private_bus_checkpoint import certificate_enabled
+        from .private_bus_checkpoint import checked_prefix_exists
 
-        if certificate_enabled(self.path) and not metadata.claims:
+        if checked_prefix_exists(self.path) and not metadata.claims:
             raise RelationViolationError("Private checkpoint lacks its claim read barrier.")
         return metadata if metadata.claims else None
 
-    def _sync_page_index_unlocked(self, mode: LockMode) -> None:
-        """Lend readers only indexed cuts; missing or stale coverage needs a writer."""
+    def _sync_page_index_unlocked(self, mode: LockMode, metadata: WireMetadata) -> None:
+        """Use the marker already read or written by this bus lock."""
         with ExitStack() as resources:
-            opened = self._open_snapshot_unlocked(resources, self.read_metadata_unlocked(), 0)
+            opened = self._open_snapshot_unlocked(resources, metadata, 0)
             with self.page_index_type(self.path) as index:
                 opened.ensure_page_index(index, mode)
 

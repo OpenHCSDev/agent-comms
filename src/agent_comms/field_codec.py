@@ -762,13 +762,7 @@ class FieldCodec(Sealed):
     def encode_fields(cls, value: object) -> dict[str, object]:
         """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
         representation."""
-        hints = cls._types(type(value))
-        result: dict[str, object] = {}
-        plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
-        for field, _key in cls.record_fields(type(value)):
-            current = getattr(value, field.name)
-            if not field.metadata.get("wire_exclude") and not plans[field.name].omitted(current):
-                result.update(plans[field.name].encoded(cls.encode(current, hints[field.name])))
+        result = cls._record_plan(type(value)).encoded(value, "wire", cls.encode)
         result.update(
             (member.wire_name, cls.encode(getattr(value, name)))
             for name, member in cls._projections(type(value), "wire").items()
@@ -919,16 +913,10 @@ class FieldCodec(Sealed):
         if representation is not None:
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
-            hints = cls._types(type(value))
             result = cls._tag(value)
-            plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
-            for field, key in cls.record_fields(type(value)):
-                current = getattr(value, field.name)
-                if not (field.metadata.get(f"{view}_exclude") or plans[field.name].omitted(current)):
-                    encoded = cls.project(current, view, hints[field.name])
-                    result.update(plans[field.name].encoded(
-                        encoded, key=field.metadata.get(f"{view}_name", key)
-                    ))
+            result.update(cls._record_plan(type(value)).encoded(
+                value, view, lambda current, declared: cls.project(current, view, declared)
+            ))
             properties = cls._projections(type(value), view)
             result.update(
                 (member.wire_name, cls.project(getattr(value, name), view))
@@ -942,13 +930,24 @@ class FieldCodec(Sealed):
 
     @dataclass(frozen=True)
     class _RecordPlan:
-        """A record's whole decode plan, derived once from its declaration."""
+        """A record's field plan, derived once from its declaration."""
 
         fields: tuple[FieldPlan, ...]
         bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
         accepted_keys: frozenset[str]
+
+        def encoded(self, value, view, encode_value):
+            result: dict[str, object] = {}
+            for entry in self.bindings:
+                current = getattr(value, entry.name)
+                metadata = entry.declared.metadata
+                if not metadata.get(f"{view}_exclude") and not entry.omitted(current):
+                    result.update(entry.encoded(
+                        encode_value(current, entry.annotation), key=metadata.get(f"{view}_name", entry.key)
+                    ))
+            return result
 
         def schema_fields(self, properties, required):
             for entry in self.fields:

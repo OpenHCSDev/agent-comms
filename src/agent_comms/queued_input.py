@@ -482,7 +482,7 @@ class DeliveredInput(QueuedInput):
                 assignments = pending_sealed_assignments(
                     store, lookup, owner.name, after_seq=after_seq
                 )
-            with bus.log.certified_read() as source:
+            with bus.log.checked_read() as source:
                 if source.marker.root_id != root_id:
                     raise IdentityConflict("delivered source wire root changed")
                 originals = tuple(source.references(tuple(

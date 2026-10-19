@@ -322,7 +322,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def _private_nk_marker(self) -> str:
         """Check that the bus belongs to the configured root before a request runs."""
         configured_root_id = self.configured_root_id
-        with self._comms.bus.log.certified_read() as source:
+        with self._comms.bus.log.checked_read() as source:
             if source.marker.root_id != configured_root_id:
                 raise PublicationActivationBlocked(
                     "private N/K ACP root does not match configuration"
@@ -358,7 +358,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
         bus = MessageBus(self._comms.root / "bus.jsonl", self._comms.registry, ResponseWrites)
         def read_claim():
-            with bus.log.certified_read() as source:
+            with bus.log.checked_read() as source:
                 return source.marker.claimed_after_seq
         claimed_after_seq = await Coordination.run_worker(read_claim)
         store_path = self._comms.root / "coordination.sqlite3"

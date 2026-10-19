@@ -659,7 +659,7 @@ class WireReadContention(ClaimContention, declared_name='wire'):
     @classmethod
     @contextmanager
     def ownership(cls, service, owners):
-        with service.bus.log.certified_read():
+        with service.bus.log.checked_read():
             yield True
 
 

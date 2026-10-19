@@ -55,10 +55,9 @@ async def drain_failures(
     except asyncio.CancelledError:
         raise
     except NativeRequestFailure as error:
-        # A failed native input has already been settled and published by its
-        # request owner; it is never replayed, so the owner keeps taking later
-        # inputs, as a restart would. This is not an inbox read failure and
-        # must not borrow the Inbox unavailable presentation.
+        # This describes a native request failure, not an inbox read failure.
+        # Settlement belongs to the request or selected participant that raised
+        # it; recording a diagnostic neither settles an input nor permits replay.
         await record(NativeInputDrainDiagnostic, error)
         raise
     except UNAVAILABLE_DRAIN_ERRORS as error:

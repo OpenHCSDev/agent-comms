@@ -194,7 +194,7 @@ class OwnedSend(CodingToolOwner):
             self.verify(store, turn, snapshot)
             owner = snapshot.require(self.owner_name)
             canonical = resource.normalized(Path(self.thread.worktree))
-            with self.comms.bus.log.certified_read() as source:
+            with self.comms.bus.log.checked_read() as source:
                 if prior is not None and source.claim(canonical) == prior:
                     return prior
             committed = self.comms.bus.publisher.publish_claim_envelope(
