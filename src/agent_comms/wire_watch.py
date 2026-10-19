@@ -268,9 +268,7 @@ def _open_file_watcher[WatchT: NativeFileWatch](
     so it needs no periodic speculative read. Platforms or source directories
     without native notification use the existing polling owner.
     """
-    if not sources:
-        raise ValueError("Wire watcher requires at least one source")
-    if sys.platform != "linux":
+    if not sources or sys.platform != "linux":
         return PollingWireWatch(sources)
     libc = ctypes.CDLL(None, use_errno=True)
     init = libc.inotify_init1

@@ -3,8 +3,18 @@ from unittest.mock import patch
 
 from agent_comms.agent_backend import RuntimeLocation
 from agent_comms.registry_document import RosterVisibility
+from agent_comms.wire_watch import NativeFileWatch
 from native_unread_fixture import completed_snapshot
 from test_thread_unread import append, setup_thread
+
+
+def test_empty_native_watch_has_no_paths_or_native_descriptor():
+    watcher = NativeFileWatch.open()
+    try:
+        assert watcher.changed_paths() == frozenset()
+        assert not watcher.invalid
+    finally:
+        watcher.close()
 
 
 def test_idle_sidebar_does_not_read_keys_and_append_only_reads_changed_thread(tmp_path):

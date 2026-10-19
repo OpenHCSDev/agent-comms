@@ -29,7 +29,7 @@ from .registry_document import RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
-from .wire_watch import FileWatch, NativeFileWatch, PollingWireWatch, WatchSource
+from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -488,7 +488,7 @@ class TranscriptReadState(ThreadOwnedState):
     def __init__(self, path: Path, registry: Registration):
         self.registry = registry
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
-        self._source_watch: FileWatch = PollingWireWatch(())
+        self._source_watch: FileWatch = NativeFileWatch.open()
         self._source_resources = ExitStack()
         self.path = ReadLedger.path_in(path.parent)
         self.reads = ReadLedger(self.path)
@@ -649,7 +649,7 @@ class TranscriptReadState(ThreadOwnedState):
                 self._preparation.cancel()
                 self._preparation = self._idle
             self._source_watch = self._source_resources.enter_context(closing(
-                NativeFileWatch.open(*sources) if sources else PollingWireWatch(())
+                NativeFileWatch.open(*sources)
             ))
             # Cover a write between the first capture and installing its watch.
             for name, keys in tuple(self._thread_keys.items()):
