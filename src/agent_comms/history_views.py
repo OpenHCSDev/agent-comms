@@ -410,8 +410,9 @@ class HistoryViews:
         thread.execution.prepare_conversation(ThreadViewRead(
             self, thread, self.registry.require(viewer), checkpoint,
         ))
-        messages = self.bus.inbox(viewer, ThreadTarget(thread.name))
-        self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
+        self.bus.mark_delivered_through(
+            viewer, self.latest_sequence(), target=ThreadTarget(thread.name),
+        )
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""
