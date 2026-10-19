@@ -35,7 +35,7 @@ from .field_codec import (
 from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .standing_rules import UndatedStandingRule
@@ -490,11 +490,11 @@ class Stalling:
     def advance(self, todo: Todo, ordered: float, now: float) -> Todo:
         if not self.stalled(ordered, now):
             return todo
-        owner, actor = todo.held(), todo.creator_identity
+        owner, actor = todo.held(), StallWatcherIncarnation.watcher()
         reason = StrikeReason(f"{owner.owner} stalled on {todo.id}: {self.stall_reason()}")
         at = RecordedEventTime(now)
-        struck = StrikeTodo(todo.revision, actor, owner, reason.text, at).apply(todo)
-        return ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
+        struck = StallStrikeTodo(todo.revision, actor, owner, reason.text, at).apply(todo)
+        return StallReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
 
     def stalled_between(self, ordered: float, since: float, now: float) -> bool:
         return since < self.stall_at(ordered) <= now
@@ -1696,8 +1696,24 @@ class AssignTodo(TodoOperation):
                        revision=current.revision + 1)
 
 
+class CommanderPermission:
+    """Strikes and releases are the order's commander's to make."""
+    actor: ThreadIncarnation
+
+    def require_permitted(self, current: Todo) -> None:
+        current.require_commander(self.actor)
+
+
+class StallWatcherPermission(CommanderPermission):
+    """Core's stall watcher makes these on its own declared identity, never the commander's."""
+
+    def require_permitted(self, current: Todo) -> None:
+        if self.actor != StallWatcherIncarnation.watcher():
+            raise TodoConflict(current)
+
+
 @dataclass(frozen=True)
-class StrikeTodo(TodoOperation):
+class StrikeTodo(CommanderPermission, TodoOperation):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -1705,7 +1721,7 @@ class StrikeTodo(TodoOperation):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
+        self.require_permitted(current)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
@@ -1869,7 +1885,7 @@ class VoidStrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class ReleaseTodo(TodoOperation):
+class ReleaseTodo(CommanderPermission, TodoOperation):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
     actor: ThreadIncarnation
     previous: Assignment
@@ -1878,10 +1894,20 @@ class ReleaseTodo(TodoOperation):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
+        self.require_permitted(current)
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class StallStrikeTodo(StallWatcherPermission, StrikeTodo):
+    """A strike Core's stall watcher records when an order shows no movement."""
+
+
+@dataclass(frozen=True)
+class StallReleaseTodo(StallWatcherPermission, ReleaseTodo):
+    """Core's stall watcher takes the stalled order off its unit."""
 
 
 @dataclass(frozen=True)

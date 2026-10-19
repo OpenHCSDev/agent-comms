@@ -162,15 +162,36 @@ class RecordedThreadIncarnation(ThreadIncarnation):
         return hashlib.sha256(identity).hexdigest()[:32]
 
 
-@dataclass(frozen=True)
-class DeletedThreadIncarnation(ThreadIncarnation):
-    """A deleted participant retains only its name, never a lookup capability."""
+class BirthlessIncarnation(ThreadIncarnation):
+    """A member whose wire birth is a declared mark, not recorded evidence; never a lookup.
 
-    WIRE_BIRTH: ClassVar[float] = -1.0
+    Each member declares its mark in ``WIRE_BIRTH``; the record decodes a mark to its member."""
+
+    WIRE_BIRTH: ClassVar[float]
+    members: ClassVar[dict[float, type[BirthlessIncarnation]]] = {}
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if cls.WIRE_BIRTH in BirthlessIncarnation.members:
+            raise TypeError(f"Wire birth {cls.WIRE_BIRTH} is already declared")
+        BirthlessIncarnation.members[cls.WIRE_BIRTH] = cls
 
     @property
     def wire_birth(self) -> float:
         return self.WIRE_BIRTH
+
+    def require_recorded(self) -> RecordedThreadIncarnation:
+        raise ValueError("Thread incarnation requires a positive recorded birth")
+
+    def renamed(self, name: str) -> Self:
+        return type(self)(name)
+
+
+@dataclass(frozen=True)
+class DeletedThreadIncarnation(BirthlessIncarnation):
+    """A deleted participant retains only its name, never a lookup capability."""
+
+    WIRE_BIRTH: ClassVar[float] = -1.0
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         return snapshot.canonical_name(self.name) not in snapshot.threads
@@ -178,36 +199,36 @@ class DeletedThreadIncarnation(ThreadIncarnation):
     def resolved(self, snapshot: RegistryProvenance) -> DeletedThreadIncarnation:
         return self
 
-    def require_recorded(self) -> RecordedThreadIncarnation:
-        raise ValueError("Thread incarnation requires a positive recorded birth")
-
     @property
     def birth_description(self) -> str:
         return "deleted declaration"
 
-    def renamed(self, name: str) -> DeletedThreadIncarnation:
-        return DeletedThreadIncarnation(name)
-
 
 @dataclass(frozen=True)
-class UnrecordedThreadIncarnation(ThreadIncarnation):
+class UnrecordedThreadIncarnation(BirthlessIncarnation):
     """Historical zero-birth evidence cannot select a live recipient."""
 
     WIRE_BIRTH: ClassVar[float] = 0.0
 
     @property
-    def wire_birth(self) -> float:
-        return self.WIRE_BIRTH
-
-    def require_recorded(self) -> RecordedThreadIncarnation:
-        raise ValueError("Thread incarnation requires a positive recorded birth")
-
-    @property
     def birth_description(self) -> str:
         return "birth unrecorded"
 
-    def renamed(self, name: str) -> UnrecordedThreadIncarnation:
-        return UnrecordedThreadIncarnation(name)
+
+@dataclass(frozen=True)
+class StallWatcherIncarnation(BirthlessIncarnation):
+    """Core's own stall watcher: it strikes and releases stalled orders, and is never a thread."""
+
+    WIRE_BIRTH: ClassVar[float] = -2.0
+    NAME: ClassVar[str] = "core-stall-watcher"
+
+    @classmethod
+    def watcher(cls) -> StallWatcherIncarnation:
+        return cls(cls.NAME)
+
+    @property
+    def birth_description(self) -> str:
+        return "Core's stall watcher"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -273,11 +294,8 @@ class ThreadIncarnationRecord:
     created_at: float
 
     def incarnation(self) -> ThreadIncarnation:
-        if self.created_at == DeletedThreadIncarnation.WIRE_BIRTH:
-            return DeletedThreadIncarnation(self.name)
-        if self.created_at == UnrecordedThreadIncarnation.WIRE_BIRTH:
-            return UnrecordedThreadIncarnation(self.name)
-        return RecordedThreadIncarnation(self.name, self.created_at)
+        member = BirthlessIncarnation.members.get(self.created_at)
+        return RecordedThreadIncarnation(self.name, self.created_at) if member is None else member(self.name)
 
     @classmethod
     def decode(cls, name: str, birth: float) -> ThreadIncarnation:
