@@ -11,7 +11,8 @@ Baseline: 5cdac561d498ece25142a8d2e5cf9b06002b6c8a.
 - [x] Decode PR query rows into named records, not positional tuples.
 - [x] Confirm real scratch-bus order, verdict, strikes, explicit fire and void through Core tools.
 - [x] Confirm main/unmerged delivery and unlinked refusal through the CLI.
-- [x] Pass the two bounded record/codec sanity checks. Pytest is unavailable.
+- [x] Pass the bounded record/codec checks and real missing-checkout board read.
+- [ ] Finish the single-worker pytest run; the unrelated post-commit correction failure is assigned for overlap settlement.
 - [x] Publish draft PR #1935; do not merge or install.
 - [ ] Automatic firing at the strike limit, with all strike sources in the same write.
 - [ ] Retain original typed transitions and the state each operation replaces.
@@ -64,7 +65,7 @@ acceptance, preserving the concise receipt below. The proof does not own other a
 
 ## Actual CLI proof
 
-Original response bodies: `docs/evidence/cn-phase3-record-results.jsonl` (14 actual responses,
+Original response bodies: `docs/evidence/cn-phase3-record-results.jsonl` (15 actual responses,
 normalized only for whitespace). Driver: `tools/proofs/cn_phase3_record.py`. The driver initializes
 real Core stores and calls `python -m agent_comms.cli tool --from ...`. It uses no fake Comms,
 fixture events or model replies. Judgment names a real edit from this unit's native session,
@@ -101,10 +102,12 @@ Core AST pass parsed 384 modules with zero omissions.
 
 ## Local checks and precise blockers
 
-- The requested background `timeout 300 python -X faulthandler -m pytest ...` failed before
-  collection: the shared interpreter has no pytest. An isolated-venv attempt was refused by the
-  existing StorageRule; no alternate installation was attempted. A shared test interpreter with
-  pytest, or a reviewed dev-dependency installation by its owner, is needed for the suite.
+- The first interpreter had no pytest. StorageRule refused an isolated venv; no workaround
+  installation was attempted. pi-cn-phase7 supplied the existing
+  `/home/ts/code/projects/agent-comms/.venv/bin/python`. Bounded checks use `-o addopts=''` to avoid
+  the default eight workers and coverage gate, plus owned persistent basetemp/TMPDIR paths.
+  The first four-module run gave 125 passed and two failures. The GitHub-unread failure is repaired
+  at its typed remote-error boundary; the post-commit correction failure is described below.
 - Final checks on source checkpoint ec5f94568: Core/Toad AST passes above, the candidate CLI entrypoint,
   and both standalone record/codec sanity functions passed under the same bounded/background
   command form. They check every DeliveryMerge member and named external non-main target decoding;
@@ -113,7 +116,48 @@ Core AST pass parsed 384 modules with zero omissions.
   not automatic firing. The shared TodoStore/Goals write-path work overlaps recent #1878 and is raised
   with claude-code. Source inspection also finds destructive order/assignment replacement, missing Core
   recording timestamps and direct fold/correction writes. pi-cn-phase3 retains this implementation.
+- A real post-commit error remains: Messaging.send catches TodoConflict only, so an ordinary SQLite
+  correction error escapes after the message is committed and loses its receipt at the caller.
+  Reproducer: `test_committed_send_reports_correction_failure_to_tool_and_cli`. Recent #1878
+  (toad-theme-2) changes that same method/class. claude-code has the exact overlap and the proposed
+  CorrectionResult-owned outcome capture; no Messaging code is edited here.
+- New #1938 (P710) requires every delivered commit to be on origin/main. That conflicts with the
+  explicit delivered-but-not-merged workflow in phase 3. claude-code has this product decision;
+  the two branches must not silently overwrite each other's policy.
 - pi-cn-phase5 owns SendBackVerdict/Goals.send_back publication, OrderPost rows/insertion and the
   canonical order channel. Those changes must remain in the same transaction as retained operations;
   this checkpoint does not edit their classes or TodoStore.rows/apply. Their exact published commit
   is a dependency for that continuing write-path change.
+
+## Remote progress with no local checkout
+
+pi-cn-phase7 supplied a concrete rotation failure: all four
+`test_board_self_check_uses_order_progress_and_its_linked_merge` cases reached
+`OpenPrProgress.found -> source.readings -> git merge-base` on an absent checkout.
+Remote PR evidence and local distance evidence were incorrectly compulsory together.
+
+The existing ProgressSource now owns remote facts and the absence of local evidence.
+`ProgressSource.at` selects LocalProgressSource once at the filesystem boundary when the
+checkout directory is available. The local subtype owns commits, Git and distance reads.
+Its Git mechanism reuses CheckedCommit.git, rather than another subprocess/error path;
+commits no longer suppress arbitrary Git errors. A broken existing checkout remains an
+actual GitCommandFailed, not a fabricated no-commit or unread-PR result.
+
+ProgressPoint owns the log-row format and decode used by both commit and distance reads.
+CommittedProgress and PushedProgress consume those named records; the raw sha/time tuples
+and repeated split/float conversions are deleted. An order's baseline point still uses its
+issue time; a Git commit point uses committer time.
+
+There are two production ProgressSource consumers: OrderProgress.read uses the availability
+factory; TodoStore.board_disagreements intentionally uses the remote-only source to look for
+missed merges. No TodoStore or phase-5 publication method was changed. PullRequests raises the
+existing WorkBranchError for a forge refusal, which OrderProgress can report as UnreadProgress
+without swallowing unrelated Git or malformed-record errors.
+
+The real proof temporarily added P5's actual immutable reference to this owned draft PR through
+`todo.order.pull_request_body`. With `/home/ts/wt/record-worker--P5` absent, the actual CLI
+`comms_todo_list` returned OpenPrProgress for PR #1935, with empty local distance readings.
+The real TodoStore.board_disagreements read also passed. The temporary reference was removed
+in finally while preserving other PR text. No fixture Comms, events or replacement Git runner
+were used. Driver/logs remain in the owned proof root and `.proof-board-read.log`; the complete
+CLI response is the fifteenth result in the retained receipt.
