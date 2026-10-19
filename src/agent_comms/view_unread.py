@@ -24,15 +24,15 @@ from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
-from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
+from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 
 if TYPE_CHECKING:
-    from .threads import Thread
-    from .registry_document import RegistrySnapshot
-    from .registration import Registration
     from .agent_backend import RuntimeLocation
+    from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
+    from .threads import Thread
 
 _INDEX_VERSION = 7
 
