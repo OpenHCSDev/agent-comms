@@ -24,6 +24,7 @@ from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceHeldError,
     MaintenanceOperator,
+    ReadyPhase,
 )
 from agent_comms.read_basis import (
     ChannelConversation, ConversationCursor, DMConversation, ReadCursor,
@@ -34,15 +35,18 @@ from agent_comms.recorded_bus import RecordedBus
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.todos import GoalRef, Todo, TodoStore
+from agent_comms.todos import GoalRef, InstallDeadline, PlannedInstallDeadline, Todo, TodoStore
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, RetainedBus
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
 from tools.upgrade_bus import (
     Backup,
+    ChangedInstall,
+    Install,
     Revisions,
     Stack,
+    UnchangedInstall,
     UpgradeRefused,
     before_stop,
     bus_files,
@@ -596,6 +600,33 @@ def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
     stack = Stack(REPO, tmp_path)
     with pytest.raises(UpgradeRefused, match=re.escape(str(stack.uv))):
         stack.require_uv()
+
+
+def test_an_install_with_nothing_to_change_only_plans_the_next(comms, tmp_path):
+    """At the target with the installed lock, the run holds, rehearses and restarts nothing."""
+    class Untouched(Stack):
+        def cli(self, root: Path, *args: str) -> dict:
+            raise AssertionError(f"an unchanged install ran {args}")
+
+    installed, staged = Untouched(tmp_path / "installed"), Untouched(tmp_path / "staged")
+    for stack in (installed, staged):
+        stack.lock.parent.mkdir(parents=True)
+        stack.lock.write_text("lock\n")
+    revisions = Revisions(REPO, tmp_path)
+
+    def install(current: str) -> Install:
+        return Install.of(REPO, comms.root, current, "target", (), installed, staged, revisions,
+                          "worker")
+
+    assert type(install("current")) is ChangedInstall
+    unchanged = install("target")
+    assert type(unchanged) is UnchangedInstall
+    assert unchanged.rehearsal() == unchanged.live() == {"unchanged": "target"}
+    planned = InstallDeadline.read(comms.root)
+    assert type(planned) is PlannedInstallDeadline and planned.installer == "worker"
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+    staged.lock.write_text("relocked\n")
+    assert type(install("target")) is ChangedInstall
 
 
 def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):
