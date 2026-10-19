@@ -75,13 +75,13 @@ class WheelSpin(StandingRule, declared_name=None):
 
     @classmethod
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
-        """Units with a native turn in the last ten minutes and no order, parked threads aside."""
+        """Units with a recent turn in their own transcript and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CONFIG.parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((thread for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
-                       and TurnDigestRead(comms.root, thread, bound).native()),
+                       and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
     def assign(self, comms: Comms, commander: str, unit: Thread) -> None:
