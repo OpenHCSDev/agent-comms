@@ -49,7 +49,6 @@ from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
-from agent_comms.connector import PORT
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -59,7 +58,6 @@ from agent_comms.todos import PlannedInstallDeadline
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
-CONNECTOR = "from agent_comms.connector import main; raise SystemExit(main())"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 
@@ -88,7 +86,6 @@ class Stack:
 
     checkout: Path
     home: Path = Path.home()
-    connector_port: int = PORT
 
     @property
     def python(self) -> Path:
@@ -158,15 +155,8 @@ class Stack:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
         history = self.cli(root, "history", "--limit", "50")  # #any: every channel
-        return {"threads": len(threads), "who": len(present),
+        return {"threads": len(threads), "who": len(present["who"]),
                 "history": len(history[EverythingHistoryPageResult.messages_key])}
-
-    def round_trip(self, root: Path) -> str:
-        """The running connector service, on this stack's Python, reads this bus as the bus
-        reads itself; it needs open maintenance, so it runs last."""
-        output = run(self.python, "-c", CONNECTOR, "round_trip", root, self.python,
-                     "--port", str(self.connector_port), cwd=self.checkout, env=self.environment())
-        return output.strip().splitlines()[-1]
 
 
 @dataclass
@@ -274,8 +264,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
             read = stack.verify(copy)
-        # No round trip here: the copy's maintenance witness names the live root, and only the
-        # live bus has the connector service the round trip proves.
+        # Optional connector qualification belongs to its own round_trip command;
+        # a native-only bus must not acquire a fabricated director to update.
         return {"steps": steps, "files": files, "read": read}
 
 
@@ -427,7 +417,6 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
         maintenance.clear(held)
-        round_trip = installed.round_trip(root)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
@@ -440,7 +429,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         raise
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
-            "round_trip": round_trip, "backup": str(backup.path)}
+            "backup": str(backup.path)}
 
 
 def start(stack: Stack, root: Path, names: list[str]) -> None:

@@ -577,8 +577,8 @@ class ServiceProcess:
 
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
-    """What an upgrade proves last: the running connector service runs the installed runtime,
-    and a read through its loopback endpoint answers as the same read on this bus."""
+    """Explicit qualification for a configured connector: its service runs the selected
+    runtime and its loopback read agrees with this bus. Native-only installs do not need it."""
 
     help = "Read the bus through the running connector service and compare"
     root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
