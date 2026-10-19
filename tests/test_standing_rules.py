@@ -22,7 +22,8 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, MergedProgress, NoCommitProgress, OpenPrProgress,
     OrderProgress, PullRequest, PullRequests, RecordHuntTodo, Todo, UnreadProgress)
-from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsStandingRulesTool, CommsTodoTool
+from agent_comms.connector import CALLER
+from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
 from test_commander_problem_orders import create, native_judge_edits
 
@@ -183,6 +184,37 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
         "RULES DUE (last rule review was 21 min ago (max 20)) -> agent-comms-commander rules review"
         " and answer the drawn rules before any order"]
 
+
+
+def test_a_claude_ai_directive_passes_the_commanders_directive_wording_and_review(commander, monkeypatch, tmp_path):
+    """claude-ai's sends through the connector pass the same word checks as order send, and a fresh review."""
+    comms, _ = commander
+    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(tmp_path), created_at=3.0))
+    ai = CALLER
+
+    def send(body):
+        return CommsSendTool(sender="claude-ai", target="worker", body=body).apply(comms, ai)
+
+    clean = "The count copy at tools.py:829 is wrong: delete it and read the count from its owner."
+    with pytest.raises(ValueError, match="no rule review recorded for claude-ai"):
+        send(clean)
+    CommsRuleReviewTool(entry=DrawnRuleReviewEntry(("Declare each fact once",), 1)).apply(comms, ai)
+    CommsRuleReviewTool(entry=AnsweredRuleReviewEntry(
+        1, "This tick moves rules.py:47 into one typed Core record that Core owns.")).apply(comms, ai)
+    for body, refusal in (
+        ("Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
+         "Read the count from its owner.", "Not blunt"),
+        ("The canonical count at tools.py:829 is wrong: read it from its owner.", "Jargon"),
+        ("Thanks for moving the count at tools.py:829 into its owner, that is correct.", "Soft wording"),
+    ):
+        with pytest.raises(ValueError, match=refusal):
+            send(body)
+    send(clean)
+    assert [(m.sender, m.body) for m in comms.bus.inbox("worker")] == [("claude-ai", clean)]
+    later = time.time() + RulesDue.max_age + 60
+    monkeypatch.setattr(time, "time", lambda: later)
+    with pytest.raises(ValueError, match="last rule review was 21 min ago"):
+        send(clean)
 
 def test_the_read_tool_returns_every_members_lines(commander, standing):
     comms, caller = commander

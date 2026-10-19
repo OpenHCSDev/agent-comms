@@ -1071,6 +1071,7 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        caller.require_directive(comms, self.body)
         body = VerdictAudience(self.audience).addressed(self.target, self.body)
         result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         caller.sent(comms, result.message)
