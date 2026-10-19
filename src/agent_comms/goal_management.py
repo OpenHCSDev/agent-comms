@@ -261,7 +261,7 @@ class Goals:
         progress = f"{goal.progress}\n\n{note}" if goal.progress else note
         self.registry.register(
             replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
-            snapshot.statuses[canonical],
+            snapshot.status(canonical),
         )
         if not waits.clear(goal.id, wait_id=wait.wait_id):
             return ()
@@ -322,7 +322,7 @@ class Goals:
         progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
         # Persist the explanation before releasing the exact wait.
         continued_goal = replace(goal, progress=progress, revision=goal.revision + 1)
-        self.registry.register(replace(owner, goal=continued_goal), snapshot.statuses[owner.name])
+        self.registry.register(replace(owner, goal=continued_goal), snapshot.status(owner.name))
         self.waits.clear(goal.id, wait_id=wait.wait_id)
         return True
 

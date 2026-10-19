@@ -133,7 +133,7 @@ class AgentActivity:
         if not incarnation.current(snapshot):
             return False
         name = snapshot.canonical_name(incarnation.name)
-        return (snapshot.statuses[name].running and snapshot.threads[name].process_alive
+        return (snapshot.status(name).running and snapshot.threads[name].process_alive
                 and self.activity_of(name, snapshot=snapshot).state.busy)
 
     def _observed(self, participant: Thread, owner: OwnerIdentity,

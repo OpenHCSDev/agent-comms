@@ -174,7 +174,7 @@ class GoalLaunchOwner(RegistryOwner):
         canonical = replace(self, thread=replace(self.thread, name=name))
         canonical.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(name)
-        snapshot.statuses[current.name].require_running()
+        snapshot.status(current.name).require_running()
         return current.goal.require().require_id(goal_id).require_active()
 
 

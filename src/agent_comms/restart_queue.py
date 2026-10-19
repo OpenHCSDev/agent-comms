@@ -260,7 +260,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
     with _store_lock(comms._wire_lock_path):
         snapshot = comms.registry.snapshot()
         owner = selection.require_current(snapshot)
-        status = snapshot.statuses[owner.name]
+        status = snapshot.status(owner.name)
         owner.require_restart_owner(status)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
         target = RestartTarget.capture(comms, launch.environment, launch_runtime)

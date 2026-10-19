@@ -134,7 +134,7 @@ class NativeThreadExecution(ThreadExecution):
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
         from .thread_presentation import LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 
-        if not snapshot.statuses[thread.name].active or not thread.process_alive:
+        if not snapshot.status(thread.name).active or not thread.process_alive:
             return UnavailableThreadOwnerBinding()
         return LiveThreadOwnerBinding(
             snapshot.owner_identity(thread.name), thread.require_process(),

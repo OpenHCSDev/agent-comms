@@ -437,7 +437,7 @@ class HistoryViews:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
         threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
-                        if not active_only or snapshot.statuses[name].active)
+                        if not active_only or snapshot.status(name).active)
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
         return ThreadRecord.read(
             snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)

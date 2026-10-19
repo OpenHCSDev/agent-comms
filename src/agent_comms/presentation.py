@@ -523,7 +523,7 @@ class ChannelView(ToolResult):
         history: ChannelActivity, visibility: RosterVisibility,
     ) -> ChannelView:
         people = {thread.name: thread for thread in registered
-                  if snapshot.statuses[thread.name].in_view(visibility)}
+                  if snapshot.status(thread.name).in_view(visibility)}
         members = tuple(sorted(people, key=lambda name: (
             name not in pins,
             channel.order.key(name, people[name].created_at,
@@ -535,7 +535,7 @@ class ChannelView(ToolResult):
             max(history.last_message,
                 max((activity[name].timestamp for name in members if name in activity), default=0)),
             history.last_user_input, pins & frozenset(members),
-            sum(snapshot.statuses[thread.name].active for thread in registered), len(registered),
+            sum(snapshot.status(thread.name).active for thread in registered), len(registered),
         )
 
 
@@ -593,10 +593,10 @@ class ThreadRecord(CliResult):
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
         observed = agents.all_activity(
-            (thread for thread in threads if snapshot.statuses[thread.name].active),
+            (thread for thread in threads if snapshot.status(thread.name).active),
             snapshot=snapshot)
         return tuple(cls(
-            thread, snapshot.statuses[thread.name],
+            thread, snapshot.status(thread.name),
             observed.get(thread.name, Activity.absent(thread.name)),
             GoalWaits.execution(thread.goal, waits, snapshot, agents),
             pending=pending[thread.name],
@@ -640,7 +640,7 @@ class ThreadView(ThreadRecord):
         waits = goal_waits.read()
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
-            thread, snapshot.statuses[thread.name], activities[thread.name],
+            thread, snapshot.status(thread.name), activities[thread.name],
             GoalWaits.execution(thread.goal, waits, snapshot, agents), runtime[thread.name],
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)

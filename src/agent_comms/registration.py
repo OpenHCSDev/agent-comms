@@ -407,7 +407,7 @@ class Registration:
     def active_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
             return {
-                name: t for name, t in document.threads.items() if document.statuses[name].active
+                name: t for name, t in document.threads.items() if document.status(name).active
             }
 
     def peers(self, exclude: str) -> Sequence[str]:

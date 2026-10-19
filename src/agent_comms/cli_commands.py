@@ -1310,7 +1310,7 @@ class StatusCliCommand(CliCommand):
         snapshot = ctx.registry.snapshot()
         running = (
             thread for name, thread in snapshot.threads.items()
-            if snapshot.statuses[name].active
+            if snapshot.status(name).active
         )
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
