@@ -1,6 +1,5 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 from agent_comms.messages import ConversationRole, NoticeRole
 import asyncio
 import os
@@ -9,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.turn_lease import NoFinishedTurn
 from agent_comms.turn_lease import NoTurn
 
 import agent_comms.agent_events as ae

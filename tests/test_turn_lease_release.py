@@ -5,12 +5,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import ActiveTurn
+from agent_comms.turn_lease import ActiveTurn, FinishedTurnFence, NoFinishedTurn
 
 
 def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypatch):
