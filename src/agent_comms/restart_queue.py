@@ -252,13 +252,14 @@ class RestartQueue:
             yield self.read(path)
 
 
-def enqueue(comms: Comms, name: str, *, launch_runtime: LaunchRuntime) -> QueuedRestart:
+def enqueue(comms: Comms, name: str, *, launch_runtime: LaunchRuntime,
+            expected: OwnerRestartSelection | None = None) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     queue = RestartQueue(comms.root / DIRECTORY)
     with _store_lock(comms._wire_lock_path):
         snapshot = comms.registry.snapshot()
-        owner = comms.registry.require(name)
+        owner = comms.registry.require(name) if expected is None else expected.require_current(snapshot)
         status = snapshot.statuses[owner.name]
         owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)

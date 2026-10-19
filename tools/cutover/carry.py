@@ -456,6 +456,10 @@ class PreparedCarries(ABC):
             for _, conversion in conversions for path in conversion.backup_files(root)))))
         return PendingConversion(chain, conversions, files, destination)
 
+    @abstractmethod
+    def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
+        """The conversion declaration owns whether writers must stop first."""
+
     @property
     @abstractmethod
     def data_root(self) -> Path: ...
@@ -488,6 +492,29 @@ class PreparedCarries(ABC):
 class NoConversion(PreparedCarries):
     root: Path
 
+    def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
+        from agent_comms.launch_runtime import LaunchRuntime
+        from agent_comms.restart_queue import enqueue
+        from agent_comms.errors import RelationViolationError
+
+        with resources:
+            with publication.selected_route(comms.root):
+                if not publication.published():
+                    publication.publish_links()
+            publication.release_if_safe(self, comms.owners.maintenance, hold)
+            # Existing exact-incarnation queue owns idle admission and settlement.
+            for original in intent.owners:
+                if not original.process.alive():
+                    continue
+                try:
+                    enqueue(comms, original.name,
+                            launch_runtime=LaunchRuntime(publication.runtime / 'bin/python'),
+                            expected=original)
+                except RelationViolationError:
+                    if original.process.alive():
+                        raise
+                    # A selected process stopped while its queue request arrived.
+
     @property
     def data_root(self) -> Path:
         return self.root
@@ -514,6 +541,33 @@ class PendingConversion(PreparedCarries):
     conversions: tuple[tuple[Step, type[Carry]], ...]
     files: tuple[Path, ...]
     backup: StoreBackup
+
+    def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
+        import time
+        from agent_comms.restart_refusals import OwnerBusyRefusal
+
+        deadline = time.monotonic() + timeout
+        previous_busy = ()
+        while True:
+            snapshot = comms.registry.snapshot()
+            busy = []
+            for original in intent.owners:
+                if not original.process.alive():
+                    continue
+                thread = original.require_current(snapshot)
+                try:
+                    comms.owners.require_restart_idle(thread)
+                except OwnerBusyRefusal:
+                    busy.append(thread.name)
+            if not busy:
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Active turns still running: ' + ', '.join(busy))
+            if tuple(busy) != previous_busy:
+                print('Waiting for active turns: ' + ', '.join(busy), flush=True)
+                previous_busy = tuple(busy)
+            time.sleep(min(0.25, max(0, deadline - time.monotonic())))
+        publication.publish_stopped(self, comms, intent, hold, resources)
 
     @property
     def data_root(self) -> Path:
