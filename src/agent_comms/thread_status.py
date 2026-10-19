@@ -195,8 +195,6 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
     It has no launched process to stop or restart, so it stays in every view.
     """
 
-    receiving = False
-
     def require_self_rename(self) -> None:
         """The CLI participant itself calls rename; it needs no bridge."""
 

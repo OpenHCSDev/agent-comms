@@ -163,7 +163,6 @@ class ExternalThreadExecution(ThreadExecution):
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
-        """The status owner reads the bridge; registration stores its declaration."""
         return CliInboxThreadStatus()
 
     @classmethod

@@ -163,7 +163,7 @@ class RegistryGoalConversion(DocumentConversion):
         document = FieldCodec.decode(RegistryDocument, {**raw, "version": cls.target_version()})
         for name, status in tuple(document.statuses.items()):
             document.set_status(name, status)
-        return FieldCodec.encode(document)
+        return FieldCodec.encode_record(document)
 
 
 @dataclass(frozen=True, slots=True)
