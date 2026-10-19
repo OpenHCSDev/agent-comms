@@ -169,6 +169,14 @@ class CommanderContext(CommanderConfig):
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
 
+    def read_check(self, line: str) -> OrderCheck:
+        if not (check := OrderCheck.parse(line)):
+            sys.exit('Refused: Check reads "<repo> :: <shell command> -> <integer>"')
+        directory = self.repo_directory(check.directory)
+        if not directory.is_dir():
+            sys.exit(f'Refused: Check repo {check.directory} is not a directory')
+        return replace(check, directory=str(directory))
+
     def held_orders(self) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_for_commander(self.incarnation)
 
@@ -246,7 +254,8 @@ class Commander(CommanderContext):
         fact = re.search(r'(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\b', body)
         group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
         owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
-        check = (line := re.search(r'(?m)^Check:(.*)$', body)) and OrderCheck.parse(line[1])
+        line = re.search(r'(?m)^Check:(.*)$', body)
+        check = self.read_check(line[1] if line else '')
         listed = {t.id: t for t in self.todos()}
         if not group:
             problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
@@ -256,10 +265,6 @@ class Commander(CommanderContext):
             problems.append('no Owner: path:line of the existing owner the fix belongs on')
         elif not os.path.exists(owner[1]) or int(owner[2]) > sum(1 for _ in open(owner[1])):
             problems.append(f'Owner {owner[1]}:{owner[2]} does not exist; read the code and name the real owner')
-        if not check:
-            problems.append('no Check: <repo> :: <command> -> N; done runs it, so make it the real acceptance count')
-        elif not os.path.isdir(check.directory):
-            problems.append(f'Check repo {check.directory} is not a directory')
         # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
         # An order's check must fail now (or it proves nothing), and every absolute
         # path:line it cites must exist.
@@ -356,10 +361,7 @@ class Commander(CommanderContext):
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
-        if not (check := OrderCheck.parse(line)):
-            sys.exit('Refused: --check reads "<repo> :: <shell command> -> <integer>"')
-        if not os.path.isdir(check.directory):
-            sys.exit(f'Refused: check repo {check.directory} is not a directory')
+        check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
         def git(*args: str) -> str:
@@ -743,21 +745,12 @@ class RuledVerb(CommanderVerb):
                      f' rules review{flag}, then answer each drawn rule{flag}.')
 
 
-class LoadedVerb(RuledVerb):
-    """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
-
-    def gate(self, ctx: Commander) -> None:
-        super().gate(ctx)
-        if not self.fork:
-            capacity.Load.of(ctx.comms, ctx.commander, ctx.state / 'forks').require()
-
-
 class OrderVerb(CommanderVerb):
     """A verb of `order`."""
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, LoadedVerb):
+class SendVerb(OrderVerb, RuledVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
@@ -900,7 +893,7 @@ class ServeVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SayVerb(OrderVerb, LoadedVerb):
+class SayVerb(OrderVerb, RuledVerb):
     help = "a non-order message; refused if it orders work"
     units: str = option("units", metavar="UNIT[,UNIT]")
     body_file: str = option("body_file", metavar="BODYFILE")
@@ -910,7 +903,7 @@ class SayVerb(OrderVerb, LoadedVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, LoadedVerb):
+class ProblemVerb(OrderVerb, RuledVerb):
     help = "Core records the problem with its order, or nothing"
     text: str = option("text")
     to: str = option("--to")
@@ -971,7 +964,7 @@ class CloseVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HuntVerb(OrderVerb, LoadedVerb):
+class HuntVerb(OrderVerb, RuledVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
     where: str = option("where", metavar="FILE:LINE")
     why: str = option("--why")

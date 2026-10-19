@@ -58,7 +58,7 @@ def test_missing_proof_row_never_decodes_history(tmp_path, monkeypatch):
         NativeContextProof.read_evidence(session, 'd' * 32)
 
 
-def test_recorded_input_starts_at_native_entry_after_header_only_reopen(tmp_path, monkeypatch):
+def test_recorded_inputs_cover_the_cut_after_header_only_reopen(tmp_path, monkeypatch):
     from agent_comms.native_session_reopen import NativeSessionIdentity
 
     session = _evidence(tmp_path)
@@ -83,7 +83,7 @@ def test_recorded_input_starts_at_native_entry_after_header_only_reopen(tmp_path
         assert decoded == ['sid'] and not evidence.inputs
         proof = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
         assert proof.session_entry_id == 'entry'
-        assert decoded == ['sid', 'entry']
+        assert decoded == ['sid'] + ['older'] * 10000 + ['entry']
         assert evidence.tracked(INPUT_ID).id == 'entry'
         index = dict(evidence.inputs)
         with session.open('ab') as stream:
@@ -91,7 +91,7 @@ def test_recorded_input_starts_at_native_entry_after_header_only_reopen(tmp_path
         assert NativeSessionIdentity.from_evidence(evidence).session_id == 'sid'
         assert evidence.inputs == index
         assert NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence) == proof
-        assert decoded == ['sid', 'entry', 'older']
+        assert decoded == ['sid'] + ['older'] * 10000 + ['entry', 'older']
 
 
 def test_evidence_scope_switches_original_source_and_closes_previous_reader(tmp_path):

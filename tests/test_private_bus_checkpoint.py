@@ -18,13 +18,15 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import CheckpointNeedsRepairError, RelationViolationError
 from agent_comms.messages import Message, HandoffKind, InfoKind
 from agent_comms.bus_source_page import AddressedPage
 from agent_comms.private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
-from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
+from agent_comms.store_files import (
+    BoundedStoreReadBudget, ExclusiveLock, SharedLock, UNBOUNDED_STORE_READ, _store_lock,
+)
 from agent_comms.threads import Thread
 
 
@@ -470,7 +472,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     # source API supplies a complete-prefix+bounded-page alternative.
     with (
         pytest.raises(RelationViolationError),
-        comms.bus.log.locked(max_bus_bytes=8 * 1024 * 1024),
+        comms.bus.log.locked(read_budget=BoundedStoreReadBudget(8 * 1024 * 1024)),
     ):
         pass
     with monkeypatch.context() as patch:
@@ -523,8 +525,7 @@ def test_reopened_root_preserves_checked_source_and_supports_append(
 @pytest.mark.parametrize("copy_root", [False, True])
 def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None:
     from agent_comms.child_process import Platform
-    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
-    from agent_comms.store_files import _store_lock_file
+    from agent_comms.store_files import StoreLockAcquisition, _store_lock_file
 
     original, root_id = _root(tmp_path)
     first = publish_initial(original, "sender", "Alice", "copied original")
@@ -543,8 +544,10 @@ def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None
     platform = Platform.current()
     with _store_lock_file(log.path) as lock_file:
         platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
-        with pytest.raises(CheckpointNeedsRepair, match="relocated"):
-            log._read_checked(lock_file, platform, lambda source: None, SharedLock())
+        with pytest.raises(CheckpointNeedsRepairError, match="relocated"):
+            with StoreLockAcquisition.holding(log.path, lock_file, platform, UNBOUNDED_STORE_READ,
+                                              mode=SharedLock(), lock_type=log.lock_type):
+                pass
     # The real reader upgrades its lock and rebuilds the copied SQLite index.
     request = AddressedPage.capture(lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup)
     witness, messages, _ = asyncio.run(log.read_checked_async(
@@ -651,7 +654,7 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
 
     import agent_comms.private_bus_checkpoint as checkpoint
     from agent_comms.child_process import Platform
-    from agent_comms.store_files import _store_lock_file
+    from agent_comms.store_files import StoreLockAcquisition, _store_lock_file
 
     comms, _ = _root(tmp_path)
     publish_initial(comms, "sender", "Alice", "first")
@@ -668,8 +671,10 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
     # A shared-lock reader never writes the checkpoint; it names the repair.
     with _store_lock_file(log.path) as lock_file:
         platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
-        with pytest.raises(checkpoint.CheckpointNeedsRepair):
-            log._read_checked(lock_file, platform, lambda source: None, SharedLock())
+        with pytest.raises(CheckpointNeedsRepairError):
+            with StoreLockAcquisition.holding(log.path, lock_file, platform, UNBOUNDED_STORE_READ,
+                                              mode=SharedLock(), lock_type=log.lock_type):
+                pass
     # The async reader then takes the exclusive lock, which repairs and reads.
     through = asyncio.run(log.read_checked_async(lambda source: source.witness.through_seq))
     assert through == 2
@@ -679,11 +684,9 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
 
 @pytest.mark.parametrize(("mode", "escalated"), [(SharedLock(), ExclusiveLock), (ExclusiveLock(), None)])
 def test_only_a_shared_reader_retries_a_needed_repair_exclusively(mode, escalated) -> None:
-    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
-
-    error = CheckpointNeedsRepair("lagged suffix")
+    error = CheckpointNeedsRepairError("lagged suffix")
     if escalated is None:
-        with pytest.raises(CheckpointNeedsRepair) as raised:
+        with pytest.raises(CheckpointNeedsRepairError) as raised:
             mode.after_repair_needed(error)
         assert raised.value is error
     else:

@@ -87,6 +87,11 @@ class CommanderConfig(CommanderRole, BaseModel):
         root = Path(root).resolve()
         return cls.read(cls.root_path(root)).model_copy(update={'root': root})
 
+    def repo_directory(self, name: str) -> Path:
+        """A configured repository name takes precedence over a directory spelling."""
+        return next((repo.checkout for repo in self.repos
+                     if repo.github.rsplit('/', 1)[-1] == name), Path(name)).resolve()
+
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
         self.require_commander(Comms(self.root).registry.require(self.commander))

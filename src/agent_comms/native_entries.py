@@ -8,7 +8,6 @@ from collections.abc import Iterable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from itertools import chain
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, TextIO
 from uuid import uuid4
@@ -69,11 +68,10 @@ class RecordedEntry(PiPayload):
         Decode it once, before splitting into message/tool/routing events; ACP
         consumers receive Unix seconds.
         """
-        timestamp = self.timestamp.at.timestamp()
-        return [replace(event, timestamp=timestamp) for event in self._events(context)]
+        return self._events(context, self.timestamp.at.timestamp())
 
-    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        return [event for message in self.messages for event in message.transcript_events(context)]
+    def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
+        return [event for message in self.messages for event in message.transcript_events(context, timestamp)]
 
     @property
     def original_id(self):
@@ -199,10 +197,6 @@ class NativeHeaderState(ABC):
             if entry is not None:
                 yield entry
 
-    def start_input(self, reader, session_entry_id):
-        reader.header()
-        return (reader.source.start_at_entry(session_entry_id),)
-
 
 class UnreadNativeHeader(NativeHeaderState):
     def decode_inputs(self, rows):
@@ -223,11 +217,6 @@ class AcceptedNativeHeader(NativeHeaderState):
     def read(self, reader):
         reader.source.verify()
         return reader.entries[0]
-
-
-class IndexedNativeHeader(AcceptedNativeHeader):
-    def start_input(self, reader, session_entry_id):
-        return ()  # The acquired reader already indexes each verified append.
 
 
 class NativeEvidenceRead:
@@ -330,10 +319,6 @@ class NativeEvidenceRead:
             self.close()
             raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
 
-    def observe_input(self, input_id, session_entry_id):
-        """Full-history readers preserve their contiguous branch semantics."""
-        return self.observe()
-
     def observe(self):
         """Decode the captured cut."""
         return self._observe(reverified=False)
@@ -367,14 +352,14 @@ class NativeEvidenceRead:
         self.source.reverify_from_start()
         return self._observe(reverified=True)
 
-    def _observe(self, *, reverified: bool, initial_rows=()):
+    def _observe(self, *, reverified: bool):
         from .native_pi import (
             NativeEvidencePrefixChanged,
             NativePiUnavailable,
         )
 
         try:
-            appended = tuple(self.decode_rows(chain(initial_rows, self.source.rows())))
+            appended = tuple(self.decode_rows(self.source.rows()))
             self.index(appended)
             entries = self.entries + appended
             self._accept_header(entries)
@@ -394,7 +379,7 @@ class NativeEvidenceRead:
             self.close()
             raise
         self.entries = entries
-        self.header_state = IndexedNativeHeader()
+        self.header_state = AcceptedNativeHeader()
         return entries[0], entries
 
     def decode_rows(self, rows):
@@ -408,12 +393,6 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
     Keep the parent class's file handle, append handling and error behavior.
     Read input evidence from that file without adding a history index or store.
     """
-
-    def observe_input(self, input_id, session_entry_id):
-        """A recorded native entry locates the first needed input, not a bus sequence."""
-        return self._observe(
-            reverified=False, initial_rows=self.header_state.start_input(self, session_entry_id),
-        )
 
     def decode_rows(self, rows):
         yield from self.header_state.decode_inputs(rows)
@@ -547,9 +526,9 @@ class CompactionEntry(NativeEntry):
 
     summary: str = ""
 
-    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+    def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
         text = self.summary.strip()
-        return [NoticeTranscript(f"## Context compacted\n\n{text}", position=context.position)] if text else []
+        return [NoticeTranscript(f"## Context compacted\n\n{text}", position=context.position, timestamp=timestamp)] if text else []
 
 
 @dataclass(frozen=True, kw_only=True)

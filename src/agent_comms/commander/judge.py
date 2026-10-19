@@ -20,7 +20,7 @@ from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
 from ..comms import Comms
-from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, SlopKind, Derivation, SupersededVerdict
+from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, Derivation, SupersededVerdict
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec
 from ..tool_caller import ThreadCaller
@@ -235,14 +235,14 @@ class BackVerb(VerdictVerb):
     msg: str = option(help="the required order message")
     roast: str = option(help="blunt, why it is stupid, with because")
     fix: str = option(help="owner and replacing shape")
-    slop_kind: str = option("--slop", help="|".join(SlopKind.names()))
+    pattern: str = option("--slop", help="pattern ID from the pinned refactor-audit catalog")
     fact: str = option(help="the required fact, 4+ words")
     at: str = option(help="PATH:LINE where it is restated")
     derive: str = option(help="|".join(Derivation.names()))
     by: str = option(help="PATH:LINE of the declaration that owns it")
 
     def slop(self) -> Slop:
-        return FieldCodec.decode(Slop, dict(kind=self.slop_kind, fact=self.fact,
+        return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,
                                            at=self.at, derive=self.derive, by=self.by))
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SendBackVerdict:
