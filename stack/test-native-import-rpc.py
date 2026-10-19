@@ -47,9 +47,7 @@ def ancestor_probe(
     package: Path, root: Path, env: dict[str, str], deny: Callable[[], None]
 ) -> dict:
     """Admit real PR77, then reach a committed ws entry's optional ancestor require."""
-    assert package.is_relative_to("/var/tmp") or package.is_relative_to(
-        "/dev/shm"
-    ), "Disposable package required"
+    assert package.is_relative_to(root), "Disposable package required"
     ancestor = package.parent.parent / "bufferutil"
     ancestor.mkdir(mode=0o700)  # Exclusive: never replace an existing dependency.
     marker = root / "ancestor-executed"
@@ -126,10 +124,13 @@ console.log(JSON.stringify({factory:typeof factory,dependencyEntry:process.argv[
         shutil.rmtree(ancestor)
 
 
-def main(launcher: Path, package: Path) -> None:
+def main(installed: Path) -> None:
     # Nothing inherited except executable lookup. No provider keys/live identity,
     # NODE_OPTIONS, user Pi configuration, project trust or saved MCP approval.
-    root = Path(tempfile.mkdtemp(prefix="pr95-canonical-rpc-", dir="/var/tmp"))
+    root = Path(tempfile.mkdtemp(prefix="native-canonical-rpc-"))
+    # The ancestor probe writes beside the package, so it runs on a disposable copy.
+    shutil.copytree(installed.parents[1], root / "node_modules", symlinks=True)
+    package = root / installed.relative_to(installed.parents[2])
     agent, project = root / "agent", root / "project"
     agent.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
@@ -141,16 +142,17 @@ def main(launcher: Path, package: Path) -> None:
         "PI_SKIP_VERSION_CHECK": "1",
         "CI": "true",
         "NO_COLOR": "1",
-        "TMPDIR": "/var/tmp",
+        "TMPDIR": str(root),
     }
     deny = network_denial()
     node = shutil.which("node")
     assert node
+    launcher = (node, str(package / "dist/cli.js"))
     # No socket/connect control here: even a kernel-denied network attempt is
     # outside this fixture's no-network-probe scope. Retain the child filter.
     extension = package / "agent-comms-extensions/pi-mcp-client"
     install = subprocess.run(
-        [str(launcher), "install", str(extension)],
+        [*launcher, "install", str(extension)],
         cwd=project,
         env=env,
         preexec_fn=deny,
@@ -177,7 +179,7 @@ def main(launcher: Path, package: Path) -> None:
         (agent / "settings.json").write_text(json.dumps(guarded_settings))
         for operation in ("install", "remove"):
             rejected = subprocess.run(
-                [str(launcher), operation, "npm:unapproved-fixture"],
+                [*launcher, operation, "npm:unapproved-fixture"],
                 cwd=project,
                 env=online_env,
                 preexec_fn=deny,
@@ -190,7 +192,7 @@ def main(launcher: Path, package: Path) -> None:
         guarded_settings["packages"] = [*settings["packages"], "npm:unapproved-fixture"]
         (agent / "settings.json").write_text(json.dumps(guarded_settings))
         rejected = subprocess.run(
-            [str(launcher), "--mode", "rpc", "--no-session"],
+            [*launcher, "--mode", "rpc", "--no-session"],
             cwd=project,
             env=online_env,
             preexec_fn=deny,
@@ -232,7 +234,7 @@ def main(launcher: Path, package: Path) -> None:
     )
     child = subprocess.Popen(
         [
-            str(launcher),
+            *launcher,
             "--offline",
             "--mode",
             "rpc",
@@ -328,4 +330,4 @@ def main(launcher: Path, package: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]).resolve(strict=True), Path(sys.argv[2]).resolve(strict=True))
+    main(Path(os.environ["PI_NATIVE_PACKAGE_DIR"]).resolve(strict=True))

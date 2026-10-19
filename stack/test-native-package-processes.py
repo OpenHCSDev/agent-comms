@@ -14,17 +14,17 @@ from pathlib import Path
 
 def main() -> None:
     stack = Path(__file__).resolve().parent
-    package = Path(sys.argv[1]).resolve(strict=True)
-    mode = sys.argv[2] if len(sys.argv) > 2 else "new"
+    package = Path(os.environ["PI_NATIVE_PACKAGE_DIR"]).resolve(strict=True)
+    mode = sys.argv[1] if len(sys.argv) > 1 else "new"
     assert mode in {"old", "new"}
     node = shutil.which("node")
     assert node
-    root = Path(tempfile.mkdtemp(prefix="pr95-package-processes-", dir="/var/tmp"))
+    root = Path(tempfile.mkdtemp(prefix="native-package-processes-"))
     (root / "home").mkdir()
     environment = {
         "PATH": os.defpath,
         "HOME": str(root / "home"),
-        "TMPDIR": "/var/tmp",
+        "TMPDIR": str(root),
         "PI_OFFLINE": "0",
         "PI_SKIP_VERSION_CHECK": "1",
         "NODE_DISABLE_COMPILE_CACHE": "1",
@@ -38,7 +38,7 @@ def main() -> None:
             str(package / "dist/agent-comms-import-fence.mjs"),
             "--input-type=module",
             "--eval",
-            (stack / "test-native-package-processes.mjs").read_text(),
+            (stack / "native-package-processes-child.mjs").read_text(),
             str(package),
             str(root),
             mode,

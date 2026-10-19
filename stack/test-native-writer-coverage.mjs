@@ -68,7 +68,10 @@ const cases = {
         const original = fs.readFileSync(file);
         fs.appendFileSync(file, JSON.stringify(rows(file)[1]) + '\n');
         const invalid = fs.readFileSync(file);
-        assert.throws(() => opened(file), /Invalid|duplicate/i);
+        // Reads are lazy and backward; the duplicate is refused when the read reaches it.
+        const manager = opened(file);
+        assert.throws(() => [...manager.entryStore.metadataEntries()],
+            error => /Invalid/.test(String(error.cause)));
         assert.deepEqual(fs.readFileSync(file), invalid);
         assert.deepEqual(invalid.subarray(0, original.length), original);
     },
@@ -140,7 +143,7 @@ const cases = {
             return result;
         };
         syncBuiltinESMExports();
-        try { assert.throws(() => opened(file), /changed during strict scan/); }
+        try { assert.throws(() => opened(file), /revision changed/); }
         finally { fs.readSync = original; syncBuiltinESMExports(); }
     },
     'constructor-race': () => {

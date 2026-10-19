@@ -1,13 +1,13 @@
 // End validation for the shared selected-entry count. No native input/provider.
 import assert from 'node:assert/strict';
-import {appendFileSync, mkdirSync, writeFileSync} from 'node:fs';
+import {appendFileSync, mkdtempSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const [packagePath, directory] = process.argv.slice(2);
-const pkg = resolve(packagePath);
-const root = resolve(directory);
-mkdirSync(root, {recursive: true, mode: 0o700});
+assert.ok(process.env.PI_NATIVE_PACKAGE_DIR, 'Prepared native package required');
+const pkg = resolve(process.env.PI_NATIVE_PACKAGE_DIR);
+const root = mkdtempSync(join(tmpdir(), 'native-state-count-'));
 const {MemoryEntryStore, DiskEntryStore} = await import(pathToFileURL(join(pkg, 'dist/core/session-entry-store.js')));
 const header = {type:'session', version:3, id:'state-count', cwd:root, timestamp:'2026-10-02T00:00:00Z'};
 const entries = [

@@ -10,6 +10,11 @@ INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 @dataclass(frozen=True)
 class NativeBuildInputs:
     root: Path
+    SCRIPTS = "stack/test-native-*"
+
+    def scripts(self) -> tuple[Path, ...]:
+        """Stack scripts that check a built package; they are no input to building it."""
+        return tuple(sorted(self.root.glob(self.SCRIPTS)))
 
     def paths(self) -> tuple[Path, ...]:
         """Inventory source families, never a second roster of patch filenames."""
@@ -31,7 +36,7 @@ class NativeBuildInputs:
                     continue
                 if path.is_file() and path.suffix in suffixes:
                     paths.add(path)
-        return tuple(sorted(paths - {self.root / "stack/pi-native.sha256"}))
+        return tuple(sorted(paths - {self.root / "stack/pi-native.sha256", *self.scripts()}))
 
     def digest(self, manifest: Path) -> str:
         digest = hashlib.sha256()

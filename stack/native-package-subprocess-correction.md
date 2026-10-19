@@ -54,7 +54,7 @@ Fresh canonical pointer `/var/tmp/pr95-update-canonical-package`; repository
 pointer `/var/tmp/pr95-update-canonical-stage` selects
 `/var/tmp/pr95-update-canonical-VVhS8l`.
 
-`test-native-package-processes.py PACKAGE [old|new]` runs the committed JS fixture
+`test-native-package-processes.py [old|new]` (package from `PI_NATIVE_PACKAGE_DIR`) runs the committed JS fixture `native-package-processes-child.mjs`
 via eval with the actual pinned fence, disposable HOME and kernel network denial.
 `PI_OFFLINE=0`. No provider credentials or network probes. Two counterfactual
 fake-command controls verify both npm and git markers can execute. Old mode
