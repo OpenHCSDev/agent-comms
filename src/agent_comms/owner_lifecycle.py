@@ -77,6 +77,16 @@ class OwnerRestartSelection:
             snapshot.claimed_generations[owner.name],
         )
 
+    @classmethod
+    def live(cls, selections, snapshot) -> tuple[OwnerRestartSelection, ...]:
+        """Retain only the exact selected processes that have not stopped."""
+        living = []
+        for selection in selections:
+            if selection.process.alive():
+                selection.require_current(snapshot)
+                living.append(selection)
+        return tuple(living)
+
     @property
     def name(self) -> str:
         return self.identity.incarnation.name
