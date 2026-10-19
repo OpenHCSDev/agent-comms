@@ -259,7 +259,7 @@ class RatchetQueueCheck(QueueCheck, declared_name=None):
 
     def summary(self, completed: subprocess.CompletedProcess[str]) -> str:
         report = FieldCodec.decode(RatchetOutput, FieldCodec.parse(completed.stdout))
-        sites = []
+        sites: list[str] = []
         for key, lines in report.introduced_lines.items():
             measure, _, path = key.partition(":")
             sites.extend(f"{measure} {path}:{line}" for line in lines)
@@ -299,7 +299,7 @@ class InstallQueueCheck(QueueCheck):
         return "; ".join(report.result.failures) or report.result.description
 
 
-class CommandQueueCheck(QueueCheck, declared_name=None):
+class CommandQueueCheck(QueueCheck):
     limit = 120
 
     def summary(self, completed: subprocess.CompletedProcess[str]) -> str:
