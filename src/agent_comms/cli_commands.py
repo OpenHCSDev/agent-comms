@@ -821,10 +821,10 @@ class CliCommand(
         return TargetSelection.decode(raw, multiple=cls.multiple_targets)
 
     @classmethod
-    def binds_channel(cls) -> bool:
-        """The declared target-bound channel parameter owns membership scope."""
-        return any(key == 'channel' and CommandOption.of(item).target_bound
-                   for item, key in FieldCodec.record_fields(cls))
+    def channel_fields(cls) -> tuple[Field, ...]:
+        """The declared target-bound channel parameters own membership scope."""
+        return tuple(item for item, key in FieldCodec.record_fields(cls)
+                     if key == 'channel' and CommandOption.of(item).target_bound)
 
     @classmethod
     def selection_channels(cls, channel: ChannelSelection,
@@ -870,7 +870,7 @@ class CliCommand(
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
                 continue
-            selected_channels = channel if member.binds_channel() else NoChannel()
+            selected_channels = channel if member.channel_fields() else NoChannel()
             for name, resolved in resolved_targets:
                 for context in name.contexts(member, selected_channels):
                     available = member.bindings(
@@ -881,7 +881,7 @@ class CliCommand(
                             command.for_editor(comms, name.name, project) for command in available))
         names = tuple(name for item in selected for name in item.names)
         return tuple(TargetAction(tuple(commands), names,
-                                  channel if declaration.binds_channel() else NoChannel())
+                                  channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:
@@ -902,8 +902,7 @@ class CliCommand(
         target = CommandTarget.named(target)
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
-                         for item, key in FieldCodec.record_fields(type(bound))
-                         if key == 'channel' and CommandOption.of(item).target_bound), NoChannel())
+                         for item in bound.channel_fields()), NoChannel())
         return TargetAction((bound,), target.names, channels)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
@@ -956,7 +955,7 @@ class CliCommand(
                        *, confirmed: bool = False,
                        channel: ChannelSelection = NoChannel(),
                        project: str | None = None) -> CliResult:
-        if not cls.binds_channel():
+        if not cls.channel_fields():
             channel.require_unbound()
             channel = NoChannel()
         snapshot = comms.registry.snapshot()
