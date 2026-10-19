@@ -22,7 +22,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
-from agent_comms.native_pi import read_tracked_input_digest
+from agent_comms.native_pi import CommittedInput, read_tracked_input_commitment
 
 from agent_comms.messages import Message, InfoKind
 from agent_comms.native_source_cursor import NativeSourceCursor
@@ -261,8 +261,8 @@ async def test_native_full_four_tools_publish_and_release(
                 binding = binding_rows(store, (proof.input_id,)).get(proof.input_id)
                 assert binding is not None
                 assert (
-                    read_tracked_input_digest(proof.context.session_file, proof.input_id)
-                    == binding.expected_prompt_digest
+                    read_tracked_input_commitment(proof.context.session_file, proof.input_id)
+                    == CommittedInput(binding.expected_prompt_digest)
                 )
             if triage:
                 assert len({proof.context.session_file for proof in proofs}) == 1
