@@ -272,9 +272,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert comms.registry.require(name).session_file
             assert len(requests) == seed_count
         facts.clear()
-        question = comms.messaging.send_message(
+        question = comms.messaging.send(
             "questioner", "#team", "ROUNDTRIP_QUESTION" if broadcast else "@answerer ROUNDTRIP_QUESTION"
-        )
+        ).message
         if broadcast:
             from agent_comms.coordination_tables.assignments import WakeAssignment
             from agent_comms.coordinator import Coordination
@@ -419,7 +419,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert type(claim.lifecycle) is FailedAssignment
                 rejected_input = rejected[0].input_id
             assert "invalid triage decision" in list(comms.views.channel_history_page("#team").messages)[-1].body
-            fresh = comms.messaging.send_message("answerer", "#team", "CONTINUITY_FRESH_SOURCE")
+            fresh = comms.messaging.send("answerer", "#team", "CONTINUITY_FRESH_SOURCE").message
             await until(lambda: len(requests) == 3, "Fresh channel source authorized without retrying rejected input")
             await until(
                 lambda: any(isinstance(fact, CursorAdvancedUpdate)

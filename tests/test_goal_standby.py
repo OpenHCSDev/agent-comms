@@ -226,7 +226,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
 
     if pending_reply:
-        comms.messaging.send_message("bob", "alice", "The work is finished")
+        comms.messaging.send("bob", "alice", "The work is finished").message
         assert comms.goals.recover_closed_goal_wait("alice") == ()
         assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
         return
@@ -329,7 +329,7 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
     for name in ("parent", "child"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
-    message = comms.messaging.send_message("child", "parent", "Finished immediately")
+    message = comms.messaging.send("child", "parent", "Finished immediately").message
     if acknowledged:
         references = tuple(message.reference for message in comms.bus.inbox("parent"))
         comms.messaging.acknowledge("parent", references)

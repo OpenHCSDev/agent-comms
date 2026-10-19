@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .pi_payloads import PiMessage, PiPayload
@@ -149,25 +149,6 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         with NativeInputEvidenceRead.open(session_file) as evidence:
             yield evidence
 
-    @staticmethod
-    def tracked_users(entries):
-        from .native_pi import NativePiUnavailable
-
-        tracked = {}
-        try:
-            for entry in entries:
-                user = entry.tracked_user
-                if user is None:
-                    continue
-                if user.input_id in tracked:
-                    raise MalformedRecord("duplicate tracked input")
-                tracked[user.input_id] = user
-        except MalformedRecord as error:
-            raise NativePiUnavailable(
-                "Native Pi session has ambiguous tracked user input"
-            ) from error
-        return tracked
-
     @property
     def tracked_user(self) -> MessageEntry | None:
         return None
@@ -201,7 +182,7 @@ class NativeEvidenceRead:
 
     def __init__(self, source):
         self.source = source
-        self.entries: tuple[NativeEntry, ...] = ()
+        self._forget()
 
     def require_path(self, session_file):
         from .native_pi import NativePiUnavailable
@@ -244,9 +225,36 @@ class NativeEvidenceRead:
                 reader.close()
                 raise
 
+    def _forget(self) -> None:
+        self.entries: tuple[NativeEntry, ...] = ()
+        self.inputs: dict[str, int] = {}
+
     def close(self):
         self.source.close()
-        self.entries = ()
+        self._forget()
+
+    def position(self, input_id: str) -> int:
+        """Where the observed session committed this input; the one answer to whether it did."""
+        from .native_pi import NativeInputUncommitted
+
+        try:
+            return self.inputs[input_id]
+        except KeyError as missing:
+            raise NativeInputUncommitted(
+                "The specified input was never durably committed") from missing
+
+    def tracked(self, input_id: str) -> MessageEntry:
+        """The observed entry that holds this tracked input."""
+        return self.entries[self.position(input_id)].require_tracked_user()
+
+    def index(self, appended: tuple[NativeEntry, ...]) -> None:
+        """Add each newly decoded tracked input once, refusing a second entry for one input."""
+        for position, entry in enumerate(appended, len(self.entries)):
+            if user := entry.tracked_user:
+                if user.input_id in self.inputs:
+                    raise MalformedRecord(
+                        "ambiguous tracked user input: one input ID on two entries")
+                self.inputs[user.input_id] = position
 
     def observe(self):
         """Decode the captured cut."""
@@ -258,14 +266,15 @@ class NativeEvidenceRead:
         A later turn, a fork or a partial tool round cannot finish this input.
         This observes the native result; it grants no input or reply replay.
         """
-        from .pi_vocabulary import PendingStopReason
+        from .native_pi import NativeInputUncommitted
 
         _header, entries = self.observe()
-        user = NativeEntry.tracked_users(entries).get(input_id)
-        if user is None:
-            return PendingStopReason
-        last = user
-        for entry in entries[entries.index(user) + 1:]:
+        try:
+            start = self.position(input_id)
+        except NativeInputUncommitted as uncommitted:
+            return uncommitted.stop_reason
+        last = entries[start]
+        for entry in entries[start + 1:]:
             if entry.input_boundary:
                 break
             if entry.parent_id != last.id:
@@ -276,7 +285,7 @@ class NativeEvidenceRead:
         return PendingStopReason
 
     def _reverify(self):
-        self.entries = ()
+        self._forget()
         self.source.reverify_from_start()
         return self._observe(reverified=True)
 
@@ -290,6 +299,7 @@ class NativeEvidenceRead:
         try:
             _private_session_dir(self.source.path.parent)
             appended = tuple(self.decode_rows(self.source.rows()))
+            self.index(appended)
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
                 raise MalformedRecord("Native Pi session header is invalid")

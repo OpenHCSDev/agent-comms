@@ -105,7 +105,7 @@ class TestToolCatalog:
     def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
         comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
-        comms.messaging.send("a", "b", "hello")
+        comms.messaging.send("a", "b", "hello").message.message_id
 
         result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
@@ -140,9 +140,9 @@ class TestToolCatalog:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "not-the-invoker")
         comms.registry.declare(comms.registry.new_thread(name='sender', tags=frozenset(), worktree='/wt'))
         comms.registry.declare(comms.registry.new_thread(name='recipient', tags=frozenset(), worktree='/wt'))
-        sent = comms.messaging.send_message("sender", "recipient", "track me")
+        sent = comms.messaging.send("sender", "recipient", "track me").message
         for index in range(6):
-            comms.messaging.send_message("recipient", "sender", f"incoming {index}")
+            comms.messaging.send("recipient", "sender", f"incoming {index}").message
 
         presentation = comms.views.thread_presentations(("sender",)).require("sender")
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
@@ -169,8 +169,8 @@ class TestToolCatalog:
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
         comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
         comms.registry.declare(comms.registry.new_thread(name='c', tags=frozenset(), worktree='/wt'))
-        comms.messaging.send("a", "b", "from a")
-        comms.messaging.send("c", "b", "from c")
+        comms.messaging.send("a", "b", "from a").message.message_id
+        comms.messaging.send("c", "b", "from c").message.message_id
 
         result = invoke_tool(
             comms, "comms_inbox", {"thread": "b", "target": "a"}, caller=NoThreadCaller()
@@ -214,7 +214,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
 
     for name in ("a", "b"):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
-    comms.messaging.send("a", "b", "Actual inbox source")
+    comms.messaging.send("a", "b", "Actual inbox source").message.message_id
     schema = next(row for row in NativeRequestTools.catalog() if row["name"] == InspectInboxTool.declared_name)
     assert schema["parameters"]["required"] == ["target", "viewer"]
     assert schema["parameters"]["properties"]["include_body"]["default"] is False

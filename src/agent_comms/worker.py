@@ -19,9 +19,7 @@ async def run() -> None:
     lower_priority()
     comms = wire()
     # Fail before attach; the check verifies the native package once.
-    launch = comms.owners.launch_authority
-    if launch is not None:
-        launch.validate()
+    comms.owners.launch_authority.check()
     name = ThreadLaunch.current().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(

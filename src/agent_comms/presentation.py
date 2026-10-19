@@ -30,9 +30,7 @@ from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
-    ConversationMessagePageRequest,
     MessagePage,
-    MessagePageRequest,
     PageBounds,
 )
 from .message_reference import MessageReference
@@ -372,11 +370,10 @@ class ReadAll(ChannelReadMark):
                 NamedViewer(viewer),
             ) as basis:
                 scope = basis.scope(target)
-            # Page preparation takes the bus lock, so release registry first.
-            page = MessagePageRequest.every(scope).read_opened(source)
-            yield presentation.bus.reads.capture(
-                basis.require_viewer(), page.messages, basis.registry, presentation.bus.log.path,
-            )
+            yield source.query_page_index(lambda index: scope.capture_all(
+                presentation.bus.reads, basis.require_viewer(), basis.registry, source, index,
+                document=basis.document,
+            ))
 
 
 @dataclass(frozen=True, slots=True)
@@ -461,9 +458,7 @@ class BusPresentation:
                     scope = basis.scope(target.name)
             # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
-            page = ConversationMessagePageRequest(scope, bounds).read_opened(source)
-            displayed = basis.viewer.displayed_scope(scope, page, basis, self.bus)
-            return replace(page, display_scope=displayed)
+            return basis.viewer.read_page(scope, bounds, basis, source)
 
     def mark_channel_read(
         self,
@@ -487,7 +482,7 @@ class BusPresentation:
         """
         snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
         unread = source.query_page_index(lambda page: page.display_unread(
-            basis.scopes, basis.viewer_names, basis.seen, source.complete_prefix.boundary))
+            basis.scopes, basis.viewer_names, basis.seen(source), source.complete_prefix.boundary, basis.registry))
         return snapshot.activity, unread
 
 

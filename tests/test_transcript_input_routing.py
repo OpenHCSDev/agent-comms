@@ -31,8 +31,8 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
-    first = comms.messaging.send_message("peer", "worker", "Original input")
-    second = comms.messaging.send_message("peer", "worker", "Distinct follow-up")
+    first = comms.messaging.send("peer", "worker", "Original input").message
+    second = comms.messaging.send("peer", "worker", "Distinct follow-up").message
     raw_second = ScheduledTurn.incoming(second).prompt
     quote = "[agent-comms from peer to worker]\nA genuine user's quoted example"
     # Bind before the session file exists, as on first-turn/fork startup.
@@ -59,7 +59,7 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
-    incoming = comms.messaging.send_message("peer", "worker", "Verified input")
+    incoming = comms.messaging.send("peer", "worker", "Verified input").message
     route = TurnRouting((incoming,), None)
     text = ScheduledTurn.incoming(incoming).prompt
     comms.transcripts.routes.record_input_display("a" * 32, text, sent_text=text, routing=route)

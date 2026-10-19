@@ -83,6 +83,7 @@ class InstallSourcesVerb(NativePackageVerb):
     snapshot: StoragePath = option("snapshot", help="the checkout the sources come from")
 
     def apply(self, ctx: None = None) -> None:
+        verify_native_package(self.package)
         install_declared_sources(self.package, self.snapshot)
 
 

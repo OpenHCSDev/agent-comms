@@ -130,9 +130,12 @@ class Thread(ThreadProvenance):
     def moved_to_project(self, project: str) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
         earlier = Path(self.worktree).expanduser().resolve()
+        current = Path(project).expanduser().resolve()
         return replace(
             self, worktree=project,
-            earlier_projects=tuple(dict.fromkeys((*self.earlier_projects, earlier))),
+            earlier_projects=tuple(dict.fromkeys(
+                path for path in (*self.earlier_projects, earlier) if path != current
+            )),
             project_resume_due=self.project_resume_due or self.executing,
         )
 

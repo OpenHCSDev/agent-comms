@@ -41,6 +41,7 @@ from .errors import (
 from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
 from .private_bus_checkpoint import RecordedContextManifestSources
 from .store_files import (
@@ -57,6 +58,9 @@ from .store_files import (
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
+
+if TYPE_CHECKING:
+    from .message_page import MessageReadRequest
 
 
 def _notify_candidates(log: WireLog, through_bytes: int) -> None:
@@ -94,6 +98,10 @@ class WireSnapshot(ObservedPath):
 
     if TYPE_CHECKING:
         revision: FileRevision
+
+    @property
+    def bus_identity(self) -> RecordedBusIdentity:
+        return RecordedBus(self.revision.identity)
 
     @abstractmethod
     def rows(self, after_offset: int = 0, before_offset: int | None = None): ...
@@ -177,6 +185,10 @@ class AbsentWireSnapshot(WireSnapshot, AbsentPath):
 
     complete_prefix = EmptyWirePrefix()
     boundary = position = 0
+
+    @property
+    def bus_identity(self) -> RecordedBusIdentity:
+        return NoRecordedBus()
 
     def changed_since(self, revision) -> bool:
         return revision is not None
@@ -542,6 +554,11 @@ class WireLog:
         source.require_marker(marker)
         yield source
         source.require_current()
+
+    def read_page[T](self, request: MessageReadRequest[T]) -> T:
+        """Acquire the one source borrowed by every part of a page request."""
+        with self.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+            return request.read_opened(source)
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

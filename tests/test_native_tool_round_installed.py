@@ -88,9 +88,9 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms
         comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))
-        comms.messaging.send_message(
+        comms.messaging.send(
             "verifier", session, f"Distinct isolated delayed-round verification {native.session.stem}."
-        )
+        ).message
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 45)
 
@@ -180,7 +180,7 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
         if following == "steering":
             await owner.prompt(session, [TextContentBlock(type="text", text="Fresh real user correction")])
         else:
-            comms.messaging.send_message("verifier", session, "Fresh background notice; no automatic reply requested")
+            comms.messaging.send("verifier", session, "Fresh background notice; no automatic reply requested").message
             await owner.inputs.drain_inbox(session)
 
     async def acknowledged(turn, event):
@@ -203,7 +203,7 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms
         comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))
-        comms.messaging.send_message("verifier", session, "Fresh requested-answer lifecycle verification")
+        comms.messaging.send("verifier", session, "Fresh requested-answer lifecycle verification").message
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 30)
         assert native.provider.posts == (1 if following == "empty_original" else 3 if following == "tool_then_notice" else 2)

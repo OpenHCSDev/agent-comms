@@ -265,11 +265,11 @@ def extend_native_run(core):
                  '            this._nativeRun.close();\n            this._nativeRun = InactiveNativeTurnRun.shared;\n            this._systemPromptOverride')
     replace_once(session, '            this._nativeRunHadTrackedInput = true;',
                  '            this._nativeRun.include(selected, this._nativeInputClaims);')
-    replace_once(session, '''        if (this._nativeRunHadTrackedInput) {
-            const overflow''',
+    # Compaction owns the overflow decision; replacing the run owner must not
+    # depend on where that independent decision is declared inside the method.
+    replace_once(session, '        if (this._nativeRunHadTrackedInput) {',
         '''        if (this._nativeRun.tracked) {
-            if (await this._nativeRun.recover(msg)) return true;
-            const overflow''')
+            if (await this._nativeRun.recover(msg)) return true;''')
     replace_once(session, '            this._nativeRunHadTrackedInput = false;\n            return msg.stopReason',
                  '            this._nativeRun.close();\n            this._nativeRun = this._startNativeRun();\n            return msg.stopReason')
     replace_once(session, '    abortRetry() {\n',

@@ -211,13 +211,13 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
         comms = case.comms
         resource = tmp_path / "owned.py"
         resource.write_text("owned\n")
-        claim = comms.messaging.send_message(
+        claim = comms.messaging.send(
             "sender",
             "owner",
             "claim",
             HandoffKind,
             claims=[ExistingFileClaim(Path("owned.py"))],
-        )
+        ).message
         assert claim.claim_transition is not None
         intent = prepare_fenced_response(
             case.store, case.bus, case.fence, "done",
