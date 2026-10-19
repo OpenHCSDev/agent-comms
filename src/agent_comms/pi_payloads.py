@@ -436,11 +436,9 @@ class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnost
     def description(self) -> str:
         return self.name or "Provider transport error"
 
-
 @dataclass(frozen=True)
 class CodelessProviderDiagnosticError(ProviderDiagnosticError):
     """Pi reported a provider error without a code."""
-
 
 @dataclass(frozen=True, kw_only=True)
 class CodedProviderDiagnosticError(ProviderDiagnosticError):
