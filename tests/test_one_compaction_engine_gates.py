@@ -156,10 +156,14 @@ def test_one_context_size_estimator_is_reachable_from_core():
 
 
 def test_pi_reports_compaction_only_through_its_own_events():
-    from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS
+    from agent_comms.pi_events import CompactionEnd, CompactionStart, NativePiEvent, ReasonedCompaction
+    from agent_comms.pi_native_backend import PiNativeBackend
 
-    compaction_kinds = {kind for kind in PI_0_85_1_EVENT_KINDS if "compaction" in kind}
-    assert compaction_kinds == {"compaction_start", "compaction_end"}
+    compaction_kinds = {
+        member.wire_kind() for member in NativePiEvent.members_with(ReasonedCompaction)
+    }
+    assert compaction_kinds == {CompactionStart.wire_kind(), CompactionEnd.wire_kind()}
+    assert compaction_kinds <= PiNativeBackend.event_kinds
 
 
 def test_native_input_patch_leaves_pis_compaction_on_for_tracked_inputs():

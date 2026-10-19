@@ -429,24 +429,6 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
         raise BackendDeclarationError(f"{type(self).__name__} does not run turns")
 
-    @classmethod
-    def require_event_family(cls, family: type[DeclaredFamily]) -> None:
-        """Fail unless ``family`` converts exactly the event kinds this backend's runtime emits."""
-        problems = _event_family_problems(cls, family)
-        if problems:
-            raise BackendDeclarationError(f"{cls.__name__}: " + "; ".join(problems))
-
-
-def _event_family_problems(backend: type, family: type[DeclaredFamily]) -> list[str]:
-    declared = {kind for member in family.members_with(family) for kind in member.known_kinds()}
-    expected = backend.event_kinds
-    problems = []
-    if missing := sorted(expected - declared):
-        problems.append(f"{family.__name__} has no converter for event kinds {missing}")
-    if extra := sorted(declared - expected):
-        problems.append(f"{family.__name__} converts event kinds the runtime never emits {extra}")
-    return problems
-
 
 def validate_backends(members: Iterable[type]) -> None:
     """Check backend declarations; raise once, naming every missing piece."""

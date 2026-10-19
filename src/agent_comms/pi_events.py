@@ -888,7 +888,3 @@ class ToolExecutionUpdate(NativePiEvent, DurablePiEvent):
             output=self.partial_result.text(),
         )
 
-
-from .pi_native_backend import PiNativeBackend  # noqa: E402
-
-PiNativeBackend.require_event_family(NativePiEvent)
