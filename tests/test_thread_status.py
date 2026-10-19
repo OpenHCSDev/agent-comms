@@ -76,7 +76,8 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
         assert individual.read_identity.thread.incarnation == thread.incarnation
         assert replace(individual, read_identity=None) == visible[0].presentation
     else:
-        assert individual is None
+        from agent_comms.registry_document import RosterVisibility
+        assert (individual is not None) == status.in_view(RosterVisibility(archived=True))
     assert comms.views.thread_presentations(("missing",)).read("missing") is None
 
 
@@ -111,7 +112,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
     assert after.threads["owner"].incarnation == before.threads["owner"].incarnation
     assert after.owner_generations["owner"] > before.owner_generations["owner"]
     assert after.claimed_generations["owner"] > before.claimed_generations["owner"]
-    assert not after.threads["owner"].active_turn.executing
+    assert not after.threads["owner"].executing
 
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):
@@ -125,6 +126,21 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
         registry.register(replace(registry.require("owner"), title="late metadata"))
     assert registry.store.path.read_bytes() == before
     assert registry.status("owner") == DeletingThreadStatus()
+
+
+@pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
+def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
+    from agent_comms.thread_presentation import SessionDisconnected
+    from agent_comms.ui_model.status import ThreadStatusModel
+
+    comms = wire(tmp_path)
+    comms.registry.register(comms.registry.new_thread('owner', frozenset(), str(tmp_path)), status)
+    view = comms.views.thread_presentations(('owner',)).views['owner']
+    transferred = FieldCodec.decode(ThreadView, FieldCodec.encode(view)).presentation
+    row = ThreadStatusModel.known('owner', transferred)
+    assert row.disconnected(SessionDisconnected('Request failed')) is row
+    assert row.presentation.summary == status.declared_name.title()
+    assert transferred.status.without_work() is transferred.status
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
