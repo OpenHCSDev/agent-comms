@@ -200,13 +200,7 @@ class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        declarations = NativeExecutableTool.members_with(NativeExecutableTool)
-        extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
-        # The native package manifest verifies each declaration's extension bytes.
-        if any(not extension.is_file() for extension in extensions):
-            raise SelectedToolDenied("Native tool extension is not installed")
-        arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
-                     *(argument for extension in extensions for argument in ("-e", str(extension))))
+        arguments = NativeExecutableTool.launch_arguments(package)
         thread = self.owner.comms.registry.require(self.owner.owner_name)
         return thread.native_launch_arguments(arguments)
 

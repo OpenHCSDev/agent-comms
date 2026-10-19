@@ -29,6 +29,7 @@ from .native_input_record import NativeInputCommit
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
+from .native_tools import NativeExecutableTool
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 
 if TYPE_CHECKING:
@@ -551,7 +552,8 @@ class NativePiRpcLaunch:
         session = (SavedSelectedSession(directory,
             identity=SessionIdentityHelper.locate(package, str(saved)))
             if saved is not None else SelectedSession(directory))
-        return cls._managed(package, arguments, cwd, environment, session, runtime, root)
+        return cls._managed(package, (*NativeExecutableTool.launch_arguments(package.path), *arguments),
+            cwd, environment, session, runtime, root)
 
     @classmethod
     def _managed(cls, package, arguments, cwd, environment, session, runtime, root):
@@ -581,7 +583,8 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         if saved != self.session.path:
             return None
-        return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
+        return self._managed(self.package,
+            (*NativeExecutableTool.launch_arguments(self.package.path), *NativeArguments.parse(arguments).rpc()),
             worktree, environment, self.session, self.runtime, root)
 
     @classmethod

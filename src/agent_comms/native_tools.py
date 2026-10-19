@@ -9,6 +9,7 @@ from typing import ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
+from .native_tool_call import SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
 
@@ -29,6 +30,16 @@ class NativeExecutableTool(ToolDeclaration):
     @classmethod
     @abstractmethod
     def native_extension(cls, package: Path) -> Path: ...
+
+    @classmethod
+    def launch_arguments(cls, package: Path) -> tuple[str, ...]:
+        """The executable declarations own their tool names and extension set."""
+        declarations = cls.members_with(cls)
+        extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
+        if any(not extension.is_file() for extension in extensions):
+            raise SelectedToolDenied("Native tool extension is not installed")
+        return ("--tools", ",".join(tool.declared_name for tool in declarations),
+                *(argument for extension in extensions for argument in ("-e", str(extension))))
 
     @classmethod
     def from_call(cls, name: str, arguments: object, *, call_id: str):
