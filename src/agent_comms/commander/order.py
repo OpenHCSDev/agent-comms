@@ -177,15 +177,14 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
-def read_check(line: str) -> OrderCheck | None:
+def read_check(line: str) -> OrderCheck:
     """Resolve the commander's check boundary once; stored checks only carry directories."""
-    check = OrderCheck.parse(line)
-    if check:
-        directory = CONFIG.repo_directory(check.directory)
-        if not directory.is_dir():
-            sys.exit(f'Refused: Check repo {check.directory} is not a directory')
-        check = replace(check, directory=str(directory))
-    return check
+    if not (check := OrderCheck.parse(line)):
+        sys.exit('Refused: Check reads "<repo> :: <shell command> -> <integer>"')
+    directory = CONFIG.repo_directory(check.directory)
+    if not directory.is_dir():
+        sys.exit(f'Refused: Check repo {check.directory} is not a directory')
+    return replace(check, directory=str(directory))
 
 
 def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
@@ -220,7 +219,8 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
     fact = re.search(r'(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\b', body)
     group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
     owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
-    check = (line := re.search(r'(?m)^Check:(.*)$', body)) and read_check(line[1])
+    line = re.search(r'(?m)^Check:(.*)$', body)
+    check = read_check(line[1] if line else '')
     listed = {t.id: t for t in todos()}
     if not group:
         problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
@@ -230,12 +230,10 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
         problems.append('no Owner: path:line of the existing owner the fix belongs on')
     elif not os.path.exists(owner[1]) or int(owner[2]) > sum(1 for _ in open(owner[1])):
         problems.append(f'Owner {owner[1]}:{owner[2]} does not exist; read the code and name the real owner')
-    if not check:
-        problems.append('no Check: <repo> :: <command> -> N; done runs it, so make it the real acceptance count')
     # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
     # An order's check must fail now (or it proves nothing), and every absolute
     # path:line it cites must exist.
-    if check and not problems:
+    if not problems:
         try:
             ran = subprocess.run(['bash', '-c', check.command], cwd=check.directory, capture_output=True, timeout=90)
             printed = CheckPrinted.decoded(ran.stdout)
@@ -249,7 +247,7 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
     # P12 deleted acp_ingress.py, which Toad imports.
     deleted = {stem for edit in edits
                for stem in re.findall(r'(?i)\bdelete\s+`?(?:\S*/)?(\w+)\.py\b', edit)}
-    if check and deleted and (unread := importers(deleted, check)):
+    if deleted and (unread := importers(deleted, check)):
         problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
                         'the check must also count their `from agent_comms` imports')
     if any(re.search(r'(?<![\w/])tools/', edit) for edit in edits) and not all(
@@ -337,8 +335,7 @@ def correct_check(pid: str, line: str, why: str) -> None:
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
-    if not (check := read_check(line)):
-        sys.exit('Refused: --check reads "<repo> :: <shell command> -> <integer>"')
+    check = read_check(line)
     if len(why.split()) < 8:
         sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
     def git(*args: str) -> str:
