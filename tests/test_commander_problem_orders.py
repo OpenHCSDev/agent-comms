@@ -365,7 +365,7 @@ def test_done_distinguishes_non_git_home_from_exact_order_checkout(
     home.mkdir()
     comms.registry.declare(comms.registry.new_thread('scratch', frozenset({'comms'}), str(home)))
     rule = StorageRule(checkout_base=tmp_path / 'wt', scratch_base=tmp_path / 'scratch', floor_gib=0)
-    comms.registry.storage_rule = rule
+    comms.registry.storage_rule = script.COMMS.registry.storage_rule = rule
     if retained_problem:
         repository = tmp_path / 'repository'
         subprocess.run(('git', 'init', '-q', str(repository)), check=True)
