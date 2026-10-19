@@ -8,12 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .external_transcript import ExternalTranscript
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
-from .external_transcript import ExternalTranscript
-from .transcript_events import TurnDigest
-from .tool_result import ToolResult
 from .tool_declaration import EditCall
+from .tool_result import ToolResult
+from .transcript_events import TurnDigest
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -92,7 +92,8 @@ class TranscriptRead[Result](ConversationPreparation):
         return self.thread.execution.prepare_conversation(self)
 
     def native(self) -> Result:
-        turns = self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)
+        source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
+        turns = source.turns(self.bound)
         return self.from_turns(turns)
 
     def external(self) -> Result:

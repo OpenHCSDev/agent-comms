@@ -14,7 +14,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .messages import Message
 from .message_reference import MessageReference
-from .recorded_time import GeneratedTimestamp
+from .recorded_time import EventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
@@ -351,7 +351,7 @@ class ToolStartTranscript(ToolTranscript):
         if self.before(since) or self.tool is None:
             return ()
         return self.tool.edit_calls(
-            self.tool_call_id, GeneratedTimestamp.decode(self.timestamp), thread, problem)
+            self.tool_call_id, EventTime.capture(self.timestamp), thread, problem)
 
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
     tool: tool_declaration.ToolDeclaration | None = field(
