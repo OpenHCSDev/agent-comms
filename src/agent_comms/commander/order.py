@@ -35,7 +35,6 @@ from ..native_tool_call import SelectedToolDenied
 from ..messages import Message
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import WorkingClaim
-from ..field_codec import FieldCodec
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
@@ -766,19 +765,19 @@ class OrderVerb(CommanderVerb):
 class CitedState:
     """Derive command options from the Evidence declarations, not another kind roster."""
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls) -> None:
         cls.__annotations__ = {**cls.__annotations__,
-                               **{FieldCodec.encode(member): tuple[str, ...]
+                               **{member.declared_name: tuple[str, ...]
                                   for member in Evidence.members_with(Evidence)}}
         for member in Evidence.members_with(Evidence):
             flag, metavar = member.form.split()
-            setattr(cls, FieldCodec.encode(member), option(
+            setattr(cls, member.declared_name, option(
                 flag, action='append', default=(), parser_default_factory=list, metavar=metavar))
-        super().__init_subclass__(**kwargs)
+        super().__init_subclass__()
 
     def evidence(self) -> tuple[Evidence, ...]:
         return tuple(member.cited(value) for member in Evidence.members_with(Evidence)
-                     for value in getattr(self, FieldCodec.encode(member)))
+                     for value in getattr(self, member.declared_name))
 
 
 @dataclass(frozen=True, kw_only=True)
