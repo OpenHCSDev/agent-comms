@@ -1151,7 +1151,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def board_order(self, todo: Todo) -> str:
         last = todo.released[-1:]
-        owner = todo.holder or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
+        owner = todo.holder or (f'unassigned: released from {last[0].previous.owner}: '
+                                f'{last[0].reason.text}')
         due = time.localtime(todo.deadline.recorded_at("An order deadline"))
         return f'{self.owner.to_wire()} | {owner} | {self.id} | {time.strftime("%H:%M", due)}'
 
@@ -1166,7 +1167,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         self.at.require_recorded("An order")
         self.first_call_deadline.require_deadline()
 
-    pending: ClassVar[bool]
     line: ClassVar[str]
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
