@@ -375,12 +375,11 @@ class StoreLockAcquisition:
         cls, store_path: Path, mode: LockMode,
     ) -> StoreLockAcquisition | UnacquiredStoreLock:
         execution = cls.execution()
-        held = cls._held.get()
         try:
             identity = FileIdentity.from_stat(store_lock_path(store_path).stat())
         except FileNotFoundError:
             return UnacquiredStoreLock()
-        for borrower, acquisition in reversed(held):
+        for borrower, acquisition in reversed(cls._held.get()):
             if (borrower == execution and acquisition.identity == identity
                     and not acquisition.file.closed):
                 mode.require_held(acquisition.mode)
