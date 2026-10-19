@@ -123,11 +123,11 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def report_failure(self, error: Exception) -> NativeTurnOutcome:
         """Attempt existing ACP error publication once without hiding the original fault."""
-        if self.result is None:
-            cause = error.__cause__ or error
-            await self.consume(events.Done(
-                text=f"Native turn failed: {type(cause).__name__}: {cause}", ok=False,
-            ))
+        if self.result is not None:
+            return self.result.outcome
+        cause = error.__cause__ or error
+        detail = f"Native turn failed: {type(cause).__name__}: {cause}"
+        await self.consume(events.Done(text=detail, ok=False))
         return self.result.outcome
 
 
