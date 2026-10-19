@@ -340,7 +340,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
     sent = post([unit], message)
-    for pid in group:  # the message is the order's recorded link; a verdict citing it lands on that order
+    # The message is each order's recorded link; a verdict citing it lands on that order.
+    for pid in group:
         call(CommsTodoTool(id=pid, operation=OrderMessage(
             COMMS.goals.todos.get(pid).revision, COMMS.registry.require(ME).incarnation, sent)))
     for other, text in taken.items():
