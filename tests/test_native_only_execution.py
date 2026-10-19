@@ -92,7 +92,7 @@ async def test_native_provider_failure_retains_failure_without_raw_stdout(native
     await native.author_history()
     original = native.session.read_bytes()
     native.provider.status = 400
-    native.provider.error_message = "P698 distinct real native provider failure"
+    native.provider.error_message = "insufficient_quota"
     async with native.open_owner() as (owner, session):
         with pytest.raises(RequestError) as caught:
             await owner.prompt(session, [{"type": "text", "text": "P698 original provider failure"}])

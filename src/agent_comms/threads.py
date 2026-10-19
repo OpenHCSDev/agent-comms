@@ -194,7 +194,7 @@ class Thread(ThreadProvenance):
         return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
 
     def native_session_directory(self, root: Path) -> Path:
-        return root / "native-sessions" / self.incarnation.lookup
+        return root / "native-sessions" / self.incarnation.require_recorded().lookup
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)

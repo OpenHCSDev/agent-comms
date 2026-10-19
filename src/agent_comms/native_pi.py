@@ -558,7 +558,8 @@ class NativePiRpcLaunch:
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
-        directory: Path, environment: dict[str, str] | None, session_file: str | None,
+        directory: Path,
+        environment: dict[str, str] | None, session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
