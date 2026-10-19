@@ -98,6 +98,32 @@ test('real SDK pipeline durably binds two identical prompts to distinct input ID
   });
 });
 
+test('P735 copied session recovers a dead lock and reports live refusal before settlement', async () => {
+  await withSession(async ({session, sm, model}) => {
+    session.agent.streamFunction = async () => fakeResponse(model);
+    await session.prompt('P735 seed', {inputId: ID_A});
+    const lock = sm.getSessionFile() + '.pr48-writer.lock';
+    writeFileSync(lock, '2147483647 1\n', {mode:0o600});
+    await session.prompt('P735 recovered', {inputId: ID_B});
+    assert(sm.getTrackedInput(ID_B));
+    const stat = readFileSync('/proc/self/stat', 'utf8');
+    const start = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/)[19];
+    writeFileSync(lock, `${process.pid} ${start}\n`, {mode:0o600});
+    const events = [];
+    session.subscribe(event => events.push(event));
+    await assert.rejects(session.prompt('P735 refused', {inputId: ID_C}),
+      error => {
+        assert.equal(error.cause.message, 'Native session writer lock unavailable; no replay');
+        return true;
+      });
+    const failure = events.findIndex(event => event.type === 'native_operation_error');
+    const settled = events.findIndex(event => event.type === 'agent_settled');
+    assert(failure >= 0 && settled > failure, JSON.stringify(events));
+    assert.match(events[failure].error, /Native session writer lock unavailable; no replay/);
+    console.log('P735 native diagnostic:', JSON.stringify(events[failure]));
+  });
+});
+
 test('direct core prompt cannot forge a native receipt without a prior claim', async () => {
   await withSession(async ({session,sm,model}) => {
     const inputId='f'.repeat(32);

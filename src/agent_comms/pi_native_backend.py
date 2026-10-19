@@ -38,6 +38,7 @@ from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
+from .pi_events import NativePiEvent
 from .selected_session import SavedSelectedSession
 from .unstarted_runtime import UnstartedRuntime
 
@@ -49,30 +50,6 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
     from .pi_payloads import StateData
     from .threads import Thread
-
-
-# The event kinds Pi 0.85.1 writes to RPC stdout, as built for Core. Sources,
-# all in @earendil-works/pi-coding-agent 0.85.1 as patched by stack/:
-#   dist/core/agent-session.d.ts   AgentSessionEvent union
-#   pi-agent-core dist/types.d.ts   AgentEvent union (agent_start .. tool_execution_end)
-#   dist/modes/rpc/rpc-mode.js      output(): response, extension_ui_request, extension_error
-#   stack/patch-native-steering.py  steering_interrupt_started / _completed
-PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
-    "agent_start", "agent_end", "agent_settled",
-    "turn_start", "turn_end",
-    "message_start", "message_update", "message_end",
-    "tool_execution_start", "tool_execution_update", "tool_execution_end",
-    "input_committed", "context_committed", "turn_context_observed", "model_request_progress",
-    "queue_update", "entry_appended", "session_info_changed", "thinking_level_changed",
-    "bash_execution_update",
-    "compaction_start", "compaction_end",
-    "auto_retry_start", "auto_retry_end",
-    "native_retry_start", "native_retry_end",
-    "summarization_retry_scheduled", "summarization_retry_attempt_start",
-    "summarization_retry_finished",
-    "steering_interrupt_started", "steering_interrupt_completed",
-    "response", "extension_ui_request", "extension_error",
-})
 
 
 @dataclass(frozen=True)
@@ -189,7 +166,10 @@ class PiNativeBackend(
     location_type: ClassVar[type[RuntimeLocation]] = PiSessionFile
     unstarted_type: ClassVar[type[RuntimeLocation]] = UnstartedRuntime
     serves_new_threads: ClassVar[bool] = True
-    event_kinds: ClassVar[frozenset[str]] = PI_0_85_1_EVENT_KINDS
+    event_kinds: ClassVar[frozenset[str]] = frozenset(
+        kind for member in NativePiEvent.members_with(NativePiEvent)
+        for kind in member.known_kinds()
+    )
 
     def __init__(
         self,

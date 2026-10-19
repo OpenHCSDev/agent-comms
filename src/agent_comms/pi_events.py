@@ -16,6 +16,7 @@ from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
 from .native_turn_context import NativeContextManifestData
+from .native_pi import NativePiUnavailable
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
     AbsentMessage,
@@ -223,6 +224,16 @@ class AgentEnd(NativePiEvent):
     @property
     def invalidates_stop(self) -> bool:
         return self.will_retry is True
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeOperationError(NativePiEvent):
+    """The native run refused an operation after the prompt was acknowledged."""
+
+    error: str
+
+    async def act(self, session: TurnSession) -> None:
+        raise NativePiUnavailable(self.error)
 
 
 class AgentSettled(NativePiEvent):
@@ -875,8 +886,3 @@ class ToolExecutionUpdate(NativePiEvent, DurablePiEvent):
             name=self.tool_name or "tool",
             output=self.partial_result.text(),
         )
-
-
-from .pi_native_backend import PiNativeBackend  # noqa: E402
-
-PiNativeBackend.require_event_family(NativePiEvent)

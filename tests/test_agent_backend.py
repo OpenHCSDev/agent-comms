@@ -14,13 +14,12 @@ import pytest
 import agent_comms.agent_backend as ab
 import agent_comms.agent_events as ae
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend
-from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
+from agent_comms.pi_native_backend import PiNativeBackend, PiSessionFile
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 
@@ -129,46 +128,8 @@ def test_validation_requires_a_location_and_event_kinds():
     assert "BareBackend declares no event_kinds" in str(error.value)
 
 
-class _ProbeEvent(DeclaredFamily):
-    @classmethod
-    def wire_kind(cls):
-        return cls.declared_name
-
-    @classmethod
-    def known_kinds(cls):
-        return (cls.wire_kind(),)
-
-
-class AlphaProbe(_ProbeEvent):
-    pass
-
-
-class BetaProbe(_ProbeEvent):
-    pass
-
-
-class FallbackProbe(_ProbeEvent):
-    @classmethod
-    def known_kinds(cls):
-        return ()
-
-
-def test_converter_family_must_cover_exactly_the_runtime_event_kinds():
-    class Runtime:
-        __name__ = "Runtime"
-        event_kinds = frozenset({"alpha_probe", "gamma"})
-
-    problems = ab._event_family_problems(Runtime, _ProbeEvent)
-    assert problems == [
-        "_ProbeEvent has no converter for event kinds ['gamma']",
-        "_ProbeEvent converts event kinds the runtime never emits ['beta_probe']",
-    ]
-    Runtime.event_kinds = frozenset({"alpha_probe", "beta_probe"})
-    assert ab._event_family_problems(Runtime, _ProbeEvent) == []
-
-
-def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
-    """The import-time check holds for a fresh interpreter (no test-declared kinds)."""
+def test_pi_backend_derives_kinds_from_its_event_family_when_imported_fresh():
+    """A fresh import derives coverage from native declarations, not a roster."""
     import subprocess
 
     result = subprocess.run(
@@ -181,7 +142,9 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
         capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stderr
-    assert {"turn_start", "queue_update", "extension_error"} <= PI_0_85_1_EVENT_KINDS
+    from agent_comms.pi_events import ExtensionError, QueueUpdate, TurnStart
+
+    assert {member.wire_kind() for member in (TurnStart, QueueUpdate, ExtensionError)} <= PiNativeBackend.event_kinds
 
 
 # -- thread declaration -------------------------------------------------------
