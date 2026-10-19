@@ -21,13 +21,16 @@ export class EntryMetadata {
         };
         return this;
     }
-    constructor(entry, sequence, offset = 0, length = 0) {
+    constructor(entry, sequence, offset = 0, length = 0, parentSequence) {
         this.id = entry.id;
         this.parentId = entry.parentId;
         this.type = entry.type;
+        this.timestamp = entry.timestamp;
         this.sequence = sequence;
         this.offset = offset;
         this.length = length;
+        // A read projection, not a selector persisted beside parentId.
+        Object.defineProperty(this, 'parentSequence', {value: parentSequence});
         this.role = entry.message?.role ?? null;
         this.inputId = entry.message?.inputId ?? null;
         this.inputDigest = entry.message?.inputDigest ?? null;
@@ -39,6 +42,19 @@ export class EntryMetadata {
         this.thinkingLevel = entry.type === 'thinking_level_change' ? entry.thinkingLevel : null;
         this.label = EntryMetadata.labelFor(entry);
     }
+    treeNode(store) {
+        const meta = this;
+        const node = {children: [], label: undefined, labelTimestamp: undefined};
+        Object.defineProperties(node, {
+            metadata: {value: meta},
+            entry: {enumerable: true, configurable: true, get() {
+                const entry = store.get(meta.id);
+                Object.defineProperty(this, 'entry', {value: entry, enumerable: true});
+                return entry;
+            }},
+        });
+        return node;
+    }
     static labelFor(entry) {
         return entry.type === 'label' ? { targetId: entry.targetId, label: entry.label ?? null, timestamp: entry.timestamp } : null;
     }
@@ -46,7 +62,9 @@ export class EntryMetadata {
     get liveLabel() { return EntryMetadata.liveLabel(this.label); }
     static fromIndex(row) {
         if (!row) return undefined;
-        return Object.assign(Object.create(EntryMetadata.prototype), JSON.parse(row.selectors));
+        const meta = Object.assign(Object.create(EntryMetadata.prototype), JSON.parse(row.selectors));
+        Object.defineProperty(meta, 'parentSequence', {value: row.parent_sequence});
+        return meta;
     }
 }
 
@@ -99,7 +117,7 @@ export class EntryStore {
     knownMetadata(id) { return this.metadata(id); }
     settingsMetadata(id) { return this.metadata(id); }
     metadataFor(entry, sequence, offset = 0, length = 0, parent = this.knownMetadata(entry.parentId)) {
-        return new EntryMetadata(entry, sequence, offset, length).inheritSettings(
+        return new EntryMetadata(entry, sequence, offset, length, parent?.sequence).inheritSettings(
             entry.parentId === null ? EntryMetadata.initialSettings : parent?.contextSettings);
     }
     committedAppend(entry, file) { throw new Error('EntryStore.committedAppend must be implemented'); }
@@ -126,24 +144,27 @@ export class EntryStore {
     }
     *entries() { for (const meta of this.chronologicalMetadata()) yield this.get(meta.id); }
     tree() {
-        const nodes = new Map(), labels = new Map(), roots = [];
-        for (const entry of this.entries()) {
-            nodes.set(entry.id, {entry, children: [], label: undefined, labelTimestamp: undefined});
-            const label = EntryMetadata.labelFor(entry);
-            if (label) labels.set(label.targetId, label);
+        // Source sequence locates output nodes; IDs stay with the metadata index.
+        const nodes = [], labels = [], roots = [];
+        for (const meta of this.chronologicalMetadata()) {
+            const node = meta.treeNode(this);
+            nodes[meta.sequence] = node;
+            const parent = meta.parentId === null ? undefined : nodes[meta.parentSequence];
+            if (meta.parentId === null || parent === node || !parent) roots.push(node);
+            else parent.children.push(node);
+            if (meta.label) labels.push(meta.label);
         }
-        for (const node of nodes.values()) {
-            const label = EntryMetadata.liveLabel(labels.get(node.entry.id));
+        for (const declared of labels) {
+            const node = nodes[this.metadata(declared.targetId)?.sequence];
+            if (!node) continue;
+            const label = EntryMetadata.liveLabel(declared);
             node.label = label?.label;
             node.labelTimestamp = label?.timestamp;
-            const parent = nodes.get(node.entry.parentId);
-            if (node.entry.parentId === null || parent === node || !parent) roots.push(node);
-            else parent.children.push(node);
         }
         const pending = [...roots];
         while (pending.length) {
             const node = pending.pop();
-            node.children.sort((a, b) => new Date(a.entry.timestamp).getTime() - new Date(b.entry.timestamp).getTime());
+            node.children.sort((a, b) => new Date(a.metadata.timestamp).getTime() - new Date(b.metadata.timestamp).getTime());
             pending.push(...node.children);
         }
         return roots;
@@ -340,7 +361,7 @@ export class DiskEntryStore extends EntryStore {
         const info = lstatSync(directory);
         if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o077))
             throw new Error('Native metadata index directory is not private');
-        const index = join(directory, 'entries-v2.sqlite');
+        const index = join(directory, 'entries-v3.sqlite');
         try { closeSync(openSync(index, 'ax', 0o600)); }
         catch (error) { if (error.code !== 'EEXIST') throw error; }
         const indexInfo = lstatSync(index);
@@ -453,7 +474,8 @@ export class DiskEntryStore extends EntryStore {
         try {
             const start = firstId === null ? 0 : this.metadata(firstId).sequence;
             if (firstId === null) while (this.#readPrevious()) {}
-            for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE sequence >= ? ORDER BY sequence').iterate(start))
+            for (const row of this.#db.prepare(`SELECT e.selectors, p.sequence AS parent_sequence FROM entries e
+                LEFT JOIN entries p ON p.id=e.parent WHERE e.sequence >= ? ORDER BY e.sequence`).iterate(start))
                 yield EntryMetadata.fromIndex(row);
         } finally { this.assertCurrent(); }
     }

@@ -17,10 +17,13 @@ export declare class EntryMetadata {
     static initialSettings: {model: EntryMetadata['model']; thinkingLevel: string};
     contextSettings?: {model: EntryMetadata['model']; thinkingLevel: string};
     inheritSettings(parent?: {model: EntryMetadata['model']; thinkingLevel: string}): EntryMetadata;
-    constructor(entry: SessionEntry, sequence: number, offset?: number, length?: number);
+    constructor(entry: SessionEntry, sequence: number, offset?: number, length?: number, parentSequence?: number);
     id: string;
     parentId: string | null;
     type: SessionEntry['type'];
+    timestamp: string;
+    readonly parentSequence?: number;
+    treeNode(store: EntryStore): SessionTreeNode & {readonly metadata: EntryMetadata};
     sequence: number;
     offset: number;
     length: number;
