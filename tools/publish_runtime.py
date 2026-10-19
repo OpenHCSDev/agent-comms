@@ -11,20 +11,110 @@ retain their code until Core's restart queue can stop them while idle.
 from __future__ import annotations
 
 import argparse
+from contextlib import suppress
 from dataclasses import dataclass
 from importlib.metadata import distribution
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
+import time
+from typing import ClassVar
 
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
+from agent_comms.child_process import LinuxPlatform, ProcessIdentity, ProcessState
 from agent_comms.comms import wire
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
+
+
+@dataclass(frozen=True)
+class RunningProcess:
+    """One /proc entry: its exact identity, its parent, and the executables it started from.
+
+    A venv's bin/python resolves to the base interpreter, so the launched argv[0] counts with only
+    its directory resolved; /proc/<pid>/exe counts when this user may read it."""
+
+    identity: ProcessIdentity
+    parent: int
+    executables: tuple[Path, ...]
+
+    @classmethod
+    def all(cls) -> tuple[RunningProcess, ...]:
+        """Every process, read once from /proc; one that exits during the read is left out."""
+        running = []
+        for entry in Path('/proc').iterdir():
+            if entry.name.isdecimal():
+                with suppress(FileNotFoundError, ProcessLookupError):
+                    running.append(cls.read(entry))
+        return tuple(running)
+
+    @classmethod
+    def read(cls, entry: Path) -> RunningProcess:
+        # Fields after comm's final ')' start at field 3: ppid is 4, pgrp 5, starttime 22.
+        fields = (entry / 'stat').read_text().rsplit(') ', 1)[1].split()
+        if fields[0] in {'Z', 'X'}:
+            raise ProcessLookupError(entry.name)
+        argv0 = Path(os.fsdecode((entry / 'cmdline').read_bytes().split(b'\0', 1)[0]))
+        launched: tuple[Path, ...] = ((argv0.parent.resolve() / argv0.name,)
+                                      if argv0.is_absolute() else ())
+        with suppress(PermissionError):
+            launched += (Path(os.readlink(entry / 'exe')),)
+        identity = ProcessIdentity.in_group(int(entry.name), int(fields[19]), int(fields[2]))
+        return cls(identity, int(fields[1]), launched)
+
+    def runs_from(self, runtime: Path) -> bool:
+        return any(path.is_relative_to(runtime) for path in self.executables)
+
+
+@dataclass(frozen=True)
+class RetiredRuntime:
+    """The runtime publication replaced: its processes, Toad views too, end after the links move,
+    except an owner waiting for its idle reload, its descendants and the publisher's ancestors."""
+
+    path: Path
+    grace: ClassVar[float] = 5.0
+
+    def processes(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
+        running = {process.identity.pid: process for process in RunningProcess.all()}
+
+        def lineage(pid: int) -> tuple[ProcessIdentity, ...]:
+            line: dict[int, ProcessIdentity] = {}
+            while pid in running and pid not in line:
+                line[pid] = running[pid].identity
+                pid = running[pid].parent
+            return tuple(line.values())
+
+        publisher = lineage(os.getpid())
+        return tuple(process for process in running.values()
+                     if process.runs_from(self.path) and process.identity not in publisher
+                     and not any(identity in owners for identity in lineage(process.identity.pid)))
+
+    def end(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
+        """SIGTERM each exact process, one shared wait, then SIGKILL any still running."""
+        platform = LinuxPlatform()
+        signalled: list[tuple[RunningProcess, int]] = []
+        for process in self.processes(owners):
+            with suppress(ProcessLookupError):
+                descriptor = platform.open_pidfd(process.identity.pid)
+                try:
+                    platform.require(process.identity)
+                    platform.signal_pidfd(descriptor, signal.SIGTERM)
+                except ProcessLookupError:
+                    os.close(descriptor)
+                    continue
+                signalled.append((process, descriptor))
+        deadline = time.monotonic() + self.grace
+        for _, descriptor in signalled:
+            try:
+                platform.watch_deadline(descriptor, deadline)
+            finally:
+                os.close(descriptor)
+        return tuple(process for process, _ in signalled)
 
 
 @dataclass(frozen=True)
@@ -58,7 +148,8 @@ class RuntimePublication:
                 f'Runtime CLI refused publication (exit {result.returncode}): {result.stdout}{result.stderr}'
             )
 
-    def publish(self, root: Path) -> None:
+    def publish(self, root: Path, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
+        """Publish, then end what the retired runtime still runs apart from waiting owners."""
         self.require_cli(root)
         path = active_route_path()
         previous_route = read_active_route(path)
@@ -69,11 +160,11 @@ class RuntimePublication:
             acquire_exclusive_route_lock(directory)
             if read_active_route(path) != previous_route:
                 raise ValueError('Active route changed during CLI check')
-            self.publish_links()
+            return self.publish_links(owners)
         finally:
             os.close(directory)
 
-    def publish_links(self) -> None:
+    def publish_links(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
         current = StoppedOwnerInstallation.current_pointer()
         if not current.is_symlink():
             if current.exists():
@@ -85,9 +176,13 @@ class RuntimePublication:
                 if link.resolve(strict=True) != previous / target.relative_to(self.runtime):
                     raise ValueError(f'Existing runtime links disagree: {link}')
             replace_link(current, previous)
+        retired = RetiredRuntime(current.resolve(strict=True))
+        if retired.path == self.runtime.resolve():
+            raise ValueError(f'Publication would retire the runtime it publishes: {self.runtime}')
         for link, target in self.links.items():
             replace_link(link, current / target.relative_to(self.runtime))
         replace_link(current, self.runtime)
+        return retired.end(owners)
 
 
 def main() -> None:
@@ -99,13 +194,18 @@ def main() -> None:
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
     comms = wire(route)
-    owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
+    snapshot = comms.registry.snapshot()
+    owners = tuple(OwnerRestartRequest().threads(snapshot))
     if options.check:
         publication.require_cli(route.root)
         print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
         return
-    publication.publish(route.root)
+    registered = tuple(thread.process_identity for thread in snapshot.threads.values())
+    ended = publication.publish(route.root, registered)
     print(f'Published {publication.runtime}', flush=True)
+    for process in ended:
+        print(f'Ended {process.identity.pid} from the retired runtime: {process.executables[0]}',
+              flush=True)
     # Queue requests keep original process identity and session settings. A
     # pending or uncertain previous request is handled by that existing owner.
     os.environ['VIRTUAL_ENV'] = str(publication.runtime)
