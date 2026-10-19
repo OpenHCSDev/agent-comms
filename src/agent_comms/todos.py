@@ -17,7 +17,6 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
-from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 
@@ -158,19 +157,21 @@ def _github_time(text: str) -> float:
 
 
 class PullRequests:
-    """A repository's pull requests, read from GitHub once and shared by every order on a board."""
+    """Pull requests queried by immutable order identity, cached within one board read."""
 
     def __init__(self) -> None:
-        self._read: dict[tuple[str, str], tuple[PullRequest, ...]] = {}
+        self._read: dict[tuple[str, str, str], tuple[PullRequest, ...]] = {}
 
-    def listed(self, repo: str, state: str) -> tuple[PullRequest, ...]:
-        if (repo, state) not in self._read:
-            self._read[repo, state] = self.read(repo, state)
-        return self._read[repo, state]
+    def listed(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+        key = (repo, state, order.id)
+        if key not in self._read:
+            self._read[key] = self.read(repo, state, order)
+        return self._read[key]
 
-    def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
+    def read(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
         listed = subprocess.run(
             ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
+             "--search", f'"{order.pull_request_reference}" in:body',
              "--json", "number,headRefName,headRefOid,mergeCommit,mergedAt,updatedAt,body", "--jq",
              'map([.number, .headRefName, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
              " .updatedAt, .body])"),
@@ -199,7 +200,7 @@ class ProgressSource:
 
     def requests(self, state: str) -> list[PullRequest]:
         """The order's explicit PR references survive checkout removal or branch reuse."""
-        return [pr for pr in self.pulls.listed(self.todo.repo, state)
+        return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
                 if self.todo.order.id in pr.orders and pr.updated_at >= self.since]
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
@@ -729,13 +730,17 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
+    @property
+    def pull_request_reference(self) -> str:
+        return f"{self.pull_request_label} {self.id}"
+
     def pull_request_body(self, body: str) -> str:
         declared = self.pull_request_ids(body)
         if any(order != self.id for order in declared):
             raise ValueError("The pull request body names a different order.")
         content = "\n".join(line for line in body.splitlines()
                             if not line.startswith(self.pull_request_label))
-        return f"{content.rstrip()}\n\n{self.pull_request_label} {self.id}\n"
+        return f"{content.rstrip()}\n\n{self.pull_request_reference}\n"
 
     def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str) -> str:
         """The order creates its PR with the immutable identity every progress reader uses."""

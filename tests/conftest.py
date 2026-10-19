@@ -245,7 +245,7 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from agent_comms.todos import PullRequests
     from agent_comms.tool_caller import ThreadCaller
 
-    monkeypatch.setattr(PullRequests, "read", lambda self, repo, state: ())
+    monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order: ())
 
     for created, name in enumerate(("lead", "worker"), 1):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
