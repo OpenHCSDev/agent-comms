@@ -134,7 +134,18 @@ def test_stale_readers_do_not_write_and_the_next_append_builds_offsets(tmp_path)
                 with pytest.raises(StaleBusPageIndexError):
                     reader.result(timeout=5)
     appended = Comms(bus.log.path.parent).messaging.send('a', 'b', 'append owns the offsets').message
-    assert appended in bus.incoming_page('b').messages
+    assert appended in bus.incoming_page('b', after=0).messages
     with BusPageIndex(bus.log.path) as index:
         with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             assert index.covers(opened)
+
+
+def test_append_commits_while_an_older_page_snapshot_is_open(tmp_path):
+    bus = retained_source(tmp_path / 'wal-reader', 9, access=WritableAccess())
+    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with BusPageIndex(bus.log.path) as index, index.covered_read(opened):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                message = executor.submit(Comms(bus.log.path.parent).messaging.send,
+                                          'a', 'b', 'published with a page open').result(timeout=3).message
+            assert len(BusPageRow.select(index.connection)) == 9
+    assert message in bus.incoming_page('b', after=0).messages
