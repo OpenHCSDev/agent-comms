@@ -68,7 +68,17 @@ export class EntryStore {
     get(id) { throw new Error('EntryStore.get must be implemented'); }
     *metadataEntries() { throw new Error('EntryStore.metadataEntries must be implemented'); }
     *chronologicalMetadata() { throw new Error('EntryStore.chronologicalMetadata must be implemented'); }
-    *branchMetadata(leafId = this.lastId) { yield* [...this.ancestors(leafId)].reverse(); }
+    *branchMetadata(leafId = this.lastId, firstId = null) {
+        const selected = new Set();
+        let first;
+        for (const meta of this.ancestors(leafId)) {
+            selected.add(meta.id);
+            first = meta;
+            if (meta.id === firstId) break;
+        }
+        if (first) for (const meta of this.chronologicalMetadata(first.id))
+            if (selected.has(meta.id)) yield meta;
+    }
     append(entry) { throw new Error('EntryStore.append must be implemented'); }
     committedAppend(entry, file) { throw new Error('EntryStore.committedAppend must be implemented'); }
     storedAt(file) { throw new Error('EntryStore.storedAt must be implemented'); }
@@ -148,13 +158,8 @@ export class EntryStore {
     *keptMetadata(leafId = this.lastId, compaction = this.latestMetadata(leafId, 'compaction')) {
         // The same original floor owns both canonical and recent-only views.
         if (!compaction) throw new Error('Kept-source view requires an original compaction floor');
-        const kept = [];
-        for (const meta of this.ancestors(leafId)) {
-            if (meta.id !== compaction.id) kept.push(meta);
-            if (meta.id === compaction.firstKeptEntryId ||
-                meta.id === compaction.id && !compaction.firstKeptEntryId) break;
-        }
-        yield* kept.reverse();
+        for (const meta of this.branchMetadata(leafId, compaction.firstKeptEntryId ?? compaction.id))
+            if (meta.id !== compaction.id) yield meta;
     }
     *contextEntries(leafId = this.lastId) {
         for (const meta of this.contextMetadata(leafId)) yield this.get(meta.id);
@@ -194,14 +199,15 @@ export class EntryBranchRange {
     constructor(store, leafId, ancestorId = null) {
         this.store = store;
         this.leafId = leafId;
+        this.ancestorId = ancestorId;
         this.start = ancestorId === null ? -1 : store.metadata(ancestorId).sequence;
     }
     *[Symbol.iterator]() {
-        for (const meta of this.store.branchMetadata(this.leafId)) {
+        for (const meta of this.store.branchMetadata(this.leafId, this.ancestorId)) {
             if (meta.sequence > this.start) yield this.store.get(meta.id);
         }
     }
-    *reverse() {
+    *newestFirst() {
         for (const meta of this.store.ancestors(this.leafId)) {
             if (meta.sequence <= this.start) break;
             yield this.store.get(meta.id);
@@ -212,28 +218,38 @@ export class EntryBranchRange {
 
 export class MemoryEntryStore extends EntryStore {
     #header;
-    #entries = new Map();
+    #entries = [];
     #metadata = new Map();
-    #last = null;
     constructor(header, entries = []) {
         super();
         this.#header = EntryStore.validateHeader(header);
         for (const entry of entries) this.append(entry);
     }
     get header() { this.assertUsable(); return this.#header; }
-    get lastId() { this.assertUsable(); return this.#last; }
-    get(id) { this.assertUsable(); return this.#entries.get(id); }
+    get lastId() { this.assertUsable(); return this.#entries.at(-1)?.id ?? null; }
+    get(id) {
+        const meta = this.metadata(id);
+        return meta ? this.#entries[meta.sequence - 1] : undefined;
+    }
     metadata(id) { this.assertUsable(); return this.#metadata.get(id); }
     assertCurrent() { this.assertUsable(); }
-    *metadataEntries() { this.assertUsable(); yield* [...this.#metadata.values()].reverse(); }
-    *chronologicalMetadata() { this.assertUsable(); yield* this.#metadata.values(); }
+    *metadataEntries() {
+        this.assertUsable();
+        for (let i = this.#entries.length - 1; i >= 0; i--)
+            yield this.#metadata.get(this.#entries[i].id);
+    }
+    *chronologicalMetadata(firstId = null) {
+        this.assertUsable();
+        const start = firstId === null ? 0 : this.metadata(firstId).sequence - 1;
+        for (let i = start; i < this.#entries.length; i++)
+            yield this.#metadata.get(this.#entries[i].id);
+    }
     append(entry) {
         this.validate(entry);
-        if (this.#entries.has(entry.id) || entry.parentId !== null && !this.has(entry.parentId))
+        if (this.#metadata.has(entry.id) || entry.parentId !== null && !this.has(entry.parentId))
             throw new Error('Invalid native entry identity or ancestry');
-        this.#metadata.set(entry.id, new EntryMetadata(entry, this.#entries.size + 1));
-        this.#entries.set(entry.id, entry);
-        this.#last = entry.id;
+        this.#metadata.set(entry.id, new EntryMetadata(entry, this.#entries.length + 1));
+        this.#entries.push(entry);
     }
     committedAppend(entry, file) {
         if (file) return this.storedAt(file);
@@ -244,7 +260,7 @@ export class MemoryEntryStore extends EntryStore {
         this.close();
         return store;
     }
-    close() { this.invalidate(); this.#entries.clear(); this.#metadata.clear(); }
+    close() { this.invalidate(); this.#entries.length = 0; this.#metadata.clear(); }
 }
 
 /** Disk-backed, bounded-page selector index; payloads remain exclusively in the native JSONL. */
@@ -322,11 +338,12 @@ export class DiskEntryStore extends EntryStore {
             }
         } finally { this.assertCurrent(); }
     }
-    *chronologicalMetadata() {
+    *chronologicalMetadata(firstId = null) {
         this.assertCurrent();
         try {
-            while (this.#readPrevious()) {}
-            for (const row of this.#db.prepare('SELECT selectors FROM entries ORDER BY sequence').iterate())
+            const start = firstId === null ? 0 : this.metadata(firstId).sequence;
+            if (firstId === null) while (this.#readPrevious()) {}
+            for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE sequence >= ? ORDER BY sequence').iterate(start))
                 yield EntryMetadata.fromIndex(row);
         } finally { this.assertCurrent(); }
     }

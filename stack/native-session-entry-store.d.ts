@@ -40,8 +40,8 @@ export declare abstract class EntryStore {
     abstract metadata(id: string | null): EntryMetadata | undefined;
     abstract get(id: string): SessionEntry | undefined;
     abstract metadataEntries(): IterableIterator<EntryMetadata>;
-    abstract chronologicalMetadata(): IterableIterator<EntryMetadata>;
-    branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
+    abstract chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
+    branchMetadata(leafId?: string | null, firstId?: string | null): IterableIterator<EntryMetadata>;
     abstract append(entry: SessionEntry): void;
     abstract committedAppend(entry: SessionEntry, file?: string): EntryStore;
     abstract storedAt(file: string): EntryStore;
@@ -79,7 +79,7 @@ export declare class MemoryEntryStore extends EntryStore {
     metadata(id: string | null): EntryMetadata | undefined;
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
-    chronologicalMetadata(): IterableIterator<EntryMetadata>;
+    chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
     append(entry: SessionEntry): void;
     committedAppend(entry: SessionEntry, file?: string): EntryStore;
     storedAt(file: string): DiskEntryStore;
@@ -94,7 +94,7 @@ export declare class DiskEntryStore extends EntryStore {
     metadata(id: string | null): EntryMetadata | undefined;
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
-    chronologicalMetadata(): IterableIterator<EntryMetadata>;
+    chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
     append(entry: SessionEntry): void;
     committedAppend(entry: SessionEntry, file?: string): EntryStore;
     storedAt(file: string): EntryStore;
@@ -104,6 +104,6 @@ export declare class DiskEntryStore extends EntryStore {
 export declare class EntryBranchRange implements Iterable<SessionEntry> {
     constructor(store: EntryStore, leafId: string | null, ancestorId?: string | null);
     [Symbol.iterator](): IterableIterator<SessionEntry>;
-    reverse(): IterableIterator<SessionEntry>;
+    newestFirst(): IterableIterator<SessionEntry>;
     isEmpty(): boolean;
 }
