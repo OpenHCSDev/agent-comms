@@ -10,6 +10,7 @@ import subprocess
 import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from io import StringIO
 from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -342,20 +343,21 @@ class ShellSource(shlex.shlex):
     tab_marker = '-'
     newline = '\n'
 
-    def __init__(self, command):
-        super().__init__(command, posix=False, punctuation_chars='<>\n')
+    def __init__(self, command: str) -> None:
+        self.source_stream = StringIO(command)
+        super().__init__(self.source_stream, posix=False, punctuation_chars='<>\n')
         self.whitespace = ' \t\r'
         self.whitespace_split = True
 
     @classmethod
-    def without_bodies(cls, command):
+    def without_bodies(cls, command: str) -> str:
         body = []
         while command:
             lex = cls(command)
             delimiters = []
             for word in lex:
                 if word == cls.here_document:
-                    after_operator = lex.instream.tell()
+                    after_operator = lex.source_stream.tell()
                     strip_tabs = command[after_operator - 1:after_operator] == cls.tab_marker
                     marker = lex.get_token()
                     if not marker or marker == cls.newline:
@@ -365,7 +367,7 @@ class ShellSource(shlex.shlex):
                 elif cls.newline in word and delimiters:
                     # shlex may look one character beyond the newline; keep
                     # the original header, not the lookahead into literal data.
-                    end = command.rfind(cls.newline, 0, lex.instream.tell()) + 1
+                    end = command.rfind(cls.newline, 0, lex.source_stream.tell()) + 1
                     body.append(command[:end])
                     lines = iter(command[end:].splitlines(keepends=True))
                     for delimiter, tabs in delimiters:
