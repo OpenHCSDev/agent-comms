@@ -223,13 +223,18 @@ class Step:
     """The todo column this step adds, as its ``column`` declares it."""
     after_line: int = 0
 
-    def current(self, checkout: Path) -> type[Carry]:
-        """Load current checkout tools, never a second Core source tree."""
+    def require_current(self, checkout: Path) -> None:
+        """Check source identity before stopping; no target Core types are imported."""
         if self.revision != self.chain_revision:
             raise RuntimeError(f'{self.name} requires tools/upgrade_bus.py for its historical full upgrade')
         source = checkout / STEPS / f'{self.name}.py'
         if source.read_bytes() != git(checkout, 'show', f'{self.revision}:{STEPS}/{source.name}'):
             raise RuntimeError(f'Conversion source changed since planning: {source}')
+
+    def current(self, checkout: Path) -> type[Carry]:
+        """Load current checkout tools, never a second Core source tree."""
+        self.require_current(checkout)
+        source = checkout / STEPS / f'{self.name}.py'
         module = importlib.import_module(f'.{self.name}', __package__)
         if Path(module.__file__).resolve() != source.resolve():
             raise RuntimeError('Conversion was loaded from a different checkout')
@@ -449,6 +454,8 @@ class PreparedCarries(ABC):
         source = (destination.data_root
                   if not published and destination.path.exists() else root)
         steps = chain.pending(CarryLedger(source).applied())
+        for step in steps:
+            step.require_current(checkout)
         if not steps:
             return NoConversion(root)
         return PendingConversion(chain, steps, destination, checkout)
