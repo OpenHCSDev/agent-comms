@@ -1,23 +1,40 @@
 name: Merge queue
 
 on:
+  status:
   merge_group:
     types: [checks_requested]
-  pull_request_review:
-    types: [submitted]
   workflow_dispatch:
+    inputs:
+      enter_queue:
+        description: Enqueue the already reviewed head after successful checks
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
-  group: merge-queue-${{ github.event.merge_group.head_sha || github.sha }}
+  group: merge-queue-${{ github.event.merge_group.head_sha || github.event.sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
+  dispatch-reviewed:
+    if: github.event_name == 'status' && github.event.context == vars.AGENT_COMMS_REVIEW_CONTEXT && github.event.state == 'success'
+    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch checks on the approved PR head, not the default-branch status event
+        env:
+          RUN_ID: ${{ github.run_id }}
+          REVIEWED_HEAD: ${{ github.event.sha }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID dispatch $REVIEWED_HEAD"
+
   ratchet:
-    if: github.event_name != 'pull_request_review' || github.event.review.state == 'approved'
+    if: github.event_name != 'status'
     name: debt-${{ matrix.kind }}
     runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
     timeout-minutes: 10
@@ -36,7 +53,7 @@ jobs:
             -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID $CHECK_KIND"
 
   practice-install:
-    if: github.event_name != 'pull_request_review' || github.event.review.state == 'approved'
+    if: github.event_name != 'status'
     name: install-rehearsal
     runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
     timeout-minutes: 60
@@ -50,7 +67,7 @@ jobs:
             -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID install"
 
   enqueue-approved:
-    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'
+    if: github.event_name == 'workflow_dispatch' && inputs.enter_queue
     needs: [ratchet, practice-install]
     runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
     timeout-minutes: 5
