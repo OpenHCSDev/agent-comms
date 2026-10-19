@@ -151,7 +151,7 @@ def test_claude_import_keeps_history_before_and_after_compaction(tmp_path):
     snapshot = read(ClaudeCodeHarness, source)
     assert bodies(snapshot) == [
         "Obsolete request", "Obsolete reply",
-        "Source compaction/context summary:\nSummary of the work so far", "Next step",
+        "Source compaction summary:\nSummary of the work so far", "Next step",
     ]
     assert snapshot.pi_session(tmp_path).count("Obsolete request") == 1
 
@@ -405,7 +405,7 @@ def test_codex_uses_response_items_and_imports_without_excerpt_limits(tmp_path):
     snapshot = read(CodexHarness, source)
     assert len(snapshot.messages) == 13
     assert snapshot.messages[-1].body.endswith("x" * 400)
-    assert "Source compaction/context summary:\nEarlier context summary" in bodies(snapshot)
+    assert "Source compaction summary:\nEarlier context summary" in bodies(snapshot)
     assert "duplicate" not in str(snapshot.messages) and "opaque" not in str(snapshot.messages)
     assert snapshot.notices == ()
     assert snapshot.pi_session(tmp_path).count("Message 9") == 1
@@ -536,8 +536,8 @@ def test_codex_import_preserves_all_compactions_and_original_messages(tmp_path):
     ])
     snapshot = read(CodexHarness, source)
     assert bodies(snapshot) == [
-        "Obsolete request", "Source compaction/context summary:\nObsolete summary",
-        "Old checkpoint", "Old tail", "Source compaction/context summary:\nCurrent summary",
+        "Obsolete request", "Source compaction summary:\nObsolete summary",
+        "Old checkpoint", "Old tail", "Source compaction summary:\nCurrent summary",
         "Current checkpoint", "Current state", "Current tail",
     ]
 
@@ -552,7 +552,7 @@ def test_codex_compaction_record_may_span_several_reverse_blocks(tmp_path):
     ])
     snapshot = read(CodexHarness, source)
     assert bodies(snapshot) == [
-        "Source compaction/context summary:\nLarge checkpoint", large_state, "Resume after large state",
+        "Source compaction summary:\nLarge checkpoint", large_state, "Resume after large state",
     ]
 
 

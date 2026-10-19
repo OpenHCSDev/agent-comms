@@ -347,7 +347,7 @@ class Summarized(RuntimeUpdate):
 
     def add_to(self, history: ImportBuffer) -> None:
         if self.text:
-            history.messages.append(ImportedInput("Source compaction/context summary:\n" + self.text))
+            history.messages.append(ImportedInput("Source compaction summary:\n" + self.text))
 
 
 @dataclass(frozen=True)
