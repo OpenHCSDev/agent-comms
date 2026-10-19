@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import PublicationActivationBlocked
@@ -14,6 +15,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
 from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
 from agent_comms.proven_source_coverage import SourceCoverage
+from agent_comms.cursor_owner import ActivationFloorCursor
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
 
@@ -33,19 +35,19 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
         assert comms.bus.log.read_metadata_unlocked(required=True).claims
         empty = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix(source_reads=source_reads)
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert empty.covered_seq == 0 and empty.injected_source_seqs == ()
         sent = comms.messaging.send_user_message(
             "bob", "fresh selected input", worktree=str(tmp_path)
         )
         before = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix(source_reads=source_reads)
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert before.blocked_seq == sent.seq and before.injected_source_seqs == ()
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
         selected = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix(source_reads=source_reads)
+        ).since(ActivationFloorCursor(0), source_reads=source_reads)
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
         assert source_witness(Comms(comms.root).bus).through_seq == sent.seq
@@ -65,7 +67,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_r
         page = reader.read(limit=1, partial=True, source_reads=source_reads)
         assert page.more_sources and page.blocked_seq == first.seq
         assert page.covered_seq == 0 and page.injected_source_seqs == ()
-        assert [message.seq for message in list(comms.bus.full_history_page().messages)] == [first.seq, second.seq]
+        assert [message.seq for message in list(comms.views.history_page(ANY_CHANNEL).messages)] == [first.seq, second.seq]
         with pytest.raises(ValueError, match="received bool"):
             reader.read(limit=True, source_reads=source_reads)
 

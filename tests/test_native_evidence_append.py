@@ -1,7 +1,6 @@
 """Original private prefix verification permits append, not changed evidence."""
 
 import asyncio
-import hashlib
 import io
 import json
 import os
@@ -39,7 +38,7 @@ def test_unchanged_verified_revision_reads_no_bytes(tmp_path, monkeypatch):
         assert tuple(source.rows()) == ()
 
 
-def test_append_hashes_only_new_bytes(tmp_path, monkeypatch):
+def test_append_checks_only_new_tail_byte(tmp_path, monkeypatch):
     session = _evidence(tmp_path)
     with PrivateEvidenceRead.open(session) as source:
         assert len(tuple(source.rows())) == 2
@@ -54,7 +53,7 @@ def test_append_hashes_only_new_bytes(tmp_path, monkeypatch):
 
         monkeypatch.setattr(os, "pread", counted)
         assert tuple(source.rows())[0]["id"] == "concurrent-append"
-        assert read == [(source.size - len(APPEND), len(APPEND))]
+        assert read == [(source.size - 1, 1)]
 
 
 def test_non_growth_revision_change_reverifies_prefix(tmp_path):
@@ -62,7 +61,7 @@ def test_non_growth_revision_change_reverifies_prefix(tmp_path):
     with PrivateEvidenceRead.open(session) as source:
         assert len(tuple(source.rows())) == 2
         session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
-        with pytest.raises(NativePiUnavailable, match="prefix changed"):
+        with pytest.raises(NativePiUnavailable, match="source changed without growth"):
             tuple(source.rows())
         assert source.stream.closed
 
@@ -84,27 +83,29 @@ def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
             os.pwrite(writer.fileno(), new, len(first))
         source.prefix = VerifiedNativeEvidencePrefix(
             len(first),
-            hashlib.sha256(first),
             FileRevision.from_stat(os.fstat(source.stream.fileno())),
         )
+        # This fixture consumed record one; verification and decode positions
+        # are separate now that an identity read can verify without decoding.
+        source.decoded_through = len(first)
         assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
 
 
-def test_growth_during_prefix_read_keeps_the_captured_entries(tmp_path, monkeypatch):
+def test_growth_during_tail_check_keeps_the_captured_entries(tmp_path, monkeypatch):
     session = _evidence(tmp_path)
     with PrivateEvidenceRead.open(session) as source:
-        read_chunks = source._pread_chunks
+        pread = os.pread
         appended = False
 
-        def grow_after_captured_chunk(start, stop):
+        def grow_after_captured_tail(fd, size, offset):
             nonlocal appended
-            for raw in read_chunks(start, stop):
-                yield raw
-                if not appended:
-                    append_to(session)
-                    appended = True
+            raw = pread(fd, size, offset)
+            if not appended:
+                append_to(session)
+                appended = True
+            return raw
 
-        monkeypatch.setattr(source, "_pread_chunks", grow_after_captured_chunk)
+        monkeypatch.setattr(os, "pread", grow_after_captured_tail)
         assert len(tuple(source.rows())) == 2
         assert tuple(source.rows())[0]["id"] == "concurrent-append"
 
@@ -140,7 +141,7 @@ async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend,
     async def during_tool_start(turn, event):
         starts.append(event.tool_call_id)
         await tool_started(turn, event)
-        # Appended bytes extend the retained digest; the start leaves its verified prefix behind.
+        # The tool start leaves its acquired inode and captured cut available.
         async with turn.cursor_delivery.reading() as source_reads:
             source = source_reads.for_source(turn.active_session_file).source
             verified.append((source.path, source.prefix))
