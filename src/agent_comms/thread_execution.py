@@ -163,7 +163,7 @@ class ExternalThreadExecution(ThreadExecution):
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
-        return CliInboxThreadStatus()
+        return CliInboxThreadStatus().registered(thread)
 
     @classmethod
     def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,

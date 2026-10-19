@@ -160,7 +160,7 @@ class RegistryGoalConversion(DocumentConversion):
     def converted(cls, raw: dict) -> dict:
         if cls.version(raw) == cls.target_version():
             return raw
-        document = FieldCodec.decode(RegistryDocument, {**raw, "version": cls.target_version()})
+        document = RegistryDocument.from_wire({**raw, "version": cls.target_version()})
         for name, status in tuple(document.statuses.items()):
             document.set_status(name, status)
         return FieldCodec.encode_record(document)
