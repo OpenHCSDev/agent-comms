@@ -15,7 +15,7 @@ from native_unread_fixture import completed_snapshot
 def answer(path, text):
     with path.open("a") as output:
         output.write(
-            json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
+            json.dumps({"type": "message", "timestamp": "2026-09-20T00:00:01Z", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
             + "\n"
         )
 

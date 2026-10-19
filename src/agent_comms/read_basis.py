@@ -677,7 +677,7 @@ class DMDisplayBasis:
                 fetched_through=page.newest_seq or 0,
             )
             with registry.store.locked(mode=SharedLock()):
-                basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path))
+                basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path), registry)
             return replace(page, selection=DMSelection(basis))
 
     def identity(self, history_revision: FileRevision | None) -> DMDisplayIdentity:
@@ -732,6 +732,7 @@ class DMDisplayBasis:
                 through,
                 snapshot,
                 RecordedBusIdentity.capture(bus.log.path),
+                registry,
             )
             self.displayed.tail.mark(bus.reads, self.displayed, through)
 
@@ -743,6 +744,7 @@ class DMDisplayBasis:
         through: int,
         snapshot: RegistrySnapshot,
         bus_identity: RecordedBusIdentity,
+        registry: Registration,
     ) -> None:
         if (self.root, self.worktree, self.requested_peer) != (
             str(root.resolve()),
@@ -754,23 +756,22 @@ class DMDisplayBasis:
         info = root.stat()
         if (info.st_dev, info.st_ino) != self.root_identity:
             raise DMScopeChanged("DM root was replaced; refresh the page.")
-        self.validate_identity(snapshot, bus_identity)
+        self.validate_identity(snapshot, bus_identity, registry)
 
     def validate_identity(
-        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity
+        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity, registry: Registration
     ) -> None:
         """Fetch and painted acknowledgement share actual identity/scope validation.
 
         Heartbeat, turn state and another view's read progress are not identity.
         """
+        selected = registry.user_thread().require(
+            DMScopeChanged("DM viewer/peer incarnation changed; refresh the page."))
         try:
-            selected = next(
-                human for thread in snapshot.threads.values() for human in thread.role.human(thread)
-            )
             viewer = snapshot.threads[self.viewer]
             target = snapshot.participant(self.requested_peer)
             scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
-        except (KeyError, StopIteration, UnregisteredThreadError) as error:
+        except (KeyError, UnregisteredThreadError) as error:
             raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.") from error
         if (
             selected.incarnation != self.viewer_identity
