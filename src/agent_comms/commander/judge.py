@@ -237,14 +237,14 @@ class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
     roast: str = option(help="blunt, why it is stupid, with because")
     fix: str = option(help="owner and replacing shape")
-    slop_kind: str = option("--slop", help="|".join(order.Slop.KINDS))
+    slop_pattern: str = option("--slop", help="the refactor-audit pattern ID the slop is")
     fact: str = option(help="the required fact, 4+ words")
     at: str = option(help="PATH:LINE where it is restated")
     derive: str = option(help="|".join(order.Slop.MECHANISMS))
     by: str = option(help="PATH:LINE of the declaration that owns it")
 
     def slop(self) -> order.Slop:
-        return order.Slop(self.slop_kind, self.fact, self.at, self.derive, self.by)
+        return order.Slop(self.slop_pattern, self.fact, self.at, self.derive, self.by)
 
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,

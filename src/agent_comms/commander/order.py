@@ -31,6 +31,7 @@ from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
+from ..pattern_catalog import PatternCatalog
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
@@ -186,17 +187,17 @@ class Slop:
     complete mechanism derives once from its declaration. Naming slop means naming the fact, where it is
     restated, the declaration that should own it and the mechanism that derives it from there; a label alone
     tells the unit nothing it can check."""
-    KINDS = {'identity': 'which meaning this is', 'membership': 'which contract or set it belongs to',
-             'implementation': 'which implementation it gets', 'state': 'a second writable copy of one value'}
     MECHANISMS = ('nominal-key', 'subclass', 'mixin', 'base-method', 'init-subclass', 'metaclass', 'declaration', 'delete-copy')
-    USAGE = ('Refused: slop needs its formal statement: --slop KIND (' + '|'.join(KINDS) + ') --fact "<the required fact, 4+ words>" '
+    USAGE = ('Refused: slop needs its formal statement: --slop PATTERN (a refactor-audit pattern ID) --fact "<the required fact, 4+ words>" '
              '--at PATH:LINE (where it is restated) --derive MECH (' + '|'.join(MECHANISMS) + ') --by PATH:LINE (the declaration that owns it)')
-    LINE = re.compile(r'^Slop: (\w+); fact (.+?); at (\S+:\d+); derive ([\w-]+) on (\S+:\d+)\s*$', re.M)
+    LINE = re.compile(r'^Slop: ([\w-]+); fact (.+?); at (\S+:\d+); derive ([\w-]+) on (\S+:\d+)\s*$', re.M)
 
-    def __init__(self, kind, fact, at, derive, by):
+    def __init__(self, cited, fact, at, derive, by):
         problems = []
-        if kind not in self.KINDS:
-            problems.append(f'kind {kind!r} is not one of {sorted(self.KINDS)}')
+        try:
+            self.pattern = PatternCatalog.pinned().pattern(cited)
+        except ValueError as unknown:
+            problems.append(str(unknown))
         if len(fact.split()) < 4:
             problems.append('the fact needs 4+ words')
         if derive not in self.MECHANISMS:
@@ -207,19 +208,21 @@ class Slop:
                 problems.append(f'{place} does not exist')
         if problems:
             sys.exit(self.USAGE + '\n  ' + '\n  '.join(problems))
-        self.kind, self.fact, self.at, self.derive, self.by = kind, fact, at, derive, by
+        self.fact, self.at, self.derive, self.by = fact, at, derive, by
 
     @classmethod
     def from_order(cls, body):
         """Every Slop: line of an order; an order that calls something slop must carry at least one."""
         found = [cls(*m.groups()) for m in cls.LINE.finditer(body)]
         if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
-            sys.exit('Refused order: it calls something slop without a line\n  Slop: <' + '|'.join(cls.KINDS)
-                     + '>; fact <required fact>; at <path:line restated>; derive <' + '|'.join(cls.MECHANISMS) + '> on <path:line owner>')
+            sys.exit('Refused order: it calls something slop without a line\n  Slop: <refactor-audit pattern ID>'
+                     + '; fact <required fact>; at <path:line restated>; derive <' + '|'.join(cls.MECHANISMS) + '> on <path:line owner>')
         return found
 
     def render(self):
-        return (f'{self.at} restates a {self.kind} fact ({self.KINDS[self.kind]}): {self.fact}. '
+        kind = self.pattern.kind
+        return (f'{self.at} restates {self.pattern.id} {self.pattern.title}, a fact of kind '
+                f'{kind.name} ({kind.question}): {self.fact}. '
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 

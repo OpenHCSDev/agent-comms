@@ -724,8 +724,8 @@ class FairText(OrderWords):
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Name the restated fact in a Slop: line (identity, membership, "
-               "implementation or state) and the declaration that derives it.")
+    refusal = ("{1} faults inheritance itself. Name the restated fact in a Slop: line citing its "
+               "refactor-audit pattern ID, and the declaration that derives it.")
 
 
 class HierarchyText(OrderWords):

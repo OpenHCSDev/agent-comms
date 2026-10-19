@@ -1084,7 +1084,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
                   why='The changes repair the existing canonical state owner', lines=('value = 2',),
                   msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner').message.message_id)
     command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
-        **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        **fields, roast='r', fix='f', slop_pattern='IDEN-5', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
@@ -1107,7 +1107,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
-        slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        slop_pattern='IDEN-5', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1').run()
     saved = comms.goals.todos.get('P1')
     assert len(saved.verdicts) == len(saved.strikes) == 1
@@ -1198,7 +1198,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
 VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
     'ok-unowned': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner' --no-owner proof",
-    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
+    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop IDEN-5"
             " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
 }
 
@@ -1217,6 +1217,31 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
         operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
         CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
         assert comms.goals.todos.get('P1').verdicts[-1] == operation
+
+
+def test_a_send_back_resolves_its_pattern_id_against_the_pinned_catalog(commander, commander_script):
+    """A send-back names its slop by a pattern ID of the pinned catalog and reads that pattern's
+    fact kind from it; an ID the catalog does not define is refused before anything is written."""
+    comms, caller = commander
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    create(commander, 'P1')
+
+    def back(pattern):
+        return judge.JudgeVerb.parse(['back', 'e1:ab', '--msg', 'm1', '--line', 'one',
+            '--why', 'The unit wrote the stored value twice', '--roast',
+            'The unit was wrong to keep a second writable copy of the stored value because it skipped the owner',
+            '--fix', 'Delete the copy and read the value from its single owner', '--slop', pattern,
+            '--fact', 'the one value being stored', '--at', f'{__file__}:1', '--derive', 'delete-copy',
+            '--by', f'{__file__}:2'], '')
+
+    with pytest.raises(SystemExit, match="'NOPE-99' is no pattern of the pinned catalog"):
+        back('NOPE-99').check_edits([])
+    sent_back = back('IDEN-3')
+    sent_back.check_edits([])
+    assert (sent_back.slop().pattern.id, sent_back.slop().pattern.kind.name) == ('IDEN-3', 'identity')
+    assert 'restates IDEN-3 One concept, several encodings, a fact of kind identity (which meaning this is)' in sent_back.slop().render()
+    CommsVerdictTool(id='P1', operation=sent_back.operation(comms.goals.todos.get('P1'), 'toolu_1')).apply(comms, caller)
+    assert len(comms.goals.todos.get('P1').strikes) == 1
 
 
 def test_close_quotes_the_works_line(commander):
