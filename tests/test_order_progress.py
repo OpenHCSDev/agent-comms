@@ -1,5 +1,6 @@
 """An order's progress is read from its unit's checkout and PRs beside its deadline; merged work draws no strike."""
 import subprocess
+import shlex
 import time
 
 from dataclasses import replace
@@ -7,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.goals import GitCommandFailed
+from agent_comms.goals import CountCheckResult, GitCommandFailed, OrderCheck
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
@@ -122,6 +123,22 @@ def test_unread_github_is_explicit(checkout):
     pulls.states = WorkBranchError('gh: not logged in')
     progress = read(checkout, pulls)
     assert progress == UnreadProgress('gh: not logged in')
+
+
+def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
+    todo, unit = checkout
+    marker = tmp_path / 'explicit-check-count'
+    check = OrderCheck(str(unit), f'printf x >> {shlex.quote(str(marker))}; printf 0',
+                       CountCheckResult(0))
+    todo = replace(todo, order=replace(todo.order, check=check))
+    source = ProgressSource.at(todo, unit, Listed())
+    assert source.readings() == DistanceReadings()
+    assert not marker.exists()
+    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
+    assert marker.read_text() == 'x'
+    assert len(source.readings().readings) == 1
+    assert source.readings().readings[0].distance == todo.order.untouched(())
+    assert marker.read_text() == 'x'
 
 
 def test_an_existing_broken_checkout_is_not_silently_treated_as_missing(checkout, tmp_path):
