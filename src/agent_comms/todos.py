@@ -17,10 +17,13 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
+from functools import cache
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
+from . import skills
 from .change_report import FileLine
 from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome
 from .command import Command
@@ -340,57 +343,89 @@ class UnreadTrend(DistanceTrend):
 
 
 @dataclass(frozen=True)
+class ProgressCheckout(DeclaredFamily, affix="Checkout"):
+    """The local history available when an order's progress is captured."""
+    path: Path
+
+    @abstractmethod
+    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]: ...
+
+    @abstractmethod
+    def readings(self, source: ProgressSource) -> DistanceReadings: ...
+
+
+class MissingCheckout(ProgressCheckout):
+    """A retired checkout contributes no local history, not a failed Git read."""
+
+    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]:
+        return iter(())
+
+    def readings(self, source: ProgressSource) -> DistanceReadings:
+        return DistanceReadings()
+
+
+class PresentCheckout(ProgressCheckout):
+    def git(self, *args: str) -> str:
+        run = subprocess.run(("git", "-C", str(self.path), *args),
+                             capture_output=True, text=True, timeout=60)
+        if run.returncode:
+            raise ValueError(f"git {args[0]} failed: {run.stderr.strip()}")
+        return run.stdout
+
+    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]:
+        """Newest branch commit; a Git failure in a present checkout remains an error."""
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(since))
+        for line in self.git("log", "-1", f"--since={after}", "--format=%H %ct",
+                             "HEAD", "--not", *excluded).splitlines():
+            sha, at = line.split()
+            yield sha, float(at)
+
+    def readings(self, source: ProgressSource) -> DistanceReadings:
+        """The order's base and newest branch commit bound its distance trend."""
+        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(source.since))
+        commits = [(sha, float(at)) for sha, at in (line.split() for line in reversed(self.git(
+            "log", "--first-parent", f"--since={after}", "--format=%H %ct", "HEAD",
+            "--not", base).splitlines()))]
+        points = [(base, source.since), *commits][-2:]
+        return DistanceReadings(
+            tuple(DistanceReading(at, source.distance(self, base, sha)) for sha, at in points),
+            source.todo.order.check.command)
+
+
+@dataclass(frozen=True)
 class ProgressSource:
-    """What an order's progress is read from: its unit's checkout and the repository's PRs."""
+    """An order's local checkout capability and independently retained PR references."""
     todo: Todo
-    checkout: Path
+    checkout: ProgressCheckout
     pulls: PullRequests
+
+    @classmethod
+    def of(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> Self:
+        path = storage.order_checkout(todo.held().owner, todo.id)
+        checkout = PresentCheckout(path) if path.is_dir() else MissingCheckout(path)
+        return cls(todo, checkout, pulls)
 
     @property
     def since(self) -> float:
         return self.todo.order.at.recorded_at("An order")
 
     def requests(self, state: str) -> list[PullRequest]:
-        """The order's explicit PR references survive checkout removal or branch reuse."""
+        """Explicit PR references survive checkout removal or branch reuse."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
                 if self.todo.order.id in pr.orders and pr.updated_at >= self.since]
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
-        """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since={after}",
-             "--format=%H %ct", "HEAD", "--not", *excluded),
-            capture_output=True, text=True, timeout=30)
-        for line in log.stdout.splitlines() if not log.returncode else ():
-            sha, at = line.split()
-            yield sha, float(at)
-
-    def git(self, *args: str) -> str:
-        run = subprocess.run(("git", "-C", str(self.checkout), *args),
-                             capture_output=True, text=True, timeout=60)
-        if run.returncode:
-            raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
-        return run.stdout
+        return self.checkout.commits(self.since, *excluded)
 
     def readings(self) -> DistanceReadings:
-        """The order's base, then each branch commit since the order; the last two are read."""
-        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        commits = [(sha, float(at)) for sha, at in (line.split() for line in reversed(self.git(
-            "log", "--first-parent", f"--since={after}", "--format=%H %ct", "HEAD",
-            "--not", base).splitlines()))]
-        points = [(base, self.since), *commits][-2:]
-        return DistanceReadings(
-            tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points),
-            self.todo.order.check.command)
+        return self.checkout.readings(self)
 
-    def distance(self, base: str, sha: str) -> CheckPrinted:
-        """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
-        ``base`` has not touched."""
+    def distance(self, checkout: PresentCheckout, base: str, sha: str) -> CheckPrinted:
+        """Run the order's check and preserve its count state beside untouched edits."""
         check = self.todo.order.check
-        touched = self.git("diff", "--name-only", base, sha).split()
-        run = check.at(sha, str(self.checkout))
+        touched = checkout.git("diff", "--name-only", base, sha).split()
+        run = check.at(sha, str(checkout.path))
         return check.result.distance(run).plus(self.todo.order.untouched(touched))
 
 
@@ -403,9 +438,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
         """The first found member by its declared precedence; with none found, no commit yet."""
-        owner = todo.holder
-        assert owner, "Only a held order has progress."
-        source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
+        source = ProgressSource.of(todo, storage, pulls)
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
             return next((progress for member in members for progress in member.found(source)),
@@ -825,8 +858,8 @@ class FairText(OrderWords):
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Name the restated fact in a Slop: line (identity, membership, "
-               "implementation or state) and the declaration that derives it.")
+    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID in a Slop: line, "
+               "name the restated fact and the declaration that derives it.")
 
 
 class HierarchyText(OrderWords):
@@ -856,26 +889,6 @@ class DefectText(BluntWords, OrderWords):
     @classmethod
     def found(cls, text: str) -> list[str]:
         return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
-
-
-class SlopKind(DeclaredFamily, affix="SlopKind"):
-    sentence: ClassVar[str]
-
-
-class IdentitySlopKind(SlopKind):
-    sentence = "which meaning this is"
-
-
-class MembershipSlopKind(SlopKind):
-    sentence = "which contract or set it belongs to"
-
-
-class ImplementationSlopKind(SlopKind):
-    sentence = "which implementation it gets"
-
-
-class StateSlopKind(SlopKind):
-    sentence = "a second writable copy of one value"
 
 
 class Derivation(DeclaredFamily, affix="Derivation"):
@@ -916,15 +929,28 @@ class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
 
 @dataclass(frozen=True)
 class Slop:
-    kind: type[SlopKind]
+    pattern: str
     fact: str
     at: FileLine
     derive: type[Derivation]
     by: FileLine
+    USAGE: ClassVar[str] = ('An order naming slop needs Slop: PATTERN-ID; fact WORDS; '
+                            'at PATH:LINE; derive MECHANISM on PATH:LINE')
     LINE: ClassVar[re.Pattern] = re.compile(
-        r'^Slop: (?P<kind>\w+); fact (?P<fact>.+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)\s*$', re.M)
+        r'^Slop: (?P<pattern>\S+); fact (?P<fact>[^\n]+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)[ \t]*$', re.M)
+
+    PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
+
+    @classmethod
+    @cache
+    def patterns(cls) -> frozenset[str]:
+        root = files(skills) / 'refactor-audit' / 'references' / 'patterns'
+        return frozenset(found[1] for source in root.iterdir() if source.name.endswith('.md')
+                         for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
 
     def __post_init__(self):
+        if self.pattern not in self.patterns():
+            raise ValueError(f'{self.USAGE}. Unknown refactor-audit pattern ID {self.pattern!r}.')
         if len(self.fact.split()) < 4:
             raise ValueError('The duplicated fact needs 4+ words.')
         self.at.require_exists()
@@ -932,13 +958,16 @@ class Slop:
 
     @classmethod
     def from_order(cls, body):
-        found = [FieldCodec.decode(cls, m.groupdict()) for m in cls.LINE.finditer(body)]
+        matches = tuple(cls.LINE.finditer(body))
+        if len(matches) != len(re.findall(r'(?m)^Slop:.*$', body)):
+            raise ValueError(cls.USAGE)
+        found = [FieldCodec.decode(cls, cited.groupdict()) for cited in matches]
         if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
-            raise ValueError('An order naming slop needs Slop: KIND; fact WORDS; at PATH:LINE; derive MECHANISM on PATH:LINE')
+            raise ValueError(cls.USAGE)
         return found
 
     def render(self):
-        return (f'{self.at.to_wire()} restates a {self.kind.declared_name} fact ({self.kind.sentence}): {self.fact}. '
+        return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
                 f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
 
 
@@ -2262,7 +2291,7 @@ class TodoStore(TypedStore):
         pulls = PullRequests(todos)
         for todo in todos:
             progress = OrderProgress.read(todo, storage, pulls)
-            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            source = ProgressSource.of(todo, storage, pulls)
             for merged in progress.missing_merges(source):
                 yield todo, merged
 

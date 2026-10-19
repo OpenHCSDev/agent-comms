@@ -1,4 +1,5 @@
 """An order's progress is read from its unit's checkout and PRs beside its deadline; merged work draws no strike."""
+import shutil
 import subprocess
 import time
 
@@ -113,6 +114,24 @@ def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
     progress = read(checkout, pulls)
     assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
     assert progress.line == 'PR #7 open at aaaaaaaaa'
+
+
+def test_removed_checkout_uses_only_retained_pr_and_present_git_errors_propagate(checkout):
+    _, unit = checkout
+    shutil.rmtree(unit)
+    pulls = Listed(open=(PullRequest(7, 'fix/p1', 'a' * 40,
+                                    updated_at=400.0, orders=('order-P1',)),))
+    progress = read(checkout, pulls)
+    assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
+    assert progress.line == 'PR #7 open at aaaaaaaaa'
+    assert progress.distance_readings() == DistanceReadings()
+    assert read(checkout) == NoCommitProgress()
+    # Absence is represented, not permission to hide a real Git error.
+    unit.mkdir()
+    with pytest.raises(ValueError, match='not a git repository'):
+        read(checkout, pulls)
+    with pytest.raises(ValueError, match='not a git repository'):
+        read(checkout)
 
 
 def test_an_order_owns_the_pr_from_its_identity_whatever_the_branch_says(checkout):
