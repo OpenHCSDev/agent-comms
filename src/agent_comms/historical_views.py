@@ -16,6 +16,7 @@ from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
+from .history_result import DmHistoryPageResult, HistoryPageResult
 from .message_page import (
     ConversationMessagePageRequest,
     MessagePage,
@@ -66,6 +67,10 @@ class HistoryView(ABC):
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
         """Retain the source's aliases/membership without borrowing live identity."""
 
+    @abstractmethod
+    def page_result(self, page: MessagePage) -> HistoryPageResult:
+        """The history command's page of this view, oldest message first."""
+
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
         return MessagePageRequest(scope, bounds)
 
@@ -114,10 +119,14 @@ class ConversationHistoryView:
 
 @dataclass(frozen=True, slots=True)
 class ChannelHistory(HistoryView):
-    scope: ChannelDisplayScope
+    channel: Channel
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
-        return self.scope
+        return self.channel.history_scope()
+
+    def page_result(self, page: MessagePage) -> HistoryPageResult:
+        return self.channel.history_result_type.for_target(
+            self.channel.name, tuple(reversed(page.messages)), page.has_older)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +152,10 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return self.channel.display_scope(snapshot)
 
+    def page_result(self, page: MessagePage) -> HistoryPageResult:
+        return self.channel.history_result_type.for_target(
+            self.channel.name, tuple(reversed(page.messages)), page.has_older)
+
 
 @dataclass(frozen=True, slots=True)
 class DMHistory(HistoryView):
@@ -151,6 +164,9 @@ class DMHistory(HistoryView):
 
     def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         return DMDisplayScope.capture(self.first, self.second, snapshot)
+
+    def page_result(self, page: MessagePage) -> HistoryPageResult:
+        return DmHistoryPageResult.for_target(self.second, tuple(reversed(page.messages)), page.has_older)
 
 
 @dataclass(frozen=True, slots=True)

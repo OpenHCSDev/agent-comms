@@ -1294,8 +1294,7 @@ class HistoryCliCommand(CliCommand):
         target = CommandTarget.named(self.target)
         traversal = self.before.older() if self.before is not None else OlderTraversal()
         bounds = PageBounds(traversal, self.limit)
-        page = ctx.views.history_page(target, bounds, viewer=self.me)
-        return target.history_result(ctx.bus.require_channel, tuple(reversed(page.messages)), page.has_older)
+        return ctx.views.history_result(target, bounds, viewer=self.me)
 
 
 @dataclass(frozen=True, kw_only=True)

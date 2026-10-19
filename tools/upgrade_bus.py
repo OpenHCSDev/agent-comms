@@ -53,6 +53,7 @@ from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_ho
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
+from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
 from agent_comms.store_files import _store_lock
@@ -185,8 +186,9 @@ class Stack:
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
-        history = self.cli(root, "history", "--everything", "--limit", "50")
-        return {"threads": len(threads), "who": len(present), "history": len(history.get("messages", ()))}
+        history = EverythingHistoryPageResult.decode(
+            self.cli(root, "history", "--limit", "50"))
+        return {"threads": len(threads), "who": len(present), "history": len(history.messages)}
 
     def round_trip(self, root: Path) -> str:
         """The connector Core declares for this bus sends one message and reads it back; it

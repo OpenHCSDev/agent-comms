@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
-from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
@@ -85,10 +84,6 @@ class CommandTarget(ABC):
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         raise ValueError("History requires a #channel or DM peer.")
 
-    def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
-                       has_older: bool) -> HistoryPageResult:
-        raise ValueError("History requires a #channel or DM peer.")
-
     def contexts(self, declaration, channel):
         return (None,)
 
@@ -149,7 +144,6 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
-    history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
 
@@ -171,10 +165,6 @@ class ThreadTarget(NamedTarget):
         if viewer is None:
             raise ValueError("DM history requires --as <participant>.")
         return direct(viewer, self.name)
-
-    def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
-                       has_older: bool) -> HistoryPageResult:
-        return self.history_result_type.for_target(self.name, messages, has_older)
 
     def contexts(self, declaration, channel):
         return declaration.selection_channels(channel, self.name)
@@ -260,12 +250,7 @@ class ChannelTarget(NamedTarget):
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         if viewer is not None:
             raise ValueError("--as is only valid for DM history.")
-        return channel(require_channel(self.name).history_scope())
-
-    def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
-                       has_older: bool) -> HistoryPageResult:
-        result_type = require_channel(self.name).history_result_type
-        return result_type.for_target(self.name, messages, has_older)
+        return channel(require_channel(self.name))
 
     def pending_count(self, counts, snapshot, require_channel):
         return require_channel(self.name).pending_count(counts)
