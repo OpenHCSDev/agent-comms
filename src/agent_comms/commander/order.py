@@ -534,7 +534,8 @@ def done(pid, sha, delivered=None):
     closed = COMMS.goals.todos.get(pid)
     if late := closed.strikes[len(todo.strikes):]:
         n = struck(closed, unit)
-        on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {pid}): {late[0].reason}', 'Strike')
+        on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {pid}): {late[0].reason}', 'Strike',
+                  VerdictAudience.of(unit, closed.goal))
         print(f'{unit}: {n} strike(s) on {pid}')
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')

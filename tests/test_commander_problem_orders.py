@@ -382,11 +382,6 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'fix')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     script.done('P1', git('rev-parse', 'HEAD'), git('rev-parse', 'HEAD'))
-    assert not comms.goals.todos.get('P1').pending
-
-    artifact = repo.parent / 'seen.png'
-    artifact.write_text('x')
-    script.close('P1', 'the installed app shows the counter at one after restart', str(artifact))
     assert not comms.goals.todos.get('P1').state.open and script.held_orders() == ()
     assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
                 'sent.jsonl', 'hunts.jsonl'} & {

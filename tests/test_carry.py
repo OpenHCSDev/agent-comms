@@ -499,7 +499,7 @@ class Owners(Stack):
 for each in (signal.SIGTERM, signal.SIGINT):
     signal.signal(each, stopped)
 root = Path(sys.argv[1])
-live(root, root, "", "", (), Owners(root), Owners(root), None)
+live(root, root, "", "", (), Owners(root), Owners(root), None, "worker")
 """
 
 
