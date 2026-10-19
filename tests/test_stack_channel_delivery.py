@@ -1,5 +1,6 @@
 """Actual native Pi evidences for queued and steered channel requests."""
 
+from bus_history import read_history
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -212,7 +213,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 ]
                 assert [event.text for event in incoming] == [origin.body for origin in messages]
             if case in {"deliver", "rename", "batch_rename"}:
-                assert list(comms.views.channel_history_page("#team").messages)[-1].body == "RECEIVED"
+                assert read_history(comms, "#team")[-1].body == "RECEIVED"
             if not success:
                 updates = []
 

@@ -1,3 +1,4 @@
+from bus_history import read_history
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.messages import NoticeRole
 import pytest
@@ -26,7 +27,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
     assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
     assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
-    assert list(Comms(tmp_path).views.channel_history_page("#team").messages)[0].mentions == message.mentions
+    assert read_history(Comms(tmp_path), "#team")[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
@@ -165,7 +166,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
     comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, role=NoticeRole()).message.message_id
-    notice = list(comms.views.channel_history_page("#team").messages)[-1]
+    notice = read_history(comms, "#team")[-1]
     assert isinstance(notice.role, NoticeRole) and not notice.role.response_policy(notice).starts_turn
     with comms.bus.opened_activity() as clocks:
         assert "sender" not in comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot())
