@@ -19,9 +19,12 @@ from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.todos import GoalRef, Todo, TodoStore
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from tools.upgrade_bus import Revisions, Stack, UpgradeRefused, before_stop, bus_files, carried, carry_all
+from agent_comms.recorded_time import RecordedEventTime
+from test_todos import order, thread
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -284,6 +287,22 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
             carried(tmp_path, before, [{"rewritten": []}])
 
 
+def todos_before_order_runs(root: Path, scratch: Path) -> None:
+    """A todo store as the first pending todo step found it: its order declares no run (before
+    P511), and it has neither the corrections nor the messages column (before P104 and P116)."""
+    lead = thread("lead", scratch, 1)
+    todo = TodoStore(scratch).create("one", "OpenHCSDev/agent-comms", "Repair the thread list",
+        creator=lead, owner=lead, generation="one", deadline=RecordedEventTime(1000),
+        order=order(scratch), goal=GoalRef("lead", 1.0, "goal-1"))
+    with closing(sqlite3.connect(TodoStore.path_in(root))) as db:
+        db.execute(Todo.schema_objects()[Todo.declared_name])
+        todo.upsert(db)
+        db.execute("""UPDATE todo SET "order" = json_remove("order", '$.run')""")
+        db.execute("ALTER TABLE todo DROP COLUMN messages")
+        db.execute("ALTER TABLE todo DROP COLUMN corrections")
+        db.commit()
+
+
 def run_step(name: str, root: Path, *flags: str) -> dict:
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join([str(REPO / "src"), str(REPO / "tools")])}
     output = subprocess.check_output(
@@ -304,8 +323,9 @@ def retained_read_ledger(root: Path) -> None:
 
 def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_path, monkeypatch):
     """Earlier formats: storage roots with a checkout list, a JSON-text-keyed read
-    ledger already carried by its retired step, and a route naming its native package. Each declared step dry-runs,
-    applies, then finds nothing left; no file it does not name changes."""
+    ledger already carried by its retired step, a route naming its native package, and a todo store
+    from before P104. Each declared step dry-runs, applies, then finds nothing left; no file it does
+    not name changes."""
     tmp_path.chmod(0o700)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: tmp_path)
@@ -319,6 +339,7 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     with store.locked():
         store._write_unlocked(json.dumps(registry, indent=2))
     retained_read_ledger(root)
+    todos_before_order_runs(root, tmp_path / "earlier")
     route = tmp_path / ".local/state/agent-comms/active-route.json"
     route.parent.mkdir(parents=True, mode=0o700)
     route.write_text(json.dumps({"version": 1, "root": str(root), "wire_root_id": root_id,
@@ -349,6 +370,9 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     assert reads.transcripts == {("user", "/sessions/a.jsonl", 6860966): 4881511}
     assert json.loads(route.read_text()) == {"version": 2, "root": str(root), "wire_root_id": root_id}
     assert route.stat().st_mode & 0o777 == 0o600
+    with closing(sqlite3.connect(TodoStore.path_in(root))) as db:
+        (todo,) = Todo.stream(db)
+    assert (todo.id, todo.corrections, todo.messages) == ("one", (), ())
 
 
 @pytest.mark.parametrize("stored, carried_count", [(None, 1), ({"turn_id": "t"}, None)])
