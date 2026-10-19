@@ -62,7 +62,8 @@ from contextlib import closing
 from agent_comms.coordination_database import CoordinationStore
 with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as writer:
     writer.execute("BEGIN IMMEDIATE")
-    print("held", flush=True)
+    with open(int(sys.argv[2]), "wb") as held:
+        held.write(b"held")
     sys.stdin.read()
     writer.execute("ROLLBACK")
 """
@@ -109,16 +110,18 @@ def transcripts_held(root: Path) -> Iterator[None]:
     if not path.exists():
         yield
         return
-    holder = subprocess.Popen([sys.executable, "-c", HOLD_TRANSCRIPTS, path],
-                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+    ready, held = os.pipe()
+    holder = subprocess.Popen([sys.executable, "-c", HOLD_TRANSCRIPTS, path, str(held)],
+                              stdin=subprocess.PIPE, pass_fds=(held,),
                               env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+    os.close(held)
     try:
-        if holder.stdout.readline() != "held\n":
-            raise UpgradeRefused(f"Could not hold the transcript store {path}")
+        with open(ready, "rb") as holding:
+            if not holding.read():
+                raise UpgradeRefused(f"Could not hold the transcript store {path}")
         yield
     finally:
-        holder.stdin.close()
-        holder.wait()
+        holder.communicate()
 
 
 def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
