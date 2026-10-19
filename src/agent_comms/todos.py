@@ -1429,7 +1429,7 @@ class ReviewedHeadVerdict(AcceptedVerdict):
     def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
         if self.actor != reviewer:
             raise TodoError("A reviewed head names the reviewer recording it.")
-        todo = self.prepare(goals, goals.todos.get(problem)).record(goals, problem)
+        todo: Todo = self.prepare(goals, goals.todos.get(problem)).record(goals, problem)
         posted = subprocess.run(
             ("gh", "api", "--method", "POST", f"repos/{todo.repo}/statuses/{self.head}",
              "-f", "state=success", "-f", "context=agent-comms/review",

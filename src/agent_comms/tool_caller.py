@@ -113,4 +113,5 @@ class ThreadCaller(ToolCaller):
 
     def judged(self, comms: Comms, problem: str, verdict: OrderVerdict) -> Todo:
         """An agent's verdict is its commander's, on the order it gave."""
-        return comms.goals.change_problem(problem, verdict, self.name)
+        judged: Todo = comms.goals.change_problem(problem, verdict, self.name)
+        return judged
