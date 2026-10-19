@@ -380,7 +380,7 @@ class HistoryViews:
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
-        unread = self.transcript_reads.counts(captured_viewer, document=basis.document)
+        unread = self.transcript_reads.counts(captured_viewer, document=basis.document, visibility=visibility)
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
