@@ -1,7 +1,9 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
+import asyncio
 import importlib
 import json
 import os
+import re
 import shlex
 import shutil
 import sqlite3
@@ -17,6 +19,7 @@ from cutover.carry import CarryChain
 from cutover.carry_todo_corrections import TodoCorrections
 
 from agent_comms.change_report import FileLine
+from agent_comms.child_process import BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
@@ -504,6 +507,20 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
     with pytest.raises(SystemExit, match='the check printed no integer'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
     assert script.held_orders() == ()
+
+
+@pytest.mark.parametrize('printed, refused', [
+    ("printf 'no count here'", 'The order check printed no integer, so no count of 1.'),
+    ('echo 2', 'The order check printed 2, not its expected count 1.'),
+    ('echo found 1', None),
+])
+def test_a_count_check_refuses_saying_whether_it_printed_no_integer_or_the_wrong_count(tmp_path, printed, refused):
+    ran = asyncio.run(BoundedRun.run(('bash', '-c', printed), cwd=str(tmp_path), timeout=30))
+    if refused is None:
+        CountCheckResult(1).require(ran)
+    else:
+        with pytest.raises(ValueError, match=re.escape(refused)):
+            CountCheckResult(1).require(ran)
 
 
 def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander):

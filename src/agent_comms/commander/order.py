@@ -29,7 +29,7 @@ from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
@@ -271,13 +271,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     if check and os.path.isdir(check.directory) and not problems:
         try:
             ran = subprocess.run(['bash', '-c', check.command], cwd=check.directory, capture_output=True, timeout=90)
-            if (got := CountCheckResult.printed(ran.stdout)) is None:
-                problems.append('the check printed no integer; '
-                                'use grep -c PATTERN FILE or ... | wc -l')
-            elif got == check.result.expected:
-                problems.append(f'Check already prints {got} before any work: `{check.command}` '
-                                'proves nothing; '
-                                'write a check that fails now')
+            printed = CheckPrinted.decoded(ran.stdout)
+            problems += printed.unproven(check.command, check.result.expected)
         except subprocess.TimeoutExpired:
             problems.append('Check took over 90 s; done runs it too, so make it a focused count')
     for path, line in re.findall(r'(?<![\w.])(/\S+?\.\w+):(\d+)', body):
