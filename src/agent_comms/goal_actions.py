@@ -362,7 +362,7 @@ class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, 
 
     @classmethod
     def require_claims(cls, claims: tuple[ProgressClaim, ...]) -> None:
-        ProgressClaim.require_claimed(claims, "completed")
+        ProgressClaim.require_claimed(claims)
 
 
 @dataclass(frozen=True, kw_only=True)

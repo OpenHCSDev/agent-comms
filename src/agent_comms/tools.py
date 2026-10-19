@@ -664,7 +664,7 @@ class CommsGoalTool(ThreadToolRequest):
         default=None,
     )
     claims: tuple[ProgressClaim, ...] = tool_field(
-        "Merged, installed or working claims, each with the artifact Core verifies; "
+        "Installed or working claims, each with the artifact Core verifies; "
         "a completed report needs at least one", default=())
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
@@ -889,14 +889,9 @@ class CommsOrderDoneTool(ThreadToolRequest):
     description = "Verify the order's check on its clean delivered commit before completing its Goal."
     problem: str = tool_field("Problem ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
-    claims: tuple[ProgressClaim, ...] = tool_field(
-        "Merged, installed or working claims, each with the artifact Core verifies in the order's "
-        "checkout; at least one")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
-        ProgressClaim.require_claimed(self.claims, "delivered")
         todo = comms.goals.todos.get(self.problem)
-        ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
         todo.require_commander(comms.registry.require(caller.name).incarnation)
         assignment = todo.assignment
         goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
@@ -946,13 +941,17 @@ class CommsProblemCloseTool(ThreadToolRequest):
     problem: str = tool_field("Problem ID")
     works: str = tool_field("What worked in the app, quoting the order's Works when run")
     artifact: str = tool_field("Existing verification artifact file")
+    claims: tuple[ProgressClaim, ...] = tool_field(
+        "The claims the order's run closes on, each with the artifact Core verifies: an "
+        "application order needs a working claim")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
         actor = comms.registry.require(caller.name).incarnation
         todo.require_commander(actor)
+        ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
         closed = comms.goals.change_problem(self.problem, InstallTodo(
-            todo.revision, actor, self.works, self.artifact), caller.name)
+            todo.revision, actor, self.works, self.artifact, self.claims), caller.name)
         return ProblemClosed(closed)
 
 

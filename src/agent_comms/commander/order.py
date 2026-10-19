@@ -20,6 +20,7 @@ and refuses to let a deadline lapse silently.
 import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import Annotated
 from pathlib import Path
 from uuid import uuid4
 
@@ -27,6 +28,7 @@ from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
+from ..field_codec import PathText
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
@@ -433,9 +435,10 @@ def problem(text, unit, due, order_file, request):
     print(pid)
 
 
-def close(pid, works, artifact):
+def close(pid, works, artifact, working):
     """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
-    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact), COMMS)
+    claims = tuple(WorkingClaim(screenshot) for screenshot in working)
+    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact, claims=claims), COMMS)
     board()
     print(f'{pid} closed')
 
@@ -513,7 +516,7 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
-def done(pid, sha, delivered=None, screenshot=''):
+def done(pid, sha, delivered=None):
     """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
@@ -534,8 +537,7 @@ def done(pid, sha, delivered=None, screenshot=''):
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered or sha)
-    claims = (WorkingClaim(screenshot),) if operation else ()
-    call(CommsOrderDoneTool(problem=pid, delivery=delivery, claims=claims))
+    call(CommsOrderDoneTool(problem=pid, delivery=delivery))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
@@ -923,12 +925,11 @@ class DoneVerb(OrderVerb, RuledVerb):
     pid: str = option("pid")
     sha: str = option("--sha", help="the checked commit (the check runs on it) or op")
     delivered: str | None = option("--delivered", default=None, metavar="SHA",
-                                   help="the unit's pushed ancestor of --sha; lateness reads its time")
-    screenshot: str = option("--screenshot", default="", metavar="PATH",
-                             help="for an op: the screenshot the working claim stands on")
+                                   help="the unit's pushed ancestor of --sha, or --sha itself when "
+                                        "omitted; lateness reads its time")
 
     def run(self) -> None:
-        done(self.pid, self.sha, self.delivered, self.screenshot)
+        done(self.pid, self.sha, self.delivered)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -996,9 +997,12 @@ class CloseVerb(OrderVerb, RuledVerb):
     pid: str = option("pid")
     works: str = option("--works")
     artifact: str = option("--artifact")
+    working: tuple[Annotated[Path, PathText], ...] = option(
+        "--working", action="append", parser_default_factory=list, default=(), metavar="PATH",
+        help="a screenshot of the run working; an application order closes only on one")
 
     def run(self) -> None:
-        close(self.pid, self.works, self.artifact)
+        close(self.pid, self.works, self.artifact, self.working)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -14,7 +14,7 @@ from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgre
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
-from test_commander_problem_orders import create, working
+from test_commander_problem_orders import create
 
 
 class Listed(PullRequests):
@@ -258,9 +258,9 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     for pid in ('P2', 'P3'):
-        CommsOrderDoneTool(problem=pid, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+        CommsOrderDoneTool(problem=pid, delivery=OperationDelivery()).apply(comms, caller)
     p1, p2, p3 = (comms.goals.todos.get(pid) for pid in ('P1', 'P2', 'P3'))
-    held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', 'p3.png')))
+    held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', 'p3.png', ())))
     read = script.progress()
     assert script.install_lines(held, read, 1000.0) == ['INSTALL not planned; waiting: P1 worker, P2 worker']
     PlannedInstallDeadline(RecordedEventTime(2000.0), 'worker').plan(comms.root)

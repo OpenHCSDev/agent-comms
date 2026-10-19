@@ -37,6 +37,7 @@ from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
+from .progress_claims import ProgressClaim, WorkingClaim
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -772,7 +773,7 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     def instructions(self) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def require_closing(self, works: str) -> None:
+    def require_closing(self, works: str, claims: tuple[ProgressClaim, ...]) -> None:
         """Refuse closing evidence that does not show this run happened."""
 
 
@@ -781,7 +782,7 @@ class MechanicalOrderRun(OrderRun):
     def instructions(self) -> tuple[str, ...]:
         return ()
 
-    def require_closing(self, works: str) -> None:
+    def require_closing(self, works: str, claims: tuple[ProgressClaim, ...]) -> None:
         """The order's check alone closes it."""
 
 
@@ -799,11 +800,15 @@ class ApplicationOrderRun(OrderRun):
     def instructions(self) -> tuple[str, ...]:
         return (f"{self.label} {self.text}",)
 
-    def require_closing(self, works: str) -> None:
+    def require_closing(self, works: str, claims: tuple[ProgressClaim, ...]) -> None:
+        """The run was seen working in the app: its words quoted and its screenshot claimed."""
         quoted = self.phrases(self.text) & self.phrases(works)
         if len(works.split()) < self.least_words or not quoted:
             raise ValueError(f"Describe what worked in {self.least_words}+ words, quoting "
                              f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
+        if not any(isinstance(claim, WorkingClaim) for claim in claims):
+            raise ValueError("An application order closes on a working claim: the screenshot of "
+                             f"{self.label} {self.text}")
 
     @classmethod
     def phrases(cls, text: str) -> set[tuple[str, ...]]:
@@ -962,7 +967,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return replace(self, check=correction.check,
                        check_corrections=(*self.check_corrections, correction))
 
-    def installed(self, works: str, artifact: str) -> ProblemOrder:
+    def installed(
+        self, works: str, artifact: str, claims: tuple[ProgressClaim, ...]
+    ) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
     def require_checked(self, problem: str) -> None:
@@ -1027,8 +1034,8 @@ class DeliveredProblemOrder(ProblemOrder):
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
-    def installed(self, works, artifact):
-        self.run.require_closing(works)
+    def installed(self, works, artifact, claims):
+        self.run.require_closing(works, claims)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
     def require_checked(self, problem: str) -> None:
@@ -1049,7 +1056,7 @@ class InstalledProblemOrder(DeliveredProblemOrder):
         if not self.works.strip() or not self.artifact.strip():
             raise ValueError("Describe what worked and name its artifact file.")
 
-    def installed(self, works, artifact):
+    def installed(self, works, artifact, claims):
         if (works, artifact) != (self.works, self.artifact):
             raise ValueError("The order already records different installed evidence.")
         return self
@@ -1567,11 +1574,12 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
 class InstallTodo(CloseOrderTodo):
     works: str
     artifact: str
+    claims: tuple[ProgressClaim, ...]
 
     def closed(self, current: Todo) -> ProblemOrder:
         if not Path(self.artifact).is_file():
             raise ValueError("Retain the installed application artifact before closing.")
-        return current.order.installed(self.works, self.artifact)
+        return current.order.installed(self.works, self.artifact, self.claims)
 
 
 @dataclass(frozen=True)

@@ -91,7 +91,7 @@ def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
         deadline=RecordedEventTime(1000), order=order(tmp_path))
     second = replace(first, id="P2", state=BlockedTodoState)
     delivered = first.order.delivered(OperationDelivery(at=RecordedEventTime(20))).installed(
-        "The installed application now shows every expected saved message correctly.", "evidence")
+        "The installed application now shows every expected saved message correctly.", "evidence", ())
     with store.writing() as db:
         second.insert(db)
         for number in range(3, 303):

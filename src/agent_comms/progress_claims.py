@@ -1,19 +1,20 @@
 """What a unit's goal report or order delivery may claim, and the artifact Core verifies behind it.
 
-A claim is a typed record, never a word in free text: merged names a commit that resolves on
-origin, installed names the order whose check result is recorded, working names a screenshot
-that exists. A claim whose artifact does not verify is refused with that artifact named.
+A claim is a typed record, never a word in free text: installed names the order whose check
+result is recorded, working names a screenshot that exists. A claim whose artifact does not
+verify is refused with that artifact named. Whether a commit is on origin is the fact its
+CommitDelivery owns, never a claim.
 """
 
 from __future__ import annotations
 
-import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily
+from .field_codec import PathText
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -31,39 +32,12 @@ class ProgressClaim(DeclaredFamily, affix="Claim"):
             claim.verify(comms, worktree)
 
     @classmethod
-    def require_claimed(cls, claims: tuple[ProgressClaim, ...], report: str) -> None:
-        """A done or delivered report stands only on an attached claim, never on its prose."""
+    def require_claimed(cls, claims: tuple[ProgressClaim, ...]) -> None:
+        """A completed report stands only on an attached claim, never on its prose."""
         if not claims:
             raise ValueError(
-                f"A {report} report needs a claim with its artifact: merged (a commit "
-                "on origin), installed (a recorded check) or working (a screenshot)."
-            )
-
-
-@dataclass(frozen=True)
-class MergedClaim(ProgressClaim):
-    commit: str
-
-    timeout: ClassVar[float] = 30.0
-
-    def verify(self, comms: Comms, worktree: Path) -> None:
-        command = ["git", "-C", str(worktree), "branch", "--remotes", "--contains", self.commit]
-        try:
-            listed = subprocess.run(
-                [*command, "--list", "origin/*"],
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-            )
-        except subprocess.TimeoutExpired as expired:
-            raise ValueError(
-                f"A merged claim needs a commit sha that resolves on origin; looking up "
-                f"{self.commit!r} took longer than {expired.timeout:g}s."
-            ) from expired
-        if not self.commit.strip() or listed.returncode or not listed.stdout.strip():
-            raise ValueError(
-                f"A merged claim needs a commit sha that resolves on origin; "
-                f"{self.commit!r} does not."
+                "A completed report needs a claim with its artifact: installed (a recorded "
+                "check) or working (a screenshot)."
             )
 
 
@@ -77,11 +51,11 @@ class InstalledClaim(ProgressClaim):
 
 @dataclass(frozen=True)
 class WorkingClaim(ProgressClaim):
-    screenshot: str
+    screenshot: Annotated[Path, PathText]
 
     def verify(self, comms: Comms, worktree: Path) -> None:
-        if not self.screenshot.strip() or not Path(self.screenshot).is_file():
+        if not self.screenshot.is_file():
             raise ValueError(
                 f"A working claim needs a screenshot path that exists; "
-                f"{self.screenshot!r} does not."
+                f"{str(self.screenshot)!r} does not."
             )
