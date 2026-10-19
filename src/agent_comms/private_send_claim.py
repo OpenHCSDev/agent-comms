@@ -120,11 +120,10 @@ class PrivateSendClaim(PromptBoundary):
             )
             return input_id
 
-        input_id = await Coordination.run_async(selected.store.session.path, reserve)
         return cls(
             selected=selected,
             stage=stage,
-            input_id=input_id,
+            input_id=await Coordination.run_async(selected.store.session.path, reserve),
             token_digest=digest,
             prompt=prompt,
             session=session,
