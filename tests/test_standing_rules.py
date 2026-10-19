@@ -20,7 +20,7 @@ from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, Unplanne
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
 from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, HuntDue, MemoryLow, PlanIdle,
-    RulesDue, StandingRule)
+    RulesDue, StandingRule, UnownedWork)
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
@@ -107,7 +107,8 @@ def test_plan_idle_names_a_ready_phase_until_an_order_serving_it_is_open(command
 
     assert RecordPlanePhase in idle() and ReviewQueuePhase not in idle()
     assert PlanIdle(RecordPlanePhase).line() == (
-        "PLAN IDLE: phase record_plane ready, no open order -> dispatch it this wake")
+        "PLAN IDLE: phase record_plane ready, no open order -> "
+        "no checked task declared; supply its source, check and brief")
     create(commander, "P1")
     assert comms.goals.todos.get("P1").order.serves is UnplannedPhase
     assert RecordPlanePhase in idle()
@@ -241,10 +242,13 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     taken = StrikeReason("The unit was taken off P2 so the test leaves it unowned.")
     comms.goals.fire("worker", taken, "lead")
     assert comms.goals.todos.get("P2").holder is None
-    read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
-    assert ("WHEEL SPIN: worker holds no order while P2 is unowned -> Core gives it to worker"
-            in read.broken)
-    assert comms.goals.todos.get("P2").holder == "worker"
+    [unowned] = UnownedWork.violations(comms, "lead")
+    assert unowned.todo.id == "P2"
+    assert unowned.line() == (
+        "UNOWNED WORK: P2 has a checked order and no unit"
+        " -> Core starts its unit in an isolated checkout")
+    # Actual unit launch/first reply is a separate native application proof.
+    assert comms.goals.todos.get("P2").holder is None
 
 
 def test_unjudged_follows_the_unjudged_edits(commander, standing):

@@ -7,6 +7,7 @@ acceptance check. Failed startup state stays retained for explicit disposition.
 
 from __future__ import annotations
 
+import math
 import subprocess
 import time
 from collections.abc import Iterable
@@ -122,16 +123,16 @@ class CheckedPhaseTask(PhaseTask):
     instruction = "Core starts the declared checked task in its own unit checkout"
 
     def __post_init__(self) -> None:
-        if not 0 < self.deadline_seconds <= 24 * 60 * 60:
-            raise ValueError("A phase task needs a positive deadline of at most one day.")
+        if not math.isfinite(self.deadline_seconds) or self.deadline_seconds <= 0:
+            raise ValueError("A phase task needs a finite positive deadline interval.")
 
     def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase]) -> None:
         history = comms.goals.todos.history_for_commander(commander.incarnation)
         if not phase.ready(history) or phase.ordered(history):
             return
-        # An existing unowned row belongs to UnownedWork, which reissues that
-        # row's actual order instead of replacing it with a phase template.
-        if any(todo.state.open for todo in phase.serving(history)):
+        # This task's existing row belongs to UnownedWork. Other phase subtasks
+        # neither supply this task's check nor replace its explicit identity.
+        if any(todo.id == self.problem for todo in history):
             return
         now = time.time()
         order = replace(self.order.reissued(now), serves=phase)
