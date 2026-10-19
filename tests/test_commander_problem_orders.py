@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from contextlib import closing
-from dataclasses import replace
+from dataclasses import fields, replace
 
 from cutover.carry import CarryChain
 
@@ -27,12 +27,13 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from agent_comms.progress_claims import MeasuredClaim, WorkingClaim
+from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
-    CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
+    CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool,
+    ThreadToolRequest)
 from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
@@ -176,17 +177,16 @@ def test_failed_check_keeps_problem_pending(commander):
     assert comms.registry.require('worker').goal.state.active
 
 
-def test_done_report_of_a_wrong_measure_is_refused_and_the_declared_check_passes(commander):
+def test_done_declares_no_wrong_measure_and_the_board_shows_the_recorded_check_result(commander):
     comms, caller = commander
-    original = create(commander, 'P1')
-    for command, count in (('grep -c x tests', 1), ('printf 1', 2)):
-        with pytest.raises(ValueError, match=f"measured '{command}' -> {count}; the order's Check is 'printf 1'"):
-            CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(),
-                               claims=(*working(comms), MeasuredClaim(command, count))).apply(comms, caller)
-    assert comms.goals.todos.get('P1') == original
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(),
-                       claims=(*working(comms), MeasuredClaim('printf 1', 1))).apply(comms, caller)
-    assert not comms.goals.todos.get('P1').pending
+    create(commander, 'P1')
+    reported = {f.name for f in fields(CommsOrderDoneTool)} - {f.name for f in fields(ThreadToolRequest)}
+    assert reported == {'problem', 'delivery', 'claims'}
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    assert comms.goals.todos.get('P1').order.delivery.printed == '1'
+    worker = comms.registry.require('worker')
+    progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
+    assert progress == "P1: Delivered, waiting on install · Check printed '1'"
 
 
 def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(commander):
@@ -1202,7 +1202,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
         todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
-    assert progress.splitlines() == ['P1: Delivered, waiting on install', f'P2: Open · Sent back: {why}']
+    assert progress.splitlines() == ["P1: Delivered, waiting on install · Check printed '1'", f'P2: Open · Sent back: {why}']
     assert (worker.goal.text, worker.goal.progress) == (ProblemGoalOrder.text, '')
     with pytest.raises(ValueError, match='block the problem.s Todo, or standby with wait_for'):
         comms.goals.update_goal('worker', BlockedGoalAction(block_reason='Waiting on lead.'), actor=ModelInvocable)

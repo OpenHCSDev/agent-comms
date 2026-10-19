@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+    printed: str = ""  # what the order's Check printed when Core verified this delivery
 
     @property
     def work(self) -> str:
@@ -56,12 +57,19 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
+    async def passed(self, check: OrderCheck) -> str:
+        await self.require_source(check)
+        result = await self.checked(check)
+        check.result.require(result)
+        return result.stdout.decode(errors="replace").strip()
+
     async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
-        """The order's check and every count its deletion declares run on the delivered source."""
-        for each in (check, *deletes.checks):
-            await self.require_source(each)
-            each.result.require(await self.checked(each))
-        return replace(self, at=await self.delivery_time(check))
+        """The order's check and every count its deletion declares run on the delivered source;
+        the delivery records what the order's check printed, never what a report says."""
+        printed = await self.passed(check)
+        for each in deletes.checks:
+            await self.passed(each)
+        return replace(self, at=await self.delivery_time(check), printed=printed)
 
     @abstractmethod
     async def require_source(self, check): ...
@@ -1013,7 +1021,10 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
-    line: ClassVar[str] = "Delivered, waiting on install"
+
+    @property
+    def line(self) -> str:
+        return f"Delivered, waiting on install · Check printed {self.delivery.printed!r}"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
