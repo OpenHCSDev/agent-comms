@@ -52,19 +52,16 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 
     def restart_onto(self, installed: Path) -> str:
         self.restart()
+        failure = f"{self} did not serve again within {self.patience}s"
         for _ in range(self.patience):
             for instance in type(self).running():
                 if instance != self:
-                    return instance.serving(installed)
+                    runtime = instance.runtime()
+                    if runtime == installed:
+                        return f"{instance} restarted onto {installed}"
+                    failure = f"{instance} runs {runtime}, not the installed {installed}"
             time.sleep(1)
-        raise ServiceNotServingError(f"{self} did not serve again within {self.patience}s")
-
-    def serving(self, installed: Path) -> str:
-        if self.runtime() != installed:
-            raise ServiceNotServingError(
-                f"{self} runs {self.runtime()}, not the installed {installed}"
-            )
-        return f"{self} restarted onto {installed}"
+        raise ServiceNotServingError(failure)
 
 
 @dataclass(frozen=True)
