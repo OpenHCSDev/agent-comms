@@ -85,14 +85,21 @@ async def test_unvalidated_configuration_refuses_before_child(tmp_path):
 
 
 async def test_native_provider_failure_retains_failure_without_raw_stdout(native_backend):
+    from acp.exceptions import RequestError
+    from agent_comms.acp_failure import RequestFailure
+
     native = native_backend
     await native.author_history()
     original = native.session.read_bytes()
     native.provider.status = 400
     native.provider.error_message = "P698 distinct real native provider failure"
-    result = await native.run("Distinct P698 failure verification; no replay.")
-    assert not result[-1].ok
-    assert not any(isinstance(item, events.Chunk) for item in result)
+    async with native.open_owner() as (owner, session):
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "P698 original provider failure"}])
+        failure = RequestFailure.from_error(caught.value).failure
+        assert native.provider.error_message in failure.detail
+        assert failure.input_state.public_status == "started"
+        assert native.provider.posts == 1
     assert native.session.read_bytes().startswith(original)
 
 
