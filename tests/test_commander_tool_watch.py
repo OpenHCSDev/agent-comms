@@ -5,6 +5,7 @@ import collections
 import importlib
 import json
 
+from agent_comms.channel_coding_tools import CodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.todos import StorageStrikeTodo
 from test_commander_problem_orders import create
@@ -24,9 +25,9 @@ def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
     assert turns["worker"] == ["edit a.py: -old text +new", "write b.py: body line", "bash ls -la"]
 
 
-def test_coordination_call_uses_its_presentation_record(tool_watch):
-    call = tool_watch.decoded('comms_threads', {}, 'coordination-1')
-    assert tool_watch.digest_line(call) == 'comms_threads {}'
+def test_coordination_call_digests_its_arguments():
+    call = CodingCall.decode('coordination-1', 'comms_threads', {})
+    assert call.digest() == 'comms_threads {}'
 
 
 def test_a_line_core_refuses_is_reported_with_its_file_and_offset(tool_watch, commander, capsys):
@@ -44,7 +45,7 @@ def test_storage_watch_judges_only_core_units(tool_watch, commander, monkeypatch
     judged = []
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
                         lambda self, thread, effects: judged.append(thread))
-    call = tool_watch.decoded('write', {'path': 'a.py', 'content': 'body'}, 'write-1')
+    call = CodingCall.decode('write-1', 'write', {'path': 'a.py', 'content': 'body'})
     tool_watch.enforce_storage(comms.registry, 'lead', call)
     assert judged == []
     tool_watch.enforce_storage(comms.registry, 'worker', call)
@@ -57,11 +58,11 @@ def test_storage_watch_reports_refused_call_without_judging(tool_watch, commande
     judged = []
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
                         lambda self, thread, effects: judged.append(thread))
-    call = tool_watch.decoded('write', {'path': 'a.py'}, 'refused-1')
+    call = CodingCall.decode('refused-1', 'write', {'path': 'a.py'})
     tool_watch.enforce_storage(comms.registry, 'worker', call)
     assert judged == []
     assert capsys.readouterr().out == ''
-    assert tool_watch.digest_line(call) == 'REFUSED write: Missing required fields for WriteTool: content'
+    assert call.digest() == 'REFUSED write: Missing required fields for WriteTool: content'
 
 
 def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, commander, monkeypatch):
@@ -97,7 +98,7 @@ def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, comma
         raise SelectedToolDenied('The write creates a file outside the declared scratch directory')
 
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage', deny)
-    call = tool_watch.decoded('write', {'path': 'a.py', 'content': 'body'}, 'write-1')
+    call = CodingCall.decode('write-1', 'write', {'path': 'a.py', 'content': 'body'})
     tool_watch.enforce_storage(comms.registry, 'worker', call)
     tool_watch.enforce_storage(comms.registry, 'worker', call)
     restarted = importlib.reload(tool_watch)

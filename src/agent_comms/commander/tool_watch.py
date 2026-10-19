@@ -27,16 +27,6 @@ def thread_names(registry: Registration) -> dict[str, str]:
             if thread.session_file}
 
 
-def decoded(name: str, args: object, call_id: str) -> CodingCall:
-    """The recorded call owns either its decoded tool or its argument refusal."""
-    return CodingCall.decode(call_id, name, args)
-
-
-def digest_line(call: CodingCall) -> str:
-    """The call owns its digest, including an argument refusal."""
-    return call.digest()
-
-
 def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> None:
     """Core judges its units and records each storage violation once."""
     if thread not in order.units() or thread not in registry:
@@ -83,14 +73,13 @@ def follow(registry: Registration, turns: dict[str, list[str]], thread: str, pat
 
 def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
          message: PiMessage) -> None:
-    for call in message.tool_calls:
-        name, args = call.name, call.arguments
-        tool = decoded(name, args, call.id)
-        digest = digest_line(tool)
+    for pi_call in message.tool_calls:
+        coding_call = CodingCall.decode(pi_call.id, pi_call.name, pi_call.arguments)
+        digest = coding_call.digest()
         with open(LOG, 'a') as log:
             log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
         turns[thread].append(digest)
-        enforce_storage(registry, thread, tool)
+        enforce_storage(registry, thread, coding_call)
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.successful:
