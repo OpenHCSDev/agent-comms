@@ -283,19 +283,17 @@ class CarryChain:
                 added.setdefault(Path(path).stem, index)
         return added
 
-    @classmethod
-    def retired_at(cls, repo: Path, revision: str, kept: Mapping[str, Step]) -> frozenset[str]:
-        """Steps the main line declared and then deleted without keeping them reachable.
+    @staticmethod
+    def retired_at(repo: Path, revision: str, kept: Mapping[str, Step]) -> frozenset[str]:
+        """Step files the main line deleted without keeping them reachable.
 
         A finished step is retired by deleting its file and reconnecting its
         successor; a bus that already ran it keeps the name in its ledger."""
         deleted = git(repo, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=D",
                       "--name-only", "--format=", revision, "--", str(STEPS)).decode().split()
-        names = {Path(path).stem for path in deleted
-                 if Path(path).parent == STEPS and Path(path).name.startswith("carry_")
-                 and path.endswith(".py")}
-        return frozenset(name for name in names - set(kept)
-                         if cls.deleted(repo, revision, name) is not None)
+        return frozenset(Path(path).stem for path in deleted
+                         if Path(path).parent == STEPS and Path(path).name.startswith("carry_")
+                         and path.endswith(".py")) - set(kept)
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
