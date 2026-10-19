@@ -410,7 +410,7 @@ class TodoColumnCarry(Carry):
         empty = tuple(item.encode(()) for item in added)
         # Rows decode only once every step before the last has carried them; this one
         # adds columns, so it counts rows without reading them as today's Todo.
-        (count,) = db.execute(f'SELECT count(*) FROM "{table}"').fetchone()
+        count = int(db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0])
         if not apply:
             db.rollback()
             return count
