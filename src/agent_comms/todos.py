@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
 from .change_report import FileLine
-from .child_process import BoundedRun, ChildResult, ExitedOutcome
+from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -258,7 +258,7 @@ def _clock(at: float) -> str:
 @dataclass(frozen=True)
 class DistanceReading:
     at: float
-    distance: int
+    distance: CheckPrinted
 
 
 @dataclass(frozen=True)
@@ -266,18 +266,29 @@ class DistanceReadings:
     """The order's last two distance readings, oldest first: its base at the order, then its
     newest commit. Fewer than two read, or a last reading at done, project nothing."""
     readings: tuple[DistanceReading, ...] = ()
+    command: str = ""
 
     @property
     def trend(self) -> DistanceTrend:
-        """Velocity across the two readings: falling projects the finish, else it is flat."""
-        last = self.readings[-2:]
-        if len(last) < 2 or not last[1].distance:
+        """A missing count diagnoses the check; only measured counts project a finish."""
+        if not self.readings:
             return UnreadTrend()
-        first, final = last
-        if final.distance >= first.distance:
-            return FlatTrend(final.distance, final.at)
-        rate = (first.distance - final.distance) / max(final.at - first.at, 1.0)
-        return MovingTrend(final.distance, final.at + final.distance / rate)
+        return self.readings[-1].distance.project(
+            self.counted_trend, lambda: UncountedTrend(self.command))
+
+    def counted_trend(self, final: int) -> DistanceTrend:
+        last = self.readings[-2:]
+        if len(last) < 2 or not final:
+            return UnreadTrend()
+        first, latest = last
+
+        def compared(previous: int) -> DistanceTrend:
+            if final >= previous:
+                return FlatTrend(final, latest.at)
+            rate = (previous - final) / max(latest.at - first.at, 1.0)
+            return MovingTrend(final, latest.at + final / rate)
+
+        return first.distance.project(compared, UnreadTrend)
 
 
 class DistanceTrend(DeclaredFamily, affix="Trend"):
@@ -308,6 +319,15 @@ class FlatTrend(DistanceTrend):
     @property
     def projection(self) -> str:
         return f"; distance {self.distance}, not falling"
+
+
+@dataclass(frozen=True)
+class UncountedTrend(DistanceTrend):
+    command: str
+
+    @property
+    def projection(self) -> str:
+        return f"; check prints no integer: {self.command}"
 
 
 @dataclass(frozen=True)
@@ -362,15 +382,16 @@ class ProgressSource:
             "--not", base).splitlines()))]
         points = [(base, self.since), *commits][-2:]
         return DistanceReadings(
-            tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points))
+            tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points),
+            self.todo.order.check.command)
 
-    def distance(self, base: str, sha: str) -> int:
+    def distance(self, base: str, sha: str) -> CheckPrinted:
         """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
         ``base`` has not touched."""
         check = self.todo.order.check
         touched = self.git("diff", "--name-only", base, sha).split()
         run = check.at(sha, str(self.checkout))
-        return check.result.distance(run) + self.todo.order.untouched(touched)
+        return check.result.distance(run).plus(self.todo.order.untouched(touched))
 
 
 @dataclass(frozen=True)
