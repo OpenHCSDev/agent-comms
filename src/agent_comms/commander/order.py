@@ -37,6 +37,7 @@ from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
+from ..storage_rules import UnitStorage
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
@@ -493,10 +494,12 @@ def done(pid, sha, screenshot='', seen='', repo=''):
         if added := forwarders_added(diff, after):
             sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
     thread = COMMS.registry.require(unit)
-    if left := [str(t) for t in COMMS.registry.storage_rule.checkouts_of(thread) if pid.lower() in t.name.lower()]:
-        sys.exit(f'Refused: {unit} still has the checkout {left} for this order; storage rule: it removes it before the order counts as done.')
+    storage = UnitStorage.read(COMMS.registry.storage_rule, thread)
+    checkout = storage.rule.order_checkout(unit, pid)
+    if checkout in storage.extra_checkouts:
+        sys.exit(f'Refused: {unit} still has the checkout {checkout} for this order; storage rule: it removes it before the order counts as done.')
     try:
-        COMMS.registry.storage_rule.require_quota(thread)
+        storage.require_quota()
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     todo.order.run.require_artifact(seen or screenshot)
