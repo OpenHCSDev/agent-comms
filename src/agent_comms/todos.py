@@ -24,7 +24,6 @@ from uuid import uuid4
 
 from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
-from .coordinator import Coordination
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -2365,13 +2364,6 @@ class TodoStore(TypedStore):
                 # A concurrent order change owns the row; observe its new assignment next pass.
                 continue
         return tuple(changed)
-
-    async def watch_stalled(self, storage: StorageRule) -> None:
-        """The backend observes Git/PR changes; Stalling alone owns the deadline."""
-
-        while True:
-            await Coordination.run_worker(lambda: self.advance_stalled(storage))
-            await asyncio.sleep(60)
 
     def board_disagreements(
         self, commander: ThreadIncarnation, storage: StorageRule,

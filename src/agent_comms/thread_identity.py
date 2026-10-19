@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
 
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
+from .declared_family import declared_words
 from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -220,11 +221,11 @@ class StallWatcherIncarnation(BirthlessIncarnation):
     """Core's own stall watcher: it strikes and releases stalled orders, and is never a thread."""
 
     WIRE_BIRTH: ClassVar[float] = -2.0
-    NAME: ClassVar[str] = "core-stall-watcher"
 
     @classmethod
     def watcher(cls) -> StallWatcherIncarnation:
-        return cls(cls.NAME)
+        """Named by its class: ``StallWatcherIncarnation`` is ``stall_watcher``."""
+        return cls(declared_words(cls.__name__.removesuffix("Incarnation")))
 
     @property
     def birth_description(self) -> str:
