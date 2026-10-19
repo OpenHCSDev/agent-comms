@@ -10,9 +10,8 @@ from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
-    ActiveItem,
     CompletedItem,
     HiddenItem,
     HistoryNotice,
@@ -20,6 +19,7 @@ from agent_comms.runtime_updates import (
     StartedItem,
     Summarized,
     TextDraft,
+    ToolDraft,
 )
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
@@ -197,12 +197,21 @@ class ToolState(TaggedWire, ABC):
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
+    def started_at(self):
+        return UnrecordedEventTime()
+
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
-        return (ActiveItem(message.id, part.id, ActivityState.WORKING, self.call(part).title),)
+        call = self.call(part)
+        return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title,
+                            ToolDraft(self.started_at(), (call.started(part.id),))),)
 
 
 class RunningTool(PendingTool):
     wire_tag = 'running'
+    time: PartTime
+
+    def started_at(self):
+        return RecordedEventTime(self.time.start / 1000)
 
 
 class EndedTool(ToolState, ABC):

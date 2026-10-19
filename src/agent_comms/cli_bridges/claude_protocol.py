@@ -19,6 +19,7 @@ from pydantic import (
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
     FinishedItem,
@@ -28,6 +29,8 @@ from agent_comms.runtime_updates import (
     RuntimeUpdate,
     SessionFacts,
     StatusUpdate,
+    StartedItem,
+    ToolDraft,
     Summarized,
     TurnEnded,
     TurnStarted,
@@ -169,6 +172,10 @@ class ClaudeTurn(ABC):
     """The transcript's identified turn owns item identities."""
 
     @abstractmethod
+    def started(self, call: ToolCall, timestamp: float, position: int,
+                phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]: ...
+
+    @abstractmethod
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]: ...
 
@@ -178,6 +185,10 @@ class ClaudeTurn(ABC):
 
 
 class UnknownTurn(ClaudeTurn):
+    def started(self, call: ToolCall, timestamp: float, position: int,
+                phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
+        return phase.unturned_finish()
+
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
@@ -190,6 +201,11 @@ class UnknownTurn(ClaudeTurn):
 @dataclass(frozen=True)
 class KnownTurn(ClaudeTurn):
     id: str
+
+    def started(self, call: ToolCall, timestamp: float, position: int,
+                phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
+        return (StartedItem(self.id, call.id, ActivityState.WORKING, call.title,
+                            ToolDraft(EventTime.capture(timestamp), (call.started(position),))),)
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
@@ -213,8 +229,9 @@ class ClaudeSession:
         self.project = cwd
         return (SessionFacts(project=cwd),)
 
-    def started(self, call: ToolCall) -> None:
+    def started(self, call: ToolCall, timestamp: float, position: int) -> tuple[RuntimeUpdate, ...]:
         self.tools[call.id] = call
+        return self.turn.started(call, timestamp, position, self.phase)
 
     def tool_result(self, tool_id: str, text: str, ok: bool, position: int) -> tuple[RuntimeUpdate, ...]:
         try:
@@ -331,8 +348,7 @@ class ToolUse(AssistantBlock):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
-        session.started(call)
-        return session.turn.active(self.id, session.phase, ActivityState.WORKING, call.title)
+        return session.started(call, record.timestamp, record.position)
 
 
     def call(self) -> ToolCall:
