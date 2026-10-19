@@ -152,6 +152,3 @@ class ThreadImported(CliResult):
     truncated_messages: int
     notices: tuple[str, ...]
     historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)

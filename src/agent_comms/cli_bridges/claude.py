@@ -14,9 +14,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_path import FileRevision
 from agent_comms.importing import ImportSnapshot
 from agent_comms.wire_watch import WatchSource, WireWatch
-from .claude_protocol import (
-    CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame, TimedRecord,
-)
+from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
 from .shared import Binding, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
@@ -59,8 +57,11 @@ class ClaudeJsonLines(JsonLinesFile):
     records = CLAUDE_RECORD
     state = ClaudeSession
 
-    def decode_line(self, raw: bytes, position: int):
-        return self.records.validate_python({**json.loads(raw), 'position': position})
+    def decode_line(self, raw: bytes, position: int) -> ClaudeRecord:
+        return self.decode_record(json.loads(raw), position)
+
+    def decode_record(self, value: dict[str, object], position: int) -> ClaudeRecord:
+        return cast(ClaudeRecord, self.records.validate_python({**value, 'position': position}))
 
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
                        raw: bytes) -> Iterator[RuntimeUpdate]:
@@ -98,12 +99,13 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
         state = parent.start_state()
         with parent.source.open('rb') as stream:
             for offset, raw in parent.import_records(stream, stream.seek(0, 2)):
-                record = parent.decode_line(raw, offset)
+                value = json.loads(raw)
+                record = parent.decode_record(value, offset)
                 for update in parent.import_updates(record, state, offset, raw):
                     # Inherit conversation, never the parent's identity, project or title.
                     if not isinstance(update, SessionFacts):
                         yield update
-                if isinstance(record, TimedRecord) and record.uuid == last_uuid:
+                if value.get('uuid') == last_uuid:
                     return
         raise ValueError(f'Inherited Claude context {parent_source} has no record {last_uuid}')
 

@@ -267,6 +267,26 @@ def test_inherited_context_stops_at_exact_parent_cut_and_keeps_launch_identity(t
         read(ClaudeCodeHarness, source)
 
 
+@pytest.mark.parametrize("cut_record", [
+    {"type": "custom-title", "uuid": "cut", "customTitle": "Parent title"},
+    claude("system", "cut", subtype="compact_boundary"),
+])
+def test_fork_cut_can_name_metadata_not_only_timed_messages(tmp_path, cut_record):
+    lines(tmp_path / "session.jsonl", [
+        claude_prompt("first", "before the cut"), cut_record, claude_reply("late", "after the cut"),
+    ])
+    source = tmp_path / "session/subagents/agent-child.jsonl"
+    source.parent.mkdir(parents=True)
+    lines(source, [
+        {"type": "fork-context-ref", "parentSessionId": "session", "parentLastUuid": "cut"},
+        claude_prompt("own", "own task"),
+    ])
+    snapshot = read(ClaudeCodeHarness, source)
+    assert "before the cut" in bodies(snapshot)
+    assert "own task" in bodies(snapshot)
+    assert "after the cut" not in bodies(snapshot)
+
+
 # Codex
 
 
