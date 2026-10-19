@@ -19,6 +19,7 @@ from dataclasses import replace
 from cutover.carry import CarryChain
 
 from agent_comms.change_report import FileLine
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
@@ -29,9 +30,9 @@ from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
@@ -380,7 +381,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
-    sent = next(m.body for m in comms.views.dm_history_page('lead', 'worker').messages if m.message_id == link.message_id)
+    sent = next(m.body for m in comms.views.history_page(CommandTarget.named('worker'), viewer='lead').messages if m.message_id == link.message_id)
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
     assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
 
@@ -584,7 +585,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and script.struck(current, 'worker') == 0
     assert 'strike voided on P1' in (tmp_path / 'narrative.md').read_text()
-    assert posted[-1][0] == ['#comms'] and 'strike voided on P1' in posted[-1][1]
+    assert posted[-1][0] == VerdictAudience(('worker', 'lead')) and 'strike voided on P1' in posted[-1][1]
     with pytest.raises(SystemExit, match='no live strike'):
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
 
@@ -602,7 +603,7 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
     assert (tmp_path / 'board.md').read_text().count(line) == 1
     assert line in (tmp_path / 'narrative.md').read_text()
-    assert [recipients for recipients, _ in posted] == [['#comms'], ['worker']]
+    assert [recipients for recipients, _ in posted] == [VerdictAudience(('worker', 'lead')), VerdictAudience(('worker',))]
     with pytest.raises(ValueError, match='Only an undelivered order'):
         script.withdraw('P1', 'withdrawing the same order twice records nothing new')
 
@@ -1044,8 +1045,8 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     worker = comms.registry.require('worker')
     assert why in GoalSegment.capture(worker, worker.goal, comms.goals).progress
     assert judge.Edit.unjudged(comms, 'lead') == []
-    audience = SendBackVerdict.audience.targets(saved)
-    assert [tuple(to) for to, _ in posted] == [audience, audience]
+    audience = SendBackVerdict.audience.of('worker', saved.goal)
+    assert [to for to, _ in posted] == [audience, audience]
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
@@ -1053,9 +1054,20 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
 def test_each_verdict_kind_reaches_its_unit_and_the_threads_whose_goal_the_order_serves(commander, kind):
     comms, _ = commander
     todo = create(commander, 'P1')
-    assert kind.audience.targets(todo) == ('worker', 'lead')
-    own = replace(todo, goal=GoalRef('worker', comms.registry.require('worker').created_at, 'goal'))
-    assert kind.audience.targets(own) == ('worker',)
+    assert kind.audience.of('worker', todo.goal).threads == ('worker', 'lead')
+    own = GoalRef('worker', comms.registry.require('worker').created_at, 'goal')
+    assert kind.audience.of('worker', own).threads == ('worker',)
+
+
+def test_each_send_target_takes_its_send_audience_and_a_channel_send_wakes_only_it(commander):
+    comms, caller = commander
+    with pytest.raises(ValueError, match='declare its audience'):
+        CommsSendTool(sender='lead', target='#all', body='Read the order').apply(comms, caller)
+    for target, audience in (('worker', ()), ('#all', ('worker',))):
+        CommsSendTool(sender='lead', target=target, body='Read the order', audience=audience).apply(comms, caller)
+        with comms.bus.log.opened_wire_snapshot() as source:
+            message, _ = list(source.public_records())[-1]
+        assert tuple(mention.thread for mention in message.mentions) == audience
 
 
 def test_an_accepted_verdict_quotes_the_order_it_serves(commander):
@@ -1215,14 +1227,16 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
 ])
 def test_tactical_refused_from_the_commander_session_only(commander, commander_script, monkeypatch, capsys,
                                                           command, kind):
-    """lead's registered process runs in Claude session s1: tactical work run there is refused with
-    the order to send its owner; the same command from another session, and an order whose body
-    names the command, pass."""
+    """lead's registered process runs in Claude session s1 and worker holds the installer problem:
+    tactical work run in s1 is refused with the order to send worker; the same command from another
+    session, and an order whose body names the command, pass. Once lead's process is gone no session
+    can be classified, so every session is refused with the read error."""
     import io, os, subprocess
     from dataclasses import replace
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.commander import send_guard
     comms, _ = commander
+    create(commander, 'P168')
     process = subprocess.Popen(['sleep', '60'], env={**os.environ, 'CLAUDE_CODE_SESSION_ID': 's1'})
     try:
         comms.registry.declare(replace(comms.registry.require('lead'),
@@ -1236,10 +1250,24 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
 
         refused = json.loads(guarded(command, 's1'))['hookSpecificOutput']
         assert refused['permissionDecision'] == 'deny'
-        assert f"{kind.capitalize()} is bus-upgrade's work" in refused['permissionDecisionReason']
-        assert 'order send --to bus-upgrade' in refused['permissionDecisionReason']
+        assert f"{kind.capitalize()} is worker's work, as holder of P168" in refused['permissionDecisionReason']
+        assert 'order send --to worker' in refused['permissionDecisionReason']
         assert guarded(command, 's2') == ''
-        assert guarded(f'agent-comms-commander order send --to bus-upgrade --body "run {command}"', 's1') == ''
+        assert guarded(f'agent-comms-commander order send --to worker --body "run {command}"', 's1') == ''
     finally:
         process.kill()
         process.wait()
+    unclassified = json.loads(guarded(command, 's2'))['hookSpecificOutput']['permissionDecisionReason']
+    assert f'{kind.capitalize()} refused: the guard cannot tell whether this session is lead' in unclassified
+    assert f'/proc/{process.pid}/environ' in unclassified
+
+
+def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_script, monkeypatch, capsys):
+    import io
+    from agent_comms.commander import send_guard
+    create(commander, 'P1')
+    for command in ('agent-comms send --from user --to lead --body "agent-comms send --from lead --to worker"',
+                    'agent-comms send --from user --to lead --body "x; agent-comms send --from lead --to worker"'):
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
+        send_guard.main([])
+        assert capsys.readouterr().out == ''
