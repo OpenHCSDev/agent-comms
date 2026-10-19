@@ -29,9 +29,9 @@ from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
@@ -584,7 +584,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and script.struck(current, 'worker') == 0
     assert 'strike voided on P1' in (tmp_path / 'narrative.md').read_text()
-    assert posted[-1][0] == ['#comms'] and 'strike voided on P1' in posted[-1][1]
+    assert posted[-1][0] == VerdictAudience(('worker', 'lead')) and 'strike voided on P1' in posted[-1][1]
     with pytest.raises(SystemExit, match='no live strike'):
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
 
@@ -602,7 +602,7 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
     assert (tmp_path / 'board.md').read_text().count(line) == 1
     assert line in (tmp_path / 'narrative.md').read_text()
-    assert [recipients for recipients, _ in posted] == [['#comms'], ['worker']]
+    assert [recipients for recipients, _ in posted] == [VerdictAudience(('worker', 'lead')), VerdictAudience(('worker',))]
     with pytest.raises(ValueError, match='Only an undelivered order'):
         script.withdraw('P1', 'withdrawing the same order twice records nothing new')
 
@@ -1085,8 +1085,8 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     worker = comms.registry.require('worker')
     assert why in GoalSegment.capture(worker, worker.goal, comms.goals).progress
     assert judge.Edit.unjudged(comms, 'lead') == []
-    audience = SendBackVerdict.audience.targets(saved)
-    assert [tuple(to) for to, _ in posted] == [audience, audience]
+    audience = SendBackVerdict.audience.of('worker', saved.goal)
+    assert [to for to, _ in posted] == [audience, audience]
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
@@ -1094,9 +1094,20 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
 def test_each_verdict_kind_reaches_its_unit_and_the_threads_whose_goal_the_order_serves(commander, kind):
     comms, _ = commander
     todo = create(commander, 'P1')
-    assert kind.audience.targets(todo) == ('worker', 'lead')
-    own = replace(todo, goal=GoalRef('worker', comms.registry.require('worker').created_at, 'goal'))
-    assert kind.audience.targets(own) == ('worker',)
+    assert kind.audience.of('worker', todo.goal).threads == ('worker', 'lead')
+    own = GoalRef('worker', comms.registry.require('worker').created_at, 'goal')
+    assert kind.audience.of('worker', own).threads == ('worker',)
+
+
+def test_each_send_target_takes_its_send_audience_and_a_channel_send_wakes_only_it(commander):
+    comms, caller = commander
+    with pytest.raises(ValueError, match='declare its audience'):
+        CommsSendTool(sender='lead', target='#all', body='Read the order').apply(comms, caller)
+    for target, audience in (('worker', ()), ('#all', ('worker',))):
+        CommsSendTool(sender='lead', target=target, body='Read the order', audience=audience).apply(comms, caller)
+        with comms.bus.log.opened_wire_snapshot() as source:
+            message, _ = list(source.public_records())[-1]
+        assert tuple(mention.thread for mention in message.mentions) == audience
 
 
 def test_an_accepted_verdict_quotes_the_order_it_serves(commander):
