@@ -11,7 +11,7 @@ import stat
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from io import DEFAULT_BUFFER_SIZE
@@ -599,11 +599,13 @@ class WireLog(StoreLockOwner):
         except CheckpointNeedsRepair as error:
             return await self._read_checked_under_lock(read, mode.after_repair_needed(error))
 
-    async def _read_checked_under_lock(self, read: Callable, mode: LockMode):
+    async def _read_checked_under_lock[T](
+        self, read: Callable[[CheckedRead], T], mode: LockMode,
+    ) -> T:
         from .child_process import Platform
         from .coordinator import Coordination
 
-        def consume(acquisition):
+        def consume(acquisition: AbstractContextManager) -> T:
             with acquisition as lock, self._checked_source(lock) as source:
                 return read(source)
 
@@ -618,7 +620,7 @@ class WireLog(StoreLockOwner):
                 lock_file.fileno(), platform, mode=mode,
             )
 
-            def read_acquired():
+            def read_acquired() -> T:
                 with lock_file:
                     return consume(StoreLockAcquisition.holding(
                         self.path, lock_file, platform, None, mode=mode, lock_type=self.lock_type,

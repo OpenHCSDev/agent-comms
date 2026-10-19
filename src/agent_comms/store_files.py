@@ -121,7 +121,9 @@ class ExclusiveLock(LockMode):
         try:
             held.require_writer()
         except CheckpointNeedsRepair as error:
-            raise RelationViolationError("Cannot upgrade an enclosing shared store lock.") from error
+            raise RelationViolationError(
+                "Cannot upgrade an enclosing shared store lock."
+            ) from error
 
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         raise error
@@ -342,7 +344,10 @@ class StoreLockAcquisition:
 
     @classmethod
     @contextmanager
-    def holding(cls, store_path, file, platform, max_bus_bytes, *, mode, lock_type):
+    def holding(
+        cls, store_path: Path, file: BinaryIO, platform: Platform, max_bus_bytes: int | None,
+        *, mode: LockMode, lock_type: type[StoreLock],
+    ) -> Iterator[StoreLock]:
         acquisition = cls(file, mode, FileIdentity.from_stat(os.fstat(file.fileno())))
         try:
             with acquisition.source(store_path, max_bus_bytes, lock_type) as lock:
@@ -353,7 +358,9 @@ class StoreLockAcquisition:
                 platform.release_store_lock(file.fileno())
 
     @contextmanager
-    def source(self, store_path: Path, max_bus_bytes: int | None, lock_type: type[StoreLock]):
+    def source(
+        self, store_path: Path, max_bus_bytes: int | None, lock_type: type[StoreLock],
+    ) -> Iterator[StoreLock]:
         """Recheck each borrow's source without reopening or downgrading its lock.
 
         An explicit joined-worker borrow installs the same owner in that worker;
