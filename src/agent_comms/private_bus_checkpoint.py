@@ -92,15 +92,28 @@ class PrefixWitness(PrefixSeal):
             raise RelationViolationError("Checked bus prefix differs from its stored marker.")
 
     def require_source(self, marker: WireMetadata, info: os.stat_result, stream: BinaryIO) -> None:
-        """Reject changed bytes; a copied file needs rebuilding under the write lock."""
+        """Validate the logical prefix independently of its physical file identity."""
         if self.root_id != marker.root_id or info.st_size < self.offset:
             raise RelationViolationError("Private bus checkpoint root/size changed.")
         if _tail(stream, self.offset) != self.tail:
             raise RelationViolationError("Private bus checkpoint prefix tail changed.")
         if self.through_seq > marker.last_seq:
             raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
-        if self.revision.identity != FileIdentity.from_stat(info):
-            raise CheckpointNeedsRepairError("Private bus source was relocated.")
+
+    def rebind_source(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                      path: Path, info: os.stat_result) -> PrefixWitness:
+        """Publish the unchanged prefix's new revision under the exclusive bus lock."""
+        rebound = replace(self, revision=replace(FileRevision.from_stat(info), size=self.offset))
+        marker.seal.require_rebuilt(self, rebound)
+        marker.seal_with(PendingSeal.capture(self, rebound, path))
+        bus.write_metadata_unlocked(marker)
+        with db:
+            CheckedPrefix.capture(rebound.root_id, rebound.revision, rebound.through_seq,
+                                  bytes.fromhex(rebound.digest), rebound.tail).upsert(db)
+        _directory_sync(path)
+        marker.seal_with(FinalSeal.capture(rebound, path))
+        bus.write_metadata_unlocked(marker)
+        return rebound
 
     def require_append(self, marker: WireMetadata, info: os.stat_result,
                        offset: int, sequence: int) -> None:
@@ -1086,7 +1099,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
                             != FileRevision.from_stat(info)
                         ):
                             raise RelationViolationError("Private bus changed during checkpoint installation.")
-                        cls.capture(marker.root_id, info, through_seq, digest,
+                        cls.capture(marker.root_id, FileRevision.from_stat(info), through_seq, digest,
                                     _tail(stream, info.st_size)).insert(db)
             _directory_sync(staged)
             with closing(_connect(staged, readonly=True)) as db:
@@ -1135,20 +1148,20 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
 
     @classmethod
     def capture(
-        cls, root_id: str, info: os.stat_result, seq: int, digest: bytes, tail: str
+        cls, root_id: str, revision: FileRevision, seq: int, digest: bytes, tail: str
     ) -> CheckedPrefix:
         return cls(
             1,
             2,
             root_id,
-            info.st_dev,
-            info.st_ino,
-            info.st_size,
+            revision.identity.device,
+            revision.identity.inode,
+            revision.size,
             seq,
             digest.hex(),
             tail,
-            info.st_mtime_ns,
-            info.st_ctime_ns,
+            revision.mtime_ns,
+            revision.ctime_ns,
         )
 
 
@@ -1309,7 +1322,7 @@ def _rebuild_checkpoint_unlocked(
         seal.require_rebuilt(saved, expected)
         marker.seal_with(PendingSeal.capture(saved, expected, db_path))
         bus.write_metadata_unlocked(marker)
-        CheckedPrefix.capture(expected.root_id, info, last_seq, digest, expected.tail).upsert(
+        CheckedPrefix.capture(expected.root_id, expected.revision, last_seq, digest, expected.tail).upsert(
             db
         )
     _directory_sync(db_path)
@@ -1323,9 +1336,9 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
     saved = _saved(db)
     info = os.fstat(stream.fileno())
     saved.require_source(marker, info, stream)
-    marker.seal.require_final(saved, path)
     if FileRevision.from_stat(info) != saved.revision:
-        raise CheckpointNeedsRepairError("Bus has rows the checkpoint does not cover yet.")
+        raise CheckpointNeedsRepairError("Bus revision requires exclusive checkpoint validation.")
+    marker.seal.require_final(saved, path)
     return saved
 
 
@@ -1358,11 +1371,7 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     _directory_sync(bus.path)
     saved = _saved(db)
     info = os.fstat(stream.fileno())
-    try:
-        saved.require_source(marker, info, stream)
-    except CheckpointNeedsRepairError:
-        # The copied index rows point at the old file; rebuild them.
-        return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, marker.seal)
+    saved.require_source(marker, info, stream)
     recovered = marker.seal.recover(bus, marker, db, path, saved, info)
     if recovered is not None:
         return recovered
@@ -1430,7 +1439,7 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
         for offset, raw, record in additions:
             indexed_sequence = _index_row(db, offset, raw, record, indexed_sequence)
         CheckedPrefix.capture(
-            saved.root_id, info, last_seq, digest, expected.tail
+            saved.root_id, expected.revision, last_seq, digest, expected.tail
         ).upsert(db)
     _directory_sync(path)
     marker.seal_with(FinalSeal.capture(expected, path))
@@ -1502,7 +1511,7 @@ def append_private_bus_checkpoint_unlocked(
         with db:
             _index_row(db, offset, raw, record, saved.through_seq)
             CheckedPrefix.capture(
-                saved.root_id, info, sequence, digest, expected.tail
+                saved.root_id, expected.revision, sequence, digest, expected.tail
             ).upsert(db)
         _directory_sync(path)
         marker.seal_with(FinalSeal.capture(expected, path))

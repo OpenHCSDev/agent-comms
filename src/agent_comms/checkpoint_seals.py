@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal
 from .declared_family import DeclaredFamily
 from .errors import CheckpointNeedsRepairError, RelationViolationError
 from .field_codec import Id128Text, Sha256Text
-from .private_path import FileRevision
+from .private_path import FileIdentity, FileRevision
 
 if TYPE_CHECKING:
     import os
@@ -100,7 +100,15 @@ class FinalSeal(CheckpointSeal):
         path: Path,
         saved: PrefixWitness,
         info: os.stat_result,
-    ) -> None:
+    ) -> PrefixWitness | None:
+        if saved.revision.identity != FileIdentity.from_stat(info):
+            self.require_rebuilt(saved, saved)
+            copied = FileRevision.from_stat(path.stat())
+            if (copied.size, copied.mtime_ns) != (self.db_revision.size, self.db_revision.mtime_ns):
+                raise RelationViolationError("Private bus copied index content revision changed.")
+            if info.st_size == saved.offset:
+                return saved.rebind_source(bus, marker, db, path, info)
+            return None
         self.check_final(saved, path)
 
     def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
@@ -137,6 +145,8 @@ class PendingSeal(CheckpointSeal):
             or self.prior.root_id != marker.root_id
         ):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
+        if replace(self.prior, revision=self.expected.revision) == self.expected:
+            return saved.rebind_source(bus, marker, db, path, info)
         return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, self)
 
     def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
