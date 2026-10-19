@@ -93,9 +93,7 @@ class ConnectorStore(RootFile, LockedStore[ConnectorGrants], lock_rank=9):
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         return cls(cls.path_in(directory))
 
-    @property
-    def record_type(self) -> type[ConnectorGrants]:
-        return ConnectorGrants
+    record_type = ConnectorGrants
 
     def empty(self) -> ConnectorGrants:
         return ConnectorGrants()

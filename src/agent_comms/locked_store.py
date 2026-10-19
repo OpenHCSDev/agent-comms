@@ -28,10 +28,8 @@ class JsonDocument(ABC, Generic[T]):
     json_sort_keys: ClassVar[bool] = False
     json_suffix: ClassVar[str] = ""
 
-    @property
-    @abstractmethod
-    def record_type(self) -> type[T]:
-        """The declaration decoded by FieldCodec, including container types."""
+    record_type: ClassVar[type]
+    """The declaration decoded by FieldCodec, including container types."""
 
     @abstractmethod
     def empty(self) -> T:
@@ -192,7 +190,10 @@ class LockedStore(StoreLockOwner, JsonDocument[T]):
         if isinstance(value, dict):
             result = {}
             for key, child in value.items():
-                child = LockedStore._canonical_schema(child)
+                if key in ("properties", "$defs", "patternProperties", "dependentSchemas"):
+                    child = {name: LockedStore._canonical_schema(schema) for name, schema in child.items()}
+                elif key not in ("default", "examples", "const", "enum"):
+                    child = LockedStore._canonical_schema(child)
                 if key in ("required", "enum", "anyOf", "oneOf", "allOf") and isinstance(child, list):
                     child = sorted(child, key=lambda item: json.dumps(item, sort_keys=True))
                 result[key] = child
@@ -201,10 +202,10 @@ class LockedStore(StoreLockOwner, JsonDocument[T]):
             return [LockedStore._canonical_schema(child) for child in value]
         return value
 
-    @property
-    def format_fingerprint(self) -> str:
+    @classmethod
+    def format_fingerprint(cls) -> str:
         """The stored declaration, never a manually maintained version number."""
-        schema = self._canonical_schema(FieldCodec.value_schema(self.record_type))
+        schema = LockedStore._canonical_schema(FieldCodec.value_schema(cls.record_type))
         encoded = json.dumps(schema, sort_keys=True, separators=(",", ":"), allow_nan=False)
         return hashlib.sha256(encoded.encode()).hexdigest()
 

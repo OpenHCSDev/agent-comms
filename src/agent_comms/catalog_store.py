@@ -22,9 +22,7 @@ class ChannelCatalog(RootFile, ThreadOwnedState, LockedStore[CatalogDocument], l
     filename: ClassVar[str] = "catalog.json"
     json_indent = 2
 
-    @property
-    def record_type(self) -> type[CatalogDocument]:
-        return CatalogDocument
+    record_type = CatalogDocument
 
     def empty(self) -> CatalogDocument:
         return CatalogDocument()

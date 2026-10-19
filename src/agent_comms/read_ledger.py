@@ -73,9 +73,7 @@ class ReadDocument:
 class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument], lock_rank=4):
     filename = "read_ledger.json"
 
-    @property
-    def record_type(self) -> type[ReadDocument]:
-        return ReadDocument
+    record_type = ReadDocument
 
     def empty(self) -> ReadDocument:
         return ReadDocument()

@@ -664,10 +664,6 @@ class FieldCodec(Sealed):
             return None, None
         if annotation is object:
             return Any, _JsonValueRepresentation
-        if isinstance(annotation, type):
-            # A class has no Annotated metadata. Its live capability still
-            # determines representation, including inherited/virtual members.
-            return annotation, annotation if issubclass(annotation, WireValue) else None
         if get_origin(annotation) is Annotated:
             target, *metadata = get_args(annotation)
         else:
@@ -685,6 +681,8 @@ class FieldCodec(Sealed):
                 return Any, representations[0] if representations else _JsonValueRepresentation
         if representations:
             return target, representations[0]
+        if target is Any:
+            return target, _AnyDecoder
         if isinstance(target, type) and issubclass(target, WireValue):
             return target, target
         return target, None
@@ -1265,13 +1263,14 @@ class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[Any]):
     def accepts_value(self, value: object) -> bool:
         return True
 
-    def encode(self, value: object) -> object:
+    @classmethod
+    def encode(cls, value: object) -> object:
         if isinstance(value, type) and issubclass(value, DeclaredFamily):
             return value.declared_name
         if type(value) is dict:
             if all(type(key) is str for key in value):
-                return {key: self.encode(item) for key, item in value.items()}
-            return [[self.encode(key), self.encode(item)] for key, item in value.items()]
+                return {key: cls.encode(item) for key, item in value.items()}
+            return [[cls.encode(key), cls.encode(item)] for key, item in value.items()]
         return compile_decoder(type(value)).encode(value)
 
 

@@ -35,9 +35,7 @@ class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]], lock
     filename: ClassVar[str] = "ledger.json"
     json_indent = 2
 
-    @property
-    def record_type(self) -> type[dict[str, Any]]:
-        return dict[str, Any]
+    record_type = dict[str, Any]
 
     def empty(self) -> dict[str, Any]:
         return {}

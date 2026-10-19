@@ -75,9 +75,7 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRu
     filename: ClassVar[str] = "runtime_info.json"
     json_indent = 2
 
-    @property
-    def record_type(self) -> type[dict[str, AgentRuntimeInfo]]:
-        return dict[str, AgentRuntimeInfo]
+    record_type = dict[str, AgentRuntimeInfo]
 
     def empty(self) -> dict[str, AgentRuntimeInfo]:
         return {}
