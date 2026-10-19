@@ -376,8 +376,8 @@ class PullRequests:
         self._orders: dict[RepositoryName, dict[str, CheckedProblemOrder]] = {}
         for todo in todos:
             if todo.holder:
-                order = todo.order.checked()
-                self._orders.setdefault(todo.repo, {})[order.id] = order
+                for order in todo.order.pull_queries():
+                    self._orders.setdefault(todo.repo, {})[order.id] = order
 
     def listed(self, repo: RepositoryName, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
         checked = order.checked()
@@ -1342,6 +1342,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def accepted(self) -> bool:
         return False
 
+    def pull_queries(self) -> tuple[CheckedProblemOrder, ...]:
+        return ()
+
     def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
                         pulls: PullRequests) -> tuple[Todo, ...]:
         return ()
@@ -1478,6 +1481,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
                        if item.name not in evidence}, **evidence)
+
+    def pull_queries(self) -> tuple[CheckedProblemOrder, ...]:
+        return (self,)
 
     def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
                         pulls: PullRequests) -> tuple[Todo, ...]:

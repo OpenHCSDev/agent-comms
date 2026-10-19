@@ -31,6 +31,7 @@ from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
@@ -56,7 +57,7 @@ def create(commander, problem, command='printf 1', expected=1, deadline=1000, ow
     CommsTodoCreateTool(owner=owner, order=CreateProblemGoalAction(
         problem=problem, order=order(comms.root, 'order-' + problem, command, expected),
         request='request', deadline=RecordedEventTime(deadline), commander='lead',
-        repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
+        repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Fix ' + problem,
     )).apply(comms, caller)
     return comms.goals.todos.get(problem)
 
