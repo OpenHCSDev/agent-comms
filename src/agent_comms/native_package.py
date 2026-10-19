@@ -15,7 +15,6 @@ import hashlib
 import json
 import os
 import stat
-import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,8 +54,13 @@ def pin_id() -> str:
     return hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
 
 
+def pinned_package_in(root: Path) -> Path:
+    """Where this pin's built package sits under a root laid out as stack/ is."""
+    return root / f".pi-native-{pin_id()}" / PACKAGE_LAYOUT
+
+
 def pinned_location() -> Path:
-    return MANIFEST.parent / f".pi-native-{pin_id()}" / PACKAGE_LAYOUT
+    return pinned_package_in(MANIFEST.parent)
 
 
 def native_environment(cache: Path) -> Path:
@@ -416,21 +420,3 @@ def verify_native_package(root: Path) -> VerifiedNativePackage:
     """Verify the entire copied package against the repository-owned commitment."""
     return VerifiedNativePackage(root)
 
-
-if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--share-resources":
-        print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)
-    elif len(sys.argv) == 4 and sys.argv[1] == "--install-sources":
-        install_declared_sources(Path(sys.argv[2]), Path(sys.argv[3]))
-    elif len(sys.argv) == 3 and sys.argv[1] == "--digest":
-        print(package_tree_digest(Path(sys.argv[2])))
-    elif len(sys.argv) == 3 and sys.argv[1] == "--write-manifest":
-        write_native_manifest(Path(sys.argv[2]))
-    elif len(sys.argv) == 2:
-        verify_native_package(Path(sys.argv[1]))
-    else:
-        raise SystemExit(
-            "Usage: python -m agent_comms.native_package [--digest|--write-manifest] PACKAGE_DIR | "
-            "--share-resources NEW_PACKAGE DEPLOYMENTS | "
-            "--install-sources PACKAGE_DIR SNAPSHOT_ROOT"
-        )
