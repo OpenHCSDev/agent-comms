@@ -12,9 +12,9 @@ class ReviewHistory(HistoryView):
         return ChannelDisplayScope("#review", frozenset({"#review"}))
 
     def live_page(self, presentation, bounds):
-        return MessagePageRequest(
+        return presentation.bus.log.read_page(MessagePageRequest(
             self.capture(presentation.registry.snapshot()), bounds
-        ).read(presentation.bus.log)
+        ))
 
 
 def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path, *, thread_registration):
