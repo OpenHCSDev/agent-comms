@@ -149,25 +149,6 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         with NativeInputEvidenceRead.open(session_file) as evidence:
             yield evidence
 
-    @staticmethod
-    def tracked_users(entries):
-        from .native_pi import NativePiUnavailable
-
-        tracked = {}
-        try:
-            for entry in entries:
-                user = entry.tracked_user
-                if user is None:
-                    continue
-                if user.input_id in tracked:
-                    raise MalformedRecord("duplicate tracked input")
-                tracked[user.input_id] = user
-        except MalformedRecord as error:
-            raise NativePiUnavailable(
-                "Native Pi session has ambiguous tracked user input"
-            ) from error
-        return tracked
-
     @property
     def tracked_user(self) -> MessageEntry | None:
         return None
@@ -202,6 +183,8 @@ class NativeEvidenceRead:
     def __init__(self, source):
         self.source = source
         self.entries: tuple[NativeEntry, ...] = ()
+        # Each tracked input's position in entries, indexed once as its entry is decoded.
+        self.inputs: dict[str, int] = {}
 
     def require_path(self, session_file):
         from .native_pi import NativePiUnavailable
@@ -247,6 +230,19 @@ class NativeEvidenceRead:
     def close(self):
         self.source.close()
         self.entries = ()
+        self.inputs = {}
+
+    def tracked(self, input_id: str) -> MessageEntry:
+        """The observed entry that holds this tracked input."""
+        return self.entries[self.inputs[input_id]].require_tracked_user()
+
+    def index(self, appended: tuple[NativeEntry, ...]) -> None:
+        """Add each newly decoded tracked input once, refusing a second entry for one input."""
+        for position, entry in enumerate(appended, len(self.entries)):
+            if user := entry.tracked_user:
+                if user.input_id in self.inputs:
+                    raise MalformedRecord("duplicate tracked input")
+                self.inputs[user.input_id] = position
 
     def observe(self):
         """Decode the captured cut."""
@@ -261,11 +257,10 @@ class NativeEvidenceRead:
         from .pi_vocabulary import PendingStopReason
 
         _header, entries = self.observe()
-        user = NativeEntry.tracked_users(entries).get(input_id)
-        if user is None:
+        if input_id not in self.inputs:
             return PendingStopReason
-        last = user
-        for entry in entries[entries.index(user) + 1:]:
+        last = self.tracked(input_id)
+        for entry in entries[self.inputs[input_id] + 1:]:
             if entry.input_boundary:
                 break
             if entry.parent_id != last.id:
@@ -277,6 +272,7 @@ class NativeEvidenceRead:
 
     def _reverify(self):
         self.entries = ()
+        self.inputs = {}
         self.source.reverify_from_start()
         return self._observe(reverified=True)
 
@@ -290,6 +286,7 @@ class NativeEvidenceRead:
         try:
             _private_session_dir(self.source.path.parent)
             appended = tuple(self.decode_rows(self.source.rows()))
+            self.index(appended)
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
                 raise MalformedRecord("Native Pi session header is invalid")
