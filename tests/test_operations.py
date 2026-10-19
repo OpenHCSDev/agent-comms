@@ -1,4 +1,4 @@
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import ANY_CHANNEL, ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.read_basis import NamedViewer
 import json
@@ -87,6 +87,16 @@ class TestMessaging:
         assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 0
         assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 1
         assert wired.bus.pending_count("fixer") == 1
+
+    def test_each_target_member_reads_and_counts_the_same_messages(self, wired):
+        wired.messaging.send("PR111", "fixer", "direct")
+        wired.messaging.send("PR111", "#all", "global")
+
+        expected = {ANY_CHANNEL: {"direct", "global"}, ThreadTarget("PR111"): {"direct"},
+                    ChannelTarget("#all"): {"global"}}
+        for target, bodies in expected.items():
+            assert {message.body for message in wired.bus.inbox("fixer", target)} == bodies
+            assert wired.bus.pending_count("fixer", target) == len(bodies)
 
     def test_scoped_channel_ack_does_not_clear_dm(self, wired):
         wired.messaging.send("PR111", "fixer", "direct")
