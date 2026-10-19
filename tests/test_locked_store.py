@@ -11,19 +11,18 @@ from dataclasses import dataclass, replace
 
 import pytest
 
+from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.locked_store import LockedStore
-from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
+from agent_comms.store_files import ExclusiveLock, SharedLock, StoreLockOwner, _store_lock
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True, slots=True)
 class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
     """A JSON transaction exemplar, independent of the indexed wait store."""
-    lock_rank = 9
-
     @property
     def record_type(self):
         return dict[str, RecordedGoalWait]
@@ -48,6 +47,9 @@ class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
         self.update(change)
         return removed
 
+
+
+StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order, WaitDocument)
 
 
 def wait(goal_id="goal"):

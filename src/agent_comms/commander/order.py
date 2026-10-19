@@ -503,7 +503,8 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
     if not any(stage in caught for stage in STAGES):
         sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{ME} at review".')
     todo = COMMS.goals.todos.get(task)
-    if not todo.state.open or todo.held().owner != unit:
+    todo.state.require_open(todo)
+    if todo.held().owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
     recorded = call(CommsTodoTool(id=task, operation=kind(
@@ -585,9 +586,8 @@ def hunt(where, pid, why, sent=None):
         sys.exit(f'Refused: {where} is not a real file:line')
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
-    todo = next((t for t in held_orders() if t.id == pid), None) or sys.exit(
-        f'Refused: {pid} is not an open tracked problem; a hunt is recorded on one. '
-        + HuntVerb.usage())
+    todo = COMMS.goals.todos.get(pid)
+    todo.state.require_open(todo)
     if sent and todo.order.id != sent:
         sys.exit(f'Refused: {sent} is not the open order of {pid}; send it first. '
                  + HuntVerb.usage())

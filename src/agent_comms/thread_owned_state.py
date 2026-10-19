@@ -6,14 +6,14 @@ from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
 
-from .declared_family import DeclaredFamily
+from .store_files import StoreOwner
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .threads import Thread
 
 
-class ThreadOwnedState(DeclaredFamily):
+class ThreadOwnedState(StoreOwner):
     """A store holding state that exists only for its thread declarations.
 
     Declaring a store here makes its rows part of the thread's lifetime:
