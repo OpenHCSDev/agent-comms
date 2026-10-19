@@ -48,7 +48,7 @@ class Carried:
     """What one run of a step changed, or would change on a dry run."""
 
     changed: int
-    detail: Mapping[str, int | bool] = field(default_factory=dict)
+    detail: dict[str, int | bool] = field(default_factory=dict)
     rewritten: tuple[str, ...] = ()
     """Files under the bus root this run wrote; every other file stays byte-identical."""
 
@@ -221,7 +221,7 @@ class TodoRows(Carry):
         cls, root: Path, changed: int, detail: Mapping[str, int], *, apply: bool
     ) -> Carried:
         rewritten = tuple(path.name for path in root.glob(f"{TodoStore.path_in(root).name}*"))
-        return Carried(changed, detail, rewritten if changed and apply else ())
+        return Carried(changed, dict(detail), rewritten if changed and apply else ())
 
 
 @dataclass(frozen=True)
