@@ -401,6 +401,15 @@ class VerifiedNativePackage:
         return self.path / "dist/cli.js"
 
     @classmethod
+    def from_environment(cls, cache: Path) -> VerifiedNativePackage:
+        """Acquire this checkout's declared test environment once, not the live install."""
+        environment = native_environment(cache)
+        manifest = environment / MANIFEST.name
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+            raise NativePackageError("Native environment and source pins disagree")
+        return cls.acquire(pinned_package_in(environment))
+
+    @classmethod
     def acquire(cls, root: Path) -> VerifiedNativePackage:
         """Acquire the pinned artifact only through safe private launch ancestry."""
         root = root.absolute()  # Do not resolve away symlink components.

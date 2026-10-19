@@ -14,14 +14,14 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 @pytest.mark.parametrize("stage", ["release_io", "reap"])
 @pytest.mark.parametrize("fault", [RuntimeError, TimeoutError])
 async def test_stop_failure_accounts_for_native_resources_and_retains_uncertainty(
-    tmp_path, monkeypatch, stage, fault
+    tmp_path, monkeypatch, stage, fault, native_runtime_package
 ):
     from native_backend_fixture import native_backend_fixture
     from agent_comms.native_child import RetiringNative
 
     failure = fault("lost process cleanup acknowledgement")
     with pytest.raises(ChildRetirementFailed) as fixture_failure:
-        async with native_backend_fixture(tmp_path) as owner:
+        async with native_backend_fixture(tmp_path, package=native_runtime_package) as owner:
             assert (await owner.run("Before process cleanup acknowledgement failure"))[-1].ok
             child = owner.persistent.child_state.child
             resource = child.resources.enter_context((tmp_path / "child-resource").open("w"))
@@ -59,13 +59,13 @@ async def test_stop_failure_accounts_for_native_resources_and_retains_uncertaint
     assert calls == [stage]
 
 
-async def test_resource_release_failure_retains_exact_native_child(tmp_path):
+async def test_resource_release_failure_retains_exact_native_child(tmp_path, native_runtime_package):
     from native_backend_fixture import native_backend_fixture
     from agent_comms.native_child import RetiringNative
 
     failure = RuntimeError("native resource release failed")
     with pytest.raises(RuntimeError) as fixture_failure:
-        async with native_backend_fixture(tmp_path) as owner:
+        async with native_backend_fixture(tmp_path, package=native_runtime_package) as owner:
             assert (await owner.run("Before resource cleanup acknowledgement failure"))[-1].ok
             child = owner.persistent.child_state.child
             resource = child.resources.enter_context((tmp_path / "child-resource").open("w"))
@@ -247,14 +247,14 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
 @pytest.mark.parametrize("already_done", [False, True])
 @pytest.mark.parametrize("gateway", [False, True])
 async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
-    tmp_path, failure, already_done, gateway
+    tmp_path, failure, already_done, gateway, native_runtime_package
 ):
     from native_backend_fixture import native_backend_fixture
     from agent_comms.native_child import RetiringNative
 
     original_error = failure("owned shutdown failed")
     with pytest.raises(failure) as fixture_failure:
-        async with native_backend_fixture(tmp_path) as owner:
+        async with native_backend_fixture(tmp_path, package=native_runtime_package) as owner:
             assert (await owner.run("Before owned shutdown failure"))[-1].ok
             child = owner.persistent.child_state.child
             calls = []
