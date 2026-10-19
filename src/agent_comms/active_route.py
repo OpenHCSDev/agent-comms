@@ -15,7 +15,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -442,5 +442,4 @@ def _publish_active_route_locked(
                 ) from error
     finally:
         if temporary is not None:
-            with suppress(OSError):
-                os.unlink(temporary, dir_fd=directory)
+            os.unlink(temporary, dir_fd=directory)

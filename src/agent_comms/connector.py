@@ -29,7 +29,7 @@ import time
 import urllib.request
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
@@ -561,9 +561,13 @@ class ServiceProcess:
             if (row[1], row[3]) == (local, "0A")  # 0A: TCP_LISTEN
         }
         for descriptor in Path("/proc").glob("[0-9]*/fd/*") if sockets else ():
-            with suppress(OSError):
-                if os.readlink(descriptor) in sockets:
-                    return cls(int(descriptor.parts[2]))
+            try:
+                target = os.readlink(descriptor)
+            except FileNotFoundError:
+                # A descriptor closed during the scan is not the listener.
+                continue
+            if target in sockets:
+                return cls(int(descriptor.parts[2]))
         raise ValueError(f"No process listens on {LOOPBACK}:{port}")
 
     @property

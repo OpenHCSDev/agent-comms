@@ -717,6 +717,21 @@ def test_literal_getattr_does_not_count_dynamic_names_or_prose():
     assert LiteralGetattr.count(source, "read.py") == 1
 
 
+def test_broad_suppress_is_counted_and_cannot_be_added(repo):
+    source = b'''with suppress(OSError): work()
+with contextlib.suppress(ConnectionError, TimeoutError): work()
+with suppress(FileNotFoundError): absent()
+with suppress(Exception): raise RuntimeError()
+'''
+    assert BroadSwallow.count(source, "read.py") == 3
+    before = repo.commit({"reader.py": "work()\n"})
+    after = repo.commit({"reader.py": "with suppress(OSError): work()\n"})
+    status, report = repo.compare(before, after)
+    identity = f"BroadSwallow:{repo.root}/reader.py"
+    assert status == 1 and report["introduced"][identity] == 1
+    assert report["delta"][identity] == 1
+
+
 def test_field_spelling_rosters_count_loops_not_declarations():
     source = b'''fields = ("path", "file_path", "filePath")\nfor key in ("path", "file_path", "filePath"):\n    value = data[key]\nvalue = next(data[key] for key in ("path", "file_path", "filePath") if key in data)\n'''
     assert ForeignFieldSpellings.count(source, "read.py") == 2
@@ -737,7 +752,7 @@ except FileNotFoundError: absent()
     assert BroadSwallow.count(source, "read.py") == 3
     root = Path(__file__).resolve().parents[2] / "src/agent_comms"
     assert sum(BroadSwallow.count(path.read_bytes(), str(path))
-               for path in root.rglob("*.py")) <= 38
+               for path in root.rglob("*.py")) <= 30
     before = repo.commit({"reader.py": "work()\n"})
     after = repo.commit({"reader.py": "try: work()\nexcept OSError: pass\n"})
     status, report = repo.compare(before, after)
