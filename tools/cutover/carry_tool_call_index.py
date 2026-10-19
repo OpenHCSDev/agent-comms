@@ -9,7 +9,7 @@ from .carry import StoreCarry, Carried
 
 
 class ToolCallIndex(StoreCarry):
-    after = "carry_acp_roles"
+    after = "carry_hunts"
     store = ExternalTranscript
 
     @classmethod
