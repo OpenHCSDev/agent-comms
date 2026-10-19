@@ -336,20 +336,36 @@ def physical_path(value, cwd):
 
 
 def shell_commands(command):
-    """Shell words, not matches in quoted code or here-document bodies."""
+    """Lex whole shell source, excluding here-document bodies, not physical lines."""
     body = []
-    lines = iter(command.splitlines(keepends=True))
-    for line in lines:
-        body.append(line)
-        lex = shlex.shlex(line, posix=False, punctuation_chars='<>')
+    while command:
+        lex = shlex.shlex(command, posix=False, punctuation_chars='<>\n')
+        lex.whitespace = ' \t\r'
         lex.whitespace_split = True
-        words = list(lex)
-        for index, word in enumerate(words[:-1]):
-            if word in ('<<', '<<-'):
-                delimiter = shlex.split(words[index + 1])[0]
-                for line in lines:
-                    if line.rstrip('\r\n').lstrip('\t') == delimiter:
-                        break
+        delimiters = []
+        for word in lex:
+            if word == '<<':
+                strip_tabs = command[lex.instream.tell() - 1:lex.instream.tell()] == '-'
+                marker = lex.get_token()
+                if not marker or marker == '\n':
+                    raise ValueError('Missing here-document delimiter')
+                delimiter = shlex.split(marker.removeprefix('-') if strip_tabs else marker)[0]
+                delimiters.append((delimiter, '\t' if strip_tabs else ''))
+            elif '\n' in word and delimiters:
+                # shlex may look one character beyond the newline. Keep the
+                # original source through that newline, then skip literal data.
+                end = command.rfind('\n', 0, lex.instream.tell()) + 1
+                body.append(command[:end])
+                lines = iter(command[end:].splitlines(keepends=True))
+                for delimiter, tabs in delimiters:
+                    for line in lines:
+                        if line.rstrip('\r\n').lstrip(tabs) == delimiter:
+                            break
+                command = ''.join(lines)
+                break
+        else:
+            body.append(command)
+            break
     lex = shlex.shlex(''.join(body), posix=True, punctuation_chars=';&|><()\n')
     lex.whitespace = ' \t\r'
     lex.whitespace_split = True
@@ -504,8 +520,16 @@ class CopyProgram(WritesTargets):
 
 def shell_storage_effects(command, cwd):
     """Decode known shell operations, not arbitrary interpreter programs."""
+    syntax = subprocess.run(('bash', '--noprofile', '--norc', '-n', '-c', command),
+                            capture_output=True, text=True)
+    if syntax.returncode:
+        return (ForbiddenStorageEffect(f'Invalid shell command {command!r}: {syntax.stderr.strip()}'),)
+    try:
+        commands = tuple(shell_commands(command))
+    except ValueError as error:
+        return (ForbiddenStorageEffect(f'Invalid shell command {command!r}: {error}'),)
     effects = []
-    for words in shell_commands(command):
+    for words in commands:
         while words and '=' in words[0]:
             words.pop(0)
         if not words:
