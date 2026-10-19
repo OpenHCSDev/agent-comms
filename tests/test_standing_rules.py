@@ -19,7 +19,7 @@ from agent_comms.standing_rules import BridgeDown, DiskLow, HuntDue, PlanIdle, R
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import CleanHunt, RecordHuntTodo, Todo
+from agent_comms.todos import CleanHunt, RecordHuntTodo, StrikeReason, Todo
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsStandingRulesTool, CommsTodoTool
 
 from test_commander_problem_orders import create, native_judge_edits
@@ -81,14 +81,79 @@ def test_bridge_down_while_the_commander_endpoint_receives_nothing(commander, tm
         assert lines(comms, BridgeDown, "watching") == []
 
 
-def test_idle_units_lists_active_units_without_an_order(commander, standing):
+def working(comms, name, created):
+    """A unit whose native session records a turn now."""
+    from datetime import datetime, timezone
+    stamp = datetime.now(timezone.utc).isoformat()
+    path = comms.root / f"{name}-session.jsonl"
+    rows = [dict(type="session", id=f"{name}-session", version=3, timestamp=stamp),
+            dict(type="message", id=f"{name}-input", timestamp=stamp,
+                 message=dict(role="user", content="Repair the owner", timestamp=time.time() * 1000))]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    path.chmod(0o600)
+    if name in comms.registry.all_threads():
+        comms.registry.register(replace(comms.registry.require(name), session_file=str(path)))
+    else:
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(comms.root), session_file=str(path), created_at=created))
+
+
+def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
+        commander, standing, tmp_path, monkeypatch):
+    from agent_comms.storage_rules import StorageRule
+    from agent_comms.todos import OrderProgress, PullRequests
+    from agent_comms.tool_caller import ThreadCaller
     comms, state, module = standing
-    native_judge_edits(commander, module.judge, [dict(id='recent', at=time.time(), path='a.py',
-        hunks=[dict(old='before', new='after')])])
-    assert lines(comms, module.IdleUnits) == [
-        "IDLE UNITS with no order: worker -> give each the top unowned row now"]
-    create(commander, "P1")
-    assert lines(comms, module.IdleUnits) == []
+    storage = StorageRule(checkout_base=tmp_path / "wt")
+    monkeypatch.setattr(comms.registry, "storage_rule", storage)
+    origin, unit = tmp_path / "origin.git", storage.order_checkout("worker", "P1")
+    unit.mkdir(parents=True)
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(unit), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                              check=True, capture_output=True, text=True).stdout
+
+    def commit(left):
+        (unit / "left").write_text(f"{left}\n")
+        (unit / "work").write_text(f"{time.time()}\n")
+        git("add", "-A")
+        git("commit", "-q", "-m", f"{left} left")
+
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    git("init", "-q", "-b", "main")
+    git("remote", "add", "origin", str(origin))
+    commit(3)
+    git("push", "-q", "origin", "main")
+    git("fetch", "-q", "origin")
+    git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    git("switch", "-q", "-c", "fix/p1")
+    todo = create(commander, "P1", command="cat left", expected=0, deadline=time.time() + 3600)
+
+    def progress():
+        return OrderProgress.read(comms.goals.todos.get("P1"), storage, PullRequests())
+
+    commit(2)
+    assert "; distance 2, projected done " in progress().line
+    assert progress().flat_since() == float("inf")
+    commit(2)
+    assert progress().line.endswith("; distance 2, not falling")
+    working(comms, "worker", 2.0)
+    working(comms, "spare", 9.0)
+
+    read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
+    assert ("WHEEL SPIN: worker kept working on P1 while its distance to done did not fall across"
+            " two readings -> Core strikes it and gives the order to an idle unit") in read.broken
+    moved = comms.goals.todos.get("P1")
+    assert [strike.previous.owner for strike in moved.live_strikes()] == ["worker"]
+    assert moved.holder == "spare" and moved.deadline == todo.deadline
+    assert moved.order.id != todo.order.id and moved.order.check == todo.order.check
+
+    create(commander, "P2", owner="worker", deadline=time.time() + 3600)
+    comms.goals.fire("worker", StrikeReason("The unit was taken off P2 so the test leaves it unowned."), "lead")
+    assert comms.goals.todos.get("P2").holder is None
+    read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
+    assert "WHEEL SPIN: worker holds no order while P2 is unowned -> Core gives it to worker" in read.broken
+    assert comms.goals.todos.get("P2").holder == "worker"
 
 
 def test_fork_now_and_unjudged_follow_the_unjudged_edits(commander, standing):

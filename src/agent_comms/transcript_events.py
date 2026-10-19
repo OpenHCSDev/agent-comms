@@ -102,10 +102,6 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         return ()
 
-    def test_runs(self, since: float) -> tuple[str, ...]:
-        """The test commands this event ran since ``since``; only tool calls run any."""
-        return ()
-
     @property
     def dated(self) -> tuple[float, ...]:
         return () if self.timestamp is None else (self.timestamp,)
@@ -334,9 +330,6 @@ class ToolStartTranscript(ToolTranscript):
         if self.before(since) or self.tool is None:
             return ()
         return self.tool.edit_calls(self.tool_call_id, self.timestamp, thread, problem)
-
-    def test_runs(self, since: float) -> tuple[str, ...]:
-        return () if self.before(since) or not self.tool else self.tool.test_runs()
 
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
     tool: tool_declaration.ToolDeclaration | None = field(

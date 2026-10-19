@@ -9,7 +9,8 @@ from typing import ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
-from .storage_rules import WriteStorageEffect, physical_path, shell_commands, shell_storage_effects
+from .native_tool_call import SelectedToolDenied
+from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
 
 
@@ -29,6 +30,15 @@ class NativeExecutableTool(ToolDeclaration):
     @classmethod
     @abstractmethod
     def native_extension(cls, package: Path) -> Path: ...
+
+    @classmethod
+    def extension_arguments(cls, package: Path) -> tuple[str, ...]:
+        """Load the declared extensions independently of input/tool authority."""
+        declarations = cls.members_with(cls)
+        extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
+        if any(not extension.is_file() for extension in extensions):
+            raise SelectedToolDenied("Native tool extension is not installed")
+        return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
 
     @classmethod
     def from_call(cls, name: str, arguments: object, *, call_id: str):
@@ -137,11 +147,6 @@ class BashTool(CodingTool):
 
     def storage_effects(self, cwd):
         return shell_storage_effects(self.command, cwd)
-
-    def test_runs(self) -> tuple[str, ...]:
-        """The whole command is one test run when any of its shell commands runs pytest."""
-        words = {Path(word).name for command in shell_commands(self.command) for word in command}
-        return (self.command,) if "pytest" in words else ()
 
 
 class MutatingPathTool(PathTool):

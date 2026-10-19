@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import re
+import tempfile
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from .child_process import ExitedOutcome
+from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
@@ -222,12 +223,19 @@ class CheckResult(DeclaredFamily, affix="CheckResult"):
     @abstractmethod
     def require(self, result) -> None: ...
 
+    @abstractmethod
+    def distance(self, result: ChildResult) -> int:
+        """How far this run is from the result the order requires; zero when it is met."""
+
 
 @dataclass(frozen=True)
 class SilentCheckResult(CheckResult):
     def require(self, result):
         if result.outcome != ExitedOutcome(0) or result.stdout:
             raise ValueError("The order check must print nothing and exit zero.")
+
+    def distance(self, result: ChildResult) -> int:
+        return int(result.outcome != ExitedOutcome(0) or bool(result.stdout))
 
 
 @dataclass(frozen=True)
@@ -242,6 +250,11 @@ class CountCheckResult(CheckResult):
         if not isinstance(result.outcome, ExitedOutcome):
             raise ValueError(f"The order check did not exit, so it printed no count of {self.expected}.")
         CheckPrinted.decoded(result.stdout).require(self.expected)
+
+    def distance(self, result: ChildResult) -> int:
+        if not isinstance(result.outcome, ExitedOutcome):
+            raise ValueError("The order check did not exit, so it printed no count.")
+        return CheckPrinted.decoded(result.stdout).distance(self.expected)
 
 
 class CheckPrinted(DeclaredFamily, affix="Printed"):
@@ -259,6 +272,9 @@ class CheckPrinted(DeclaredFamily, affix="Printed"):
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         """Why a check that must fail before any work proves nothing yet."""
 
+    @abstractmethod
+    def distance(self, expected: int) -> int: ...
+
 
 @dataclass(frozen=True)
 class CountPrinted(CheckPrinted):
@@ -267,6 +283,9 @@ class CountPrinted(CheckPrinted):
     def require(self, expected: int) -> None:
         if self.count != expected:
             raise ValueError(f"The order check printed {self.count}, not its expected count {expected}.")
+
+    def distance(self, expected: int) -> int:
+        return abs(self.count - expected)
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ((f"Check already prints {self.count} before any work: `{command}` proves nothing; "
@@ -277,6 +296,10 @@ class CountPrinted(CheckPrinted):
 class NoIntegerPrinted(CheckPrinted):
     def require(self, expected: int) -> None:
         raise ValueError(f"The order check printed no integer, so no count of {expected}.")
+
+    def distance(self, expected: int) -> int:
+        self.require(expected)
+        return 0
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
@@ -297,12 +320,43 @@ class OrderCheck:
             raise ValueError("The order check directory does not exist.")
 
     LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)")
+    # The revision is the run's parameter; a check line never chooses it.
+    CHECKOUT: ClassVar[re.Pattern] = re.compile(r"(?:git\s+fetch\b[^&]*&&\s*)?git\s+checkout\b[^&]*&&\s*")
+    timeout: ClassVar[int] = 300
+    measured: ClassVar[dict[tuple[OrderCheck, str], ChildResult]] = {}
 
     @classmethod
     def parse(cls, line: str) -> OrderCheck | None:
         """The one reading of a check line, `<repo> :: <shell command> -> <integer>`; else None."""
         found = cls.LINE.fullmatch(line.strip())
-        return found and cls(found[1], found[2], CountCheckResult(int(found[3])))
+        return found and cls(found[1], cls.CHECKOUT.sub("", found[2], count=1),
+                             CountCheckResult(int(found[3])))
+
+    async def run(self) -> ChildResult:
+        """The check on its directory's live state."""
+        return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
+                                    timeout=self.timeout)
+
+    async def run_at(self, revision: str, repository: str) -> ChildResult:
+        """The check on ``revision`` in a throwaway detached checkout from ``repository``. A
+        revision's result never changes, so this process runs each one once."""
+        key = (self, revision)
+        if key not in OrderCheck.measured:
+            with tempfile.TemporaryDirectory(prefix="order-check-") as scratch:
+                tree = str(Path(scratch) / "tree")
+                await self.git(repository, "worktree", "add", "--detach", tree, revision)
+                try:
+                    OrderCheck.measured[key] = await BoundedRun.run(
+                        ("bash", "-c", self.command), cwd=tree, timeout=self.timeout)
+                finally:
+                    await self.git(repository, "worktree", "remove", "--force", tree)
+        return OrderCheck.measured[key]
+
+    @staticmethod
+    async def git(repository: str, *args: str) -> None:
+        result = await BoundedRun.run(("git", "-C", repository, *args), timeout=60)
+        if result.outcome != ExitedOutcome(0):
+            raise ValueError(result.stderr.decode(errors="replace") or f"git {args[0]} failed")
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
