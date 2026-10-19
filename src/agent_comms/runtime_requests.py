@@ -220,11 +220,10 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         await ctx.send(
             OwnerReady(
                 ready=metadata,
-                config_options=[],
                 controller_token=ctx.client.token,
             )
         )
-        agent.sessions.config.observe_configuration(ctx.session_id)
+        await agent.sessions.config.observe_configuration(ctx.session_id, ctx.client)
         while line := await ctx.reader.readline():
             ClientLine.read(line).answer(ctx.client)
 

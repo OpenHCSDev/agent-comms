@@ -147,11 +147,28 @@ class OwnerIdentityChangedError(RuntimeError):
     """A saved attachment must not follow a reused thread name."""
 
 
+class SessionClients(dict[str, set[SocketClient]]):
+    """The subscriber collection owns removal and the last-disconnect event."""
+
+    def __init__(self, runtime: RuntimeServer):
+        super().__init__()
+        self.runtime = runtime
+
+    def disconnect(self, client: SocketClient) -> None:
+        for session_id, members in self.items():
+            if client in members:
+                members.discard(client)
+                if not members:
+                    del self[session_id]
+                    self.runtime.agent.sessions.config.stop_observing_configuration(session_id)
+                return
+
+
 class RuntimeServer:
     def __init__(self, agent: Any):
         self.agent = agent
         self.server: asyncio.Server | None = None
-        self.clients: dict[str, set[SocketClient]] = {}
+        self.clients = SessionClients(self)
         # Set only while handling a prompt on this particular attachment.
         # Never publish this bearer to ACP metadata, the transcript or other sockets.
         self.controller: ContextVar[SocketClient | None | object] = ContextVar(
@@ -243,7 +260,7 @@ class RuntimeServer:
                 await socket_client.session_update(session_id=session_id, update=update)
                 delivered = True
             except (ConnectionError, OSError):
-                self.clients[session_id].discard(socket_client)
+                self.clients.disconnect(socket_client)
         return delivered
 
     def is_controller(self, session_id: str, controller: SocketClient) -> bool:
@@ -280,8 +297,7 @@ class RuntimeServer:
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.of(error))
         finally:
-            if session_id is not None:
-                self.clients.get(session_id, set()).discard(client)
+            self.clients.disconnect(client)
             client.disconnected()
             writer.close()
 
@@ -447,8 +463,8 @@ class OwnerAttachment:
     presented: dict[str, object]
 
     def metadata(self) -> dict[str, object]:
-        """The ACP session metadata, with the owner's configuration options."""
-        return {**self.presented, "configOptions": self.ready.config_options}
+        """The ACP session metadata; configuration has its own publication."""
+        return self.presented
 
 
 class RuntimeProxy(RuntimeConnection):
@@ -586,14 +602,6 @@ class RuntimeProxy(RuntimeConnection):
                 try:
                     attachment = await self._subscribe_once()
                     reader = attachment.reader
-                    if self.agent.sessions.client is not None:
-                        await self.agent.sessions.client.session_update(
-                            session_id=self.session_id,
-                            update={
-                                "sessionUpdate": "config_option_update",
-                                "configOptions": attachment.ready.config_options,
-                            },
-                        )
                     break
                 except OwnerIdentityChangedError:
                     return

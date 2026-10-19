@@ -6,13 +6,12 @@ import asyncio
 import os
 from dataclasses import dataclass, replace
 from abc import abstractmethod
-from collections.abc import AsyncIterator
-from contextlib import aclosing, asynccontextmanager
+from contextlib import aclosing
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
-from acp import RequestError
+from acp import Client, RequestError
 from acp.schema import (
     ConfigOptionUpdate,
     SessionConfigOptionSelect,
@@ -34,7 +33,7 @@ from .threads import Thread
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
-    from .runtime import RuntimeServer
+    from .runtime import RuntimeServer, SocketClient
     from .session_effects import SessionEffects
     from .pi_commands import SettingCommand
     from .session_lifecycle import SessionLifecycle
@@ -300,26 +299,14 @@ class SessionConfigOptions(ConfigOptions):
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
-        self.observers: dict[str, asyncio.Task[None]] = {}
+        self._publication_sessions: set[str] = set()
+        self.observer = self.runtime.background(self._observe_configuration())
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
         self.settings_in_use: dict[str, UseSettings] = {}
 
-    @asynccontextmanager
-    async def session_options(
-        self, thread_name: str
-    ) -> AsyncIterator[list[SessionConfigOptionSelect]]:
-        """Hold the configuration observation until its consumer supplies it.
-
-        A private new/load/Ready reply does not publish to other subscribers.
-        Its snapshot must not follow a newer broadcast on the same transport.
-        """
-        async with self.catalog_publish_lock:
-            thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-            yield await self.options(thread)
-
     async def _publish(self, session_id: str, options: list[SessionConfigOptionSelect]) -> None:
-        """Publish within the original session_options acquisition lifetime."""
+        """Publish within the configuration owner's acquisition lifetime."""
         update = ConfigOptionUpdate(
             session_update="config_option_update", config_options=options
         )
@@ -354,9 +341,9 @@ class SessionConfigOptions(ConfigOptions):
             raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id, thread)
         await self.use_stored_settings(session_id, name)
-        async with self.session_options(name) as options:
-            await self._publish(session_id, options)
-            return SetSessionConfigOptionResponse(config_options=options)
+        return SetSessionConfigOptionResponse(
+            config_options=await self.publish_configuration(session_id),
+        )
 
     async def configure_thread(
         self, thread: Thread, command: SettingCommand,
@@ -402,28 +389,44 @@ class SessionConfigOptions(ConfigOptions):
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
         await self.use_stored_settings(session_id, name)
 
-    def observe_configuration(self, session_id: str) -> None:
-        """An opened ACP session owns presentation work, never its input drain."""
-        if session_id not in self.observers:
-            self.observers[session_id] = self.runtime.background(self._observe_configuration(session_id))
+    async def observe_configuration(self, session_id: str, client: Client | SocketClient) -> None:
+        """Subscribe an ACP consumer and supply its own initial configuration."""
+        self._publication_sessions.add(session_id)
+        await self.send_menu(client, session_id)
 
-    async def _observe_configuration(self, session_id: str) -> None:
+    async def send_menu(self, client: Client | SocketClient, session_id: str) -> None:
+        async with self.catalog_publish_lock:
+            options = await self.options_for_session(session_id)
+            await client.session_update(session_id=session_id, update=ConfigOptionUpdate(
+                session_update="config_option_update", config_options=options,
+            ))
+
+    async def options_for_session(self, session_id: str) -> list[SessionConfigOptionSelect]:
+        name = self.sessions.require(session_id)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        return await self.options(thread)
+
+    def stop_observing_configuration(self, session_id: str) -> None:
+        self._publication_sessions.discard(session_id)
+        self.publications.pop(session_id, None)
+
+    async def _observe_configuration(self) -> None:
         sources = (
             WatchSource.file(self.comms.registry.store.path),
             WatchSource.file(self.configuration.native_config / "auth.json"),
         )
         async with aclosing(WireWatch.observations(*sources)) as observations:
             async for _ in observations:
-                await self.publish_configuration(session_id, self.sessions.require(session_id))
+                for session_id in tuple(self._publication_sessions):
+                    await self.publish_configuration(session_id)
 
     async def close(self) -> None:
-        for task in self.observers.values():
-            task.cancel()
-        await asyncio.gather(*self.observers.values(), return_exceptions=True)
-        self.observers.clear()
+        self.observer.cancel()
+        await asyncio.gather(self.observer, return_exceptions=True)
+        self._publication_sessions.clear()
 
-    async def publish_configuration(self, session_id: str, thread_name: str) -> None:
-        if self.sessions.client is None and not self.sessions.runtime_enabled:
-            return
-        async with self.session_options(thread_name) as options:
+    async def publish_configuration(self, session_id: str) -> list[SessionConfigOptionSelect]:
+        async with self.catalog_publish_lock:
+            options = await self.options_for_session(session_id)
             await self._publish(session_id, options)
+            return options
