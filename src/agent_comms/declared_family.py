@@ -78,6 +78,10 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         return cast(_FamilyMeta, cls)
 
 
+class UnknownFamilyMember(ValueError):
+    """The selected name is not a declared member of the requested family."""
+
+
 class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
@@ -94,7 +98,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]
-    __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
+    __registry__: ClassVar[dict[str | None, type[DeclaredFamily]]]
 
     def __init_subclass__(
         cls,
@@ -115,14 +119,14 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
 
     @classmethod
-    def member_named(cls, name: str) -> type[Self]:
+    def member_named(cls, name: str | None) -> type[Self]:
         cls._member_declarations()
         try:
             member = cls.__registry__[name]
         except (KeyError, TypeError):
-            raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):
-            raise ValueError(f"{name!r} is not a member of {cls.__name__}")
+            raise UnknownFamilyMember(f"{name!r} is not a member of {cls.__name__}")
         return cast(type[Self], member)
 
     @classmethod

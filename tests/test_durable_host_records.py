@@ -3,6 +3,7 @@ import asyncio
 import json
 
 import pytest
+from agent_comms.field_codec import MalformedRecord
 
 from agent_comms.agent_backend import (
     FailedCompaction,
@@ -87,7 +88,8 @@ def test_result_kind_is_bound_to_its_pending_command():
                         'success': False, 'error': 'failed'})
         assert channel.correlate(error) == command
         assert (await future).error == 'failed'
-        assert channel.correlate(error) is None
+        with pytest.raises(MalformedRecord, match="no pending command"):
+            channel.correlate(error)
     asyncio.run(journey())
 
 

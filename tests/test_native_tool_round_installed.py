@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.channel_coding_tools import CodingToolOwner, CodingToolSocket
+from agent_comms.pi_events import MessageEnd, Response
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.native_pi import NativePiTerminalFailure
 from agent_comms.turn_failure import ModelRequestFailed
@@ -42,16 +43,17 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
             provider.status = 400
             provider.error_message = "controlled terminal after the distinct authorized effect"
 
-    message_end = TrackedTurnSession.message_end
+    apply_native_event = TrackedTurnSession.apply_native_event
 
     async def delayed_declaration(turn, event):
-        if any(isinstance(item, ToolCallContent) and item.id == "fresh-round-1"
-               for item in event.message.content):
+        if isinstance(event, MessageEnd) and any(
+                isinstance(item, ToolCallContent) and item.id == "fresh-round-1"
+                for item in event.message.content):
             # The actual first socket request reaches its original ten-second
             # start deadline. The second request must exist before this native
             # declaration is consumed, reproducing the retained ordering.
             await asyncio.wait_for(release.wait(), 20)
-        await message_end(turn, event)
+        return await apply_native_event(turn, event)
 
     handle_request = CodingToolSocket.handle_request
 
@@ -82,7 +84,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
 
     monkeypatch.setattr(TrackedTurnSession, "result", observed_result)
     monkeypatch.setattr(provider, "response_chunks", response_chunks)
-    monkeypatch.setattr(TrackedTurnSession, "message_end", delayed_declaration)
+    monkeypatch.setattr(TrackedTurnSession, "apply_native_event", delayed_declaration)
     monkeypatch.setattr(CodingToolSocket, "handle_request", observed_request)
     monkeypatch.setattr(CodingToolOwner, "allow", observed_claim)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
@@ -170,7 +172,7 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
             native.provider.status = 400
 
     committed_input = TrackedTurnSession.committed_input
-    response = TrackedTurnSession.response
+    apply_native_event = TrackedTurnSession.apply_native_event
     result = TrackedTurnSession.result
 
     async def original_committed(turn, event):
@@ -184,10 +186,12 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
             await owner.inputs.drain_inbox(session)
 
     async def acknowledged(turn, event):
-        await response(turn, event)
-        if event.success and event.command is pi_commands.Prompt and event.id != turn.command.id:
+        updates = await apply_native_event(turn, event)
+        if (isinstance(event, Response) and event.success and event.command is pi_commands.Prompt
+                and event.id != turn.command.id):
             acknowledgments.append(event.id)
             gate.set()  # The real native RPC has queued the following input before the answer completes.
+        return updates
 
     async def terminal(turn):
         try:
@@ -198,7 +202,7 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
 
     monkeypatch.setattr(native.provider, "response_chunks", chunks)
     monkeypatch.setattr(TrackedTurnSession, "committed_input", original_committed)
-    monkeypatch.setattr(TrackedTurnSession, "response", acknowledged)
+    monkeypatch.setattr(TrackedTurnSession, "apply_native_event", acknowledged)
     monkeypatch.setattr(TrackedTurnSession, "result", terminal)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms

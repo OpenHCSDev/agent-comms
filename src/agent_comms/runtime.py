@@ -87,7 +87,10 @@ class SocketClient:
         # One original saved snapshot must fit. Retain the transport's existing
         # configured budget when it is larger; no second output queue is owned.
         transport.set_write_buffer_limits(high=max(high_water, len(record)), low=low_water)
-        self.writer.write(record)
+        try:
+            self.writer.write(record)
+        except (BrokenPipeError, ConnectionResetError) as error:
+            raise SubscriberClosed("Runtime subscriber disconnected") from error
         await asyncio.sleep(0)
         _, high_water = transport.get_write_buffer_limits()
         if transport.get_write_buffer_size() > high_water:
@@ -259,7 +262,7 @@ class RuntimeServer:
             try:
                 await socket_client.session_update(session_id=session_id, update=update)
                 delivered = True
-            except (ConnectionError, OSError):
+            except SubscriberClosed:
                 self.clients.disconnect(socket_client)
         return delivered
 
@@ -291,11 +294,10 @@ class RuntimeServer:
         except asyncio.CancelledError:
             pass
         except Exception as error:
-            # The original owner launch retains stderr. Preserve the chain
-            # before the socket response deliberately reduces it to text.
-            _LOG.exception("Runtime request failed (session=%s)", session_id)
+            # Reply to this requester, then propagate the original failure to the server task.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.of(error))
+            raise
         finally:
             self.clients.disconnect(client)
             client.disconnected()
@@ -557,13 +559,6 @@ class RuntimeProxy(RuntimeConnection):
                     response = ClientPermissionResponse.of(
                         request.id, RequestPermissionResponse.model_validate(reply)
                     )
-            except (
-                TimeoutError, ConnectionError, ValueError, RequestError, asyncio.CancelledError
-            ):
-                # An unanswered, disconnected, refused or invalid client reply
-                # is a denial; the owner never receives client exception text.
-                # Any other failure is a defect and propagates after the denial.
-                pass
             finally:
                 if (
                     token == self._controller_token
@@ -582,8 +577,8 @@ class RuntimeProxy(RuntimeConnection):
             try:
                 while line := await reader.readline():
                     await OwnerLine.read(line).deliver(self)
-            except (OSError, ConnectionError):
-                pass  # A reset subscription is safe to establish again.
+            except ConnectionResetError:
+                pass  # The transport reports the closed subscription, not a decoder defect.
             except (ValueError, RuntimeError, RequestError):
                 # The owner is our component: an undecodable or unexpected line,
                 # or the owner's failure line, is a defect, not an end of stream.
@@ -601,7 +596,7 @@ class RuntimeProxy(RuntimeConnection):
                     break
                 except OwnerIdentityChangedError:
                     return
-                except (OSError, RuntimeError):
+                except (FileNotFoundError, ConnectionRefusedError):
                     await asyncio.sleep(0.1)
 
     async def close_permissions(self) -> None:

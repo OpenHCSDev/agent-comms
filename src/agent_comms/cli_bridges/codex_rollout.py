@@ -118,11 +118,7 @@ class FunctionCallItem(RolloutItem):
 
     @property
     def raw_input(self) -> dict[str, JsonValue]:
-        try:
-            decoded = json.loads(self.arguments)
-        except ValueError:
-            decoded = None
-        return decoded if isinstance(decoded, dict) else {'input': self.arguments}
+        return TypeAdapter(dict[str, JsonValue]).validate_json(self.arguments)
 
     def updates(self, state: RolloutState, position: int) -> tuple[TranscriptUpdate, ...]:
         state.tools[self.call_id] = self.name
@@ -135,6 +131,10 @@ class CustomToolCallItem(FunctionCallItem):
     """A freeform tool (apply_patch): its input is text, not JSON arguments."""
     wire_tag = 'custom_tool_call'
     arguments: str = Field(default='', alias='input')
+
+    @property
+    def raw_input(self) -> dict[str, JsonValue]:
+        return {'input': self.arguments}
 
 
 class FunctionCallOutputItem(RolloutItem):

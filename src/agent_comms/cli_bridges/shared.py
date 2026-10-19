@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import fcntl
-import hashlib
 import json
 import secrets
 import os
@@ -38,6 +36,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tools import (
     BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool)
 from agent_comms.messages import Message, MessageKind, InfoKind
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from agent_comms.send_result import SendResult
 from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime
@@ -786,13 +785,11 @@ class Inbox(Operation[OperationBridge]):
         tasks.create_task(bridge.watch())
 
     async def run(self, bridge: OperationBridge) -> None:
-        # One session claim, independent of --state and bus aliases. This is the
-        # existing watch lease, not a process file or a second registration.
-        claims = Path.home() / '.local/state/agent-comms/cli-watch'
-        claims.mkdir(parents=True, exist_ok=True, mode=0o700)
-        key = hashlib.sha256(bridge.binding.thread.encode()).hexdigest()
-        with (claims / f'{key}.lock').open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # The claim records how this watch was started, so the session's hook can
+        # name the re-arm command once the lease lapses.
+        record = WatchRecord(bridge.binding.bus, bridge.binding.root,
+                             (Path(sys.argv[0]).name, *sys.argv[1:]))
+        with WatchClaim(bridge.binding.thread).held(record):
             from agent_comms.registration import Registration
 
             registry = await asyncio.to_thread(

@@ -31,10 +31,7 @@ def current_root() -> Path:
 
 def root_is_current(root: str | Path) -> bool:
     """Fail closed if a client's root is no longer the current route."""
-    try:
-        return current_root() == Path(root).expanduser().resolve()
-    except (OSError, ValueError, RuntimeError):
-        return False
+    return current_root() == Path(root).expanduser().resolve()
 
 
 def implicit_root() -> bool:

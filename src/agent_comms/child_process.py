@@ -1457,7 +1457,7 @@ class BoundedRun:
                 child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
         except TimeoutError:
             raise  # A launch expiry is not evidence that user code never started.
-        except OSError as error:
+        except FileNotFoundError as error:
             yield ChildResult(FailedToStartOutcome(str(error)))
             return
         exchange = asyncio.create_task(child.communicate(input))

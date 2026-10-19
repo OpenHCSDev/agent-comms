@@ -26,7 +26,7 @@ class ExtensionUiSession:
         # A acknowledgement is informational, never permission to call a tool or send.
         if self.acknowledgement is not None or not session.permits_live_status():
             return None
-        self.acknowledgement = McpLiveAcknowledgement.from_status(text, session.input_id)
+        self.acknowledgement = McpLiveAcknowledgement.from_status(text, session.command.input_id)
         return self.acknowledgement
 
     async def choose(self, request: DialogUiRequest, session: TurnSession) -> ExtensionUiChoice:
@@ -50,11 +50,7 @@ class ExtensionUiSession:
         session.finished = True
 
     async def answer(self, request: DialogUiRequest, session: TurnSession) -> None:
-        try:
-            choice = await self.choose(request, session)
-        except ValueError as error:
-            await self.fail(str(error), session)
-            return
+        choice = await self.choose(request, session)
         # Input forwarding may become uncertain while the controller is awaiting
         # the user. Input permission must still hold when its answer reaches Pi.
         if not session.prompt_state.permits_extension_ui(session):

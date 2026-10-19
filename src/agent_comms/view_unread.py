@@ -29,7 +29,6 @@ from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 
 if TYPE_CHECKING:
     from .agent_backend import RuntimeLocation
-    from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
     from .threads import Thread
@@ -397,8 +396,7 @@ class TranscriptReadState(ThreadOwnedState):
     finishes an irrelevant prefix; source replacement discards its projection.
     """
 
-    def __init__(self, path: Path, registry: Registration):
-        self.registry = registry
+    def __init__(self, path: Path):
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
         self._key_snapshot: RegistrySnapshot | None = None
         self._key_visibility = DEFAULT_ROSTER
@@ -529,11 +527,10 @@ class TranscriptReadState(ThreadOwnedState):
         # cancellation, never this connection, the observer pipe or the owner's locks.
         self._preparation = self._preparation.started(self, needed)
 
-    def _refresh_keys(self, visibility: RosterVisibility) -> None:
+    def _refresh_keys(self, snapshot: RegistrySnapshot, visibility: RosterVisibility) -> None:
         changed = self._source_watch.changed_paths()
         invalid = self._source_watch.invalid
-        # Each RegistryRevision owns one stable detached snapshot.
-        snapshot = self.registry.snapshot()
+        # The caller's captured registry owns the thread set for these counts.
         rebuild = invalid
         if snapshot is not self._key_snapshot or visibility != self._key_visibility:
             current = {}
@@ -573,7 +570,7 @@ class TranscriptReadState(ThreadOwnedState):
                 if observed != keys.revisions:
                     self._thread_keys[name] = keys.refresh(observed)
 
-    def counts(self, viewer: str, *, document: ReadDocument,
+    def counts(self, viewer: str, *, registry: RegistrySnapshot, document: ReadDocument,
                visibility: RosterVisibility) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if not self._lock.acquire(blocking=False):
@@ -581,7 +578,7 @@ class TranscriptReadState(ThreadOwnedState):
         try:
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
-            self._refresh_keys(visibility)
+            self._refresh_keys(registry, visibility)
             try:
                 return self._counts_locked(viewer, document)
             except sqlite3.DatabaseError as error:
@@ -630,12 +627,12 @@ _shared_lock = RLock()
 _shared_states: WeakValueDictionary[str, TranscriptReadState] = WeakValueDictionary()
 
 
-def transcript_read_state(path: Path, registry: Registration) -> TranscriptReadState:
+def transcript_read_state(path: Path) -> TranscriptReadState:
     """Reuse one source index per live wire root, without retaining dead roots."""
     key = str(path.expanduser().resolve())
     with _shared_lock:
         state = _shared_states.get(key)
         if state is None or not state._cleanup.alive:
-            state = TranscriptReadState(Path(key), registry)
+            state = TranscriptReadState(Path(key))
             _shared_states[key] = state
         return state
