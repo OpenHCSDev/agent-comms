@@ -10,8 +10,12 @@ from pathlib import Path
 from typing import ClassVar
 
 from ..comms import Comms
-from ..standing_rules import ReasonedStandingRule, StandingRule
+from ..goal_actions import OrderGoalAction
+from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingRule,
+                              UndatedStandingRule)
 from ..goals import Goal
+from ..threads import Thread
+from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
 from . import capacity, judge
 from .config import CommanderConfig, Repo
@@ -20,7 +24,7 @@ CONFIG = CommanderConfig.installed()
 
 
 @dataclass(frozen=True)
-class Detached(StandingRule):
+class Detached(UndatedStandingRule):
     unit: str
     unread: int
     orders: tuple[str, ...]
@@ -41,7 +45,7 @@ class Detached(StandingRule):
 
 
 @dataclass(frozen=True)
-class RequestStalled(StandingRule):
+class RequestStalled(UndatedStandingRule):
     goal: Goal
 
     @classmethod
@@ -57,25 +61,97 @@ class RequestStalled(StandingRule):
 
 
 @dataclass(frozen=True)
-class IdleUnits(ReasonedStandingRule):
-    """Units with a native turn in the last ten minutes and no order; excludes parked threads."""
+class WheelSpin(StandingRule, declared_name=None):
+    """An order is not getting closer to done, or a unit sits with no order; Core gives the
+    order to a unit that will move it, with no deadline and no commander turn involved."""
+
+    todo: Todo
 
     recent: ClassVar[int] = 10 * 60
-    text = "IDLE UNITS with no order: {why} -> give each the top unowned row now"
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
+    def idle(cls, comms: Comms, commander: str) -> list[Thread]:
+        """Units with a native turn in the last ten minutes and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CONFIG.parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
-        idle = sorted(thread.name for thread in comms.registry.all_threads().values()
-                      if thread.name not in excluded
-                      and TurnDigestRead(comms.root, thread, bound).native())
-        return ", ".join(idle) or None
+        return sorted((thread for thread in comms.registry.all_threads().values()
+                       if thread.name not in excluded
+                       and TurnDigestRead(comms.root, thread, bound).native()),
+                      key=lambda thread: thread.name)
+
+    def assign(self, comms: Comms, commander: str, unit: Thread) -> None:
+        """The order sent again to ``unit`` through its Goal, with the order's own text."""
+        todo = comms.goals.todos.get(self.todo.id)
+        order = todo.order.reissued(time.time())
+        comms.goals.update_goal(unit.name, OrderGoalAction(
+            problem=todo.id, expected_revision=todo.revision, order=order,
+            request=todo.goal.request(), deadline=todo.deadline, commander=commander,
+            traced=todo.order.owner))
+        comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(todo)}")
 
 
 @dataclass(frozen=True)
-class ForkNow(StandingRule):
+class FlatWheelSpin(WheelSpin, DatedStandingRule):
+    """Two distance readings with no fall while the unit kept working."""
+
+    since: float
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[FlatWheelSpin, ...]:
+        held = tuple(todo for todo in cls.todos(comms, commander) if todo.pending)
+        pulls = PullRequests(held)
+        storage = comms.registry.storage_rule
+        trends = ((todo, OrderProgress.read(todo, storage, pulls).distance_readings().trend)
+                  for todo in held)
+        flat = ((todo, trend.since) for todo, trend in trends if isinstance(trend, FlatTrend))
+        return tuple(cls(todo, since) for todo, since in flat
+                     if TurnDigestRead(comms.root, comms.registry.require(todo.held().owner),
+                                       TurnsSince(since)).read().turns)
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (f"WHEEL SPIN: {self.todo.holder} kept working on {self.todo.id} while its distance"
+                " to done did not fall across two readings -> Core strikes it and gives the order"
+                " to an idle unit")
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        todo = comms.goals.todos.get(self.todo.id)
+        held = todo.held()
+        if not todo.struck_on_order(held.owner):
+            comms.goals.change_problem(todo.id, StrikeTodo(
+                todo.revision, comms.registry.require(commander).incarnation, held,
+                f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
+                " across two readings"), commander)
+        for unit in self.idle(comms, commander)[:1]:
+            self.assign(comms, commander, unit)
+
+
+@dataclass(frozen=True)
+class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
+    """A unit holds no next order while the board has unowned rows."""
+
+    unit: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
+        rows = (todo for todo in comms.goals.todos.for_commander(
+            comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
+        idle = cls.idle(comms, commander)
+        return tuple(cls(todo, unit.name) for unit, todo in zip(idle, rows, strict=False))
+
+    def line(self) -> str:
+        return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
+                f" -> Core gives it to {self.unit}")
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.assign(comms, commander, comms.registry.require(self.unit))
+
+
+@dataclass(frozen=True)
+class ForkNow(UndatedStandingRule):
     """The load on the asked Comms needs more live forks than there are."""
 
     load: capacity.Load
@@ -90,7 +166,7 @@ class ForkNow(StandingRule):
 
 
 @dataclass(frozen=True)
-class Unjudged(ReasonedStandingRule):
+class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
     text = "UNJUDGED {why} edits -> judge or fork a judge slice"
 
@@ -101,7 +177,7 @@ class Unjudged(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
-class MergeGrowth(StandingRule):
+class MergeGrowth(DatedStandingRule):
     """A merge to a fleet repository's main that grew its source by more than the limit, judged by
     its own first-parent diff and read from git on every read; nothing about it is stored."""
 

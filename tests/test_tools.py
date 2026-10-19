@@ -4,6 +4,7 @@ import re
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool

@@ -517,7 +517,7 @@ def strike(unit: str, why: str, caught: str = f'{ME} at review', *,
 
 
 def done(pid, sha, delivered=None):
-    """Core checks the delivery on its clean checked commit; a late delivered commit is a strike."""
+    """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')

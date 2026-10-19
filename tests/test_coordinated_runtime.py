@@ -165,7 +165,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         if fresh:
             session_file = session_dir / "one.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "id": "isolated-session"}) + "\n"
+                json.dumps({"type": "session", "id": "isolated-session", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None
@@ -181,13 +181,9 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         await asyncio.to_thread(authorized)
         if fail_on == len(calls):
             raise NativePiUnavailable("fake backend process died")
-        if fresh:
-            entries = [{"type": "session", "id": "isolated-session"}]
-            proof_rows = []
-        else:
-            entries = [json.loads(line) for line in session_file.read_text().splitlines()]
-            proof_file = Path(str(session_file) + ".input-proof")
-            proof_rows = read_proof_rows(session_file) if proof_file.exists() else []
+        entries = [json.loads(line) for line in session_file.read_text().splitlines()]
+        proof_file = Path(str(session_file) + ".input-proof")
+        proof_rows = read_proof_rows(session_file) if proof_file.exists() else []
         session_id = entries[0]["id"]
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
@@ -727,7 +723,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     session_dir.mkdir(parents=True, mode=0o700)
     saved = session_dir / "saved.jsonl"
     moved = session_dir / "moved.jsonl"
-    saved.write_text(json.dumps({"type": "session", "id": "isolated-session"}) + "\n")
+    saved.write_text(json.dumps({"type": "session", "id": "isolated-session", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n")
     saved.chmod(0o600)
     monkeypatch.setattr(
         "agent_comms.native_session_reopen.SessionIdentityHelper.locate",
