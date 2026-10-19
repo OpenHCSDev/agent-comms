@@ -35,7 +35,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from agent_comms.carry import STEPS, Carry, CarryChain, CarryLedger, RetainedBus
+from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, RetainedBus
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
@@ -56,7 +56,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def step_source(after: str | None) -> str:
     return (
-        "from agent_comms.carry import Carried, Carry\n\n"
+        "from cutover.carry import Carried, Carry\n\n"
         f"class Step(Carry):\n    after = {after!r}\n\n"
         "    @classmethod\n    def carry(cls, root, *, apply):\n        return Carried(0)\n"
     )
@@ -320,7 +320,7 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
     older = repo.commit({"carry": (REPO / STEPS / "carry.py").read_text()})
     (repo.path / "src/probe_api.py").write_text("OLD = 1\nNEW = 2\n")
     newer = repo.commit({"carry_probe": (
-        "from probe_api import NEW\n\nfrom agent_comms.carry import Carried, Carry\n\n\n"
+        "from probe_api import NEW\n\nfrom cutover.carry import Carried, Carry\n\n\n"
         "class Probe(Carry):\n    after = None\n\n"
         "    @classmethod\n    def before_stop(cls, root, *, apply):\n"
         "        (root / 'stopped').write_text(str(NEW))\n        return Carried(1, {}, ('stopped',))\n\n"

@@ -150,7 +150,7 @@ raise SystemExit(main(sys.argv[2:]))
         assert children[0].returncode is not None
 
 
-PROBE = ("from agent_comms.carry import Carried, Carry\n\n\n"
+PROBE = ("from cutover.carry import Carried, Carry\n\n\n"
          "class Probe(Carry):\n    after = None\n\n"
          "    @classmethod\n    def carry(cls, root, *, apply):\n"
          "        (root / 'carried').write_text('carried')\n        return Carried(1, {}, ('carried',))\n\n\n"
@@ -161,7 +161,7 @@ PROBE = ("from agent_comms.carry import Carried, Carry\n\n\n"
 async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_path, monkeypatch):
     """The upgrade declares maintenance; the Core watch closes, the carry runs, and once
     maintenance clears the bridge's next child receives a message sent after it."""
-    from agent_comms.carry import STEPS, CarryChain, CarryLedger
+    from cutover.carry import STEPS, CarryChain, CarryLedger
     from test_bus_route_counts_locking import _case
     from test_carry import REPO, CheckoutStack, Repository
     from tools.upgrade_bus import Revisions, carry_all

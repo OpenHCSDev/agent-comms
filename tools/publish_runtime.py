@@ -29,7 +29,7 @@ from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.restart_refusals import OwnerBusyRefusal
 from agent_comms.store_files import _atomic_write_text, _store_lock
-from agent_comms.carry import CarryChain, CarryLedger
+from .cutover.carry import CarryChain, CarryLedger
 
 
 class PublicationIntent(SubclassUnion, affix=''):

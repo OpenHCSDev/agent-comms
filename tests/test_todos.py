@@ -22,7 +22,7 @@ from agent_comms.todos import (
     BlockedTodoState, OperationDelivery, Todo, TodoConflict, TodoError, TodoState, TodoStore,
 )
 
-from tools.cutover.carry_todo_open_indexes import TodoOpenIndexes
+from cutover.carry_todo_open_indexes import TodoOpenIndexes
 
 
 def thread(name: str, root: Path, created: float) -> Thread:

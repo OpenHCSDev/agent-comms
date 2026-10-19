@@ -73,17 +73,12 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel.force-include]
 ".pi/APPEND_SYSTEM.md" = "agent_comms/_native/APPEND_SYSTEM.md"
 "stack/pi-native.sha256" = "agent_comms/_native/pi-native.sha256"
-"tools/__init__.py" = "tools/__init__.py"
-"tools/publish_runtime.py" = "tools/publish_runtime.py"
-"tools/cutover/__init__.py" = "tools/cutover/__init__.py"
-"tools/cutover/carry.py" = "tools/cutover/carry.py"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src", "tests", "extensions", "README.md", "LICENSE", "hatch_build.py",
     ".pi/APPEND_SYSTEM.md", "stack/APPEND_SYSTEM.md",
-    "stack/pi-native.sha256", "tools/__init__.py", "tools/publish_runtime.py",
-    "tools/cutover/__init__.py", "tools/cutover/carry.py",
+    "stack/pi-native.sha256",
 ]
 
 [tool.hatch.version]
@@ -91,6 +86,7 @@ path = "src/agent_comms/__init__.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tools"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
