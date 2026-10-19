@@ -85,8 +85,8 @@ def client_wire(root: Path | None) -> Iterator[Comms]:
     Only the UI yields between index units.
     """
     route = resolve_comms_route(root)
+    # Refuse before borrowing a route or opening stores held by maintenance.
+    # This grants nothing: writes still check under their determining locks.
+    MaintenanceBarrier(route.root / "registry.json").assert_open_unlocked()
     with route.hold_client_route():
-        # Refuse before opening stores that maintenance may hold locked. This
-        # observation grants nothing: writes still check under their own locks.
-        MaintenanceBarrier(route.root / "registry.json").assert_open_unlocked()
         yield Comms(route, projection=CompletingRouteCounts)

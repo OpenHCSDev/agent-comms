@@ -1,17 +1,21 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 import base64
+import fcntl
 import hashlib
+import os
 import secrets
 import shutil
 import json
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
+from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms
 from agent_comms.connector import (
     CALLER,
@@ -286,12 +290,15 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
 
 
 @pytest.mark.parametrize("phases", [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
-async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(comms, tmp_path, phases):
+async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
+    comms, tmp_path, phases, monkeypatch,
+):
     for name in ("worker", "claude-ai"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
     original = comms.messaging.send("worker", "claude-ai", "Ready for your message").message
-    copied_root = tmp_path / "maintenance-copy"
+    copied_root = tmp_path / ".agent-comms"
     shutil.copytree(comms.root, copied_root)
+    monkeypatch.setenv("HOME", str(tmp_path))
     store = ConnectorStore.at(tmp_path / "copy-auth")
     connector = Connector(store, "http://127.0.0.1:18766", copied_root)
     before = (copied_root / "bus.jsonl").read_bytes()
@@ -301,7 +308,10 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(comms, t
         held = barrier.begin(MaintenanceOperator("connector-refusal-proof"))
         for phase in phases:
             held = barrier.advance(held, phase)
-        with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path):
+        with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path), ExitStack() as locks:
+            directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)
+            locks.callback(os.close, directory)
+            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
             started = time.monotonic()
             response = await reader.post("/mcp", headers=headers, timeout=2, json={
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call",
