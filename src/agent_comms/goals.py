@@ -260,8 +260,8 @@ class CountPrinted(CheckPrinted):
             raise ValueError(f"The order check printed {self.count}, not its expected count {expected}.")
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
-        return (f"Check already prints {self.count} before any work: `{command}` proves nothing; "
-                "write a check that fails now",) * (self.count == expected)
+        return ((f"Check already prints {self.count} before any work: `{command}` proves nothing; "
+                 "write a check that fails now",) if self.count == expected else ())
 
 
 @dataclass(frozen=True)
