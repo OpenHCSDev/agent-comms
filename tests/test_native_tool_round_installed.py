@@ -51,7 +51,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
             # start deadline. The second request must exist before this native
             # declaration is consumed, reproducing the retained ordering.
             await asyncio.wait_for(release.wait(), 20)
-        await message_end(turn, event)
+        return await message_end(turn, event)
 
     handle_request = CodingToolSocket.handle_request
 

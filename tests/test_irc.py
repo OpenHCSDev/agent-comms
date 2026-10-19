@@ -157,7 +157,7 @@ class TestPresence:
         assert Registration(path).last_seen("a") == seen
 
     def test_who_shape(self, chat):
-        rows = {view.thread.name: FieldCodec.project(view, "presence") for view in chat.views.who()}
+        rows = {row.thread.name: row.to_wire() for row in chat.views.who()}
         assert rows["PR111"]["status"] == "running"
         assert rows["PR111"]["tags"] == ["ci"]
         assert rows["PR111"]["last_seen"] > 0

@@ -305,17 +305,21 @@ class SessionLifecycle:
                 or self.display_titles.get(session_id) != thread.title
                 or self.worktrees.get(session_id) != thread.worktree
             ):
-                await self.runtime.session_update(
-                    session_id=session_id,
-                    update=SessionInfoUpdate(
-                        session_update="session_info_update",
-                        title=thread.title,
-                        field_meta=await self.metadata(name, session_id=session_id),
-                    ),
-                )
+                await self.publish_metadata(session_id, title=thread.title)
                 self.titles[session_id], self.display_titles[session_id] = name, thread.title
                 self.worktrees[session_id] = thread.worktree
             return name
+
+    async def publish_metadata(self, session_id: str, *, title: str | None = None) -> None:
+        """Publish the complete current session state through its existing transport."""
+        await self.runtime.session_update(
+            session_id=session_id,
+            update=SessionInfoUpdate(
+                session_update="session_info_update",
+                title=title,
+                field_meta=await self.metadata(self.require(session_id), session_id=session_id),
+            ),
+        )
 
     async def observe_native_configuration(
         self, session_id: str, thread_name: str, event: events.NativeMetadataObservation
