@@ -132,7 +132,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
         assert records.current_draft(transcript.root, transcript.incarnation).events[0].text == "Hel"
         assert records.cut().offset == 0
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hello", timestamp=1.0, position='a'),))
-    transcript.finish(turn_id="t", item_id="other", events=(NoticeTranscript("Tool", position='other'),))
+    transcript.finish(turn_id="t", item_id="other", events=(NoticeTranscript("Tool", timestamp=1.0, position='other'),))
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).item_id == "a"
     read = comms.transcripts.capture_page_read("codex")
