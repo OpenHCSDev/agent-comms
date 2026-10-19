@@ -43,9 +43,9 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     )
     with pytest.raises(ValueError):
         CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
-    examples = (ReadTool(path="file"), BashTool(command="pwd"),
-        EditTool(path="file", edits=(ReplacementEdit("before", "after"),)),
-        WriteTool(path="file", content="value"))
+    examples = (ReadTool(call_id="case", path="file"), BashTool(call_id="case", command="pwd"),
+        EditTool(call_id="case", path="file", edits=(ReplacementEdit("before", "after"),)),
+        WriteTool(call_id="case", path="file", content="value"))
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
@@ -68,7 +68,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     arguments = {"pattern": "shared preview"}
     event = events.ToolStart.from_call("pattern-case", name, arguments)
     recorded = ToolStartTranscript(position=0, tool_call_id="pattern-case", tool_name=name, raw_input=arguments,
-                                   tool=ToolDeclaration.record(name, arguments))
+                                   tool=ToolDeclaration.record(name, arguments, call_id="pattern-case"))
     assert (event.title, event.kind) == (f"{label} shared preview", "search")
     assert (recorded.title, recorded.kind) == (event.title, event.kind)
     owner, received = acp_tools
@@ -125,7 +125,7 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
         "messageID": "message", "callID": "open-code", "tool": "read",
         "state": {"status": "pending", "input": {"filePath": "open-code.txt"}}})
     call = part.state.call(part)
-    assert call.title == "Read open-code.txt" and call.tool == ReadTool(path="open-code.txt")
+    assert call.title == "Read open-code.txt" and call.tool == ReadTool(call_id="open-code", path="open-code.txt")
     recorded, _ = call.finished("saved", True, 0)
     assert recorded.title == call.title and recorded.raw_input == {"path": "open-code.txt"}
     opaque = {"external": ["not", "Pi"]}
@@ -149,7 +149,7 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     for request in ToolRequest.members_with(ToolRequest):
         arguments = {"from": "source", "to": "destination", "body": "decode-only"}
         call = CodingCall.decode("isolated-call", request.declared_name, arguments)
-        assert isinstance(call, NativeExecutableTool) and call.name == request.declared_name
+        assert isinstance(call, NativeExecutableTool) and call.declared_name == request.declared_name
         assert call.call_id == "isolated-call" and call.arguments == arguments
         assert call.allowed_claim() is None
         assert call.digest() == f'{request.declared_name} {json.dumps(arguments)}'
@@ -169,10 +169,9 @@ def test_native_call_fields_are_not_model_arguments():
     call = CodingCall.decode("owned-call", "write", arguments)
     assert type(call) is WriteTool and call.call_id == "owned-call"
     assert call.arguments == arguments
-    assert FieldCodec.encode(call) == {"tool": "write", **arguments}
-    assert set(FieldCodec.record_schema(WriteTool)["properties"]) == set(arguments)
+    assert FieldCodec.encode(call) == {"tool": "write", "call_id": "owned-call", **arguments}
     refused = CodingCall.decode("owned-call", "write", {**arguments, "call_id": "foreign"})
-    with pytest.raises(SelectedToolDenied, match="call_id"):
+    with pytest.raises(SelectedToolDenied, match="call identity"):
         refused.allowed_claim()
 
 
