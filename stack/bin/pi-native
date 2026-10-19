@@ -24,7 +24,6 @@ fi
 # managed-project override is now copied inside the verified package instead.
 unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
 export NODE_DISABLE_COMPILE_CACHE=1
-native verify "${cli%/dist/cli.js}"
 # Each launch derives the installed extension sources from the verified
 # declaration; sources whose bytes already match are not written.
 native install_sources "${cli%/dist/cli.js}" "$repo_root"

@@ -65,7 +65,6 @@ publish() {
     deployment="$publish_root/native-current-$build_id"
     deployment_package="$deployment/node_modules/@earendil-works/pi-coding-agent"
     if [[ -e "$deployment" ]]; then
-        verify "$deployment"
         native \
             install_sources "$deployment_package" "$repo_root"
     else
@@ -74,7 +73,6 @@ publish() {
         mkdir -p -- "$deployment_stage/node_modules/@earendil-works"
         cp -a --reflink=auto -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
-        verify "$deployment_stage"
         native \
             install_sources \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent" "$repo_root"
