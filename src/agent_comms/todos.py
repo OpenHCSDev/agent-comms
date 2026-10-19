@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
 from .change_report import FileLine
-from .child_process import BoundedRun, ChildResult, ExitedOutcome
+from .child_process import BoundedRun, ChildResult, ExitedOutcome, Platform, ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import (
@@ -34,6 +34,7 @@ from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
+from .turn_digests import TurnDigestRead, TurnsSince
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
@@ -141,7 +142,8 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
         lateness = self.at.lateness(todo.deadline)
         reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
                   f"(caught by {actor.name} at review)")
-        return (StrikeTodo(todo.revision, actor, todo.held(), reason),) * lateness.late()
+        return (StrikeTodo(todo.revision, actor, todo.held(), reason,
+                           evidence=(CommitEvidence(self.delivered),)),) * lateness.late()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -164,11 +166,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
             raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
                              "first pushed commit that answers the order.")
-        pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
-                                "--list", "origin/*")
-        if not pushed.strip():
-            raise ValueError(
-                f"Delivered commit {self.delivered} is on no origin branch; push it first.")
+        await self.run(check, "git", "merge-base", "--is-ancestor", self.delivered, "origin/main")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1606,11 +1604,119 @@ class AssignTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class Evidence(DeclaredFamily, affix="Evidence"):
+    """Checkable state behind a strike; a board row is not an artifact."""
+    form: ClassVar[str]
+
+    @classmethod
+    @abstractmethod
+    def cited(cls, text: str) -> Self: ...
+
+    @classmethod
+    def verified(cls, evidence: tuple[Evidence, ...], goals: Goals, current: Todo) -> None:
+        if not evidence:
+            raise ValueError("Cite the state the strike stands on: "
+                             + ", ".join(member.form for member in cls.members_with(cls))
+                             + "; a board row, goal text or another agent's account is not state.")
+        for cited in evidence:
+            cited.verify(goals, current)
+
+    @abstractmethod
+    def verify(self, goals: Goals, current: Todo) -> None: ...
+
+    @staticmethod
+    def git(current: Todo, *args: str) -> int:
+        return subprocess.run(("git", "-C", current.order.check.directory, *args),
+                              capture_output=True, timeout=30).returncode
+
+
+@dataclass(frozen=True)
+class CommitEvidence(Evidence):
+    sha: str
+    form = "--commit SHA"
+
+    @classmethod
+    def cited(cls, text: str) -> Self:
+        return cls(text)
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if self.git(current, "cat-file", "-e", f"{self.sha}^{{commit}}"):
+            raise ValueError(f"{self.sha} is no commit of {current.order.check.directory}")
+
+
+@dataclass(frozen=True)
+class DiffEvidence(Evidence):
+    a: str
+    b: str
+    form = "--diff A..B"
+
+    @classmethod
+    def cited(cls, text: str) -> Self:
+        return cls(*text.split(".."))
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if self.git(current, "diff", "--quiet", self.a, self.b) != 1:
+            raise ValueError(f"{self.a}..{self.b} changes nothing in {current.order.check.directory}")
+
+
+@dataclass(frozen=True)
+class TurnRecordEvidence(Evidence):
+    thread: str
+    turn_id: str
+    form = "--turn THREAD:TURN_ID"
+
+    @classmethod
+    def cited(cls, text: str) -> Self:
+        return cls(*text.split(":", 1))
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        turns = TurnDigestRead(goals.root, goals.registry.require(self.thread),
+                               TurnsSince(current.order.at.recorded_at("An order"))).read().turns
+        if self.turn_id not in {turn.turn_id for turn in turns}:
+            raise ValueError(f"{self.thread} recorded no turn {self.turn_id} since this order")
+
+
+@dataclass(frozen=True)
+class ProcessEvidence(Evidence):
+    pid: int
+    start: int
+    form = "--process PID:START"
+
+    @classmethod
+    def cited(cls, text: str) -> Self:
+        pid, start = text.split(":")
+        return cls(int(pid), int(start))
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if not Platform.current().matches(ProcessIdentity(self.pid, self.start)):
+            raise ValueError(f"No process {self.pid} started at {self.start} is running")
+
+
+@dataclass(frozen=True)
+class RuntimeEvidence(Evidence):
+    path: str
+    form = "--runtime PATH"
+
+    @classmethod
+    def cited(cls, text: str) -> Self:
+        return cls(text)
+
+    def verify(self, goals: Goals, current: Todo) -> None:
+        if not Path(self.path).is_absolute() or not Path(self.path).exists():
+            raise ValueError(f"{self.path} is no existing absolute runtime path")
+
+
+@dataclass(frozen=True)
 class StrikeTodo(TodoOperation):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+    evidence: tuple[Evidence, ...] = field(default=(), metadata={"wire_omit_default": True})
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        Evidence.verified(self.evidence, goals, current)
+        return self
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
@@ -1745,6 +1851,11 @@ class SupersededVerdict(OrderVerdict):
 class SendBackVerdict(OrderVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
+    evidence: tuple[Evidence, ...] = field(default=(), metadata={"wire_omit_default": True})
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        Evidence.verified(self.evidence, goals, current)
+        return self
 
     @property
     def line(self) -> str:
@@ -1752,7 +1863,7 @@ class SendBackVerdict(OrderVerdict):
 
     def judged(self, current: Todo) -> Todo:
         strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                            self.at)
+                            self.at, evidence=self.evidence)
         return strike.apply(current)
 
     def record(self, goals: Goals, problem: str) -> Todo:

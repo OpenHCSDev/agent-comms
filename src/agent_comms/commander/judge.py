@@ -230,7 +230,7 @@ class SupersededVerb(VerdictVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BackVerb(VerdictVerb):
+class BackVerb(order.CitedState, VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
     msg: str = option(help="the required order message")
     roast: str = option(help="blunt, why it is stupid, with because")
@@ -248,7 +248,8 @@ class BackVerb(VerdictVerb):
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
                                todo.held(), edit_id,
-                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
+                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
+                               evidence=self.evidence())
 
     def check_edits(self, edits: list[Edit]) -> None:
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):

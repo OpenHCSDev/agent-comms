@@ -34,7 +34,8 @@ from ..goals import OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..messages import Message
 from ..plan_phases import OrderPhase, UnplannedPhase
-from ..progress_claims import MergedClaim, WorkingClaim
+from ..progress_claims import WorkingClaim
+from ..field_codec import FieldCodec
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
@@ -44,7 +45,7 @@ from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
-                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
+                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop, Evidence)
 from . import capacity
 from .config import Commander, CommanderConfig, CommanderRole, Repo
 
@@ -431,7 +432,7 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
 
 
 def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
-           kind: type[StrikeTodo] = StrikeTodo) -> None:
+           evidence: tuple[Evidence, ...] = (), kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
     failure stays private and none is described in words that hide what happened."""
     # What matters is how a mistake happened, how often, and how and when it was caught.
@@ -442,7 +443,7 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
     if todo.held().owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
     recorded(unit, todo, kind(todo.revision, COMMS.registry.require(ME).incarnation, todo.held(),
-                              f'{why} (caught by {caught})'))
+                              f'{why} (caught by {caught})', evidence=evidence))
 
 
 def recorded(unit: str, todo: Todo, strike: StrikeTodo) -> None:
@@ -500,13 +501,10 @@ def done(pid, sha, screenshot='', seen='', repo=''):
         claim = WorkingClaim(evidence.artifact())
     else:
         delivered_commit = revision(repo, sha)
-        if subprocess.run(['git', '-C', repo, 'merge-base', '--is-ancestor',
-                           delivered_commit, 'HEAD']).returncode:
-            sys.exit(f'Refused: {delivered_commit} is not in {repo} HEAD.')
         delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
                                   delivered_commit=delivered_commit, evidence=evidence)
-        claim = MergedClaim(delivery.delivered)
-    call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
+    claims = (claim,) if operation else ()
+    call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=claims))
     delivered_todo = COMMS.goals.todos.get(pid)
     for late in delivered_todo.strikes[len(todo.strikes):]:
         posted(unit, delivered_todo, late)
@@ -792,8 +790,26 @@ class SendVerb(OrderVerb, LoadedVerb):
              replaces=self.replaces, disk=self.disk)
 
 
+class CitedState:
+    """Derive command options from the Evidence declarations, not another kind roster."""
+
+    def __init_subclass__(cls, **kwargs):
+        cls.__annotations__ = {**cls.__dict__.get('__annotations__', {}),
+                               **{FieldCodec.encode(member): tuple[str, ...]
+                                  for member in Evidence.members_with(Evidence)}}
+        for member in Evidence.members_with(Evidence):
+            flag, metavar = member.form.split()
+            setattr(cls, FieldCodec.encode(member), option(
+                flag, action='append', default=(), parser_default_factory=list, metavar=metavar))
+        super().__init_subclass__(**kwargs)
+
+    def evidence(self) -> tuple[Evidence, ...]:
+        return tuple(member.cited(value) for member in Evidence.members_with(Evidence)
+                     for value in getattr(self, FieldCodec.encode(member)))
+
+
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, RuledVerb):
+class StrikeVerb(CitedState, OrderVerb, RuledVerb):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
     why: str = option("--why")
@@ -803,7 +819,7 @@ class StrikeVerb(OrderVerb, RuledVerb):
         references = set(re.findall(r'\bP\d+\b', self.why))
         if len(references) != 1:
             sys.exit('Refused: name exactly one problem in --why; strikes count per problem.')
-        strike(self.unit, references.pop(), self.why, self.caught)
+        strike(self.unit, references.pop(), self.why, self.caught, evidence=self.evidence())
 
 
 @dataclass(frozen=True, kw_only=True)
