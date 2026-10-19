@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal
 
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, TimestampText
+from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
 from .pi_payloads import PiMessage, PiPayload
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
@@ -30,7 +29,7 @@ class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
     id: str | None = None
     parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
-    timestamp: Annotated[datetime, TimestampText]
+    timestamp: Annotated[RecordedTimestamp, TimestampText]
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
@@ -53,7 +52,7 @@ class RecordedEntry(PiPayload):
         Decode it once, before splitting into message/tool/routing events; ACP
         consumers receive Unix seconds.
         """
-        timestamp = self.timestamp.timestamp()
+        timestamp = self.timestamp.at.timestamp()
         return [replace(event, timestamp=timestamp) for event in self._events(context)]
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
@@ -69,7 +68,6 @@ class RecordedEntry(PiPayload):
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
-    opaque: ClassVar[bool] = False
 
     def imported_sources(self):
         return ()
@@ -492,12 +490,6 @@ class ImportedMetadataEntry(CustomEntry):
 class UnknownEntry(NativeEntry):
     payload: dict[str, Any]
     opaque = True
-
-    @property
-    def source_coordinates(self):
-        # Decode once for this source read. No parallel current identity fields
-        # are populated on an opaque extension record.
-        return RecordedEntry.from_wire(self.payload)
 
 
 @dataclass(frozen=True, kw_only=True)

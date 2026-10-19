@@ -42,7 +42,6 @@ class PiEvent(PiPayload, DeclaredFamily):
     """One declaration-owned record received by the Pi RPC channel."""
 
     wire_tag = "type"
-    opaque = False
 
     def __init_subclass__(
         cls, *, starts: type[phases.TurnPhase] | None = None,
