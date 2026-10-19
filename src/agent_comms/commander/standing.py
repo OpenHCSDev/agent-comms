@@ -124,7 +124,7 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
             comms.goals.change_problem(todo.id, StrikeTodo(
                 todo.revision, comms.registry.require(commander).incarnation, held,
                 f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
-                " across two readings", evidence=(todo.order.owner,)), commander)
+                " across two readings", evidence=(todo.order.source_reference(),)), commander)
         for unit in self.idle(comms, commander)[:1]:
             self.assign(comms, commander, unit)
 

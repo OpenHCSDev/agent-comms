@@ -146,7 +146,7 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
         reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
                   f"(caught by {actor.name} at review)")
         return (StrikeTodo(todo.revision, actor, todo.held(), reason,
-                           evidence=(todo.order.owner,)),) * lateness.late()
+                           evidence=(todo.order.source_reference(),)),) * lateness.late()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1111,7 +1111,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
-    def verify_evidence(self, evidence: tuple[FileLine, ...]) -> None:
+    def source_reference(self) -> FileLine:
         raise ValueError("This problem has no checked order to cite evidence against.")
 
     @classmethod
@@ -1196,9 +1196,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
-    def verify_evidence(self, evidence: tuple[FileLine, ...]) -> None:
-        for cited in evidence:
-            cited.require_exists()
+    def source_reference(self) -> FileLine:
+        return self.owner
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -1673,7 +1672,9 @@ class CitedStrike(TodoOperation, declared_name=None):
     def prepare(self, goals: Goals, current: Todo) -> Self:
         if not self.evidence:
             raise ValueError("A strike needs a checkable file:line, not a board row or goal text.")
-        current.order.verify_evidence(self.evidence)
+        current.order.source_reference()
+        for cited in self.evidence:
+            cited.require_exists()
         return self
 
 
