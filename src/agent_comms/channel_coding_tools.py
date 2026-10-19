@@ -28,9 +28,9 @@ from .envelope_claim_transitions import (
 )
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_arguments import NativeArguments
+from .storage_room import RoomReservation
 from .native_tools import NativeToolDeclaration
 from .native_tool_transport import ToolTransport, ToolCallIdentity
-from .child_process import ProcessIdentity
 from .selected_tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
@@ -44,7 +44,18 @@ class CodingToolOwner(ABC):
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
-    async def allow(self, turn, round_number: int, call: CodingCall) -> None:
+    async def reserve_room(self, call: CodingCall) -> RoomReservation | None:
+        registry = self.comms.registry
+        thread = registry.require(self.owner_name)
+        effects = call.storage_effects(Path(thread.worktree))
+        await asyncio.to_thread(registry.decide_storage, thread.name, effects)
+        work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
+        if work:
+            return await registry.storage_rule.wait_for_room(
+                work, thread, self.comms.root)
+        return None
+
+    async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation | None:
         def check(store: Coordination) -> None:
             self.verify(store, turn, self.comms.registry.snapshot())
             slot = call.slot(turn.command.input_id, round_number)
@@ -56,8 +67,15 @@ class CodingToolOwner(ABC):
                 self.claims[canonical] = self.claim_resource(
                     store, turn, resource, slot, self.claims.get(canonical))
 
-        async with self.check_lock:
-            await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+        reservation = await self.reserve_room(call)
+        try:
+            async with self.check_lock:
+                await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+        except BaseException:
+            if reservation is not None:
+                await asyncio.to_thread(reservation.finish, completed=False)
+            raise
+        return reservation
 
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
@@ -146,24 +164,9 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
-        registry = self.owner.comms.registry
-        thread = registry.require(self.owner.owner_name)
-        effects = call.storage_effects(Path(thread.worktree))
-        await asyncio.to_thread(registry.decide_storage, thread.name, effects)
-        work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
-        reservation = None
-        if work:
-            reservation = await registry.storage_rule.wait_for_room(
-                work, thread, self.owner.comms.root,
-                process=ProcessIdentity.capture(self.expected_pid))
-        try:
-            # Recheck turn authority only after waiting, with no database or
-            # registry lock carried across admission.
-            await self.owner.allow(self.turn, round_number, call)
-        except BaseException:
-            if reservation is not None:
-                await asyncio.to_thread(reservation.finish, completed=False)
-            raise
+        # The owner rechecks authority after its unlocked room wait. The
+        # transport holds the returned reservation for this exact tool call.
+        reservation = await self.owner.allow(self.turn, round_number, call)
         if reservation is not None:
             self.reservations[ToolCallIdentity(round_number, call.call_id)] = reservation
 

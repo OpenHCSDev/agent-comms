@@ -61,6 +61,7 @@ class RoomNeed:
         return RoomNeed(max(self.memory, other.memory), max(self.disk, other.disk))
 
 
+@dataclass(frozen=True)
 class RoomPhase(DeclaredFamily, affix="RoomPhase"):
     waiting: ClassVar[bool] = False
     held: ClassVar[RoomNeed] = RoomNeed()
@@ -118,7 +119,7 @@ class RoomLedger(TypedStore):
             yield db
             changed = db.total_changes != before
         if changed:
-            self.source_paths()[0].touch()
+            self.source_paths()[0].write_bytes(b'')
 
     def dead_claims(self):
         # Dead/replaced processes cannot hold room, but are never replayed.
@@ -274,18 +275,11 @@ class RoomAllocation:
             await asyncio.to_thread(enqueue)
             source = ModifiedWatchSource(ledger.root, frozenset(
                 os.fsencode(path.name) for path in ledger.source_paths()))
-            async for watcher in WireWatch.observations(source):
+            async for _ in WireWatch.observations(source, refresh_seconds=self.room_refresh_seconds):
                 if await asyncio.to_thread(self._admit, ticket):
                     measurement = WorkMeasurement(self, process)
                     admitted = True
                     return RoomReservation(self, ticket, measurement)
-                # Real release notifications race safely with prepare/admit. A
-                # timeout refreshes external OS changes, not another denial.
-                try:
-                    async with asyncio.timeout(self.room_refresh_seconds):
-                        await watcher.wait()
-                except TimeoutError:
-                    watcher.notify()
         finally:
             if not admitted:
                 await asyncio.to_thread(ledger.release, ticket)
