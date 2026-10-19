@@ -26,7 +26,7 @@ from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsencePr
 
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
-from cutover.carry import STEPS, Step
+from cutover.carry import STEPS, CarryChain, Step
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
@@ -1172,16 +1172,18 @@ class EditedCarry(Measure):
             path = next(fields)
             if status[0] in "RC":
                 next(fields)
-            name = Path(path).stem
-            if not (name.startswith("carry_") and path.endswith(".py")):
+            if not path.endswith(".py"):
                 continue
             if status[0] in "MRC" or status == "T":
                 before = git(repo, "show", f"{base}:{path}")
                 if Step.holds_carry(before):
                     edited += (status != "M" or cls.conversion(before) !=
                                cls.conversion(git(repo, "show", f"{head}:{path}")))
-            elif status == "A":
-                edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
+            elif status == "A" and Step.holds_carry(git(repo, "show", f"{head}:{path}")):
+                deleted = git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path)
+                if deleted.strip():
+                    _, source = CarryChain.source(repo, base, Path(path).stem)
+                    edited += Step.holds_carry(source)
         return {cls.__name__: 0}, {cls.__name__: edited}
 
 class UncarriedRecordFormat(Measure):
@@ -1233,8 +1235,8 @@ class UncarriedRecordFormat(Measure):
     @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         added = git(repo, "diff", "--name-only", "-z", "--diff-filter=A", base, head, "--", str(STEPS))
-        carried = any(Path(path).stem.startswith("carry_") and path.endswith(".py")
-                      for path in added.decode().split("\0"))
+        carried = any(Step.holds_carry(git(repo, "show", f"{head}:{path}"))
+                      for path in added.decode().split("\0") if path.endswith(".py"))
         before = cls.formats(repo, base, root, changed)
         after = cls.formats(repo, head, root, changed)
         uncarried = sum(before[name].version == form.version or not carried

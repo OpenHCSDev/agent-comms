@@ -1,7 +1,7 @@
 """The steps a retained bus is carried through when its durable format changes.
 
-A step is one module beside this one, ``carry_<what>.py``, holding one ``Carry``
-subclass, run as ``python -m cutover.carry_<what> ROOT [--apply]`` with ``src``
+A step is one module beside this one holding a ``Carry`` subclass that assigns
+``after``, run as ``python -m cutover.<module> ROOT [--apply]`` with ``src``
 and ``tools`` on the path. Three rules make a step safe to run on any bus at any later time:
 
 - It is idempotent: data it already carried reports no change.
@@ -245,29 +245,32 @@ class Step:
                           if isinstance(target, ast.Name)] == ["column"])
 
     @staticmethod
-    def holds_carry(source: bytes) -> bool:
-        """Whether a module declares a Carry subclass, read without importing it."""
-        return any(isinstance(node, ast.ClassDef)
-                   and any(parent_name(base) in carry_parents() for base in node.bases)
-                   for node in ast.parse(source).body)
+    def after_declarations(source: bytes) -> Iterator[tuple[ast.ClassDef, ast.Assign | ast.AnnAssign]]:
+        """The Carry classes and their assigned predecessors, without importing code."""
+        parents = carry_parents()
+        for node in ast.parse(source).body:
+            if isinstance(node, ast.ClassDef) and any(
+                parent_name(base) in parents for base in node.bases
+            ):
+                for statement in node.body:
+                    match statement:
+                        case ast.Assign(targets=[ast.Name(id="after")]) | ast.AnnAssign(
+                            target=ast.Name(id="after"), value=ast.expr()
+                        ):
+                            yield node, statement
+
+    @classmethod
+    def holds_carry(cls, source: bytes) -> bool:
+        """Whether a module declares a step, not merely a Carry helper class."""
+        return any(cls.after_declarations(source))
 
     @classmethod
     def declared(cls, name: str, source: bytes, revision: str) -> Step:
-        """The step a module declares, read without importing it. A ``carry_*`` module
-        holding no Carry is refused: a conversion outside the chain never runs."""
-        for node in ast.parse(source).body:
-            if isinstance(node, ast.ClassDef) and any(
-                parent_name(base) in carry_parents() for base in node.bases
-            ):
-                for statement in node.body:
-                    if (isinstance(statement, ast.Assign)
-                            and [target.id for target in statement.targets
-                                 if isinstance(target, ast.Name)] == ["after"]):
-                        return cls(name, ast.literal_eval(statement.value), revision,
-                                   node.name, revision, cls.declared_columns(source),
-                                   statement.lineno)
-                raise ValueError(f"{name} declares no step it runs after")
-        raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
+        """Read the selected module's step declaration without importing its revision."""
+        for node, statement in cls.after_declarations(source):
+            return cls(name, ast.literal_eval(statement.value), revision,
+                       node.name, revision, cls.declared_columns(source), statement.lineno)
+        raise ValueError(f"{name} declares no step it runs after")
 
 
 def parent_name(base: ast.expr) -> str | None:
@@ -308,10 +311,11 @@ class CarryChain:
         known = {}
         tree = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
         for path in tree:
-            if path.startswith("carry_") and path.endswith(".py"):
-                name = path.removesuffix(".py")
-                known[name] = Step.declared(
-                    name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
+            if path.endswith(".py"):
+                source = git(repo, "show", f"{revision}:{STEPS}/{path}")
+                if Step.holds_carry(source):
+                    name = path.removesuffix(".py")
+                    known[name] = Step.declared(name, source, revision)
         # Only a declared predecessor can keep a historical step reachable.
         # Deleting a finished step and reconnecting its successor retires it.
         restored_by: dict[str, Step] = {}
@@ -373,17 +377,17 @@ class CarryChain:
                     added.setdefault(Path(path).stem, positions[fields[0]])
         return added
 
-    @staticmethod
-    def retired_at(repo: Path, revision: str, kept: Mapping[str, Step]) -> frozenset[str]:
+    @classmethod
+    def retired_at(cls, repo: Path, revision: str, kept: Mapping[str, Step]) -> frozenset[str]:
         """Step files the main line deleted without keeping them reachable.
 
         A finished step is retired by deleting its file and reconnecting its
         successor; a bus that already ran it keeps the name in its ledger."""
         deleted = git(repo, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=D",
                       "--name-only", "--format=", revision, "--", str(STEPS)).decode().split()
-        return frozenset(Path(path).stem for path in deleted
-                         if Path(path).parent == STEPS and Path(path).name.startswith("carry_")
-                         and path.endswith(".py")) - set(kept)
+        return frozenset(Path(path).stem for path in set(deleted)
+                         if Path(path).parent == STEPS and path.endswith(".py")
+                         and Step.holds_carry(cls.source(repo, revision, Path(path).stem)[1])) - set(kept)
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step:
