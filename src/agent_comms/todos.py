@@ -712,6 +712,30 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
+class DefectText(BluntText):
+    """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
+    a text naming no defect needs no label."""
+
+    SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
+
+    @classmethod
+    def found(cls, text: str) -> list[str]:
+        named = cls.SLOP.search(text)
+        return super().found(cls.SLOP.sub(' ', text)) if named else ['no defect named']
+
+
+class DirectiveText:
+    """What the commander and the owner's voice send units: order send, order say and the
+    connector's send refuse a text failing any of these."""
+
+    OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
+        FairText, HierarchyText, PlainText, OrderText, DefectText)
+
+    @classmethod
+    def refused(cls, text: str) -> tuple[str, ...]:
+        return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+
+
 class OrderRun(DeclaredFamily, affix="OrderRun"):
     label: ClassVar[str] = "Works when:"
 
@@ -912,6 +936,11 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
+    def require_checked(self, problem: str) -> None:
+        """An installed claim stands on this order's recorded check result."""
+        raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
+                         "its order has none.")
+
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
@@ -972,6 +1001,9 @@ class DeliveredProblemOrder(ProblemOrder):
     def installed(self, works, artifact):
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
+
+    def require_checked(self, problem: str) -> None:
+        """The delivery passed the order's check, so its result is recorded."""
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)

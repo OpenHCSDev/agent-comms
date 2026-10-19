@@ -7,7 +7,8 @@ import re
 import shlex
 import shutil
 import subprocess
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
@@ -34,9 +35,34 @@ class StorageRoots:
 
 
 @dataclass(frozen=True)
+class MemoryHolder:
+    """One temp dir or test process and the memory it holds."""
+
+    name: str
+    gib: float
+
+    def __str__(self) -> str:
+        return f"{self.name} {self.gib:.1f} GiB"
+
+
+@dataclass(frozen=True)
+class MemoryUse:
+    """How much memory is available now and what holds it, read from /proc and the temp root."""
+
+    available_gib: float
+    idle_dirs: tuple[MemoryHolder, ...]
+    processes: tuple[MemoryHolder, ...]
+
+
+@dataclass(frozen=True)
 class StorageRule:
     floor_gib: float = 5.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
+    memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
+    idle_minutes: float = 30.0  # a pytest temp dir untouched this long holds memory for nothing
+    temp_root: StoragePath = Path('/tmp')  # RAM-backed, so its pytest dirs hold memory
+    proc: StoragePath = Path('/proc')
+    shown: ClassVar[int] = 5  # holders named in each list
     scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     max_checkouts: int = 2
     volume: StoragePath = Path.home()
@@ -97,6 +123,46 @@ class StorageRule:
 
     def free_gib(self):
         return shutil.disk_usage(self.volume).free / 2**30
+
+    def memory(self) -> MemoryUse:
+        """Available memory, the largest idle pytest temp dirs and the largest test processes."""
+        lines = (self.proc / 'meminfo').read_text().splitlines()
+        available = next(int(line.split()[1]) for line in lines if line.startswith('MemAvailable:'))
+        idle = time.time() - self.idle_minutes * 60
+        dirs = (MemoryHolder(str(path), self.tree_gib(path))
+                for path in self.temp_root.glob('pytest-of-*/*')
+                if path.is_dir() and path.stat().st_mtime < idle)
+        return MemoryUse(available / 2**20, self.largest(dirs),
+                         self.largest(self.test_processes()))
+
+    def largest(self, holders: Iterator[MemoryHolder]) -> tuple[MemoryHolder, ...]:
+        return tuple(sorted(holders, key=lambda holder: -holder.gib)[:self.shown])
+
+    @staticmethod
+    def tree_gib(path: Path) -> float:
+        return sum(map(StorageRule.held_bytes, path.rglob('*'))) / 2**30
+
+    @staticmethod
+    def held_bytes(item: Path) -> int:
+        try:
+            return item.lstat().st_size
+        except FileNotFoundError:
+            return 0  # removed while read (old temp dirs are pruned), so it holds nothing
+
+    def test_processes(self) -> Iterator[MemoryHolder]:
+        """Each live pytest process by resident size; one that exits while read is not listed."""
+        for pid in self.proc.glob('[0-9]*'):
+            try:
+                argv = (pid / 'cmdline').read_bytes().split(b'\0')
+                status = (pid / 'status').read_text().splitlines()
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            rss = [line.split()[1] for line in status if line.startswith('VmRSS:')]
+            if rss and any(b'pytest' in word for word in argv):
+                yield MemoryHolder(f'pid {pid.name}', int(rss[0]) / 2**20)
+
+    def memory_due(self, memory: MemoryUse) -> bool:
+        return memory.available_gib < self.memory_gib
 
     def below_floor(self, free_gib: float) -> bool:
         return free_gib < self.floor_gib
