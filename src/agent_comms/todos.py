@@ -1138,7 +1138,7 @@ class StrikeTodo(TodoOperation):
 
 @dataclass(frozen=True)
 class VerdictAudience:
-    """The threads a send is for; a send reaching more than one thread wakes no thread outside it."""
+    """The threads a send is for; a send reaching many threads wakes no thread outside it."""
     threads: tuple[str, ...]
 
     @classmethod

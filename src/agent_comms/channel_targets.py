@@ -300,7 +300,7 @@ class ChannelTarget(NamedTarget):
     def addressed(self, threads: tuple[str, ...], body: str) -> str:
         """Mentions limit the wake to the declared audience, so a send without one is refused."""
         if not threads:
-            raise ValueError(f"A send to {self.name} reaches more than one thread; declare its audience.")
+            raise ValueError(f"A send to {self.name} reaches many threads; declare its audience.")
         return " ".join(f"@{thread}" for thread in threads) + f" {body}"
 
     def wake_policy(self, recipient, mentions):

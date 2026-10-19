@@ -61,7 +61,7 @@ def refuse(text, *families):
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
 
 
-def post(audience: VerdictAudience, body):
+def post(audience: VerdictAudience, body: str) -> str:
     """Send one message its caller refused with OUTGOING; judge reads it from bus history.
 
     One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
@@ -786,7 +786,7 @@ def due(pid: str, at: str, why: str) -> None:
         todo.revision, todo.assignment, moved, todo.order, todo.goal)))
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
               f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline',
-              VerdictAudience.of(todo.holder, todo.goal))
+              VerdictAudience.of(todo.held().owner, todo.goal))
     print(f'{pid}: due {hhmm(moved)}')
 
 
@@ -795,14 +795,15 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
 
     The reason goes on the public record and to the unit that held it."""
     todo = COMMS.goals.todos.get(pid)
+    unit = todo.held().owner
     refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
     call(CommsTodoTool(id=pid, operation=WithdrawTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, why,
         superseded_by)))
     withdrawal, = COMMS.goals.todos.get(pid).order.withdrawals(todo)
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-              VerdictAudience.of(todo.assignment.owner, todo.goal))
-    post(VerdictAudience((todo.assignment.owner,)),
+              VerdictAudience.of(unit, todo.goal))
+    post(VerdictAudience((unit,)),
          f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
     board()
     print(withdrawal)
