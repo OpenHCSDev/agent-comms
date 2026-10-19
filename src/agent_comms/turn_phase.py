@@ -1,4 +1,4 @@
-"""Declaration-owned Pi excursions and phase-specific watchdog diagnostics."""
+"""Shared turn stages own activity and phase-specific watchdog behavior."""
 
 from __future__ import annotations
 
@@ -6,12 +6,21 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .activity import Activity, ActivityState, ObservedActivity
+from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
 from .pi_payloads import ProviderDiagnosticError
 if TYPE_CHECKING:
-    from . import pi_events as pi
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence
+
+
+@dataclass(frozen=True)
+class TurnPhaseOutput(ThreadOutput):
+    agents: AgentActivity
+    lease: TurnLeaseFence
+
+    @property
+    def activity_thread(self) -> str:
+        return self.lease.identity.incarnation.name
 
 
 class StallExempt:
@@ -37,8 +46,6 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     The existing registry turn lease supplies identity independently of phase.
     """
     detail: str = ""
-    _start_phases: ClassVar[dict[type[object], type[TurnPhase]]] = {}
-    _end_events: ClassVar[frozenset[type[object]]] = frozenset()
 
     stall_reason: ClassVar[str] = "model_no_progress"
     # An excursion (tool, retry, compaction) runs without RPC events; an input
@@ -95,39 +102,14 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return phase
 
-    def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
-        for event_type in type(event).__mro__:
-            member = TurnPhase._start_phases.get(event_type)
-            if member is not None:
-                return member.enter(self, event, active_tools)
-        if self.matches_end(event) and self.may_finish(active_tools):
-            return ModelWaitPhase()
-        return self
-
-    @classmethod
-    def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
-        return cls()
-
-    def matches_end(self, event: pi.PiEvent) -> bool:
-        return any(event_type in self._end_events for event_type in type(event).__mro__)
-
-    def may_finish(self, active_tools: set[str]) -> bool:
-        return True
-
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
-
-    def response_output(self) -> TurnPhase:
-        """Response deltas are progress evidence, not a persisted control phase."""
-        return self
 
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
 
     def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
-        agents.set_activity(
-            lease.identity.incarnation.name, self.activity_state, self.activity_detail,
-        )
+        TurnPhaseOutput(agents, lease).enter(self)
 
 
 class Excursion(TurnPhase, declared_name=None):
@@ -207,10 +189,6 @@ class SettlingStatsPhase(TurnPhase):
 class CompactionPhase(StallExempt, Excursion):
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
 
-    @classmethod
-    def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
-        return current.compacting()
-
     activity_state = ActivityState.WORKING
     label = "Compacting context"
 
@@ -265,18 +243,5 @@ class ToolRunningPhase(Excursion):
     def tool_ended(self, tool_id: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
         return replace(self, tools=retained) if retained else ModelWaitPhase()
-    def may_finish(self, active_tools: set[str]) -> bool:
-        return not active_tools
-
-    @classmethod
-    def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
-        name = event.tool_name or "tool"
-        return current.tool_started(event.tool_call_id or name, name)
-
-    def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
-        if self.matches_end(event):
-            return self.tool_ended(event.tool_call_id or event.tool_name or "tool")
-        return super().on(event, active_tools)
-
     def stalled(self, accepted: bool) -> TurnPhase:
         return ModelWaitPhase().stalled(accepted)

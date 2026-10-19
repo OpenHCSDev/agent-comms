@@ -6,7 +6,7 @@ import json
 import os
 import threading
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -37,7 +37,23 @@ from .thread_presentation import (
 
 if TYPE_CHECKING:
     from .activity_checkpoint import ActivityCheckpoint
+    from .agent_activity import AgentActivity
     from .threads import Thread
+    from .turn_phase import TurnPhase
+
+
+class ThreadOutput(ABC):
+    """One phase-to-activity publication for lease and transcript outputs."""
+
+    agents: AgentActivity
+
+    @property
+    @abstractmethod
+    def activity_thread(self) -> str: ...
+
+    def enter(self, phase: TurnPhase) -> None:
+        self.agents.set_activity(self.activity_thread, phase.activity_state,
+                                 " ".join(phase.activity_detail.split()))
 
 
 class ActivityState(Enum):
