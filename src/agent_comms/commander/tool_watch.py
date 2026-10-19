@@ -8,11 +8,10 @@ from pathlib import Path
 
 from . import order
 from .config import CommanderConfig
-from ..channel_coding_tools import CodingCall, RefusedCodingCall
+from ..channel_coding_tools import CodingCall
 from ..field_codec import MalformedRecord
 from ..native_entries import NativeEntry
 from ..native_tool_call import SelectedToolDenied
-from ..native_tools import CodingTool
 from ..pi_payloads import PiMessage, TextContent
 from ..tool_declaration import ToolDeclaration, one_line
 from ..registration import Registration
@@ -31,11 +30,12 @@ def thread_names(registry: Registration) -> dict[str, str]:
 
 def decoded(name: str, args: object, call_id: str) -> CodingCall:
     """The recorded call owns either its decoded tool or its argument refusal."""
+    call = CodingCall.decode(call_id, name, args)
     try:
-        return CodingTool.from_call(name, args, call_id=call_id)
-    except (SelectedToolDenied, MalformedRecord) as refused:
+        call.require_tool()
+    except SelectedToolDenied as refused:
         print(f'REFUSED tool {name} [{call_id}]: {one_line(str(refused), 200)}', flush=True)
-        return RefusedCodingCall(call_id, name, args, str(refused))
+    return call
 
 
 def digest_line(name: str, args: object, call: CodingCall) -> str:
