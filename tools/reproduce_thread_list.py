@@ -20,18 +20,20 @@ from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable
 
 
-def writer(
-    root: Path,
-    stop: Event,
-    ready: Event,
-    result: Queue[int],
-    imports: bool,
-    dump_after: float,
-) -> None:
+def declaration(root: Path, name: str, created_at: float = 0) -> Thread:
+    return Thread(
+        name,
+        frozenset({"proof"}),
+        str(root),
+        created_at=created_at,
+        storage_roots=StorageRoots(root / "scratch" / name),
+    )
+
+
+def writer(root: Path, stop: Event, result: Queue[int], imports: bool, dump_after: float) -> None:
     if dump_after:
         faulthandler.dump_traceback_later(dump_after)
     comms = Comms(root)
-    ready.set()
     count = 0
     while not stop.is_set():
         name = f"writer-{count % 85}"
@@ -42,22 +44,13 @@ def writer(
                 worktree=str(root),
                 tags=frozenset({"proof"}),
             )
-        elif imports:
-            comms.registry.register(
-                replace(comms.registry.require(name), title=f"write {count}"), StoppedThreadStatus()
-            )
         else:
-            comms.registry.register(
-                Thread(
-                    name,
-                    frozenset({"proof"}),
-                    str(root),
-                    created_at=float(count % 85 + 1),
-                    title=f"write {count}",
-                    storage_roots=StorageRoots(root / "scratch" / name),
-                ),
-                StoppedThreadStatus(),
+            thread = (
+                comms.registry.require(name)
+                if imports
+                else declaration(root, name, float(count % 85 + 1))
             )
+            comms.registry.register(replace(thread, title=f"write {count}"), StoppedThreadStatus())
         count += 1
     result.put(count)
 
@@ -75,44 +68,23 @@ def main() -> None:
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
-    source = root / "source.jsonl"
-    source.write_text(
-        "\n".join(
-            json.dumps(
-                {
-                    "type": kind,
-                    "uuid": str(index),
-                    "timestamp": "2026-10-19T00:00:00Z",
-                    "cwd": str(root),
-                    "sessionId": "proof",
-                    "promptId": "p-1",
-                    "origin": {"kind": "human"},
-                    "message": {"role": kind, "content": [{"type": "text", "text": text}]},
-                }
-            )
-            for index, (kind, text) in enumerate(
-                (("user", "Scratch source input"), ("assistant", "Scratch source reply"))
-            )
-        )
-        + "\n"
+    event = dict(
+        timestamp="2026-10-19T00:00:00Z",
+        cwd=str(root),
+        sessionId="proof",
+        promptId="p-1",
+        origin=dict(kind="human"),
     )
-    comms.registry.register(
-        Thread(
-            "sentinel",
-            frozenset({"proof"}),
-            str(root),
-            storage_roots=StorageRoots(root / "scratch" / "sentinel"),
-        ),
-        StoppedThreadStatus(),
-    )
+    with (root / "source.jsonl").open("w") as stream:
+        for kind in ("user", "assistant"):
+            event.update(type=kind, uuid=kind, message=dict(role=kind, content=f"Scratch {kind}"))
+            print(json.dumps(event), file=stream)
+    comms.registry.register(declaration(root, "sentinel"), StoppedThreadStatus())
     reading = ObserveSidebar(str(root), True, False).observation()
-    stop, ready = mp.Event(), mp.Event()
+    stop = mp.Event()
     counts: Queue[int] = mp.Queue()
-    process = mp.Process(
-        target=writer, args=(root, stop, ready, counts, args.imports, args.dump_after)
-    )
+    process = mp.Process(target=writer, args=(root, stop, counts, args.imports, args.dump_after))
     process.start()
-    ready.wait(10)
     start = time.monotonic()
     reads = empty = errors = 0
     try:
@@ -122,11 +94,7 @@ def main() -> None:
                     reads += 1
                     if not result.derived[1]:
                         empty += 1
-                        print(
-                            f"EMPTY after {reads} reads: "
-                            f"registry={len(comms.registry.snapshot().threads)}",
-                            flush=True,
-                        )
+                        print(f"EMPTY after {reads} reads", flush=True)
                 elif isinstance(result, SidebarUnreadable):
                     errors += 1
                     print(f"UNREADABLE after {reads} reads: {result.error}", flush=True)
