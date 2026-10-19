@@ -22,7 +22,9 @@ from ..standing_rules import (
 )
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
-from ..todos import FlatTrend, OrderProgress, PullRequests, StallPassFailed, StrikeTodo, Todo, TodoConflict
+from ..todos import (
+    FlatTrend, OrderProgress, PullRequests, StallPassFailed, StrikeTodo, Todo, TodoConflict,
+)
 from ..tools import CommsUnjudgedTool
 from ..turn_digests import TurnDigestRead, TurnsSince
 from .config import CommanderConfig, Repo
@@ -57,7 +59,8 @@ class RequestStalled(UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
         return tuple(cls(request) for goal in thread.goal.active()
-                     for request, served in goal.order.open_requests(goal, comms.goals, thread.incarnation)
+                     for request, served in goal.order.open_requests(
+                         goal, comms.goals, thread.incarnation)
                      if not served)
 
     def line(self) -> str:
@@ -280,7 +283,8 @@ class MergeGrowth(DatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
-        return tuple(growth for repo in CommanderConfig.installed().repos for growth in cls.merges(repo) if growth.over)
+        return tuple(growth for repo in CommanderConfig.installed().repos
+                     for growth in cls.merges(repo) if growth.over)
 
     @property
     def over(self) -> bool:

@@ -398,7 +398,7 @@ def board():
              '| Problem | Owner file | Owner | Order | Due | Progress | Delivered '
              '| Strikes | Owner last acted |',
              '|---|---|---|---|---|---|---|---|---|']
-    listed, read = todos(), progress()
+    listed, read = COMMANDER.orders(CONFIG.repos), progress()
     activity = {unit: last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
         unit, last = t.holder, t.released[-1:]
@@ -590,8 +590,8 @@ def replied(latest: Message | None) -> str:
 
 
 def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
-    """Every past-due unrecorded order alarms with its state until recorded.
-    Core records a stalled order's strike and release; this view only reports deadlines."""
+    """Past-due unfinished orders alarm; installed merges have already closed.
+    Core records a stalled order's strike and release; this view reports deadlines."""
     now = time.time()
     late = []
     for t in pending:
@@ -601,8 +601,7 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
         answer = reply(t.holder, ordered)
         due = f'due {hhmm(t.deadline)}, order {t.order.id}'
         late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
-    alarm = (f'OVERDUE: {", ".join(late)} -> record merged work; '
-             'push or merge unfinished work now')
+    alarm = f'OVERDUE: {", ".join(late)} -> push or merge unfinished work now'
     return [alarm] * bool(late)
 
 
@@ -617,7 +616,7 @@ def overdue():
     installs: list[str] = []
     while True:
         now = time.time()
-        held = held_orders()
+        held = tuple(todo for todo in COMMANDER.orders(CONFIG.repos) if todo.assignment)
         activity = {unit: last_activity(unit) for unit in {t.assignment.owner for t in held}}
         if missing := first_calls(held, activity):
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
