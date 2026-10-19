@@ -120,6 +120,7 @@ async def stream_agent_events(
     persistent_session: PersistentPiSession,
     package: VerifiedNativePackage,
     root: Path,
+    session_directory: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: RequestObserver = NO_REQUEST_OBSERVER,
@@ -143,6 +144,7 @@ async def stream_agent_events(
                     tuple(agent_args),
                     package=package,
                     root=root,
+                    directory=session_directory,
                     worktree=Path(cwd),
                     environment=env_extra,
                     session_file=session_file,
@@ -214,7 +216,8 @@ class NativeSession(MroDispatch, ABC):
         self.finish_event = finish_event
         self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
-            model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+            model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS,
+            NATIVE_STARTUP_POLICY,
         )
         self.rpc_abort_grace = rpc_abort_grace
         self.send_boundary = send_boundary

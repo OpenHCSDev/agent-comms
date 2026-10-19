@@ -8,11 +8,13 @@ import os
 import socket
 import struct
 from collections.abc import Callable
-from contextlib import ExitStack
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Generic, TypeVar, TYPE_CHECKING
 
+from .child_process import join_retirement
 from .field_codec import MalformedRecord, Token256Text
 from .native_tool_call import NativeToolCall, OwnerToolConnection, SelectedToolDenied, DuplicateToolCallIdentity
 from .pi_payloads import PiContent, ToolCallContent
@@ -173,13 +175,9 @@ class ToolTransport(Generic[Call]):
         except MalformedRecord as error:
             raise ValueError("Selected tool transport requires a random 256-bit token") from error
         self.path = Path(directory).absolute() / "s"
-        self._resources = ExitStack()
+        self._resources = AsyncExitStack()
         self.token = token
         self.expected_pid: int | None = None
-        # Live owner-side completion only. A visible .done file after failed
-        # fsync is not a durable acknowledgement and must never be promoted by itself.
-        self._server: asyncio.AbstractServer | None = None
-        self._created = False
         self.calls: NativeToolCallTable[Call] = NativeToolCallTable()
         self._handlers: set[asyncio.Task] = set()
 
@@ -245,32 +243,38 @@ class ToolTransport(Generic[Call]):
             raise SelectedToolDenied("Selected tool socket already exists")
         try:
             self.address = self._resources.enter_context(PrivateSocketRole.address(self.path))
-            self._server = await asyncio.start_unix_server(
-                self._handle, path=str(self.address), limit=self.max_request + 1
-            )
-            self._created = True
+            listener = self._resources.enter_context(socket.socket(socket.AF_UNIX))
+            listener.bind(str(self.address))
+            self._resources.callback(self.path.unlink, missing_ok=True)
             os.chmod(self.path, 0o600)
+            self._server = await asyncio.start_unix_server(
+                self._handle, sock=listener, limit=self.max_request + 1,
+                start_serving=False, cleanup_socket=False,
+            )
+            self._resources.push_async_callback(self._server.wait_closed)
+            self._resources.push_async_callback(self._drain_handlers)
+            self._resources.callback(self._server.close)
+            await self._server.start_serving()
         except BaseException:
             await self.close()
             raise
 
+    @cached_property
+    def _retirement(self) -> asyncio.Task[None]:
+        return asyncio.create_task(self._close())
+
     async def close(self) -> None:
-        server, self._server = self._server, None
-        if server is not None:
-            server.close()
-        # Python's server wait_closed can wait for existing client transports.
-        # Cancel/drain those handlers before awaiting listener completion.
+        await join_retirement(self._retirement)
+
+    async def _close(self) -> None:
+        await self._resources.aclose()
+
+    async def _drain_handlers(self) -> None:
         handlers = tuple(self._handlers)
         for task in handlers:
             task.cancel()
         if handlers:
             await asyncio.gather(*handlers, return_exceptions=True)
-        if server is not None:
-            await server.wait_closed()
-        if self._created:
-            self.path.unlink(missing_ok=True)
-            self._created = False
-        self._resources.close()
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         task = asyncio.current_task()
@@ -278,7 +282,7 @@ class ToolTransport(Generic[Call]):
         self._handlers.add(task)
         try:
             try:
-                if self._server is None:
+                if not self._server.is_serving():
                     raise SelectedToolDenied("Owner tool socket is closed")
                 sock = writer.get_extra_info("socket")
                 if sock is None or self.expected_pid is None:
@@ -310,7 +314,4 @@ class ToolTransport(Generic[Call]):
                 )
         finally:
             writer.close()
-            try:
-                await writer.wait_closed()
-            finally:
-                self._handlers.discard(task)
+            self._handlers.discard(task)
