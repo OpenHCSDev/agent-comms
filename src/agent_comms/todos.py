@@ -1647,8 +1647,8 @@ class TodoStore(TypedStore):
             (owner.name, owner.wire_birth)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        """The orders serving one request: a Goal on the commander's thread."""
-        return self._open(
+        """Every order that served one request, a Goal on the commander's thread, open or done."""
+        return self._select(
             "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
