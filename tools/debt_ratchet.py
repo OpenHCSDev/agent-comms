@@ -1177,7 +1177,7 @@ class EditedCarry(Measure):
                 continue
             if status[0] in "MRC" or status == "T":
                 before = git(repo, "show", f"{base}:{path}")
-                if Step.declared(name, before, base) is not None:
+                if Step.holds_carry(before):
                     edited += (status != "M" or cls.conversion(before) !=
                                cls.conversion(git(repo, "show", f"{head}:{path}")))
             elif status == "A":
