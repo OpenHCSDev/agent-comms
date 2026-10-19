@@ -2043,10 +2043,12 @@ class Todo(TypedTable):
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
 
+    unrequested_goal: ClassVar[GoalReference] = NoGoalReference()
+
     @classmethod
     def ordered(cls, todo_id: str, repo: str, text: str, creator: ThreadIncarnation,
                 assignment: Assignment, deadline: EventTime, order: CheckedProblemOrder,
-                goal: GoalReference = NoGoalReference()) -> Todo:
+                goal: GoalReference = unrequested_goal) -> Todo:
         _text(todo_id, "Todo ID", 128)
         _text(text, "Todo text", 2000)
         deadline.require_deadline()
@@ -2385,8 +2387,9 @@ class TodoStore(TypedStore):
         goal: GoalRef,
     ) -> Todo:
         identity, assignee = _participant(creator), _thread(owner)
-        proposed = Todo.ordered(todo_id, repo, text, identity,
-                                Assignment.of(assignee, identity, generation), deadline, order, goal)
+        proposed = Todo.ordered(
+            todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
+            deadline, order, goal)
         with self.writing() as db:
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)

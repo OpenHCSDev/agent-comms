@@ -278,13 +278,16 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
         deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
             rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
         at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
-    common = dict(order=order, request=order.request(COMMS.registry.require(ME), tuple(group)), deadline=RecordedEventTime(time.time()).at_clock(due), commander=ME)
+    request = order.request(COMMS.registry.require(ME), tuple(group))
+    due_at = RecordedEventTime(time.time()).at_clock(due)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
-            problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
+            problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
+            order=order, request=request, deadline=due_at, commander=ME)))
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
+            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace,
+            order=order, request=request, deadline=due_at, commander=ME)))
     message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
     sent = post(VerdictAudience((unit,)), message)
     # The message is each order's recorded link; a verdict citing it lands on that order.
@@ -825,7 +828,8 @@ class InstallVerb(RuledVerb):
     installer: str = option("installer", help="the unit that runs the install")
 
     def run(self) -> None:
-        PlannedInstallDeadline(RecordedEventTime(time.time()).at_clock(self.at), self.installer).plan(COMMS.root)
+        planned = RecordedEventTime(time.time()).at_clock(self.at)
+        PlannedInstallDeadline(planned, self.installer).plan(COMMS.root)
         print(f'install due {self.at}, run by {self.installer}')
 
 
