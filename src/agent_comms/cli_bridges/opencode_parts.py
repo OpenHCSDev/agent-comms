@@ -9,9 +9,8 @@ from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
-    ActiveItem,
     CompletedItem,
     HiddenItem,
     HistoryNotice,
@@ -19,6 +18,7 @@ from agent_comms.runtime_updates import (
     StartedItem,
     Summarized,
     TextDraft,
+    ToolDraft,
 )
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
@@ -197,13 +197,23 @@ class ToolState(TaggedWire, ABC):
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
+    def started_at(self, message: AssistantMessage) -> RecordedEventTime:
+        return RecordedEventTime(message.time.created / 1000)
+
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
-        return (ActiveItem(message.id, part.id,
-                           ToolRunningPhase(tools=((part.callID, self.call(part).title),))),)
+        call = self.call(part)
+        started_at = self.started_at(message)
+        return (StartedItem(message.id, part.id,
+                            ToolRunningPhase(tools=((part.callID, call.title),)),
+                            ToolDraft(started_at, (call.started(part.id, started_at.at),))),)
 
 
 class RunningTool(PendingTool):
     wire_tag = 'running'
+    time: PartTime
+
+    def started_at(self, message: AssistantMessage) -> RecordedEventTime:
+        return RecordedEventTime(self.time.start / 1000)
 
 
 class EndedTool(ToolState, ABC):

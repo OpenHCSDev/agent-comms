@@ -17,6 +17,7 @@ from pydantic import (
 )
 
 from agent_comms.cli_protocol import TaggedWire, TimestampedWire, WireHeader, WireModel
+from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
     FinishedItem,
@@ -26,6 +27,8 @@ from agent_comms.runtime_updates import (
     RuntimeUpdate,
     SessionFacts,
     StatusUpdate,
+    StartedItem,
+    ToolDraft,
     Summarized,
     TurnEnded,
     TurnStarted,
@@ -164,8 +167,22 @@ class Live(ClaudeReaderPhase):
         raise ValueError('Claude completed an item before identifying its turn')
 
 
+@dataclass
+class ClaudeToolDraft(ToolDraft):
+    """One decoded start owns the prefix and its original source clock."""
+
+    call: ToolCall
+
+    def completed(self, record: TimedRecord, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
+        return (*self.events, self.call.ended(text, ok, record.position, record.timestamp))
+
+
 class ClaudeTurn(ABC):
     """The transcript's identified turn owns item identities."""
+
+    @abstractmethod
+    def started(self, tool: ClaudeToolDraft,
+                phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]: ...
 
     @abstractmethod
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
@@ -177,6 +194,10 @@ class ClaudeTurn(ABC):
 
 
 class UnknownTurn(ClaudeTurn):
+    def started(self, tool: ClaudeToolDraft,
+                phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
+        return phase.unturned_finish()
+
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
@@ -190,6 +211,11 @@ class UnknownTurn(ClaudeTurn):
 class KnownTurn(ClaudeTurn):
     id: str
 
+    def started(self, tool: ClaudeToolDraft,
+                phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
+        return (StartedItem(self.id, tool.call.id,
+                            ToolRunningPhase(tools=((tool.call.id, tool.call.title),)), tool),)
+
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
                  phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return (FinishedItem(self.id, item, events),)
@@ -202,7 +228,7 @@ class KnownTurn(ClaudeTurn):
 @dataclass
 class ClaudeSession:
     turn: ClaudeTurn = field(default_factory=UnknownTurn)
-    tools: dict[str, tuple[ToolCall, TimedRecord]] = field(default_factory=dict)
+    tools: dict[str, ClaudeToolDraft] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
 
@@ -212,17 +238,16 @@ class ClaudeSession:
         self.project = cwd
         return (SessionFacts(project=cwd),)
 
-    def started(self, call: ToolCall, record: TimedRecord) -> None:
-        self.tools[call.id] = call, record
+    def started(self, tool: ClaudeToolDraft) -> tuple[RuntimeUpdate, ...]:
+        self.tools[tool.call.id] = tool
+        return self.turn.started(tool, self.phase)
 
     def tool_result(self, tool_id: str, text: str, ok: bool, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         try:
-            call, started = self.tools.pop(tool_id)
+            tool = self.tools.pop(tool_id)
         except KeyError:
             return self.phase.missing_tool(tool_id)
-        return (*self.finished(tool_id, (
-                    call.started(started.position, started.timestamp),
-                    call.ended(text, ok, record.position, record.timestamp))),
+        return (*self.finished(tool_id, tool.completed(record, text, ok)),
                 *self.turn.active(tool_id, self.phase, ModelWaitPhase()))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
@@ -326,9 +351,9 @@ class ToolUse(AssistantBlock):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
-        session.started(call, record)
-        return session.turn.active(self.id, session.phase,
-                                   ToolRunningPhase(tools=((self.id, call.title),)))
+        return session.started(ClaudeToolDraft(
+            EventTime.capture(record.timestamp),
+            (call.started(record.position, record.timestamp),), call))
 
 
     def call(self) -> ToolCall:
