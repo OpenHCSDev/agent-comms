@@ -20,7 +20,7 @@ from .errors import HumanInitialUnknownError, RelationViolationError
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
-    from .private_bus_checkpoint import CertifiedSourceRead
+    from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .wire_log import WireLog
@@ -251,7 +251,7 @@ class InitialOrigin(ABC):
         """Refuse a sender this origin cannot speak for."""
 
     @abstractmethod
-    def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
+    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         """Check the sender and message ID against the bus before appending."""
 
     @abstractmethod
@@ -272,7 +272,7 @@ class AgentOrigin(InitialOrigin):
             RelationViolationError("Initial sender must be a visible registered executable.")
         )
 
-    def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
+    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
 
     def append(
@@ -300,7 +300,7 @@ class HumanOrigin(InitialOrigin):
         if message.sender != self.sender:
             raise RelationViolationError("Local USER origin differs from registered identity.")
 
-    def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
+    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         source.require_new_human_message(sender, message_id)
 
     def append(

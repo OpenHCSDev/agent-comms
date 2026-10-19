@@ -425,7 +425,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
 def test_duplicate_private_response_key_rejected_by_unique_constraint(
     tmp_path: Path, first_batch_rows: int
 , private_comms, participants) -> None:
-    """Exercise decoder/transaction invariants, not certify a rewritten bus."""
+    """Exercise decoder/transaction invariants, not check a rewritten bus."""
     comms = private_comms
     root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
     lookup = participants
@@ -589,9 +589,9 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
         index.maintain(start=ResumeIndex())
     # The canonical barrier, not the disposable index, repairs an identical
     # original prefix at its new inode. Only then may explicit rebuild adopt it.
-    with comms.bus.log.certified_read() as certified:
-        certified.require_current()
-        assert certified.witness.revision == FileRevision.from_stat(source.stat())
+    with comms.bus.log.checked_read() as checked:
+        checked.require_current()
+        assert checked.witness.revision == FileRevision.from_stat(source.stat())
     assert index.maintain(start=RebuildIndex())
 
 

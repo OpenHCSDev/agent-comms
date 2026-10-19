@@ -1,6 +1,6 @@
 """Producer/cursor integration beyond the legacy bus byte and page caps.
 
-Provider-free native fake only: a source certificate is not an ACK or input permit.
+Provider-free native fake only: a source prefix record is not an ACK or input permit.
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
         assert current.recipient_lookup == lookup
 
 
-async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
+async def test_checked_unproven_first_source_cannot_be_skipped(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, _first, lookup = _root(tmp_path)
     bad, bad_calls = _fake_model(decision="IGNORE", digest_override="b" * 64)
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)

@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     import sqlite3
 
     from .private_bus_checkpoint import (
-        CertifiedSourceRead,
         CheckpointNeedsRepair,
         PrefixWitness,
         WritableCheckpoint,
@@ -169,19 +168,18 @@ class StoreLockRelease:
 
 @dataclass(frozen=True)
 class StoreLock:
-    """One physical lock's descriptor and opened durability resource."""
+    """A held store lock's file descriptor."""
 
     descriptor: int
-    source: CertifiedSourceRead | None
     _releases: ClassVar[ContextVar[StoreLockRelease]] = ContextVar(
         "store_lock_release", default=StoreLockRelease(active=False)
     )
 
     @classmethod
     @contextmanager
-    def open_source(cls, path: Path, mode: LockMode):
-        """Generic file locks lend no bus data or recovery authority."""
-        yield None
+    def hold(cls, path: Path, descriptor: int, mode: LockMode):
+        """Keep a plain store lock; it does not hold a checked bus read."""
+        yield cls(descriptor)
 
     @classmethod
     @contextmanager
@@ -226,32 +224,6 @@ class StoreLock:
             yield scope
         finally:
             scope.close()
-
-    def certified_read(self) -> CertifiedSourceRead:
-        if self.source is None:
-            raise RelationViolationError("Store has no certified original wire source.")
-        return self.source
-
-    @contextmanager
-    def current_source(
-        self, log: WireLog, metadata: WireMetadata
-    ) -> Iterator[CertifiedSourceRead]:
-        """Read the bus's current checked state while keeping this bus lock.
-
-        An append may have changed the bus since this lock first read it.
-        Refresh that read without reconstructing claims or scanning unchecked
-        bus data.
-        """
-        source = self.certified_read()
-        if source.marker == metadata:
-            source.require_open_prefix()
-            yield source
-            return
-        with self.open_source(log.path, ExclusiveLock()) as refreshed:
-            if refreshed is None:
-                raise RelationViolationError("Store has no certified original wire source.")
-            refreshed.require_marker(metadata)
-            yield refreshed
 
 
 class StoreOwner(DeclaredFamily):
@@ -328,8 +300,8 @@ def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, mode, 
                 bus_info = store_path.lstat()
                 if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
                     raise RelationViolationError("Bus exceeds bounded read budget.")
-        with lock_type.open_source(store_path, mode) as source:
-            yield lock_type(lock_file.fileno(), source)
+        with lock_type.hold(store_path, lock_file.fileno(), mode) as lock:
+            yield lock
     finally:
         platform.release_store_lock(lock_file.fileno())
 

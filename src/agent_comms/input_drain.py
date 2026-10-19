@@ -476,7 +476,7 @@ class InputObservation:
                 source.committed_sequence(),
                 source.marker.claimed_after_seq,
             )
-        wire = await self.comms.bus.log.read_certified_async(wire_revision)
+        wire = await self.comms.bus.log.read_checked_async(wire_revision)
         entry = (await self._own_entry(session_id)).entry
         return await self._observe_coordination(session_id, root_id, wire, entry)
 

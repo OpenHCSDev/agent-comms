@@ -1085,7 +1085,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
 
 @dataclass(frozen=True, kw_only=True)
 class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
-    help = "Pin a certified original human message for its recipient"
+    help = "Pin a checked original human message for its recipient"
     thread: str = option("thread")
     source: MessageReference = option("--source", normalize=_message_reference,
                                       help="Original sequence:message_id")
@@ -1196,7 +1196,7 @@ class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
 
 @dataclass(frozen=True, kw_only=True)
 class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
-    help = "Export current authored context from original certified sources"
+    help = "Export current authored context from original checked sources"
     thread: str = option("thread")
     output: str = option("--output")
     overwrite: bool = option("--overwrite", default=False)

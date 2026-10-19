@@ -47,7 +47,7 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
 
 def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     request = AddressedPage.capture(lookup=lookup, after_seq=after, limit=limit)
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         witness, captured, more = source.addressed_page(comms.bus.log, request)
     return witness, tuple(captured), more
 
@@ -56,9 +56,10 @@ def test_bus_read_authority_comes_from_its_declared_lock_type(tmp_path):
     comms, root_id = _root(tmp_path)
     publish_initial(comms, 'sender', '#team', 'typed bus source')
     with _store_lock(comms.bus.log.path) as generic:
-        assert generic.source is None
+        assert not hasattr(generic, "checked_read")
+        assert not hasattr(generic, "source")
     with comms.bus.log.locked() as bus:
-        assert bus.certified_read().marker.root_id == root_id
+        assert bus.checked_read.marker.root_id == root_id
 
 
 def test_claim_barrier_reuses_the_writer_sealed_marker(tmp_path, monkeypatch):
@@ -76,7 +77,7 @@ def test_claim_barrier_reuses_the_writer_sealed_marker(tmp_path, monkeypatch):
 
     monkeypatch.setattr(WireLog, "read_metadata_unlocked", observe)
     with comms.bus.log.locked() as lock:
-        source = lock.certified_read()
+        source = lock.checked_read
         # The writer already flushed and sealed this exact source. A reader
         # borrows that proof, rather than resampling or flushing it again.
         assert reads == [source.marker]
@@ -87,7 +88,7 @@ def test_claim_barrier_reuses_the_writer_sealed_marker(tmp_path, monkeypatch):
     second = publish_initial(comms, "sender", "#team", "@Alice next")
     reads.clear()
     with comms.bus.log.locked() as lock:
-        source = lock.certified_read()
+        source = lock.checked_read
         assert reads == [source.marker]
         source.witness.require_marker(source.marker)
         assert source.marker.last_seq == second.seq
@@ -105,18 +106,18 @@ def test_human_duplicate_check_includes_retained_rows_without_delivery_pointers(
     user = comms.messaging.user_identity(str(tmp_path))
     original = Message(user.name, 'Alice', 'Retained original body', InfoKind,
                        timestamp=1.0, seq=1, sender_role=user.role)
-    # An authored offline retained cut, installed by the existing certificate
+    # An authored offline retained cut, installed by the existing prefix record
     # owner. PublicWireRecord deliberately publishes no DeliverySources row.
     with _store_lock(comms.root / 'wire'), comms.bus.log.locked():
         comms.bus.log.path.write_text(json.dumps(original.to_wire()) + '\n')
         comms.bus.log.write_metadata_unlocked(WireMetadata(
             last_seq=1, claimed_after_seq=1, writer_protocol_version=1,
             wire_root_id=root_id, claim_envelopes_version=1))
-        # Replace only this fixture's derived empty certificate, as for the
+        # Replace only this fixture's derived empty prefix record, as for the
         # original offline retained cutover. No retained bus is discarded.
         (comms.root / 'private_bus_checkpoint.sqlite3').unlink()
         install_private_bus_checkpoint(comms.bus.log, _bus_locked=True)
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         assert source.connection.execute(
             f'SELECT COUNT(*) FROM "{DeliverySources.declared_name}"').fetchone()[0] == 0
     with pytest.raises(RelationViolationError, match='already exists'):
@@ -176,7 +177,7 @@ def test_retained_fact_capture_is_exhaustive_scoped_and_detached(tmp_path, monke
 
     monkeypatch.setattr(DeliverySources, "decode_bytes", observed)
     owner = comms.registry.require("Alice")
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         captured = source.retained_task_facts(owner.incarnation)
         assert decoded == [], "Decoding retained publication ownership"
     later = comms.messaging.send_user_message("Alice", "After the captured cut", worktree=str(tmp_path))
@@ -210,7 +211,7 @@ def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, m
     assert witness.digest != saved.digest
 
 
-def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> None:
+def test_claim_and_keyed_response_append_share_checked_prefix(tmp_path: Path) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
     from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
     from test_coordination_response import _ready
@@ -238,7 +239,7 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
         )
         response = case.bus.log.read_keyed_response(intent)
         assert response.seq == claim.seq + 1
-        with comms.bus.log.certified_read() as source:
+        with comms.bus.log.checked_read() as source:
             assert source.witness.through_seq == response.seq
         with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
             assert (
@@ -276,7 +277,7 @@ def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, mo
         stream.write(raw.replace(b'"seq": 1', b'"seq":\t1', 1))
         stream.flush()
         os.fsync(stream.fileno())
-    with pytest.raises(RelationViolationError, match="certified prefix changed"):
+    with pytest.raises(RelationViolationError, match="checked prefix changed"):
         _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     assert bus.read_bytes().endswith(b"\n")
 
@@ -346,7 +347,7 @@ def test_unknown_public_writer_cannot_make_initial_absent_audience(tmp_path: Pat
         _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
-def test_deleted_sql_index_cannot_certify_absent_selected_source(tmp_path: Path) -> None:
+def test_deleted_sql_index_cannot_check_absent_selected_source(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     source = publish_initial(comms, "sender", "Alice", "mandatory selected")
     lookup = RecordedThreadIncarnation("fixture", 17002.0).lookup
@@ -465,7 +466,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     assert (witness.through_seq, len(page), page[0].message.seq, more) == (1002, 100, 901, True)
     assert [row.message.seq for row in _page(comms, lookup, after=1000)[1]] == [1001, 1002]
     assert _page(comms, RecordedThreadIncarnation("fixture", 17004.0).lookup)[1] == ()
-    # Existing capped readers still fail closed; only the explicit certified
+    # Existing capped readers still fail closed; only the explicit checked
     # source API supplies a complete-prefix+bounded-page alternative.
     with (
         pytest.raises(RelationViolationError),
@@ -493,7 +494,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     print(f"checkpoint scale bytes={recovered.offset} warm_ms={warm_ms:.1f} cold_ms={cold_ms:.1f}")
 
 
-def test_reopened_root_preserves_certified_source_and_supports_append(
+def test_reopened_root_preserves_checked_source_and_supports_append(
     tmp_path: Path,
 ) -> None:
     comms, root_id = _root(tmp_path)
@@ -543,10 +544,10 @@ def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None
     with _store_lock_file(log.path) as lock_file:
         platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
         with pytest.raises(CheckpointNeedsRepair, match="relocated"):
-            log._read_certified(lock_file, platform, lambda source: None, SharedLock())
+            log._read_checked(lock_file, platform, lambda source: None, SharedLock())
     # The real reader upgrades its lock and rebuilds the copied SQLite index.
     request = AddressedPage.capture(lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup)
-    witness, messages, _ = asyncio.run(log.read_certified_async(
+    witness, messages, _ = asyncio.run(log.read_checked_async(
         lambda source: source.addressed_page(log, request)
     ))
     assert witness.root_id == root_id
@@ -565,7 +566,7 @@ def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None
 
 
 @pytest.mark.parametrize("fault", ["tail", "prefix", "root", "shrink"])
-def test_copied_root_corruption_is_not_recertified(tmp_path: Path, fault: str) -> None:
+def test_copied_root_corruption_is_not_rechecked(tmp_path: Path, fault: str) -> None:
     comms, _ = _root(tmp_path)
     for _ in range(12):
         publish_initial(comms, "sender", "Alice", "retained " + "x" * 500)
@@ -586,7 +587,7 @@ def test_copied_root_corruption_is_not_recertified(tmp_path: Path, fault: str) -
     before = (copied.root / "private_bus_checkpoint.sqlite3").read_bytes()
     marker = (copied.root / "bus_meta.json").read_bytes()
     with pytest.raises(RelationViolationError):
-        asyncio.run(copied.bus.log.read_certified_async(lambda source: source.witness))
+        asyncio.run(copied.bus.log.read_checked_async(lambda source: source.witness))
     assert (copied.root / "private_bus_checkpoint.sqlite3").read_bytes() == before
     assert (copied.root / "bus_meta.json").read_bytes() == marker
 
@@ -623,7 +624,7 @@ def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch
     copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
     original = copied.bus.log.path.read_bytes()
     with pytest.raises(HumanClaimBlockedError, match="UNKNOWN"):
-        asyncio.run(copied.bus.log.read_certified_async(
+        asyncio.run(copied.bus.log.read_checked_async(
             lambda source: source.require_new_human_message("human", "new-message")
         ))
     assert copied.bus.log.private_marker_unlocked().last_seq == 2
@@ -668,12 +669,12 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
     with _store_lock_file(log.path) as lock_file:
         platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
         with pytest.raises(checkpoint.CheckpointNeedsRepair):
-            log._read_certified(lock_file, platform, lambda source: None, SharedLock())
+            log._read_checked(lock_file, platform, lambda source: None, SharedLock())
     # The async reader then takes the exclusive lock, which repairs and reads.
-    through = asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq))
+    through = asyncio.run(log.read_checked_async(lambda source: source.witness.through_seq))
     assert through == 2
     # Once repaired, a shared read succeeds without writing.
-    assert asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq)) == 2
+    assert asyncio.run(log.read_checked_async(lambda source: source.witness.through_seq)) == 2
 
 
 @pytest.mark.parametrize(("mode", "escalated"), [(SharedLock(), ExclusiveLock), (ExclusiveLock(), None)])

@@ -386,7 +386,7 @@ def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monk
         read.read()
 
 
-def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatch):  # noqa: F811
+def test_original_window_uses_the_barriers_open_checked_prefix(tmp_path, monkeypatch):  # noqa: F811
     import agent_comms.private_bus_checkpoint as checkpoint
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
@@ -403,11 +403,11 @@ def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatc
     assert view.notifications[0].message.reference == initial.message.reference
 
 
-def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noqa: F811
+def test_original_open_checked_prefix_expires_with_canonical_lock(tmp_path):  # noqa: F811
     import sqlite3
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
         assert tuple(source.references((initial.message.reference,))) == (initial,)
     assert source.stream.closed
@@ -417,7 +417,7 @@ def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noq
         tuple(source.references((initial.message.reference,)))
 
 
-def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
+def test_missing_checked_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     comms.bus.log.path.unlink()
     with pytest.raises(
