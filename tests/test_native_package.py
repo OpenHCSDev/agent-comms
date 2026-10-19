@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from agent_comms.core_stamp import CheckoutStamp
 
 import agent_comms.native_package as native_package
 from agent_comms.native_package import (
@@ -249,6 +250,7 @@ def launcher(tmp_path):
     (source / '__init__.py').write_text('')
     shutil.copytree(repo / 'src/agent_comms', source, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('__pycache__'))
+    CheckoutStamp(str(repo)).write(source / 'package_stamp.py')
     # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
     # with its dependencies.
     interpreter = stack / ".venv/bin/python"
