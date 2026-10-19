@@ -138,7 +138,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
                 through=through,
                 expected_display_basis=page.display_basis,
             )
-    assert first.bus.pending_count(first.messaging.user_identity(str(first.root)).name, "peer") == 1
+    assert first.bus.pending_count(first.messaging.user_identity(str(first.root)).name, CommandTarget.named("peer")) == 1
 
 
 def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
