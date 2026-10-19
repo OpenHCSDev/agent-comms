@@ -27,4 +27,5 @@ def test_named_forge_row_preserves_the_actual_nonmain_merge_target():
     request = row.parsed()
     assert request.base == 'release'
     assert request.merge == 'b' * 40
+    assert request.merged_at < request.updated_at
     assert request.orders == ('proof-order',)
