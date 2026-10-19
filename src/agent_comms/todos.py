@@ -397,7 +397,7 @@ class PullRequests:
         aliases = {f"o{index}": candidate for index, candidate in enumerate(orders.values())}
         selections = []
         for alias, candidate in aliases.items():
-            search = json.dumps(f'repo:{repo} is:pr is:{state} in:body '
+            search = json.dumps(f'repo:{repo.to_wire()} is:pr is:{state} in:body '
                                 f'"{candidate.pull_request_reference}" sort:updated-desc')
             selections.append(
                 f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
@@ -411,7 +411,8 @@ class PullRequests:
              f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
-            raise WorkBranchError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
+            raise WorkBranchError(
+                listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
         rows = FieldCodec.decode(dict[str, tuple[ListedPullRequest, ...]],
                                  FieldCodec.parse(listed.stdout))
         for alias, candidate in aliases.items():
