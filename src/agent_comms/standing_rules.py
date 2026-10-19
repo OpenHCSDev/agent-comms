@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .declared_family import DeclaredFamily
 from .plan_phases import PlanPhase
 from .rule_reviews import RuleReviews
-from .todos import OrderProgress, ProgressSource, PullRequests
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -143,6 +142,8 @@ class BoardDisagrees(StandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        from .todos import OrderProgress, ProgressSource, PullRequests
+
         todos = cls.todos(comms, commander)
         storage, pulls = comms.registry.storage_rule, PullRequests(todos)
         found = []
