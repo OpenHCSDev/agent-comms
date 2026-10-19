@@ -229,7 +229,9 @@ class ClaudeSession:
         self.project = cwd
         return (SessionFacts(project=cwd),)
 
-    def started(self, call: ToolCall, timestamp: float, position: int) -> tuple[RuntimeUpdate, ...]:
+    def started(
+        self, call: ToolCall, timestamp: float, position: int,
+    ) -> tuple[RuntimeUpdate, ...]:
         self.tools[call.id] = call
         return self.turn.started(call, timestamp, position, self.phase)
 

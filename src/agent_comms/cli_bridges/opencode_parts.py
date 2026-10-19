@@ -10,7 +10,7 @@ from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
     CompletedItem,
     HiddenItem,
@@ -197,7 +197,7 @@ class ToolState(TaggedWire, ABC):
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
-    def started_at(self):
+    def started_at(self) -> EventTime:
         return UnrecordedEventTime()
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
@@ -210,7 +210,7 @@ class RunningTool(PendingTool):
     wire_tag = 'running'
     time: PartTime
 
-    def started_at(self):
+    def started_at(self) -> RecordedEventTime:
         return RecordedEventTime(self.time.start / 1000)
 
 
