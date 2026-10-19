@@ -28,6 +28,7 @@ from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
     boundary_decoder,
 )
+from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -1135,11 +1136,18 @@ class StrikeTodo(TodoOperation):
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
+@dataclass(frozen=True)
 class VerdictAudience:
-    """The order's unit and its goal's thread; no verdict kind today concerns every unit."""
-    @staticmethod
-    def targets(todo: Todo) -> tuple[str, ...]:
-        return tuple(dict.fromkeys((todo.held().owner, *todo.goal.threads())))
+    """The threads a send is for; a send reaching more than one thread wakes no thread outside it."""
+    threads: tuple[str, ...]
+
+    @classmethod
+    def of(cls, unit: str, goal: GoalReference) -> VerdictAudience:
+        """An order's unit and its goal's thread; no verdict kind today concerns every unit."""
+        return cls(tuple(dict.fromkeys((unit, *goal.threads()))))
+
+    def addressed(self, target: str, body: str) -> str:
+        return CommandTarget.named(target).addressed(self.threads, body)
 
 
 @dataclass(frozen=True)

@@ -140,6 +140,10 @@ class NamedTarget(CommandTarget):
     def effective_mentions(self, message, audience):
         return frozenset()
 
+    def addressed(self, threads: tuple[str, ...], body: str) -> str:
+        """One recipient is its own audience."""
+        return body
+
     def require_frozen_recipients(self, message, audience):
         """Non-direct targets impose no exact-recipient requirement."""
 
@@ -292,6 +296,12 @@ class ChannelTarget(NamedTarget):
 
     def effective_mentions(self, message, audience):
         return frozenset(mention.thread for mention in message.mentions).intersection(audience.canonical_members)
+
+    def addressed(self, threads: tuple[str, ...], body: str) -> str:
+        """Mentions limit the wake to the declared audience, so a send without one is refused."""
+        if not threads:
+            raise ValueError(f"A send to {self.name} reaches more than one thread; declare its audience.")
+        return " ".join(f"@{thread}" for thread in threads) + f" {body}"
 
     def wake_policy(self, recipient, mentions):
         if mentions:
