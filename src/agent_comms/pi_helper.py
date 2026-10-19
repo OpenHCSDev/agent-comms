@@ -12,7 +12,7 @@ from typing import ClassVar
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import RestartEnvironment
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 
 
 class PiHelperError(ValueError):
@@ -43,6 +43,10 @@ class PiHelperOutputExceeded(PiHelperError):
 class SessionHelperRequest:
     package: str
     file: str
+
+    @property
+    def launch_runtime(self) -> LaunchRuntime:
+        return LaunchRuntime.running()
 
 
 class PiHelper(DeclaredFamily, affix="Helper"):
@@ -100,6 +104,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
             timeout=cls.timeout_for(request),
             cwd=cwd,
             env=environment,
+            runtime=request.launch_runtime,
         )
         if not outcome.outcome.successful:
             raise cls.failure(request, outcome)

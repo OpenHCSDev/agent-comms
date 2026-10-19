@@ -6,6 +6,7 @@
     "agent_comms.read_ledger.ReadLedger": "bcc9ec9af2016cfaa1252d05e08118b4f1b73f9c4eb68553c9c37df76dc40996",
     "agent_comms.registry_store.RegistryStore": "ed3745f30c77c59218d2be474aa580ec5bc2b0d53e144c4277f006f6952b24c4",
     "agent_comms.relationships.RelationshipStore": "f865e917057f7b0e047c92b99c36255a2126a2dfd7a650cdc15982f24b90ab99",
+    "agent_comms.runtime_children.RuntimeChildrenStore": "b258974a17d0d0ed0635ad08b5cfc111b5c8206bb775e01b9338f948f683935b",
     "agent_comms.runtime_info.RuntimeInfoStore": "84a30c144ca2edc44e290592d77a1c6a2679f765acb13b52d27072b2f6e8e752",
     "agent_comms.shared_ledger.SharedLedger": "31b84d65b2ac1f54250ce31f8192880d6eb6c67295e2fc2aad835f4ebfe1feb0"
   },

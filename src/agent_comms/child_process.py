@@ -22,20 +22,27 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
+from collections.abc import Callable, Generator
+from contextlib import (
+    AbstractContextManager,
+    asynccontextmanager,
+    contextmanager,
+    nullcontext,
+    suppress,
+)
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
-from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec, NullMember, SubclassUnion, RecordMember
 from .errors import RelationViolationError
+from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
+from .launch_runtime import LaunchRuntime
 from .sealed import Sealed
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
+    from .runtime_children import RuntimeChildrenStore, RuntimeChildReservation
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
@@ -50,7 +57,7 @@ class IdentityMismatchError(ProcessLookupError):
 
 
 class ChildRetirementError(BaseException):
-    """Capability: the child owner's cleanup acknowledgement failed, independently of cancellation."""
+    """The child owner's cleanup acknowledgement failed independently of cancellation."""
 
 
 class ChildRetirementFailed(RuntimeError, ChildRetirementError):
@@ -408,7 +415,9 @@ class Platform(DeclaredFamily, affix="Platform"):
         """POSIX locks end at last close, including inherited descriptors."""
 
     @abstractmethod
-    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
+    def launch(
+        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime
+    ) -> ChildLaunch: ...
 
     def terminate_group(self, identity: ProcessIdentity) -> None:
         self.signal_group(identity, signal.SIGTERM)
@@ -463,8 +472,10 @@ class PosixPlatform(Platform):
 
         fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
 
-    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
-        return PosixLaunch(command, pass_fds)
+    def launch(
+        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime
+    ) -> ChildLaunch:
+        return PosixLaunch(command, pass_fds, runtime)
 
     def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
         try:
@@ -803,13 +814,46 @@ class Win32Platform(Platform):
                 # owners outlive this launcher; no kill-on-handle-close flag.
                 self.kernel.CloseHandle(job)
 
-    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
+    def launch(
+        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime
+    ) -> ChildLaunch:
         if pass_fds:
             raise NotImplementedError("POSIX descriptor inheritance is unavailable on Windows")
-        return WindowsLaunch(command, self)
+        return WindowsLaunch(command, self, runtime)
+
+
+class ChildRegistration(ABC):
+    """The durable owner notified after a launched group has finished."""
+
+    @abstractmethod
+    def finished(self, identity: ProcessIdentity) -> None: ...
+
+
+class NoChildRegistration(ChildRegistration):
+    """An observed process has no launch registration to remove."""
+
+    def finished(self, identity: ProcessIdentity) -> None:
+        pass
+
+
+NO_CHILD_REGISTRATION = NoChildRegistration()
 
 
 class ChildLaunch(ABC):
+    # The composition root binds the store after process types are declared.
+    children_store: ClassVar[type[RuntimeChildrenStore]]
+
+    def __init__(self, runtime: LaunchRuntime):
+        self.runtime = runtime
+
+    def record(self, identity: ProcessIdentity, reservation: RuntimeChildReservation) -> None:
+        """Persist the gated child, or cancel before user code executes."""
+        try:
+            reservation.record(identity)
+        except BaseException:
+            self.cancel_before_release(identity)
+            raise
+
     @property
     @abstractmethod
     def argv(self) -> tuple[str, ...]: ...
@@ -828,16 +872,36 @@ class ChildLaunch(ABC):
         stderr=subprocess.DEVNULL,
     ) -> ParentedProcess:
         """Record the parent's process handle before the platform allows exec."""
-        process = subprocess.Popen(
-            self.argv,
-            cwd=cwd,
-            env=env,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            **self.options,
-        )
-        return ParentedProcess(process, Platform.current().identity(process.pid))
+        with self.children_store.launching(self.runtime) as reservation:
+            process = subprocess.Popen(
+                self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
+                stderr=stderr, **self.options,
+            )
+            identity = Platform.current().identity(process.pid)
+            child = ParentedProcess(process, identity, reservation.store)
+            try:
+                self.record(identity, reservation)
+            except BaseException:
+                child.reap()
+                child.close_streams()
+                raise
+        return child
+
+    async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
+        async with self.children_store.launching_async(self.runtime) as reservation:
+            process = await asyncio.create_subprocess_exec(
+                self.argv[0], *self.argv[1:], cwd=cwd, env=env, **stdio.options, **self.options,
+            )
+            identity = Platform.current().identity(process.pid)
+            child = AttachedChild(process, identity, reservation.store)
+            child._stderr_task = asyncio.create_task(child._drain_stderr())
+            try:
+                self.record(identity, reservation)
+            except BaseException:
+                await process.wait()
+                await child._stderr_task
+                raise
+        return child
 
     @abstractmethod
     def release(self, identity: ProcessIdentity) -> None: ...
@@ -862,7 +926,8 @@ class ChildLaunch(ABC):
 
 
 class WindowsLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], platform: Win32Platform):
+    def __init__(self, command: tuple[str, ...], platform: Win32Platform, runtime: LaunchRuntime):
+        super().__init__(runtime)
         self.command, self.platform = command, platform
 
     @property
@@ -896,7 +961,8 @@ class WindowsLaunch(ChildLaunch):
 
 
 class PosixLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...]):
+    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime):
+        super().__init__(runtime)
         self.command = command
         self.pass_fds = pass_fds
         self.read_fd, self.write_fd = os.pipe()
@@ -1136,7 +1202,10 @@ async def join_retirement(task: asyncio.Future):
 class ChildProcess(Sealed, ABC):
     """The sole stop algorithm; cancellation retains the cleanup task."""
 
-    def __init__(self, identity: ProcessIdentity):
+    def __init__(
+        self, identity: ProcessIdentity, registration: ChildRegistration = NO_CHILD_REGISTRATION,
+    ):
+        self.registration = registration
         self.identity = identity
         self.platform = Platform.current()
         self._stop_task: asyncio.Task[ChildOutcome] | None = None
@@ -1160,13 +1229,15 @@ class ChildProcess(Sealed, ABC):
     @abstractmethod
     async def wait(self) -> ChildOutcome: ...
 
-    def _stop_plan(self, guard):
+    def _stop_plan(
+        self, guard: Callable[[], AbstractContextManager[None]], deadline: float = math.inf,
+    ) -> Generator[float, None, type[GracefulStopOutcome]]:
         with guard():
             self.platform.terminate_group(self.identity)
-        deadline = time.monotonic() + STOP_GRACE_SECONDS
+        grace_deadline = min(time.monotonic() + STOP_GRACE_SECONDS, deadline)
         stage = GracefulStopOutcome
         while self.platform.group_members(self.identity):
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= grace_deadline:
                 stage = ForcedStopOutcome
                 with guard():
                     self.platform.force_group(self.identity)
@@ -1176,15 +1247,19 @@ class ChildProcess(Sealed, ABC):
         # pending disk IO), which has no deadline. Kill again each round so a
         # member forked during the first kill retires too.
         while self.platform.group_members(self.identity):
+            if time.monotonic() >= deadline:
+                survivors = self.platform.group_members(self.identity)
+                raise ChildRetirementFailed(f"Process group still alive: {survivors}")
             if stage is ForcedStopOutcome:
                 with guard():
                     self.platform.force_group(self.identity)
             yield 0.02
+        self.registration.finished(self.identity)
         return stage
 
-    def _retire_group(self, guard):
+    def _retire_group(self, guard, deadline=math.inf):
         """Use the same guarded stop plan for synchronous and asynchronous cleanup."""
-        plan = self._stop_plan(guard)
+        plan = self._stop_plan(guard, deadline)
         while True:
             try:
                 delay = next(plan)
@@ -1258,8 +1333,9 @@ class TerminalChildStdio(ChildStdio):
 class AttachedChild(ChildProcess):
     stderr_limit: ClassVar[int] = 16000
 
-    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity):
-        super().__init__(identity)
+    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity,
+                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
+        super().__init__(identity, registration)
         self.process = process
         self.stdin = process.stdin
         self.stdout = process.stdout
@@ -1275,23 +1351,15 @@ class AttachedChild(ChildProcess):
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
         stdio: ChildStdio = StreamingChildStdio(),
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ) -> AttachedChild:
         if not command:
             raise ValueError("A child command is required")
         platform = Platform.current()
-        with platform.launch(command, pass_fds) as launch:
-            process = await asyncio.create_subprocess_exec(
-                *launch.argv,
-                cwd=cwd,
-                env=env,
-                **stdio.options,
-                **launch.options,
-            )
-            identity = platform.identity(process.pid)
-            child = cls(process, identity)
-            child._stderr_task = asyncio.create_task(child._drain_stderr())
+        with platform.launch(command, pass_fds, runtime) as launch:
+            child = await launch.spawn_async(cwd=cwd, env=env, stdio=stdio)
             try:
-                launch.release(identity)
+                launch.release(child.identity)
                 await launch.verify_async()
             except BaseException:
                 await child.stop()
@@ -1330,7 +1398,9 @@ class AttachedChild(ChildProcess):
         return tail
 
     async def stderr_tail(self, max_bytes: int = stderr_limit) -> str:
-        return (await asyncio.shield(self._stderr_task))[-max_bytes:].decode(errors="replace").strip()
+        return (
+            (await asyncio.shield(self._stderr_task))[-max_bytes:].decode(errors="replace").strip()
+        )
 
     async def _collect_stdout(self) -> bytes:
         output = bytearray()
@@ -1442,6 +1512,7 @@ class BoundedRun:
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ):
         """Borrow a collected result; this scope still owns child retirement.
 
@@ -1454,7 +1525,9 @@ class BoundedRun:
         deadline = asyncio.get_running_loop().time() + timeout
         try:
             async with asyncio.timeout_at(deadline):
-                child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
+                child = await AttachedChild.start(
+                    command, cwd=cwd, env=env, pass_fds=pass_fds, runtime=runtime
+                )
         except TimeoutError:
             raise  # A launch expiry is not evidence that user code never started.
         except FileNotFoundError as error:
@@ -1495,9 +1568,9 @@ class SynchronousProcess(ChildProcess):
     @abstractmethod
     def reap(self) -> ChildOutcome: ...
 
-    def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
+    def stop_sync(self, *, guard=nullcontext, deadline=math.inf) -> ChildOutcome:
         self.require_stop_authority()
-        stage = self._retire_group(guard)
+        stage = self._retire_group(guard, deadline)
         return stage(self.reap())
 
 
@@ -1516,11 +1589,19 @@ class ObservedProcess(SynchronousProcess):
         return self.reap()
 
 
+class RecordedRuntimeGroup(ObservedProcess):
+    """A recorded launch owns the group even after its original leader exits."""
+
+    def require_stop_authority(self) -> None:
+        self.platform.group_members(self.identity)
+
+
 class ParentedProcess(SynchronousProcess):
     """Owns the OS child handle, its reap result, and any captured pipe streams."""
 
-    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity):
-        super().__init__(identity)
+    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity,
+                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
+        super().__init__(identity, registration)
         self.process = process
 
     @classmethod
@@ -1532,10 +1613,11 @@ class ParentedProcess(SynchronousProcess):
         env: dict[str, str] | None = None,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ) -> ParentedProcess:
         if not command:
             raise ValueError("A child command is required")
-        with Platform.current().launch(command, ()) as launch:
+        with Platform.current().launch(command, (), runtime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
                 if before_start is not None:

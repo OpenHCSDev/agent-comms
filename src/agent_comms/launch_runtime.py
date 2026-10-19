@@ -30,13 +30,17 @@ class LaunchRuntime:
         return cls(Path(sys.executable))
 
     @property
+    def prefix(self) -> Path:
+        return self.interpreter.parent.parent.resolve()
+
+    @property
     def native_entrypoint(self) -> str:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
             RestartEnvironment.inherit(source).for_interpreter(self.interpreter).without_pythonpath(),
-            virtual_env=str(self.interpreter.parent.parent),
+            virtual_env=str(self.prefix),
         )
         return configuration.apply_runtime(source)
 
