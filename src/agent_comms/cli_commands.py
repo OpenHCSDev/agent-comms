@@ -1913,7 +1913,7 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
     confirmed: bool = option('--confirmed', default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return CliCommand.decode(self.operation).execute_target(
+        return CliCommand.member_named(self.operation).execute_target(
             ctx, CommandTarget.arguments(self.target, self.project), self.arguments,
             confirmed=self.confirmed, channel=self.channel, project=self.project)
 
@@ -2083,7 +2083,7 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
     help = 'Execute a declared operation using its original CLI field parsers'
 
     def apply(self, ctx: Comms) -> CliResult:
-        return TargetEdit(CliCommand.decode(self.operation),
+        return TargetEdit(CliCommand.member_named(self.operation),
                           CommandTarget.arguments(self.target, self.project), self.arguments,
                           self.confirmed, self.channel, self.project).apply(ctx)
 

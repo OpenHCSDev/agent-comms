@@ -123,7 +123,7 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
     assert calls == [first, second]
     assert First.members_with(First) == (first, Text, Empty)
     assert Second.members_with(Second) == (second,)
-    assert First.decode('number') is first
+    assert First.member_named('number') is first
     assert FieldCodec.encode_document(Empty(), Empty) is None
     assert FieldCodec.decode_document(Empty, None) == Empty()
     assert FieldCodec.decode_document(dict[str, Empty], {'empty': None}) == {'empty': Empty()}

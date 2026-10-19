@@ -234,7 +234,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append(str(refused))
     serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
     try:
-        phase = OrderPhase.decode(serves[1] if serves else UnplannedPhase.declared_name)
+        phase = OrderPhase.member_named(serves[1] if serves else UnplannedPhase.declared_name)
     except ValueError as refused:
         problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
@@ -726,7 +726,7 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.decode(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_namespace(args)
 
 
 class RuledVerb(CommanderVerb):
@@ -918,7 +918,7 @@ class ServeVerb(OrderVerb, RuledVerb):
     phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
 
     def run(self) -> None:
-        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.decode(self.phase)))
+        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
         print(f'{self.pid} serves {self.phase}')
 
 

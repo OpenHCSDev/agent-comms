@@ -31,7 +31,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
 
     def parse(args):
         options = parser.parse_args(args)
-        return CliCommand.decode(options.command).from_namespace(options)
+        return CliCommand.member_named(options.command).from_namespace(options)
 
     register = parse(["register", "--name", "a", "--worktree", "/wt", "--tags", "x, y,x"])
     assert register.tags == frozenset({"x", "y"})

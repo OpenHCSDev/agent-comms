@@ -108,7 +108,7 @@ class WakeDecision(RecipientDecision):
     def from_wire(cls, row: dict[str, str]) -> WakeDecision:
         match row:
             case {"recipient_lookup": lookup, "audience": audience, "wake_mode": mode}:
-                return cls(lookup, MessageAudience(audience), WakePolicy.decode(mode)())
+                return cls(lookup, MessageAudience(audience), WakePolicy.member_named(mode)())
         raise IntegrityViolationError("A wake decision row is incomplete.")
 
 

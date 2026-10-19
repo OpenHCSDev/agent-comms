@@ -72,7 +72,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path,
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
         ).run()
-    assert comms.owners.maintenance.read().phase == MaintenancePhase.decode("paused")
+    assert comms.owners.maintenance.read().phase == MaintenancePhase.member_named("paused")
     writes = [json.loads(line) for line in received.read_text().splitlines()]
     assert [item["type"] for item in writes] == ["get_state"]
     with pytest.raises(ProcessLookupError):

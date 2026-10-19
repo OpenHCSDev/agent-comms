@@ -344,7 +344,7 @@ class TestSelectedTargetActions:
         options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions'])
-        parsed = CliCommand.decode(options.command).from_namespace(options)
+        parsed = CliCommand.member_named(options.command).from_namespace(options)
         assert parsed == explicit
         with pytest.raises(ValueError, match='cannot be overridden'):
             action.bound[0].edited({'all': True})
