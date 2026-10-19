@@ -1297,10 +1297,11 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                    if (named := self.NAMED_FILE.findall(edit)) and not any(map(changed, named)))
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
-        return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
+        return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
+                       if item.name not in evidence}, **evidence)
 
     def merged(self, sha: str) -> ProblemOrder:
-        return MergedProblemOrder(original=self, sha=sha)
+        return self.copy_as(MergedProblemOrder, sha=sha)
 
     @property
     def pull_request_reference(self) -> str:
@@ -1375,15 +1376,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MergedProblemOrder(ProblemOrder):
-    """An installed merge, retaining its original order without inventing a check or app proof."""
-    original: CheckedProblemOrder
+class MergedProblemOrder(CheckedProblemOrder):
+    """The checked order installed by a merge, with its actual merge identity."""
     sha: str
     line: ClassVar[str] = "Merged and installed"
-
-    @property
-    def id(self) -> str:
-        return self.original.id
 
     def require_close(self) -> None:
         pass

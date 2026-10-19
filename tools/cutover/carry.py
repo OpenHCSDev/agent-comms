@@ -600,6 +600,16 @@ class PendingConversion(PreparedCarries):
             self.backup.retire()
 
 
+class TodoOrderShape(StoreCarry):
+    """Reshape saved orders before any step decodes rows as today's Todo."""
+
+    store = TodoStore
+
+    @classmethod
+    def precedes(cls, later: type[Carry]) -> bool:
+        return issubclass(later, TodoRows) and not issubclass(later, TodoColumnCarry)
+
+
 class TodoColumnCarry(TodoRows):
     """Todo rows gain one declared record column, empty; every other column stays as it was."""
 

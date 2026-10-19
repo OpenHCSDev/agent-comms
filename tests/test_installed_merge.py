@@ -1,12 +1,12 @@
 """Merge observation closes the real stored order, without a completion request."""
-from dataclasses import replace
+from dataclasses import fields, replace
 import subprocess
 
 import pytest
 
 from agent_comms.commander.config import Repo
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import (DoneTodoState, MergedProblemOrder, OperationDelivery,
+from agent_comms.todos import (CheckedProblemOrder, DoneTodoState, MergedProblemOrder, OperationDelivery,
                                PullRequest, PullRequests, UnorderedProblemOrder)
 from agent_comms.tools import CommsOrderDoneTool
 from test_commander_problem_orders import working
@@ -58,8 +58,11 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     assert closed.state is DoneTodoState and closed.assignment is None
     assert closed.revision == todo.revision + 1 and not closed.pending
     assert isinstance(closed.order, MergedProblemOrder)
-    assert closed.order.sha == sha and closed.order.original == original
+    assert closed.order.sha == sha
+    assert all(getattr(closed.order, item.name) == getattr(original, item.name)
+               for item in fields(CheckedProblemOrder))
     assert closed.order.id == original.id
+    assert "original" not in FieldCodec.encode(closed.order)
     assert closed.strikes == todo.strikes
     assert FieldCodec.decode(type(closed), FieldCodec.encode(closed)) == closed
 
