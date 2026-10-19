@@ -949,7 +949,7 @@ class FieldCodec(Sealed):
         init_required_keys: tuple[str, ...]
         accepted_keys: frozenset[str]
 
-        def encoded(self, value, view, encode_value):
+        def encoded(self, value, view, encode_value) -> dict[str, object]:
             result: dict[str, object] = {}
             for entry in self.bindings:
                 current = getattr(value, entry.name)
@@ -1059,13 +1059,13 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def decode(self, data: object) -> T: ...
 
-    def encode_value(self, value: object) -> Any:
+    def encode_value(self, value: object) -> object:
         if isinstance(value, WireValue):
             return type(value).encode(value)
         kind = type(value)
         if value is None or kind is str or kind is int or kind is bool:
             return value
-        if kind is float and math.isfinite(value):
+        if kind is float and math.isfinite(cast(float, value)):
             return value
         if is_dataclass(value) and not isinstance(value, type):
             return FieldCodec.encode_record(value)
