@@ -30,20 +30,7 @@ from .config import Commander, CommanderConfig
 Words = tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class SimpleCommand:
-    words: Words
-
-
-class ParsedCommand(SimpleCommand):
-    """The shell lexer identified this simple command's argument boundaries."""
-
-
-class UnparsedCommand(SimpleCommand):
-    """Malformed shell input still exposes its whitespace-separated words to rules."""
-
-
-def simple_commands(command: str) -> tuple[SimpleCommand, ...]:
+def simple_commands(command: str) -> tuple[Words, ...]:
     """The one parse of a command line: its simple commands, split at shell operators."""
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
@@ -55,8 +42,8 @@ def simple_commands(command: str) -> tuple[SimpleCommand, ...]:
             else:
                 commands[-1].append(word)
     except ValueError:
-        return (UnparsedCommand(tuple(command.split())),)
-    return tuple(ParsedCommand(tuple(words)) for words in commands if words)
+        return (tuple(command.split()),)
+    return tuple(tuple(words) for words in commands if words)
 
 
 @dataclass(frozen=True)
@@ -93,9 +80,9 @@ class GuardedCommand(DeclaredFamily, affix='Command'):
 
     @classmethod
     def refusals(cls, command: str, session: CommanderSession) -> tuple[str, ...]:
-        return tuple(reason for simple in simple_commands(command)
+        return tuple(reason for words in simple_commands(command)
                      for kind in cls.members_with(cls) if not inspect.isabstract(kind)
-                     for reason in kind.refused(simple.words, session))
+                     for reason in kind.refused(words, session))
 
 
 @dataclass(frozen=True)
