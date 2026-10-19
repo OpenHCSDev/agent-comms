@@ -17,7 +17,9 @@ from agent_comms.notification_progress import FailedProgress
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.revision_views import CommanderView
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressSource, PullRequests, Todo
+from agent_comms.todos import (
+    CommitMomentum, OrderProgress, ProgressPoint, ProgressSource, PullRequests, Todo,
+)
 from agent_comms.turn_digests import LastTurns, ThreadTurns
 from agent_comms.ui_model.observation import (
     InterestRequest,
@@ -41,6 +43,8 @@ class CommanderOrder:
     todo: Todo
     progress: OrderProgress
     overdue: bool
+    commits: tuple[ProgressPoint, ...] = ()
+    observed_at: float = 0
 
     @property
     def line(self) -> str:
@@ -87,6 +91,12 @@ class UnitCard:
     @property
     def line(self) -> str:
         return self.unit.name + " | " + " ; ".join(order.line for order in self.orders)
+
+    @property
+    def momentum(self) -> tuple[CommitMomentum, ...]:
+        """Derived from order times and commit evidence; never a stored score."""
+        return tuple(CommitMomentum(order.todo, order.commits, order.observed_at)
+                     for order in self.orders)
 
     @property
     def priority(self) -> tuple[bool, float, str]:
@@ -158,9 +168,9 @@ class CommanderModel:
         grouped: dict[ThreadIncarnation, list[CommanderOrder]] = {}
         for todo in todos:
             unit = todo.held().owner_identity
-            progress = ProgressSource.at(
-                todo, storage.order_checkout(unit.name, todo.id), pulls).progress()
-            grouped.setdefault(unit, []).append(CommanderOrder(todo, progress, todo.overdue(now)))
+            source = ProgressSource.at(todo, storage.order_checkout(unit.name, todo.id), pulls)
+            grouped.setdefault(unit, []).append(CommanderOrder(
+                todo, source.progress(), todo.overdue(now), source.cadence_commits(), now))
         cards = []
         for unit, orders in grouped.items():
             if comms.registry.require(unit.name).incarnation != unit:

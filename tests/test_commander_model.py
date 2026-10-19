@@ -3,12 +3,17 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.goals import CheckedCommit
+from agent_comms.goals import OrderCheck
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.todos import CommitMomentum, ProgressPoint, ProgressSource, PullRequests
 from agent_comms.ui_model.commander import (
     CommanderModel,
     ObserveCommander,
     OpenCardDetail,
     ReadCommanderIdentity,
+    CommanderOrder,
+    CardDetail,
+    UnitCard,
 )
 from agent_comms.ui_model.observation import ReadAnswered, ReadRefused
 from test_commander_problem_orders import create
@@ -40,11 +45,42 @@ def test_status_source_never_requests_acceptance_measurement(commander, monkeypa
     create(commander, 'P1')
     def forbidden(*args, **kwargs):
         pytest.fail('A read-only commander page executed an acceptance measurement')
-    monkeypatch.setattr(CheckedCommit, 'run', forbidden)
+    monkeypatch.setattr(OrderCheck, 'at', forbidden)
+    monkeypatch.setattr(OrderCheck, 'run', forbidden)
     # Progress now consumes retained check receipts, never executes a measurement.
     model = CommanderModel.read(comms, ObserveCommander(
         str(comms.root), comms.registry.require(caller.name).incarnation))
     assert model.units[0].orders[0].progress.state == 'no commit since the order'
+
+
+def test_card_derives_commit_cadence_against_deadline_without_storing_momentum(commander):
+    comms, caller = commander
+    todo = replace(create(commander, 'P1'), deadline=RecordedEventTime(300))
+    points = (ProgressPoint('first', 100), ProgressPoint('second', 160))
+    order = CommanderOrder(todo, ProgressSource(todo, comms.root, PullRequests((todo,))).progress(),
+                           False, points, 170)
+    card = UnitCard(comms.registry.require('worker').incarnation, (order,), CardDetail())
+    momentum, = card.momentum
+    assert 'momentum' not in card.__dataclass_fields__
+    assert momentum.interval == 60
+    assert momentum.next_at == 220
+    assert momentum.deadline_margin == 80
+    assert '1.3m before due' in momentum.line
+    assert 'completion unknown' in momentum.line
+    late = replace(momentum, todo=replace(todo, deadline=RecordedEventTime(200)), observed_at=250)
+    assert '0.3m after due' in late.line
+    assert 'forecast missed by 0.5m' in late.line
+
+
+@pytest.mark.parametrize('points', [(), (ProgressPoint('one', 100),),
+    (ProgressPoint('one', 100), ProgressPoint('two', 100)),
+    (ProgressPoint('one', 160), ProgressPoint('two', 100))])
+def test_unknown_commit_cadence_does_not_invent_forecast(commander, points):
+    todo = create(commander, 'P1')
+    momentum = CommitMomentum(todo, points, 170)
+    assert momentum.next_at == 0
+    assert 'cadence unknown' in momentum.line
+    assert 'next commit ~' not in momentum.line
 
 
 def test_commander_identity_is_resolved_or_refused_in_the_read_process(commander):

@@ -32,7 +32,7 @@ COMMANDER = "claude-code"
 UNITS = ("pi-cn-phase2", "pi-cn-phase5")
 
 
-def prepare(output: Path) -> None:
+def prepare(output: Path, units: tuple[str, ...], ordered_at: float | None) -> None:
     live = Comms(LocalRoute.default())
     root = output / "bus"
     if root.exists():
@@ -40,7 +40,7 @@ def prepare(output: Path) -> None:
     root.mkdir(parents=True)
     comms = Comms(root)
     receipts = []
-    for name in (COMMANDER, *UNITS):
+    for name in (COMMANDER, *units):
         original = live.registry.require(name)
         session = original.session_file
         if session:
@@ -60,7 +60,7 @@ def prepare(output: Path) -> None:
         text="Verify the commander page on copied real unit sessions", goal_id="page-request",
         order=RequestGoalOrder()))
     now = time.time()
-    for index, name in enumerate(UNITS):
+    for index, name in enumerate(units):
         comms.goals.update_goal(name, SetGoalAction(
             text="Copied unit for read-only page verification"))
         order = PendingProblemOrder(
@@ -69,7 +69,8 @@ def prepare(output: Path) -> None:
             edits=("Render the canonical order owner without copying its state",),
             banned=("Do not launch a provider or change the original saved session",),
             report="Report the actual visible commander page and its expanded unit card",
-            at=RecordedEventTime(now - 1200 if not index else now),
+            at=RecordedEventTime(ordered_at if ordered_at is not None and not index
+                                 else now - 1200 if not index else now),
             first_call_deadline=RecordedEventTime(now + 120), run=MechanicalOrderRun())
         CommsTodoCreateTool(owner=name, order=CreateProblemGoalAction(
             problem=f"P{index + 1}", order=order, request="page-request",
@@ -87,7 +88,7 @@ def prepare(output: Path) -> None:
     (output / "sources.txt").write_text("\n".join(receipts) + "\n")
 
 
-async def journey(app, pilot, output: Path) -> None:
+async def journey(app, pilot, output: Path, units: tuple[str, ...], momentum: bool) -> None:
     from toad.navigation_target import FeedTarget
     from toad.screens.commander import CommanderScreen, CommanderUnit
     from toad.widgets.conversation import Conversation
@@ -101,7 +102,7 @@ async def journey(app, pilot, output: Path) -> None:
     conversation.prompt.focus()
     await pilot.press("enter")
     async with asyncio.timeout(90):
-        while not isinstance(app.screen, CommanderScreen) or len(app.screen.rows) != len(UNITS):
+        while not isinstance(app.screen, CommanderScreen) or len(app.screen.rows) != len(units):
             await pilot.pause(0.2)
     screen = app.screen
     await pilot.pause(1)
@@ -111,14 +112,17 @@ async def journey(app, pilot, output: Path) -> None:
         (output / f"{stage}.txt").write_text(text + "\n")
         subprocess.run(("import", "-window", "root", str(output / f"{stage}.png")), check=True)
     capture("level-0")
-    card = next(row for row in screen.query(CommanderUnit) if row.unit.name == UNITS[0])
+    card = next(row for row in screen.query(CommanderUnit) if row.unit.name == units[0])
+    if momentum:
+        assert "m/commit; next commit" in str(card.momentum_widget.content)
+        assert "completion unknown" in str(card.momentum_widget.content)
     await pilot.click(card.query_one("CollapsibleTitle"))
     async with asyncio.timeout(90):
         while "Latest checkout commits:" not in str(card.detail_widget.content):
             await pilot.pause(0.2)
     await pilot.pause(1)
-    assert "pi-cn-phase2" in str(card.title)
-    assert screen.rows[next(unit for unit in screen.rows if unit.name == UNITS[1])].collapsed
+    assert units[0] in str(card.title)
+    assert screen.rows[next(unit for unit in screen.rows if unit.name == units[1])].collapsed
     capture("level-1")
     def deliver():
         comms = Comms(output / "bus")
@@ -131,6 +135,8 @@ async def journey(app, pilot, output: Path) -> None:
         while "Delivered, waiting on install" not in str(card.title):
             await pilot.pause(0.2)
     await pilot.pause(0.5)
+    if momentum:
+        assert "order delivered" in str(card.momentum_widget.content)
     capture("live-delivery")
     # Verify collapse/return does not replace the underlying conversation or its draft.
     await pilot.press("escape")
@@ -145,15 +151,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--units", nargs=2, default=UNITS)
+    parser.add_argument("--ordered-at", type=float)
+    parser.add_argument("--momentum", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     if args.prepare:
-        prepare(args.output)
+        prepare(args.output, tuple(args.units), args.ordered_at)
         return
     os.environ["AGENT_COMMS_ROOT"] = str(args.output / "bus")
     from toad.app import ToadApp
     app = ToadApp(project_dir=str(args.output))
-    app.run(auto_pilot=lambda pilot: journey(app, pilot, args.output))
+    app.run(auto_pilot=lambda pilot: journey(app, pilot, args.output, tuple(args.units), args.momentum))
     if app._exception:
         raise app._exception
 

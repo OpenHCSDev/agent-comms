@@ -384,6 +384,49 @@ class ProgressPoint:
 
 
 @dataclass(frozen=True)
+class CommitMomentum:
+    """A next-commit forecast from observed commits, not a completion estimate.
+
+    The card derives this value on read; nothing is persisted. Without a known
+    amount of remaining work, commit cadence cannot predict order completion.
+    """
+    todo: Todo
+    commits: tuple[ProgressPoint, ...]
+    observed_at: float
+    window: ClassVar[int] = 2
+
+    @property
+    def interval(self) -> float:
+        if len(self.commits) < self.window:
+            return 0
+        return self.commits[-1].at - self.commits[0].at
+
+    @property
+    def next_at(self) -> float:
+        return self.commits[-1].at + self.interval if self.interval > 0 else 0
+
+    @property
+    def deadline_margin(self) -> float:
+        return self.todo.deadline.recorded_at("An order deadline") - self.next_at
+
+    @property
+    def line(self) -> str:
+        due = self.todo.deadline.recorded_at("An order deadline") - self.observed_at
+        deadline = f"due in {due / 60:.1f}m" if due >= 0 else f"due {-due / 60:.1f}m ago"
+        if not self.todo.pending:
+            return f"{self.todo.id}: momentum not applicable; order delivered"
+        if self.interval <= 0:
+            return (f"{self.todo.id}: cadence unknown (need two increasing commit times); "
+                    f"{deadline}; completion unknown")
+        margin = self.deadline_margin
+        relation = "before" if margin >= 0 else "after"
+        late = self.observed_at - self.next_at
+        missed = f"; forecast missed by {late / 60:.1f}m" if late > 0 else ""
+        return (f"{self.todo.id}: {self.interval / 60:.1f}m/commit; next commit ~{_clock(self.next_at)} "
+                f"({abs(margin) / 60:.1f}m {relation} due); {deadline}{missed}; completion unknown")
+
+
+@dataclass(frozen=True)
 class DistanceReading:
     at: float
     distance: int
@@ -488,6 +531,10 @@ class ProgressSource:
     def latest_commit(self) -> str:
         raise ValueError("The unit checkout is unavailable.")
 
+    def cadence_commits(self) -> tuple[ProgressPoint, ...]:
+        """No checkout means no local commit evidence, not zero velocity."""
+        return ()
+
 
 class LocalProgressSource(ProgressSource):
     """An available checkout supplies the local commit and distance evidence."""
@@ -510,13 +557,23 @@ class LocalProgressSource(ProgressSource):
     def readings(self) -> DistanceReadings:
         """The order's base, then each branch commit since the order; the last two are read."""
         base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        commits = [ProgressPoint.listed(line) for line in reversed(self.git(
-            "log", f"--max-count={DistanceReadings.window}", "--first-parent", f"--since={after}",
-            f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())]
+        commits = self.branch_commits(base, DistanceReadings.window)
         points = [ProgressPoint(base, self.since), *commits][-DistanceReadings.window:]
         return DistanceReadings(tuple(
             reading for point in points for reading in self.recorded_distances(base, point)))
+
+    def cadence_commits(self) -> tuple[ProgressPoint, ...]:
+        """Bounded branch evidence since the order; never run its acceptance check."""
+        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
+        return self.branch_commits(base, CommitMomentum.window)
+
+    def branch_commits(self, base: str, limit: int) -> tuple[ProgressPoint, ...]:
+        """Decode the bounded order-time branch window once for all readers."""
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
+        return tuple(point for line in reversed(self.git(
+            "log", f"--max-count={limit}", "--first-parent", f"--since={after}",
+            f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())
+            if (point := ProgressPoint.listed(line)).at >= self.since)
 
     def recorded_distances(self, base: str, point: ProgressPoint) -> Iterator[DistanceReading]:
         """Only explicit check receipts supply a distance; no receipt means unknown."""
