@@ -11,7 +11,7 @@ import pytest
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, ForeignFieldSpellings,
-    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr, GitMeasure, UncarriedRecordFormat,
+    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr, GitMeasure, NoneAbsence, UncarriedRecordFormat,
     python_paths,
 )
 
@@ -627,6 +627,21 @@ def test_unchanged_old_sites_are_not_forced_to_zero(repo, measure, source):
     assert status == 0
     assert report["head"][identity] == 1
     assert report["introduced"][identity] == 0
+
+
+def test_none_as_absence_fails_with_its_line_except_in_a_listed_boundary_decoder(repo):
+    decoder = "class FieldPlan:\n    def decoded(self, value: str):\n        return value\n"
+    owner = "def owner(value: str):\n    return value\n"
+    base = repo.commit({"plan.py": decoder, "owner.py": owner})
+    head = repo.commit({"plan.py": decoder.replace("value: str", "value: str | None"),
+                        "owner.py": owner.replace("value: str", "value: str | None")})
+    status, report = repo.compare(base, head)
+    identity = f"{NoneAbsence.__name__}:{repo.root}"
+    assert "FieldPlan.decoded" in NoneAbsence.boundary_decoders
+    assert status == 1
+    assert report["introduced"][f"{identity}/owner.py"] == report["delta"][f"{identity}/owner.py"] == 1
+    assert report["introduced_lines"] == {f"{identity}/owner.py": [1]}
+    assert report["introduced"][f"{identity}/plan.py"] == report["delta"][f"{identity}/plan.py"] == 0
 
 
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
