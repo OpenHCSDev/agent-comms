@@ -7,6 +7,8 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 from __future__ import annotations
 
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
+from agent_comms.field_codec import FieldCodec
+from agent_comms.diagnostics import request_observation_path
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.messages import NoticeRole
@@ -994,14 +996,16 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(tmp_path: Path
 async def test_registered_owner_stopped_during_model_cannot_settle(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path)
     runner, _ = _fake_model(decision="IGNORE")
+    leases = []
 
     async def stop_owner(*args, **kwargs):
         result = await runner(*args, **kwargs)
+        leases.append(comms.registry.require("alpha").require_turn_lease())
         comms.registry.unregister("alpha")
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", stop_owner)
-    with pytest.raises(StaleFence, match="stopped or changed"):
+    with pytest.raises(StaleFence, match="turn witness is invalid"):
         await SelectedExecution(
             root=root,
             wire_root_id=root_id,
@@ -1011,7 +1015,10 @@ async def test_registered_owner_stopped_during_model_cannot_settle(tmp_path: Pat
         ).run()
     assert len(list(comms.views.channel_history_page("#team").messages)) == 1
     assert not comms.registry.status("alpha").active
-    assert not comms.registry.require("alpha").active_turn.executing
+    assert not comms.registry.require("alpha").turn_state.active.executing
+    records = [json.loads(line) for line in request_observation_path(root, leases[0].turn_id).read_text().splitlines()]
+    assert records[-1]["turn"] == FieldCodec.encode(leases[0])
+    assert "acquisition" in records[-1]
 
 
 async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
