@@ -1,6 +1,7 @@
 from dataclasses import replace
 
-from agent_comms.presentation import NoRevision, RegistrationsView, SidebarView, StoresView, WireRevision
+from agent_comms.presentation import NoRevision, WireRevision
+from agent_comms.revision_views import RegistrationsView, SidebarView, StoresView
 from agent_comms.ui_model.observation import (
     NotificationsRead, ReadNotifications, ReadRecordedNotifications, UnreadableNotificationsRead,
 )

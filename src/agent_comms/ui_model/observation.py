@@ -44,9 +44,9 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.presentation import (NoRevision, NotificationsView, ReadState, RegistrationsView,
-                                       SidebarView, StoresView, WireRevision)
+from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel

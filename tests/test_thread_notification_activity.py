@@ -7,7 +7,8 @@ import pytest
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.presentation import MessageNotification, NotificationsView, WireRevision
+from agent_comms.presentation import MessageNotification, WireRevision
+from agent_comms.revision_views import NotificationsView
 from agent_comms.private_path import FileRevision
 from agent_comms.ui_model.observation import (
     NotificationsObserved, ObserveNotifications, ObserveThreads, ReadNotifications, ThreadPresented,

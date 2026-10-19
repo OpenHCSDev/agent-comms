@@ -14,7 +14,8 @@ from agent_comms.notification_progress import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
-from agent_comms.presentation import MessageNotification, StoresView
+from agent_comms.presentation import MessageNotification
+from agent_comms.revision_views import StoresView
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread

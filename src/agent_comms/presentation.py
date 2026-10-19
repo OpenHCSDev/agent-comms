@@ -8,7 +8,6 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
-from itertools import zip_longest
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
@@ -44,6 +43,8 @@ from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope
                          NamedViewer)
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
+from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView, 
+                             NotificationsView, RegistrationsView, RevisionView, SidebarView, StoresView)
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
@@ -745,59 +746,6 @@ class CoordinationSnapshot:
         )
 
 
-@dataclass(frozen=True)
-class RevisionView(DeclaredFamily, affix="View"):
-    """A view derived from some of the revision's sources; each source declares the views it feeds."""
-
-    def differs(self, before: object, current: object) -> bool:
-        return before != current
-
-
-@dataclass(frozen=True)
-class RegistrationsView(RevisionView):
-    pass
-
-
-@dataclass(frozen=True)
-class StoresView(RevisionView):
-    """Every observed store; the activity expiry tick is not a store."""
-
-
-@dataclass(frozen=True)
-class StatusView(RevisionView):
-    """Activity, assignments and bus reads supply thread status.
-
-    Draft and finished CLI items share one store. Neither changes the
-    sidebar's roster, activity or unread bus counts. Their own observer
-    still receives every revision and refreshes the conversation.
-    """
-
-
-@dataclass(frozen=True)
-class SidebarView(RevisionView):
-    """Native unread progress updates counts without rebuilding thread presentations."""
-
-
-@dataclass(frozen=True)
-class ExternalTranscriptsView(RevisionView):
-    """CLI drafts and finished items, independently of coordination status."""
-
-
-@dataclass(frozen=True)
-class NotificationsView(RevisionView):
-    """Whole-window changes; activity is attributed to its message participants."""
-
-
-@dataclass(frozen=True)
-class BusSourceView(RevisionView):
-    def differs(self, before: object, current: object) -> bool:
-        return any(FileRevision.source_changed(earlier, now)
-                   for earlier, now in zip_longest(before, current))
-
-
-STATUS_SOURCE = (StoresView, StatusView, SidebarView)
-
-
 def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]], *views: type[RevisionView]):
     return field(metadata={"paths": paths, "views": views})
 
@@ -846,8 +794,10 @@ class WireRevision(ReadState):
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root),
         StoresView, ExternalTranscriptsView)
     # Notifications change once per expiry period, not per tick.
-    expiry_tick: int = field(metadata={"views": (NotificationsView,),
-                                       "key": lambda tick: tick // WireRevision.expiry_seconds})
+    expiry_tick: int = field(metadata={
+        "views": (NotificationsView,),
+        "differs": lambda before, now: (
+            before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds)})
 
     expiry_seconds: ClassVar[int] = 30
 
@@ -930,6 +880,6 @@ class WireRevision(ReadState):
 
     def changed_before(self, view: RevisionView, later: WireRevision) -> bool:
         """Whether any source feeding `view` differs, by the view's comparison."""
-        return any(view.differs(key(getattr(self, source.name)), key(getattr(later, source.name)))
-                   for source in fields(self) if isinstance(view, source.metadata.get("views", ()))
-                   for key in (source.metadata.get("key", lambda value: value),))
+        return any(source.metadata.get("differs", view.differs)(
+            getattr(self, source.name), getattr(later, source.name))
+            for source in fields(self) if isinstance(view, source.metadata["views"]))
