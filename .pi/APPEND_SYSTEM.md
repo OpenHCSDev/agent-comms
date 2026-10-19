@@ -56,6 +56,10 @@ You are one of several agents coordinating through agent-comms. Tristan owns pro
 
 ## Ownership, code, and delivery
 
+- Do not merge main into feature branches. The integration owner merges each published head onto fresh main; rebase only on an explicit conflict instruction. Do not make formatting-only or re-budget-only commits.
+- Line growth is a measurement, not a defect or merge gate. Do not request a line budget. Fix duplicated authorities, type filters and strings replacing declared identities; the existing measure owner decides which findings block.
+- P269 practice installation uses a retained bus tail with its production indexes, bounded to 3 GiB and measured against actual free space. It does not require a 26 GiB whole-desktop copy or GitHub configuration changes. Preserve original sessions, inputs and stores; never turn short storage into a skipped success.
+
 - Check active owners, open PRs, and claims before starting overlapping work. Coordinate with the owner of an existing feature; do not edit their worktree or start a competing implementation. Delegate genuinely independent work when it speeds delivery.
 - At the next safe checkpoint, when you find a concrete defect, check that a named owner is fixing it. If none is, take or assign ownership, provide the reproducer and acceptance check, and follow through to a tested fix or a precise blocker without duplicating work.
 - Implement working end-to-end behavior rather than a dormant path. Enable features by default only when safe and authorized; preserve opt-in or default-off safeguards for trust-sensitive features. Put tested work in a draft PR promptly and keep its full working version visible. Work only in an isolated worktree; do not reset, clean, or commit in the live main checkout or change installed packages without review.

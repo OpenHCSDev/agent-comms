@@ -19,9 +19,13 @@ as data; the host compares it with that declaration. No repository variable
 mirrors the context. No native GitHub approval is required: the contributors all
 use the same GitHub identity and cannot approve their own PRs.
 
-The install gate's run_machines checks out the proposed revision, then rehearse
-invokes target/tools/upgrade_bus.py, including --help and the actual rehearsal.
-It does not invoke the live checkout's installer. GateResult/MachineResult carry
+The queue invokes PracticeGateCommand. PracticeCopy uses the existing CheckRoot
+owner to retain the bus tail, bounded saved-session tails and their production
+indexes; it does not snapshot the whole desktop bus. PracticeCopy owns the 3 GiB
+cap and checks measured bytes against current free space. It never admits an
+empty substitute or a skipped installation. The gate checks out the proposed
+revision, then rehearse invokes target/tools/upgrade_bus.py, including --help and
+the actual rehearsal. It does not invoke the live checkout's installer. GateResult/MachineResult carry
 typed failure reasons back to the queue. CheckFailed carries the actual completed command and delegates its public
 summary to the QueueCheck member. Ratchet summaries decode introduced_lines
 and print Measure file:line. Installer summaries return the declared
@@ -67,21 +71,22 @@ evidence, not installed entrypoints. No runner launch, authorized_keys edit,
 queue enablement, native approval, production install or restart was performed
 by this worker.
 
-## Remaining acceptance
+## Practice proof and later activation
 
-A real approved PR must merge through the enabled queue after the actual
-private practice install, and a deliberately failing PR must show its reason
-on GitHub. Local unit checks, annotations printed locally and ratchets do not
-establish that acceptance. Bootstrap is still a reviewed operator action.
+The latest owner ruling replaces real-queue proof with a practice installation
+on the bounded retained-tail copy. Report that command's exit code and the pushed
+revision; unit checks alone are not the practice-install proof. Both source and
+tools ratchets must exit zero. SourceLines reports actual growth without a
+budget or blocking the merge; structural findings still block through their
+owning Measure implementations.
 
-Current storage is an independent blocker: the desktop bus is approximately
-26 GiB and this host has approximately 12 GiB free. The operator needs a
-separately provisioned practice-install volume/allocation. The queue now always
-invokes the actual install gate, which owns storage admission/refusal; the
-queue's second boolean allocation switch and invented capacity literals are
-deleted. A verified admin/reviewed-head run authorizes a practice attempt, not
-an exemption from the install gate's storage floor. No private-copy run was
-started by this worker under its 3 GB allocation. Worker checkouts and receipts stay under
-/home/ts/wt/pi-cn-load--P269 and /home/ts/.cache/agent-scratch/pi-cn-load, below
-the combined 3 GB limit. The old runner state remains with its existing owner;
-its credentials have not been copied or deleted.
+The disabled queue, offline runner and unauthorized key are not prerequisites
+for this proof. They remain untouched; later production activation requires the
+operator actions above. No deliberate failing GitHub branch is claimed here.
+The copy does not need room for a 26 GiB desktop snapshot. Its admission uses
+actual copied bytes and actual remaining space, not a second queue policy.
+
+Worker checkouts and receipts stay under /home/ts/wt/pi-cn-load--P269 and
+/home/ts/.cache/agent-scratch/pi-cn-load, below the combined 3 GB limit. The old
+runner state remains with its existing owner; its credentials have not been
+copied or deleted.

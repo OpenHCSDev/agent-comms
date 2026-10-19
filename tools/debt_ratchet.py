@@ -47,6 +47,11 @@ AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
 
 
 class Measure(DeclaredFamily, affix="Measure"):
+    @classmethod
+    def blocks(cls, delta: dict[str, int]) -> bool:
+        return any(value > 0 for key, value in delta.items()
+                   if key.partition(":")[0] == cls.__name__)
+
     @staticmethod
     def environment(root: str) -> dict[str, str]:
         return dict(os.environ)
@@ -243,9 +248,11 @@ class TypeErrors(CheckedRevision):
 
 
 class SourceLines(Measure):
-    """Budget edited lines, retaining moves across the source boundary (50% similarity)."""
+    """Report edited lines, retaining moves across the source boundary (50% similarity)."""
 
-    trailer: typing.ClassVar[str] = "Src-Budget"
+    @classmethod
+    def blocks(cls, delta: dict[str, int]) -> bool:
+        return False
 
     @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
@@ -258,9 +265,7 @@ class SourceLines(Measure):
             if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
                 added += int(increase)
                 removed += int(decrease)
-        # Each commit's trailer budgets that commit's lines, so a range's budget is their sum.
-        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
-        return {cls.__name__: removed + sum(int(value) for value in declared.split())}, {cls.__name__: added}
+        return {cls.__name__: removed}, {cls.__name__: added}
 
 
 @dataclass(frozen=True)
@@ -1537,7 +1542,8 @@ class Comparison:
 
     @property
     def failed(self) -> bool:
-        return any(value > 0 for value in self.delta.values()) or any(self.introduced.values())
+        return (any(measure.blocks(self.delta) for measure in Measure.members_with(Measure))
+                or any(self.introduced.values()))
 
 
 def compare(repo: Path, base: str, head: str, root: str) -> Comparison:

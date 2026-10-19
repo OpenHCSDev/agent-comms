@@ -12,10 +12,21 @@ import pytest
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
     FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat,
-    ComparedKind, DeclaredSpellings, NamedAccess, NamedDeclaration, StringIdentity, python_paths,
+    ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
+    SourceLines, StringIdentity, python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
+
+
+@pytest.mark.parametrize("name,blocked", [
+    (SourceLines.__name__, False),
+    (f"{NoneAbsence.__name__}:tools/example.py", True),
+])
+def test_measure_owner_decides_whether_growth_blocks(name: str, blocked: bool) -> None:
+    result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
+    assert result.delta[name] == 1
+    assert result.failed is blocked
 
 
 class Repository:

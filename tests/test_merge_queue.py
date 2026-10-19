@@ -13,7 +13,6 @@ from install_gate import FailedMachineResult, GateResult, MachinesGateResult
 from merge_queue import (
     CheckFailed,
     DispatchQueueCheck,
-    GateError,
     Host,
     InstallQueueCheck,
     QueueCheck,
@@ -49,7 +48,7 @@ class MergeQueueTests(unittest.TestCase):
     def test_a_workflow_cannot_supply_git_options(self):
         host = Host(Path("."), "owner/repo", Path("."))
         with patch("merge_queue.run") as command:
-            with self.assertRaises(GateError):
+            with self.assertRaises(MalformedRecord):
                 host.fetch("--upload-pack=anything")
         command.assert_not_called()
 
@@ -89,7 +88,7 @@ class MergeQueueTests(unittest.TestCase):
             check = InstallQueueCheck(123)
             check.check(host, Target("a" * 40, "b" * 40))
         self.assertIs(command.call_args.args[0], check)
-        self.assertIn("--revision", command.call_args.args)
+        self.assertIn("--practice", command.call_args.args)
 
     def test_only_declared_installer_refusal_crosses_the_log_boundary(self):
         error = UpgradeRefused("Insufficient room")

@@ -8,7 +8,6 @@ coverage and rehearsal. A workflow receives exit status, never bus data or logs.
 from __future__ import annotations
 
 import argparse
-import re
 import shlex
 import subprocess
 import sys
@@ -28,7 +27,7 @@ from install_gate import (
 )
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, GitCommitText
 from agent_comms.todos import ReviewedHeadVerdict
 
 WORKFLOW = Path(".github/workflows/debt-ratchet.yml")
@@ -185,11 +184,13 @@ class Host:
     scratch: Path
 
     def fetch(self, head: str) -> str:
-        if re.fullmatch(r"[0-9a-f]{40}", head) is None:
-            raise GateError("A check requires a full GitHub commit identifier")
+        head = GitCommitText.decode(head)
         run("git", "fetch", "origin", head, cwd=self.repo)
         run("git", "submodule", "update", "--init", "--recursive", cwd=self.repo)
-        return run("git", "rev-parse", f"{head}^{{commit}}", cwd=self.repo)
+        resolved = run("git", "rev-parse", f"{head}^{{commit}}", cwd=self.repo)
+        if resolved != head:
+            raise GateError("A check requires the full GitHub commit identifier")
+        return resolved
 
     def command(self, check: QueueCheck, *arguments: str | Path | int) -> None:
         completed = subprocess.run(
@@ -286,7 +287,7 @@ class InstallQueueCheck(QueueCheck):
             host.repo / "tools/install_gate.py",
             "--repo",
             host.repo,
-            "--revision",
+            "--practice",
             target.head,
             "--base",
             target.base,
