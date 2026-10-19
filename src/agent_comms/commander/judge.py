@@ -26,7 +26,6 @@ from ..field_codec import FieldCodec
 from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
-from ..cli_commands import option
 from .order import CommanderVerb, RuledVerb
 from .config import CommanderConfig
 
@@ -124,7 +123,7 @@ class JudgeVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
     help = "every unit's unjudged edits in full, beside its current orders"
-    thread: str = option("thread", nargs="?", default="")
+    thread: str = FieldCodec.option("thread", nargs="?", default="")
 
     def selects(self, edit: Edit) -> bool:
         return not self.thread or edit.thread == self.thread
@@ -144,10 +143,10 @@ class AlarmVerb(JudgeVerb):
 class VerdictVerb(JudgeVerb, RuledVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
-    ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")
-    why: str = option()
-    msg: str = option(default="", help="BUSID of my order message to the unit")
-    lines: tuple[str, ...] = option(
+    ids: tuple[str, ...] = FieldCodec.option("ids", nargs="+", metavar="ID:CODE")
+    why: str = FieldCodec.option()
+    msg: str = FieldCodec.option(default="", help="BUSID of my order message to the unit")
+    lines: tuple[str, ...] = FieldCodec.option(
         "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
     @abstractmethod
@@ -190,9 +189,9 @@ class VerdictVerb(JudgeVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(VerdictVerb):
     help = "the edit serves the order"
-    serves: str = option(help="exact words of the order")
-    no_owner: str = option("--no-owner", default="", help="12+ words with because and absolute file:line")
-    peer: str = option("--peer", default="", help="another sender's retained order message to the unit")
+    serves: str = FieldCodec.option(help="exact words of the order")
+    no_owner: str = FieldCodec.option("--no-owner", default="", help="12+ words with because and absolute file:line")
+    peer: str = FieldCodec.option("--peer", default="", help="another sender's retained order message to the unit")
 
     def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
         actor = order.COMMS.registry.require(ME).incarnation
@@ -216,7 +215,7 @@ class OkVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class SupersededVerb(VerdictVerb):
     help = "the task moved to another unit; these edits are neither ok nor sent back"
-    by: str = option("--by", help="the replacing order's message")
+    by: str = FieldCodec.option("--by", help="the replacing order's message")
 
     def operation(self, todo: Todo, edit_id: str) -> SupersededVerdict:
         return SupersededVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
@@ -232,14 +231,14 @@ class SupersededVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
-    msg: str = option(help="the required order message")
-    roast: str = option(help="blunt, why it is stupid, with because")
-    fix: str = option(help="owner and replacing shape")
-    pattern: str = option("--slop", help="pattern ID from the pinned refactor-audit catalog")
-    fact: str = option(help="the required fact, 4+ words")
-    at: str = option(help="PATH:LINE where it is restated")
-    derive: str = option(help="|".join(Derivation.names()))
-    by: str = option(help="PATH:LINE of the declaration that owns it")
+    msg: str = FieldCodec.option(help="the required order message")
+    roast: str = FieldCodec.option(help="blunt, why it is stupid, with because")
+    fix: str = FieldCodec.option(help="owner and replacing shape")
+    pattern: str = FieldCodec.option("--slop", help="pattern ID from the pinned refactor-audit catalog")
+    fact: str = FieldCodec.option(help="the required fact, 4+ words")
+    at: str = FieldCodec.option(help="PATH:LINE where it is restated")
+    derive: str = FieldCodec.option(help="|".join(Derivation.names()))
+    by: str = FieldCodec.option(help="PATH:LINE of the declaration that owns it")
 
     def slop(self) -> Slop:
         return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,

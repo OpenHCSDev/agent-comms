@@ -11,23 +11,12 @@ import signal
 import sys
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import MISSING, dataclass, field, fields, replace
-from dataclasses import Field as DataclassField
+from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import (
-    Any,
-    ClassVar,
-    Generic,
-    Literal,
-    Self,
-    TypeVar,
-    cast,
-    get_type_hints,
-)
-
+from typing import ClassVar, Generic, Literal, Self, TypeVar
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -50,23 +39,10 @@ from agent_comms.config_options import CatalogConfigOption, CatalogSelection, Co
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import (
-    FieldCodec,
-    NullMember,
-    RecordMember,
-    SubclassUnion,
-    compile_decoder,
-)
+from agent_comms import field_codec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import (
-    ConversationRole,
-    InfoKind,
-    Message,
-    MessageKind,
-    SendableMessageKind,
-    SendableRole,
-)
+from agent_comms import messages
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -83,14 +59,14 @@ class Binding(TypedTable):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         group = parser.add_argument_group('Core/CLI binding (all or none)')
-        for _, key in FieldCodec.record_fields(cls):
+        for _, key in field_codec.FieldCodec.record_fields(cls):
             group.add_argument('--' + key.replace('_', '-'))
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Binding | None:
-        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
+        values = {key: vars(arguments)[key] for _, key in field_codec.FieldCodec.record_fields(cls)
                   if vars(arguments)[key] is not None}
-        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else None
+        return field_codec.FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else None
 
     @classmethod
     @contextmanager
@@ -142,7 +118,7 @@ class Options:
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
-                      for declared, key in FieldCodec.record_fields(cls)})
+                      for declared, key in field_codec.FieldCodec.record_fields(cls)})
 
 @dataclass(frozen=True)
 class MonitorEvidence(DeclaredFamily):
@@ -232,8 +208,8 @@ class DeliveryRow(TypedTable):
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     @cached_property
-    def message(self) -> Message:
-        return Message.from_wire(json.loads(self.payload))
+    def message(self) -> messages.Message:
+        return messages.Message.from_wire(json.loads(self.payload))
 
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
         with bridge.db:
@@ -257,7 +233,7 @@ class Operation(ABC, Generic[OperationBridge]):
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Operation:
-        return FieldCodec.decode_record(cls, {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)})
+        return field_codec.FieldCodec.decode_arguments(cls, arguments)
 
     @abstractmethod
     async def execute(self, bridge: OperationBridge) -> None: ...
@@ -280,33 +256,39 @@ class Operation(ABC, Generic[OperationBridge]):
 
 
 def _json_object(value: str) -> dict[str, object]:
-    return FieldCodec.decode(dict[str, object], FieldCodec.parse(value))
+    return field_codec.FieldCodec.decode(dict[str, object], field_codec.FieldCodec.parse(value))
 
 
 @dataclass(frozen=True)
 class TargetField:
     """The declared field owns parsing, editor hints and requiredness."""
-    declaration: DataclassField
-    annotation: object
+    plan: field_codec.FieldPlan
     value: object
+
+    @classmethod
+    def of(cls, plan: field_codec.FieldPlan, value: object) -> TargetField:
+        editor = CatalogTargetField if 'catalog' in plan.declared.metadata else plan.setting('editor', cls)
+        return editor(plan, value)
+
+    @property
+    def annotation(self) -> object:
+        return self.plan.annotation
 
     @property
     def name(self) -> str:
-        return FieldCodec.wire_key(self.declaration)
+        return self.plan.key
 
     @property
     def multiline(self) -> bool:
-        return CommandOption.of(self.declaration).multiline
+        return self.plan.setting('multiline', False)
 
     @property
     def description(self) -> str:
-        return CommandOption.of(self.declaration).parser_options.get(
-            'help', self.name.replace('_', ' ').capitalize())
+        return self.plan.description
 
     @property
-    def editor_default(self):
-        formatter = CommandOption.of(self.declaration).editor_format
-        return formatter(self.value) if formatter else compile_decoder(self.annotation).encode_editor(self.value)
+    def editor_default(self) -> object:
+        return self.plan.editor_default(self.value)
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         """An unrestricted field does not declare a finite-choice editor."""
@@ -317,10 +299,10 @@ class TargetField:
 
     @property
     def required(self) -> bool:
-        return self.declaration.default is MISSING and self.declaration.default_factory is MISSING
+        return self.plan.constructor_required
 
     def value_schema(self) -> dict[str, object]:
-        return FieldCodec.value_schema(self.annotation)
+        return field_codec.FieldCodec.value_schema(self.annotation)
 
     def json_schema(self) -> dict[str, object]:
         return {**self.value_schema(), 'multiline': self.multiline,
@@ -337,11 +319,11 @@ class ChoiceTargetField(TargetField):
         return ()
 
     @property
-    def choices(self) -> tuple[tuple[str, str | None], ...]:
+    def choices(self) -> tuple[tuple[str, str], ...]:
         return tuple((choice.name, choice.value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        decoder = compile_decoder(self.annotation)
+        decoder = field_codec.compile_decoder(self.annotation)
         options = (SessionConfigSelectOption(name=label, value=decoder.encode_editor(decoder.decode(value)))
                    for label, value in decoder.editor_choices())
         return replace(self, options=tuple(options))
@@ -353,7 +335,7 @@ class ChoiceTargetField(TargetField):
 class CatalogTargetField(ChoiceTargetField):
     @property
     def catalog(self) -> type[CatalogConfigOption]:
-        return cast(type[CatalogConfigOption], CommandOption.of(self.declaration).catalog)
+        return self.plan.setting('catalog', CatalogConfigOption)
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:
@@ -362,126 +344,31 @@ class CatalogTargetField(ChoiceTargetField):
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
         catalog = catalogs.catalog_for(self.catalog)
         options = await catalog.display_choices(selection)
-        decoder = compile_decoder(self.annotation)
+        decoder = field_codec.compile_decoder(self.annotation)
         return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
             value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
-        return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
+        return {**field_codec.FieldCodec.value_schema(self.annotation), 'configuration': field_codec.FieldCodec.encode(self.catalog)}
 
 
-@dataclass(frozen=True)
-class CommandOption:
-    """The declared CLI and editor properties of one command field."""
-
-    multiline: bool
-    target_bound: bool
-    editor_format: Callable[[Any], str] | None
-    flags: tuple[str, ...]
-    parser_options: Mapping[str, Any]
-    group: str | None
-    normalize: Callable[..., Any] | None
-    parser_default: Any
-    parser_default_factory: Any
-    editor: type[TargetField]
-    catalog: type[CatalogConfigOption] | None
-
-    @staticmethod
-    def of(declaration: DataclassField) -> CommandOption:
-        return declaration.metadata[CommandOption]
-
-    @staticmethod
-    def argument_payload(declaration: DataclassField[object], annotation: object, value: object) -> object:
-        normalize = CommandOption.of(declaration).normalize
-        return (normalize(value) if normalize is not None
-                else compile_decoder(annotation).argument_payload(value))
-
-    def argument_flags(self, declaration: DataclassField) -> tuple[str, ...]:
-        """The declared flags; a field that declares none is the option its own name spells."""
-        return self.flags or ("--" + declaration.name.replace("_", "-"),)
-
-
-def option(
-    *flags: str,
-    default: Any = MISSING,
-    default_factory: Any = MISSING,
-    group: str | None = None,
-    normalize: Callable[..., Any] | None = None,
-    wire_name: str | None = None,
-    parser_default: Any = MISSING,
-    parser_default_factory: Any = MISSING,
-    multiline: bool = False,
-    target_bound: bool = False,
-    editor_format: Callable[[Any], str] | None = None,
-    editor: type[TargetField] = TargetField,
-    catalog: type[CatalogConfigOption] | None = None,
-    **parser_options: Any,
-) -> Any:
-    """One field owns both its CLI projection and JSON boundary conversion."""
-    metadata: dict[object, object] = {CommandOption: CommandOption(
-        multiline=multiline, target_bound=target_bound, editor_format=editor_format,
-        flags=flags, parser_options=parser_options, group=group, normalize=normalize,
-        parser_default=parser_default, parser_default_factory=parser_default_factory,
-        editor=CatalogTargetField if catalog is not None else editor, catalog=catalog,
-    )}
-    if wire_name is not None:
-        metadata["wire_name"] = wire_name
-    return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
 class DeclaredOptions:
-    """option() fields own a declaration's argparse subcommand and its decoding from the namespace.
-
-    A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
-    the member."""
+    """The CLI adapter consumes FieldCodec's existing field plans."""
     help: ClassVar[str]
-    __dataclass_fields__: ClassVar[dict[str, DataclassField[object]]]
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
-        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        cls.add_arguments(subparsers.add_parser(field_codec.FieldCodec.encode(cls), help=cls.help))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        groups: dict[str, Any] = {}
-        hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
-            option = CommandOption.of(declared)
-            group = option.group
-            owner = parser
-            if group is not None:
-                if group not in groups:
-                    groups[group] = parser.add_mutually_exclusive_group(required=True)
-                owner = groups[group]
-            annotation = hints[declared.name]
-            decoder = compile_decoder(annotation)
-            # An option that declares its own argparse action owns its argument's shape.
-            options = {**({} if "action" in option.parser_options else decoder.argument_options()),
-                       **option.parser_options}
-            if option.parser_default is not MISSING:
-                options["default"] = option.parser_default
-            elif option.parser_default_factory is not MISSING:
-                options["default"] = option.parser_default_factory()
-            else:
-                default = (declared.default_factory() if declared.default_factory is not MISSING
-                           else declared.default)
-                if default is MISSING:
-                    options["required"] = True
-                else:
-                    options["default"] = decoder.argument_text(
-                        FieldCodec.encode(default, annotation)
-                    )
-            flags = option.argument_flags(declared)
-            if any(flag.startswith("-") for flag in flags):
-                options["dest"] = FieldCodec.wire_key(declared)
-            else:
-                options.pop("required", None)
-            owner.add_argument(*flags, **options)
+        field_codec.FieldCodec.add_arguments(cls, parser)
 
     @classmethod
     def from_arguments(cls, args: argparse.Namespace) -> Self:
-        return FieldCodec.decode_arguments(cls, args, CommandOption.argument_payload)
-
+        return field_codec.FieldCodec.decode_arguments(cls, args)
 
 class SendArguments(argparse.Namespace):
     """Raw send fields declared for argparse; Send owns their decoded values."""
@@ -494,48 +381,41 @@ class SendArguments(argparse.Namespace):
     command: str
 
 
-class SendReport(SubclassUnion, affix=""):
-    @abstractmethod
-    def send(self, ctx: Comms, request: Send) -> SendResult: ...
-
-
-class MissingReport(NullMember, SendReport):
+class SendReport(field_codec.SubclassUnion, affix=""):
     def send(self, ctx: Comms, request: Send) -> SendResult:
-        return ctx.messaging.send(request.sender, request.target, request.body,
-                                  request.type, role=request.role())
+        return self.emit(partial(ctx.messaging.send, request.sender, request.target,
+                                 request.body, request.type, role=request.role()))
+
+    @abstractmethod
+    def emit(self, send: Callable[..., SendResult]) -> SendResult: ...
+
+
+class MissingReport(field_codec.NullMember, SendReport):
+    def emit(self, send: Callable[..., SendResult]) -> SendResult:
+        return send()
 
 
 @dataclass(frozen=True)
-class SuppliedReport(ChangeReport, RecordMember, SendReport):
-    def send(self, ctx: Comms, request: Send) -> SendResult:
-        return ctx.messaging.send(request.sender, request.target, request.body,
-                                  request.type, role=request.role(), report=self)
+class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
+    def emit(self, send: Callable[..., SendResult]) -> SendResult:
+        return send(report=self)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Send(DeclaredOptions, Operation):
     help = "Send to a thread (DM), #channel, or #all"
-    sender: str = option("--from", default="")
-    target: str = option("--to")
-    body: str = option("--body")
-    type: builtins.type[MessageKind] = option("--type", default=InfoKind,
-        choices=SendableMessageKind.names(), editor=ChoiceTargetField)
-    role: builtins.type[SendableRole] = option("--role", default=ConversationRole)
-    report: SendReport = option("--report", default=MissingReport(),
-        help="Change report fields as a JSON object", type=FieldCodec.parse)
-
-    @classmethod
-    def from_arguments(cls, args: argparse.Namespace) -> Self:
-        return FieldCodec.decode_record(cls, dict(
-            sender=args.sender, target=args.target, body=args.body,
-            type=args.type, role=args.role, report=args.report))
-
-    def send(self, ctx: Comms) -> SendResult:
-        return self.report.send(ctx, self)
+    sender: str = field_codec.FieldCodec.option("--from", default="")
+    target: str = field_codec.FieldCodec.option("--to")
+    body: str = field_codec.FieldCodec.option("--body")
+    type: builtins.type[messages.MessageKind] = field_codec.FieldCodec.option("--type", default=messages.InfoKind,
+        choices=messages.SendableMessageKind.names(), editor=ChoiceTargetField)
+    role: builtins.type[messages.SendableRole] = field_codec.FieldCodec.option("--role", default=messages.ConversationRole)
+    report: SendReport = field_codec.FieldCodec.option("--report", default=MissingReport(),
+        help="Change report fields as a JSON object", type=field_codec.FieldCodec.parse)
 
     async def execute(self, bridge: CliBridge) -> None:
-        await bridge.show_sent(await asyncio.to_thread(
-            replace(self, sender=bridge.binding.bus).send, bridge.comms))
+        request = replace(self, sender=bridge.binding.bus)
+        await bridge.show_sent(await asyncio.to_thread(request.report.send, bridge.comms, request))
 
 
 class Inbox(Operation[OperationBridge]):
@@ -577,7 +457,7 @@ class Watch(Inbox):
 
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
-    message: Message
+    message: messages.Message
 
     @property
     def text(self) -> str:
@@ -617,7 +497,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
-    async def accept(self, message: Message) -> None:
+    async def accept(self, message: messages.Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
         delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire(), separators=(',', ':')) + '\n', outcome)
@@ -642,8 +522,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
             '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+            '--after', json.dumps(field_codec.FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+            '--acknowledgment', field_codec.FieldCodec.encode(ExplicitWatchAcknowledgment)),
             stdio=StreamingChildStdio(input_enabled=False))
         try:
             async for item in WatchLine.stream(child):
@@ -814,7 +694,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         # One reversible JSON string per line; no truncation or lost line breaks.
         return json.dumps(text, ensure_ascii=False)
 
-    async def deliver(self, message: Message) -> type[Outcome]:
+    async def deliver(self, message: messages.Message) -> type[Outcome]:
         parts = self.incoming_frame(message).parts
         with self.db:
             DeliveryRow.update(self.db, where='id=?', parameters=(message.message_id,), monitor=ReceivingMonitor(len(parts)))

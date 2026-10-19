@@ -37,7 +37,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from pydantic import JsonValue
 
-from .cli_commands import DeclaredOptions, option
+from .cli_commands import DeclaredOptions
 from .command import Command
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
@@ -526,11 +526,11 @@ class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(ConnectorVerb):
     help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
-    root: Annotated[Path, PathText] | None = option(
+    root: Annotated[Path, PathText] | None = FieldCodec.option(
         "--root", default=None, help="Comms root (default: the active route)"
     )
-    port: int = option("--port", default=PORT, help="The loopback port it listens on")
-    issuer: str = option(
+    port: int = FieldCodec.option("--port", default=PORT, help="The loopback port it listens on")
+    issuer: str = FieldCodec.option(
         "--issuer",
         default=f"http://{LOOPBACK}:{PORT}",
         help="Public origin the OAuth metadata names",
@@ -552,9 +552,9 @@ class RoundTripVerb(ConnectorVerb):
     runtime and its loopback read agrees with this bus. Native-only installs do not need it."""
 
     help = "Read the bus through the running connector service and compare"
-    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
-    runtime: Annotated[Path, PathText] = option("runtime", help="The Python the service runs")
-    port: int = option("--port", default=PORT, help="The service's loopback port")
+    root: Annotated[Path, PathText] = FieldCodec.option("root", help="The comms root it proves")
+    runtime: Annotated[Path, PathText] = FieldCodec.option("runtime", help="The Python the service runs")
+    port: int = FieldCodec.option("--port", default=PORT, help="The service's loopback port")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         read = ToolCall.of(CommsChannelsTool)
@@ -600,7 +600,7 @@ class PendingVerb(ConnectorVerb):
 @dataclass(frozen=True, kw_only=True)
 class ApproveVerb(ConnectorVerb):
     help = "Approve one waiting authorization"
-    request: str = option("request", help="The id the authorize page shows")
+    request: str = FieldCodec.option("request", help="The id the authorize page shows")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         def approved(grants: ConnectorGrants) -> ConnectorGrants:

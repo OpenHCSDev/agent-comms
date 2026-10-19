@@ -14,13 +14,7 @@ from pydantic import JsonValue
 
 from .progress_claims import ProgressClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
-from .cli_commands import (
-    ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
-    PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
-    ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
-    HistoryCliCommand,
-    _json_object, option,
-)
+from .cli_commands import ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand, PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand, ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand, HistoryCliCommand, _json_object
 from .thread_execution import (
     ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
     StartOwnerControl, ThreadCommandAvailability,
@@ -1351,7 +1345,7 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
-    name: str | None = option("--name", default=None, help="Calling thread")
+    name: str | None = FieldCodec.option("--name", default=None, help="Calling thread")
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
         caller = ToolCaller.from_actor(self.name)
@@ -1361,11 +1355,11 @@ class ToolsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand, declared_name="tool"):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
-    caller: str | None = option(
+    caller: str | None = FieldCodec.option(
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
-    tool: str = option("--tool")
-    arguments: dict[str, object] = option(
+    tool: str = FieldCodec.option("--tool")
+    arguments: dict[str, object] = FieldCodec.option(
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
         parser_default="{}", normalize=_json_object)
 

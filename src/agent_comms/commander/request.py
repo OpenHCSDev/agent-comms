@@ -9,9 +9,10 @@ open request that no open order serves.
 
 from __future__ import annotations
 
+from ..field_codec import FieldCodec
+
 from dataclasses import dataclass
 
-from ..cli_commands import option
 from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
@@ -33,7 +34,7 @@ class RequestVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
     help = "record an owner request as the commander's Goal; prints its id"
-    text: str = option("text")
+    text: str = FieldCodec.option("text")
 
     def run(self) -> None:
         goal = COMMS.goals.update_goal(ME, SetGoalAction(text=self.text, order=RequestGoalOrder()))
@@ -43,8 +44,8 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
 @dataclass(frozen=True, kw_only=True)
 class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
     help = "close a request; refused while an order serving it is open"
-    id: str = option("id")
-    why: str = option("--why")
+    id: str = FieldCodec.option("id")
+    why: str = FieldCodec.option("--why")
 
     def run(self) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())

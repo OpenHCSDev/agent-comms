@@ -1,3 +1,5 @@
+
+from ..field_codec import FieldCodec
 """The only way the commander sends an order to a unit. Refuses soft or vague orders; tracks deadlines and strikes.
 
 `order send` bodies declare, on their own lines:
@@ -25,7 +27,7 @@ from uuid import uuid4
 
 from ..change_report import FileLine
 from ..child_process import BoundedRun
-from ..cli_commands import DeclaredOptions, option
+from ..cli_commands import DeclaredOptions
 from ..command import Command
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
@@ -651,7 +653,7 @@ def overdue():
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
+    fork: str | None = FieldCodec.option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
 
     @property
     def who(self) -> str:
@@ -771,15 +773,15 @@ class OrderVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class SendVerb(OrderVerb, RuledVerb):
     help = "record the order in Core and send it"
-    unit: str = option("unit")
-    due: str = option("due", help="HH:MM local time")
-    body_file: str = option("body_file", metavar="BODYFILE")
-    clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
-    mechanical: bool = option("--mechanical", default=False)
-    reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
-    replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
-    disk: bool = option("--disk", default=False, help="a cleanup order; never overrides a tool's storage rule")
-    traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
+    unit: str = FieldCodec.option("unit")
+    due: str = FieldCodec.option("due", help="HH:MM local time")
+    body_file: str = FieldCodec.option("body_file", metavar="BODYFILE")
+    clean: bool = FieldCodec.option("--clean", default=False, help="the unit showed no incompetence")
+    mechanical: bool = FieldCodec.option("--mechanical", default=False)
+    reassign: str | None = FieldCodec.option("--reassign", default=None, help="the concrete failure that forces replacement")
+    replaces: str | None = FieldCodec.option("--replaces", default=None, help="the current message this order replaces")
+    disk: bool = FieldCodec.option("--disk", default=False, help="a cleanup order; never overrides a tool's storage rule")
+    traced: str | None = FieldCodec.option("--traced", default=None, metavar="PATH:LINE",
                                 help="the first failing source line, required after two owners")
 
     def run(self) -> None:
@@ -791,9 +793,9 @@ class SendVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class StrikeVerb(OrderVerb, RuledVerb):
     help = "a send-back, a missed deadline or a false claim"
-    unit: str = option("unit")
-    why: str = option("--why")
-    caught: str = option("--caught", default=f'{ME} at review', help='"WHO at STAGE"; stage is review/install/live/user')
+    unit: str = FieldCodec.option("unit")
+    why: str = FieldCodec.option("--why")
+    caught: str = FieldCodec.option("--caught", default=f'{ME} at review', help='"WHO at STAGE"; stage is review/install/live/user')
 
     def run(self) -> None:
         references = set(re.findall(r'\bP\d+\b', self.why))
@@ -805,8 +807,8 @@ class StrikeVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class FireVerb(OrderVerb, RuledVerb):
     help = "take every open problem off a unit; their orders and strikes stay"
-    unit: str = option("unit")
-    why: str = option("--why")
+    unit: str = FieldCodec.option("unit")
+    why: str = FieldCodec.option("--why")
 
     def run(self) -> None:
         fire(self.unit, self.why)
@@ -815,9 +817,9 @@ class FireVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class UnstrikeVerb(OrderVerb, RuledVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
-    pid: str = option("pid")
-    why: str = option("--why")
-    at: str | None = option("--at", default=None,
+    pid: str = FieldCodec.option("pid")
+    why: str = FieldCodec.option("--why")
+    at: str | None = FieldCodec.option("--at", default=None,
                             help="HH:MM the strike was recorded; default the newest")
 
     def run(self) -> None:
@@ -827,9 +829,9 @@ class UnstrikeVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class DueVerb(OrderVerb, RuledVerb):
     help = "move a held order's deadline; the reason goes on the public record"
-    pid: str = option("pid")
-    at: str = option("at", help="HH:MM the order is now due")
-    why: str = option("--why")
+    pid: str = FieldCodec.option("pid")
+    at: str = FieldCodec.option("at", help="HH:MM the order is now due")
+    why: str = FieldCodec.option("--why")
 
     def run(self) -> None:
         due(self.pid, self.at, self.why)
@@ -838,8 +840,8 @@ class DueVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class InstallVerb(RuledVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
-    at: str = option("at", help="HH:MM the install is due")
-    installer: str = option("installer", help="the unit that runs the install")
+    at: str = FieldCodec.option("at", help="HH:MM the install is due")
+    installer: str = FieldCodec.option("installer", help="the unit that runs the install")
 
     def run(self) -> None:
         PlannedInstallDeadline(deadline(self.at), self.installer).plan(COMMS.root)
@@ -849,9 +851,9 @@ class InstallVerb(RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class WithdrawVerb(OrderVerb, RuledVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
-    pid: str = option("pid")
-    why: str = option("--why")
-    superseded_by: str | None = option("--superseded-by", default=None, metavar="PID",
+    pid: str = FieldCodec.option("pid")
+    why: str = FieldCodec.option("--why")
+    superseded_by: str | None = FieldCodec.option("--superseded-by", default=None, metavar="PID",
                                        help="the problem that already owns this fix")
 
     def run(self) -> None:
@@ -861,14 +863,14 @@ class WithdrawVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb, RuledVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
-    unit: str = option("unit", metavar="UNIT")
-    message: str = option("message", metavar="ORDER")
-    sha: str = option("--sha", help="the delivered commit in --repo HEAD, or op")
-    screenshot: str = option("--screenshot", default="", metavar="PATH",
+    unit: str = FieldCodec.option("unit", metavar="UNIT")
+    message: str = FieldCodec.option("message", metavar="ORDER")
+    sha: str = FieldCodec.option("--sha", help="the delivered commit in --repo HEAD, or op")
+    screenshot: str = FieldCodec.option("--screenshot", default="", metavar="PATH",
                              help="for an op: the screenshot the working claim stands on")
 
-    seen: str = option("--seen", default="")
-    repo: str = option("--repo", default="", help="the recorded order check directory")
+    seen: str = FieldCodec.option("--seen", default="")
+    repo: str = FieldCodec.option("--repo", default="", help="the recorded order check directory")
 
     def run(self) -> None:
         todo = COMMS.goals.todos.resolve_order(COMMS.registry.require(ME).incarnation, self.unit, self.message)
@@ -878,9 +880,9 @@ class DoneVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
     help = "open the problem's PR with its required immutable order identity"
-    pid: str = option("pid")
-    title: str = option("--title")
-    body_file: str = option("--body-file")
+    pid: str = FieldCodec.option("pid")
+    title: str = FieldCodec.option("--title")
+    body_file: str = FieldCodec.option("--body-file")
 
     def run(self) -> None:
         todo = COMMS.goals.todos.get(self.pid)
@@ -892,9 +894,9 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb, RuledVerb):
     help = "replace an open order's wrong check with one passing on main; keeps deadline, strikes"
-    pid: str = option("pid")
-    check: str = option("--check", help='"<repo> :: <shell command> -> <integer>"')
-    why: str = option("--why", help="what was wrong with the recorded check")
+    pid: str = FieldCodec.option("pid")
+    check: str = FieldCodec.option("--check", help='"<repo> :: <shell command> -> <integer>"')
+    why: str = FieldCodec.option("--why", help="what was wrong with the recorded check")
 
     def run(self) -> None:
         correct_check(self.pid, self.check, self.why)
@@ -903,8 +905,8 @@ class CheckVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(OrderVerb, RuledVerb):
     help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
-    pid: str = option("pid")
-    phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
+    pid: str = FieldCodec.option("pid")
+    phase: str = FieldCodec.option("phase", help="one of " + ", ".join(OrderPhase.names()))
 
     def run(self) -> None:
         call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
@@ -914,8 +916,8 @@ class ServeVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class SayVerb(OrderVerb, RuledVerb):
     help = "a non-order message; refused if it orders work"
-    units: str = option("units", metavar="UNIT[,UNIT]")
-    body_file: str = option("body_file", metavar="BODYFILE")
+    units: str = FieldCodec.option("units", metavar="UNIT[,UNIT]")
+    body_file: str = FieldCodec.option("body_file", metavar="BODYFILE")
 
     def run(self) -> None:
         say(self.units, self.body_file)
@@ -924,12 +926,12 @@ class SayVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class ProblemVerb(OrderVerb, RuledVerb):
     help = "Core records the problem with its order, or nothing"
-    text: str = option("text")
-    to: str = option("--to")
-    due: str = option("--due", help="HH:MM local time")
-    order: str = option("--order", help="the order body file")
-    where: str = option("--where", help="the actual file:line where this problem occurs")
-    disk: bool = option("--disk", default=False)
+    text: str = FieldCodec.option("text")
+    to: str = FieldCodec.option("--to")
+    due: str = FieldCodec.option("--due", help="HH:MM local time")
+    order: str = FieldCodec.option("--order", help="the order body file")
+    where: str = FieldCodec.option("--where", help="the actual file:line where this problem occurs")
+    disk: bool = FieldCodec.option("--disk", default=False)
 
     def run(self) -> None:
         problem(self.text, self.to, self.due, self.order, self.where, self.disk)
@@ -938,9 +940,9 @@ class ProblemVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class DropVerb(OrderVerb, RuledVerb):
     help = "drop an old order for a live newer one without a strike"
-    unit: str = option("unit")
-    message: str = option("message")
-    by: str = option("--by")
+    unit: str = FieldCodec.option("unit")
+    message: str = FieldCodec.option("message")
+    by: str = FieldCodec.option("--by")
 
     def run(self) -> None:
         COMMS.goals.todos.drop(COMMS.registry.require(ME).incarnation, self.unit, self.message, self.by)
@@ -950,9 +952,9 @@ class DropVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class FoldVerb(OrderVerb, RuledVerb):
     help = "join duplicate open problems without losing their text"
-    pid: str = option("pid")
-    into: str = option("--into")
-    why: str = option("--why")
+    pid: str = FieldCodec.option("pid")
+    into: str = FieldCodec.option("--into")
+    why: str = FieldCodec.option("--why")
 
     def run(self) -> None:
         COMMS.goals.todos.fold(COMMS.registry.require(ME).incarnation, self.pid, self.into, self.why)
@@ -962,9 +964,9 @@ class FoldVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class LinkVerb(OrderVerb, RuledVerb):
     help = "attach an unassigned problem to an existing order"
-    pid: str = option("pid")
-    unit: str = option("unit")
-    message: str = option("message")
+    pid: str = FieldCodec.option("pid")
+    unit: str = FieldCodec.option("unit")
+    message: str = FieldCodec.option("message")
 
     def run(self) -> None:
         COMMS.goals.todos.link(COMMS.registry.require(ME).incarnation, self.pid, self.unit, self.message)
@@ -974,9 +976,9 @@ class LinkVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class CloseVerb(OrderVerb, RuledVerb):
     help = "the fix works in the app; Core closes the problem"
-    pid: str = option("pid")
-    works: str = option("--works")
-    artifact: str = option("--artifact", default="", help="defaults to the file recorded by done --seen")
+    pid: str = FieldCodec.option("pid")
+    works: str = FieldCodec.option("--works")
+    artifact: str = FieldCodec.option("--artifact", default="", help="defaults to the file recorded by done --seen")
 
     def run(self) -> None:
         close(self.pid, self.works, self.artifact)
@@ -985,9 +987,9 @@ class CloseVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class HuntVerb(OrderVerb, RuledVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
-    where: str = option("where", metavar="FILE:LINE")
-    why: str = option("--why")
-    sent: str = option("--sent", default="", metavar="ORDER",
+    where: str = FieldCodec.option("where", metavar="FILE:LINE")
+    why: str = FieldCodec.option("--why")
+    sent: str = FieldCodec.option("--sent", default="", metavar="ORDER",
                        help="the open order the hunt became; omitted means clean")
 
     @classmethod
