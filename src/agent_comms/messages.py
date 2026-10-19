@@ -16,7 +16,8 @@ from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, FieldRepresentation, InlineRecord, MalformedRecord, NullMember, projected
+from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
+from .field_codec import FieldRepresentation
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -203,8 +204,8 @@ class MessageRoleName(FieldRepresentation[MessageRole]):
 
     @staticmethod
     def names() -> tuple[str, ...]:
-        return tuple(role.declared_name for role in MessageRole.members_with(MessageRole)
-                     if role.sendable)
+        return tuple(name for name in MessageRole.names()
+                     if MessageRole.member_named(name).sendable)
 
 
 class InformationalMessage:
