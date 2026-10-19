@@ -18,7 +18,8 @@ from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleRe
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
-from .config import CommanderConfig, me
+from .caller import me
+from .config import CommanderConfig
 
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3

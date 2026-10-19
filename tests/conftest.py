@@ -265,7 +265,8 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     from dataclasses import replace
 
     from agent_comms.child_process import ProcessIdentity
-    from agent_comms.commander.config import Commander, CommanderConfig
+    from agent_comms.commander.caller import Commander
+    from agent_comms.commander.config import CommanderConfig
 
     comms, _ = commander
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -283,6 +284,7 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     comms.registry.declare(replace(lead, tags=lead.tags | {CommanderConfig.TAG},
         process_identity=ProcessIdentity.capture(os.getpid()), commander_config=config))
     Commander.calling.cache_clear()
+    Commander.calling()  # resolved at dispatch, before a test moves lead's process
     from agent_comms.commander import order
     yield importlib.reload(order), repo
     Commander.calling.cache_clear()
@@ -293,7 +295,7 @@ def commander_facts(commander, commander_script):
     """Change the commander facts lead's registration holds; the next dispatch reads them."""
     from dataclasses import replace
 
-    from agent_comms.commander.config import Commander
+    from agent_comms.commander.caller import Commander
 
     comms, _ = commander
 

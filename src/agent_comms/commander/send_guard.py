@@ -25,7 +25,7 @@ from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
 from ..todos import InstallDeadline
 from . import order
-from .config import me
+from .caller import me
 
 Words = tuple[str, ...]
 

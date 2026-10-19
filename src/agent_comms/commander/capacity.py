@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..comms import Comms
-from .config import me
+from .caller import me
 
 PER_COMMANDER = 6
 BEAT_AGE = 10 * 60

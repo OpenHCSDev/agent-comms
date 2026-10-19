@@ -7,7 +7,7 @@ import os, time, glob, collections
 from pathlib import Path
 
 from . import order
-from .config import me
+from .caller import me
 from ..channel_coding_tools import CodingCall, RefusedCodingCall
 from ..field_codec import MalformedRecord
 from ..native_entries import NativeEntry

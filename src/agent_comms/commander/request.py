@@ -16,7 +16,7 @@ from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
 from ..todos import Todo
-from .config import me
+from .caller import me
 from .order import CommanderVerb, RuledVerb, hhmm
 
 

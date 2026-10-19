@@ -1,26 +1,20 @@
 """The commander facts a commander thread's registration holds, recorded by `agent-comms install`.
 
 Every commander tool reads its board, paths and repositories from the registration of the
-thread calling it; none of them hardcodes a home directory, a bus root or a unit name.
+thread calling it (see `caller`); none of them hardcodes a home directory, a bus root or a unit name.
 """
 from __future__ import annotations
 
-import os
 import subprocess
+from abc import abstractmethod
 from dataclasses import dataclass
-from functools import cache
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
-from ..child_process import ProcessIdentity
 from ..errors import RelationViolationError
-from ..field_codec import PathText
-
-if TYPE_CHECKING:
-    from ..comms import Comms
-    from ..thread_identity import ThreadIncarnation
-    from ..todos import TodoStore
+from ..field_codec import NullMember, PathText, RecordMember, SubclassUnion
+from ..registration_inheritance import RegistrationInheritance
 
 
 @dataclass(frozen=True)
@@ -40,8 +34,34 @@ class Repo:
         return cls(checkout=checkout.resolve(), github='/'.join(github))
 
 
+class CommanderFacts(SubclassUnion, RegistrationInheritance["CommanderFacts"], affix=""):
+    """What a thread's registration holds to command with."""
+
+    @classmethod
+    def apply(cls, incoming: CommanderFacts, previous: CommanderFacts) -> CommanderFacts:
+        return incoming.registered(previous)
+
+    @abstractmethod
+    def registered(self, previous: CommanderFacts) -> CommanderFacts:
+        """The facts a new declaration of the thread keeps."""
+
+    @abstractmethod
+    def config(self, thread: str) -> CommanderConfig: ...
+
+
 @dataclass(frozen=True)
-class CommanderConfig:
+class NoCommanderFacts(NullMember, CommanderFacts):
+    """A thread that commands nothing; declaring a thread again without facts keeps its recorded ones."""
+
+    def registered(self, previous: CommanderFacts) -> CommanderFacts:
+        return previous
+
+    def config(self, thread: str) -> CommanderConfig:
+        raise RelationViolationError(f'{thread} holds no commander facts; run agent-comms install --commander {thread}')
+
+
+@dataclass(frozen=True)
+class CommanderConfig(RecordMember, CommanderFacts):
     """What one commander works with, held on its own thread's registration."""
 
     TAG: ClassVar[str] = 'commander'
@@ -62,6 +82,12 @@ class CommanderConfig:
     def packaged_rules() -> Path:
         return Path(str(files('agent_comms.commander') / 'rules'))
 
+    def registered(self, previous: CommanderFacts) -> CommanderFacts:
+        return self
+
+    def config(self, thread: str) -> CommanderConfig:
+        return self
+
     def prepare(self) -> None:
         """Start each state file empty, so every tool reads a real file."""
         for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
@@ -69,60 +95,3 @@ class CommanderConfig:
             directory.mkdir(parents=True, exist_ok=True)
         if not (self.state / 'activity.log').exists():
             (self.state / 'activity.log').write_text('')
-
-
-def lineage(pid: int) -> tuple[ProcessIdentity, ...]:
-    """The process and each ancestor, nearest first."""
-    line: list[ProcessIdentity] = []
-    while pid > 1:
-        # Fields after comm's final ')' start at field 3, so ppid is the second.
-        stat = Path(f'/proc/{pid}/stat').read_text()
-        line.append(ProcessIdentity.capture(pid))
-        pid = int(stat.rsplit(') ', 1)[1].split()[1])
-    return tuple(line)
-
-
-@dataclass(frozen=True)
-class Commander:
-    """The commander a tool acts for: the registered thread whose process runs the tool, itself or
-    through an ancestor, tagged commander and holding its facts."""
-
-    comms: Comms
-    name: str
-    config: CommanderConfig
-
-    @classmethod
-    def of(cls, comms: Comms, pid: int) -> Commander:
-        threads = comms.registry.snapshot().threads.values()
-        caller = next((thread for identity in lineage(pid) for thread in threads
-                       if thread.process_identity == identity), None)
-        if caller is None:
-            raise RelationViolationError(f'pid {pid} runs for no registered thread: no commander')
-        if CommanderConfig.TAG not in caller.tags or caller.commander_config is None:
-            raise RelationViolationError(
-                f'{caller.name} is not a registered commander: its registration lacks the '
-                f'{CommanderConfig.TAG} tag or its facts; run agent-comms install --commander NAME')
-        return cls(comms, caller.name, caller.commander_config)
-
-    @classmethod
-    @cache
-    def calling(cls) -> Commander:
-        """This process's commander, read once at its first dispatch."""
-        from ..active_route import resolve_comms_route
-        from ..comms import Comms
-
-        return cls.of(Comms(resolve_comms_route()), os.getpid())
-
-    @property
-    def todos(self) -> TodoStore:
-        """The Todo store that owns problems, orders, deadlines and strikes."""
-        return self.comms.goals.todos
-
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        return self.comms.registry.require(self.name).incarnation
-
-
-def me() -> Commander:
-    """The commander this tool acts for, read from its registration at dispatch."""
-    return Commander.calling()

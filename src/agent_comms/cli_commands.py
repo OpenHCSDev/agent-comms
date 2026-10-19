@@ -1442,9 +1442,10 @@ class InstallCliCommand(CliCommand):
         installed = {type(harness).declared_name: harness.install(ctx, self.commander, project)
                      for harness in Harness.present(home)}
         # The facts belong to the commander's own registration; a harness may have just declared it.
-        current = ctx.registry.snapshot().threads.get(self.commander)
+        threads = ctx.registry.snapshot().threads
+        tags = threads[self.commander].tags if self.commander in threads else frozenset()
         ctx.registry.declare(ctx.registry.new_thread(
-            self.commander, (current.tags if current else frozenset()) | {CommanderConfig.TAG},
+            self.commander, tags | {CommanderConfig.TAG},
             str(project), commander_config=config, execution=ExternalThreadExecution))
         config.prepare()
         return InstallResult(self.commander, installed)

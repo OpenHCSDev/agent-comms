@@ -43,7 +43,8 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo)
 from . import capacity
-from .config import Repo, me
+from .caller import me
+from .config import Repo
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -352,7 +353,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
-        strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
+        strike(unit, group[0], f'sent back on {group[0]}: {verdict}', at_review())
 
 
 def importers(modules: set[str], check: OrderCheck) -> list[str]:
@@ -481,14 +482,17 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
 
-def strike(unit: str, task: str, why: str, caught: str | None = None, *,
+def at_review() -> str:
+    return f'{me().name} at review'
+
+
+def strike(unit: str, task: str, why: str, caught: str, *,
            kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
 
     Core records the strike on the task's Todo; the strike is written to the narrative file and posted to
     #comms in the same step, so no failure stays private and none is described in words that hide what happened.
     """
-    caught = caught or f'{me().name} at review'
     # What matters is how a mistake happened, how often, and how and when it was caught.
     if not any(stage in caught for stage in STAGES):
         sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES},'
@@ -535,7 +539,7 @@ def done(pid, sha, delivered=None, screenshot=''):
     lateness = me().todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
-        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered}')
+        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered}', at_review())
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 
@@ -853,9 +857,8 @@ class StrikeVerb(OrderVerb, RuledVerb):
     unit: str = option("unit")
     pid: str = option("pid", help="the problem the strike is for; strikes count per problem")
     why: str = option("--why")
-    caught: str | None = option("--caught", default=None,
-                                help='"WHO at STAGE" (default: this commander at review);'
-                                     ' stage is review/install/live/user')
+    caught: str = option("--caught", default_factory=at_review,
+                         help='"WHO at STAGE"; stage is review/install/live/user')
 
     def run(self) -> None:
         strike(self.unit, self.pid, self.why, self.caught)

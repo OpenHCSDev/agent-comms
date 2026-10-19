@@ -18,7 +18,8 @@ from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
 from . import capacity, judge
-from .config import Repo, me
+from .caller import me
+from .config import Repo
 
 
 

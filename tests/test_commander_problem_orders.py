@@ -21,7 +21,8 @@ from cutover.carry import CarryChain
 from agent_comms.change_report import FileLine
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import BoundedRun, ProcessIdentity
-from agent_comms.commander.config import Commander, CommanderConfig, Repo
+from agent_comms.commander.caller import Commander
+from agent_comms.commander.config import CommanderConfig, Repo
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.coordination_database import CoordinationStore

@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 
 from . import judge, order
-from .config import me
+from .caller import me
 from ..tools import CommsStandingRulesTool, StandingRulesRead
 from ..todos import Todo
 

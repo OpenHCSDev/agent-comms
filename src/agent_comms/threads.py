@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .commander.config import CommanderConfig
+from .commander.config import CommanderFacts, NoCommanderFacts
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .cli_result import ThreadToolCatalogResult
@@ -101,8 +101,8 @@ class Thread(ThreadProvenance):
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     # What a commander works with: its board, state, repositories. `agent-comms install` records it.
-    commander_config: CommanderConfig | None = field(default=None, kw_only=True, metadata={
-        "registration_inheritance": InheritMissing, "wire_omit_default": True})
+    commander_config: CommanderFacts = field(default_factory=NoCommanderFacts, kw_only=True, metadata={
+        "registration_inheritance": CommanderFacts, "wire_omit_default": True})
     role: type[ThreadRole] = AgentThreadRole
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
