@@ -47,6 +47,7 @@ from .plan_phases import OrderPhase, UnplannedPhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .goal_management import Goals
+    from .commander.config import Repo
 
 
 @dataclass(frozen=True)
@@ -590,18 +591,21 @@ class OpenPrProgress(Moving, FoundProgress):
 
 @dataclass(frozen=True)
 class MergedProgress(FoundProgress):
-    """A merge awaits its order record; its alarm does not itself draw a strike."""
+    """A linked merge closes its order once the installed checkout contains it."""
     precedence: ClassVar[int] = 1
     sha: str
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.merge[:9]) for pr in source.requests("merged")
+        return (cls(pr.merge) for pr in source.requests("merged")
                 if pr.merge and (pr.merged_at or 0) >= source.since)
 
     @property
     def state(self) -> str:
-        return f"merged as {self.sha}, awaiting record"
+        return f"merged as {self.sha[:9]}, waiting on install"
+
+    def close(self, todo: Todo) -> Todo:
+        return DoneTodoState.closed(todo, todo.order.merged(self.sha))
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
@@ -1134,6 +1138,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
+    def merged(self, sha: str) -> ProblemOrder:
+        raise ValueError("Only a recorded order can close from its installed merge.")
+
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return ()
 
@@ -1238,6 +1245,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
+    def merged(self, sha: str) -> ProblemOrder:
+        return MergedProblemOrder(original=self, sha=sha)
+
     @property
     def pull_request_reference(self) -> str:
         return f"{self.pull_request_label} {self.id}"
@@ -1308,6 +1318,21 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         """The order waiting on the fleet's install to record it working."""
         return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergedProblemOrder(ProblemOrder):
+    """An installed merge, retaining its original order without inventing a check or app proof."""
+    original: CheckedProblemOrder
+    sha: str
+    line: ClassVar[str] = "Merged and installed"
+
+    @property
+    def id(self) -> str:
+        return self.original.id
+
+    def require_close(self) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1626,7 +1651,13 @@ class DoneTodoState(TodoState):
     @classmethod
     def decide(cls, current, command):
         current.require_commander(command.actor)
-        return replace(current, state=cls, assignment=None, revision=current.revision + 1)
+        return cls.closed(current, current.order)
+
+    @classmethod
+    def closed(cls, current: Todo, order: ProblemOrder) -> Todo:
+        order.require_close()
+        return replace(current, state=cls, order=order, assignment=None,
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -2296,6 +2327,23 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
+                         storage: StorageRule) -> None:
+        """Observe outside the write lock; commit only orders whose observed revision still holds."""
+        todos = self.held_for_commander(commander)
+        pulls = PullRequests(todos)
+        completed = tuple(merged.close(todo) for todo in todos
+                          for repo in repos if repo.github.lower() == todo.repo
+                          for merged in MergedProgress.found(ProgressSource.of(todo, storage, pulls))
+                          if repo.contains(merged.sha))
+        if not completed:
+            return
+        with self.writing() as db:
+            for result in completed:
+                current = self._current(db, result.id)
+                if current.revision + 1 == result.revision:
+                    result.upsert(db)
 
     def board_disagreements(
         self, commander: ThreadIncarnation, storage: StorageRule,

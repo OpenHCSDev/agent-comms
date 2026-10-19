@@ -82,17 +82,17 @@ def call(tool):
 
 def todos():
     """The problems this commander created; Core's Todo store is their one owner."""
-    return COMMS.goals.todos.for_commander(COMMS.registry.require(ME).incarnation)
+    return COMMANDER.orders()
 
 
 def held_orders() -> tuple[Todo, ...]:
     """This commander's open orders that a unit holds."""
-    return COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+    return tuple(todo for todo in todos() if todo.assignment)
 
 
 def held_by(unit: str) -> tuple[Todo, ...]:
     """This commander's open orders held by one unit."""
-    return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
+    return tuple(todo for todo in held_orders() if todo.holder == unit)
 
 
 def units() -> frozenset[str]:
@@ -589,7 +589,7 @@ def replied(latest: Message | None) -> str:
 
 
 def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
-    """Every past-due unrecorded order alarms with its state until recorded.
+    """Past-due unfinished orders alarm; installed merges have already closed.
     Stall crossings remain separate from deadline alarms."""
     now = time.time()
     late, stalled = [], []
@@ -602,8 +602,7 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
         answer = reply(t.holder, ordered)
         due = f'due {hhmm(t.deadline)}, order {t.order.id}'
         late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
-    alarm = (f'OVERDUE: {", ".join(late)} -> record merged work; '
-             'push or merge unfinished work now')
+    alarm = f'OVERDUE: {", ".join(late)} -> push or merge unfinished work now'
     return [alarm] * bool(late) + stalled
 
 
