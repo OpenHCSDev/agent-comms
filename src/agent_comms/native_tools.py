@@ -47,16 +47,8 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     call_id: str = field(metadata={"wire_context": True})
     claim: ClassVar[None] = None
 
-    @classmethod
-    def storage_effects(cls, cwd):
-        return ()
-
     def allowed_claim(self) -> FileClaimPath | None:
         return self.claim
-
-    def decide_storage(self, registry, thread: str) -> None:
-        worktree = Path(registry.require(thread).worktree)
-        registry.decide_storage(thread, self.storage_effects(worktree))
 
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]) -> NativeExecutableTool:

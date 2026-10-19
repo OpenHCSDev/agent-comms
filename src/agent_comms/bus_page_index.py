@@ -117,10 +117,11 @@ class BusPageIndex(TypedStore):
             self._resources.enter_context(resources.pop_all())
             return db
 
-    def _open_writer(self):
+    def _open_writer(self, *, check_same_thread: bool = True):
         """Keep disposable-schema repair inside the store's WAL attachment boundary."""
         with ExitStack() as opening:
-            db = opening.enter_context(closing(super()._open_writer()))
+            db = opening.enter_context(closing(super()._open_writer(
+                check_same_thread=check_same_thread)))
             try:
                 self.require_schema(self._schema(db))
             except StaleBusPageIndexError:
@@ -175,6 +176,11 @@ class BusPageIndex(TypedStore):
 
     def sync(self, opened: WireSnapshot) -> bool:
         """Advance the source supplied by its writer; never acquire another bus lock."""
+        # Coverage admission opened a reader. Retire it before the writer so
+        # SQLite can checkpoint on writer close, instead of leaving a cold
+        # read-only attachment to reconstruct the entire WAL on every query.
+        self._resources.close()
+        self.__dict__.pop('connection', None)
         revision = opened.revision
         size = opened.complete_prefix.boundary
         while size:

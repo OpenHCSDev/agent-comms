@@ -5,6 +5,8 @@ import collections
 import importlib
 import json
 
+import pytest
+
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.todos import StorageStrikeTodo
@@ -21,8 +23,28 @@ def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
                            {"type": "toolCall", "id": f"c{index}", "name": name, "arguments": arguments}
                            for index, (name, arguments) in enumerate(calls)]}})
     turns = collections.defaultdict(list)
-    tool_watch.follow(comms.registry, turns, "worker", "session.jsonl", 0, f"{line}\n".encode())
+    tool_watch.follow(comms.registry, turns, "worker", f"{line}\n".encode())
     assert turns["worker"] == ["edit a.py: -old text +new", "write b.py: body line", "bash ls -la"]
+
+
+def test_every_coding_family_uses_the_shared_storage_decision(commander):
+    from agent_comms.storage_rules import WriteStorageEffect
+
+    comms, _ = commander
+    thread = comms.registry.require('worker')
+    path = thread.storage_roots.scratch / 'checked.py'
+    calls = (
+        CodingCall.decode('bash', 'bash', {'command': 'ls -la'}),
+        CodingCall.decode('read', 'read', {'path': str(path)}),
+        CodingCall.decode('edit', 'edit', {'path': str(path), 'edits': [
+            {'oldText': 'old', 'newText': 'new'}]}),
+        CodingCall.decode('write', 'write', {'path': str(path), 'content': 'body'}),
+        CodingCall.decode('request', 'comms_threads', {}),
+        CodingCall.decode('invalid', 'write', {'path': str(path)}),
+    )
+    effects = tuple(call.decide_storage(comms.registry, thread.name) for call in calls)
+    write = (WriteStorageEffect(path),)
+    assert effects == ((), (), write, write, (), ())
 
 
 def test_coordination_call_digests_its_arguments():
@@ -30,13 +52,13 @@ def test_coordination_call_digests_its_arguments():
     assert call.digest() == 'comms_threads {}'
 
 
-def test_a_line_core_refuses_is_reported_with_its_file_and_offset(tool_watch, commander, capsys):
+def test_a_malformed_line_raises_instead_of_skipping_history(tool_watch, commander):
     comms, _ = commander
     whole = json.dumps({"type": "message", "id": "m1", "timestamp": "2026-10-18T22:00:00.000Z",
                         "message": {"role": "user", "content": "hello"}})
     data = f'{whole}\n{{"type": "message"\n'.encode()
-    tool_watch.follow(comms.registry, collections.defaultdict(list), "worker", "session.jsonl", 7, data)
-    assert capsys.readouterr().out.startswith(f"REFUSED session.jsonl@{7 + len(whole) + 1}: ")
+    with pytest.raises(json.JSONDecodeError):
+        tool_watch.follow(comms.registry, collections.defaultdict(list), "worker", data)
 
 
 def test_storage_watch_judges_only_core_units(tool_watch, commander, monkeypatch):
@@ -83,7 +105,7 @@ def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, co
                            {'type': 'toolCall', 'id': id, 'name': 'write', 'arguments': args}
                            for id, args in calls]}})
     turns = collections.defaultdict(list)
-    tool_watch.follow(comms.registry, turns, 'worker', 'session.jsonl', 0, (line + '\n').encode())
+    tool_watch.follow(comms.registry, turns, 'worker', (line + '\n').encode())
     assert seen == ['write', 'write']
     assert turns['worker'] == ['REFUSED write: Missing required fields for WriteTool: content', 'write b.py: body']
 

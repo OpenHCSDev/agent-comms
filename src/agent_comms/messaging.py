@@ -22,7 +22,7 @@ from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
-from .todos import TodoStore
+from .todos import TodoConflict, TodoStore
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
@@ -88,7 +88,7 @@ class Messaging:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
             todos.correct(owner.name, committed.message_id, body)
-        except Exception as error:
+        except TodoConflict as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
             correction = CorrectionComplete()
@@ -105,30 +105,26 @@ class Messaging:
         with self.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 
-    def initialize_private_initial_protocol(self) -> str:
-        """Initialize the private protocol on a fresh owner-only root."""
+    def initialize_private_initial_protocol(self, *, history: Sequence[Message] = ()) -> str:
+        """Initialize a fresh root; selected public history grants no delivery."""
         publisher: InitialWrites = self.bus.publisher
         with _store_lock(self._wire_lock_path):
-            return publisher.initialize_private_protocol()
+            return publisher.initialize_private_protocol(history=history)
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""
-        for thread in self._user_identities():
-            return thread
+        return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
+
+    def _register_user(self, worktree: str) -> Thread:
         name = self.registry.snapshot().claim_name("user")
         thread = self.registry.new_thread(name, frozenset(), worktree, role=UserThreadRole)
         self.registry.register(thread)
         return thread
 
-    def _user_identities(self):
-        """Derive existing humans from the original registered declarations."""
-        return (human for thread in self.registry.all_threads().values()
-                for human in thread.role.human(thread))
-
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            for thread in self._user_identities():
+            for thread in self.registry.user_thread().existing():
                 return thread
         # Creation is a write, with its original exclusive recheck. Observing
         # an existing sender must not serialize every sidebar/page preparation
@@ -201,5 +197,6 @@ class Messaging:
         return basis.message_count
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
-        with _store_lock(self._wire_lock_path):
-            self.bus.mark_delivered_through(self.registry.require(name).name, sequence)
+        # The bus owns capture under its read lock and the ledger validates that
+        # source. Nesting an exclusive wire hold deadlocks its snapshot reader.
+        self.bus.mark_delivered_through(self.registry.require(name).name, sequence)

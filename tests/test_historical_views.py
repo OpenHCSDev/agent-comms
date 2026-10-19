@@ -1,7 +1,7 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.read_basis import NamedViewer
+from agent_comms.read_basis import AllChannelDisplayScope, NamedViewer
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -17,7 +17,7 @@ from agent_comms.read_basis import ChannelConversation, ConversationCursor, Read
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
-from agent_comms.message_page import PageBounds
+from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import OlderTraversal
 
 
@@ -105,7 +105,7 @@ def test_original_identity_and_no_delivery_authority(migrated):
     old, prior, live, source = migrated
     rows = collect(live, "channel_display_page", "#team", viewer=live.views.display_viewer(str(live.root)))
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
-    original = list(old.views.channel_history_page("#team").messages)
+    original = list(old.views.history_page(CommandTarget.named("#team")).messages)
     assert [m.to_wire() for m in historical] == [m.to_wire() for m in original]
     assert all(m.sender_created_at == 10.0 for m in historical)
     assert len(live.bus.incoming_page("bob", after=0).messages) == 2
@@ -171,6 +171,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         {"type": "session", "version": 3, "id": "saved", "timestamp": "2026-09-20T00:00:00Z"},
         {
             "type": "message",
+            "timestamp": "2026-09-20T00:00:01Z",
             "id": "one",
             "message": {
                 "role": "user",
@@ -180,6 +181,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         },
         {
             "type": "message",
+            "timestamp": "2026-09-20T00:00:02Z",
             "id": "two",
             "message": {"role": "assistant", "content": [{"type": "text", "text": "old answer"}]},
         },
@@ -236,7 +238,7 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
 
     old, live = setup(tmp_path / "old", 1), setup(tmp_path / "live", 0)
     native = tmp_path / "recorded.jsonl"
-    native.write_text(json.dumps({"type": "message", "message": {
+    native.write_text(json.dumps({"type": "message", "timestamp": "2026-09-20T00:00:01Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "original recorded answer"}],
     }}) + "\n")
     old.threads.attach_session((attachment_owner := old.registry.require("alice")), str(native), process=attachment_owner.process_identity)
@@ -290,15 +292,16 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
 def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     _, _, live, _ = migrated
     viewer = live.messaging.user_identity(str(live.root)).name
-    assert len(collect(live, "channel_history_page", "#team")) == 9
+    assert len(collect(live, "history_page", CommandTarget.named("#team"))) == 9
     assert len(collect(live, "history_page", CommandTarget.named("alice"), viewer=viewer)) == 9
-    assert len(collect(live, "full_history_page")) == 18
-    for message in collect(live, "full_history_page"):
+    assert len(collect(live, "history_page", CommandTarget.named("#any"))) == 18
+    for message in collect(live, "history_page", CommandTarget.named("#any")):
         if isinstance(message, HistoricalMessage):
             assert not message.role.response_policy(message).starts_turn
             assert not message.role.response_policy(message).starts_turn_for(message, "bob")
             assert message.display_metadata["history"]["source"] == message.source.original_root
-    assert len(list(live.bus.full_history_page().messages)) == 4
+    assert len(list(live.bus.log.read_page(
+        MessagePageRequest(AllChannelDisplayScope('#any'))).messages)) == 4
 
 
 def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path):
@@ -325,7 +328,8 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
 
 def test_older_than_registry_incarnation_stays_unattributed(migrated):
     _, _, live, source = migrated
-    original = list(live.bus.full_history_page().messages)[0]
+    original = list(live.bus.log.read_page(
+        MessagePageRequest(AllChannelDisplayScope('#any'))).messages)[0]
     projected = HistoricalMessage.project(
         replace(original, timestamp=1.0), source, 0, source.provenance
     )

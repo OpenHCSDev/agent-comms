@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.registration import Registration
 from agent_comms.store_files import _atomic_write_text
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -42,7 +43,7 @@ def test_malformed_replacement_never_serves_stale_success(tmp_path):
     registry.require("worker")
     _atomic_write_text(path, "{")
     for _ in range(2):
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises(MalformedRecord):
             registry.require("worker")
     _atomic_write_text(path, saved)
     assert registry.require("worker").name == "worker"
@@ -98,7 +99,10 @@ def test_sender_bindings_are_lazy_immutable_and_owned_by_the_snapshot(tmp_path):
             first["senders"] = "{}"
         assert FieldCodec.encode(historical) == encoded
         assert json.loads(first["unrecorded"]) == []
+    assert registry.snapshot() is snapshot
+    registry.heartbeat("worker")
     newer = registry.snapshot()
+    assert newer is not snapshot
     assert "sender_bindings" not in newer.__dict__
     assert newer.sender_bindings == snapshot.sender_bindings
     assert newer.sender_bindings is not snapshot.sender_bindings

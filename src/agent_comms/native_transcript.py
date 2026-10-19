@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,15 +23,15 @@ from .private_path import FileRevision
 from .transcript_sources import TranscriptSource
 
 
-def _reverse_records(
-    path: Path, before: int, *, floor: int = 0
+def reverse_records(
+    path: Path, before: int, *, floor: int = 0, stream=None
 ) -> Generator[tuple[int, int, bytes], None, None]:
     """Scan offsets in fixed chunks, then read each complete record exactly once.
 
     Record size is independent of scan-buffer size. In particular, images/tool
     output exceeding a buffer are neither dropped nor repeatedly concatenated.
     """
-    with path.open("rb") as stream:
+    with (path.open("rb") if stream is None else nullcontext(stream)) as stream:
         position = end = before
         while position > floor:
             count = min(position - floor, 65536)
@@ -349,7 +349,7 @@ class NativeTranscript(TranscriptSource):
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size
         floor = max(0, end - max_bytes) if max_bytes is not None else 0
-        for _, _, raw in _reverse_records(self.path, end, floor=floor):
+        for _, _, raw in reverse_records(self.path, end, floor=floor):
             # Skip only the record still being appended; corrupt history raises.
             if raw.endswith(b"\n"):
                 yield NativeEntry.read(raw)
@@ -365,5 +365,5 @@ class NativeTranscript(TranscriptSource):
                 yield NativeRecord.read(start, stream.tell(), raw)
 
     def reverse(self, before: int):
-        for start, end, raw in _reverse_records(self.path, before):
+        for start, end, raw in reverse_records(self.path, before):
             yield NativeRecord.read(start, end, raw)

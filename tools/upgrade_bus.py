@@ -19,9 +19,9 @@ A live run then stops the running agent owners with the installed CLI, backs
 the bus up (tar plus a hash of every file), moves the checkout,
 relocks and syncs its stack, prepares native Pi, carries the bus, reads it
 back, and starts only the owners it stopped. A failure after the backup
-restores the bus, the route, the checkout and its stack, and restarts those
-owners. Nothing is sent and no input is replayed: owners start by the normal
-start path, which never replays uncertain inputs.
+keeps maintenance held and preserves the bus, checkout and backup for forward
+repair. It never resets live main or replaces a possibly changed bus. Nothing
+is sent and no input is replayed: owners start by the normal start path.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -52,13 +52,14 @@ from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_ho
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
+from agent_comms.host_services import HostService
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
-CONNECTOR = "from agent_comms.connector import main; raise SystemExit(main())"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 
@@ -130,11 +131,11 @@ class Stack:
     def cli(self, root: Path, *arguments: str) -> dict:
         """One JSON CLI result for this bus alone, never the route's, waiting while the
         route index is still being built."""
-        environment = {**self.environment(), "AGENT_COMMS_ROOT": str(root)}
         for _ in range(240):
             completed = subprocess.run(
                 [str(self.python), "-c", "from agent_comms.cli import main; main()", "--root", str(root),
-                 *arguments], cwd=self.checkout, env=environment, capture_output=True, text=True)
+                 *arguments], cwd=self.checkout, env=self.environment(), capture_output=True,
+                text=True)
             if "Route index covers" not in completed.stdout:
                 break
             time.sleep(5)
@@ -144,20 +145,20 @@ class Stack:
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
+    def require_idle(self, root: Path, names: list[str]) -> None:
+        """The installed lifecycle reads its own turn records before any stop."""
+        run(self.python, "-c",
+            "import sys; from pathlib import Path; from agent_comms.comms import wire; "
+            "comms=wire(Path(sys.argv[1])); snapshot=comms.registry.snapshot(); "
+            "[comms.owners.require_restart_idle(snapshot.require(name)) for name in sys.argv[2:]]",
+            root, *names, cwd=self.checkout, env=self.environment())
+
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
         history = self.cli(root, "history", "--limit", "50")  # #any: every channel
-        return {"threads": len(threads), "who": len(present),
+        return {"threads": len(threads), "who": len(present["who"]),
                 "history": len(history[EverythingHistoryPageResult.messages_key])}
-
-    def round_trip(self, root: Path) -> str:
-        """The connector Core declares for this bus sends one message and reads it back; it
-        needs open maintenance, so it runs last."""
-        environment = {**self.environment(), "AGENT_COMMS_ROOT": str(root)}
-        output = run(self.python, "-c", CONNECTOR, "round_trip", root, cwd=self.checkout,
-                     env=environment)
-        return output.strip().splitlines()[-1]
 
 
 @dataclass
@@ -189,11 +190,9 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
         if "--before-stop" in flags:
             return TodoColumnCarry.before_stop(root, apply=True)
         return TodoColumnCarry.carry_step(
-            root, step, CarryChain.at(revisions.repo, step.chain_revision), apply=True)
+            root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
-    # Historical conversions use their own source, but their old CLI cannot decide
-    # the target chain's order or recognize steps added after that source revision.
     worker = (
         "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
         "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
@@ -221,7 +220,7 @@ def carry_all(
     for step in pending:
         with _store_lock(root / "wire"):
             result = CarryLedger(root).apply(
-                CarryChain.at(revisions.repo, step.chain_revision), step.name,
+                CarryChain.at(revisions.repo, step.revision), step.name,
                 lambda: carry(step, root, stack, revisions, "--apply"))
         results.append(result.report(step.name, True))
     return results
@@ -261,13 +260,19 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         stack.prepare_native()
         with transcripts_held(copy):
             before = bus_files(copy)
-            steps = [*before_stop(copy, pending, stack, revisions),
-                     *carry_all(copy, pending, stack, revisions)]
-            files = carried(copy, before, steps)
-            read = stack.verify(copy)
-        # No round trip here: the copy's maintenance witness names the live root, and only the
-        # live bus has the connector service the round trip proves.
-        return {"steps": steps, "files": files, "read": read}
+        stopping = before_stop(copy, pending, stack, revisions)
+        # Optional connector qualification belongs to its own round_trip command;
+        # a native-only bus must not acquire a fabricated director to update.
+        return carry_and_read(copy, before, pending, stack, stack, revisions, stopping)
+
+
+def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
+                   reader: Stack, revisions: Revisions, stopping: list[dict]) -> dict:
+    """The pass a rehearsal and a live install share once ``before`` was read under the
+    transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
+    step's process, so a step that writes the transcript store could not run under it."""
+    steps = [*stopping, *carry_all(root, pending, staged, revisions)]
+    return {"steps": steps, "files": carried(root, before, steps), "read": reader.verify(root)}
 
 
 def route_readers(patience: int = 120) -> None:
@@ -386,19 +391,22 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
                if thread["role"] == "agent" and thread["status"] == "running"]
     before_stop(root, pending, staged, revisions)
-    maintenance = MaintenanceBarrier(root / "registry.json")
+    maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
+    try:
+        installed.require_idle(root, running)
+    except BaseException:
+        maintenance.clear(held)
+        raise
     lock = installed.lock
-    transcripts = ExitStack()
     try:
         for name in running:
             installed.cli(root, "stop", "--name", name)
         route_readers()
-        transcripts.enter_context(transcripts_held(root))
-        backup = Backup.take(root, ROUTE, (root,),
-            root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
+        with transcripts_held(root):
+            backup = Backup.take(root, ROUTE, (root,),
+                root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
-        transcripts.close()
         maintenance.clear(held)
         start(installed, root, running)
         print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
@@ -409,33 +417,20 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         installed.relock()
         installed.prepare_native()
-        steps = carry_all(root, pending, staged, revisions)
-        files = carried(root, backup.files(), steps)
-        read = installed.verify(root)
+        passed = carry_and_read(root, backup.files(), pending, staged, installed, revisions, [])
         maintenance.clear(held)
-        round_trip = installed.round_trip(root)
+        services = HostService.restart_running(installed.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
-        transcripts.close()
     except BaseException as error:
-        if maintenance.read().phase is ReadyPhase:  # the round trip failed on the opened bus
-            maintenance.begin(MaintenanceOperator("upgrade-bus"))  # restore brings back ``held``
-            route_readers()
-        # The failed bus keeps its hold until restore has swapped it out.
-        backup.restore()
-        transcripts.close()
-        run("git", "-C", checkout, "reset", "--keep", "-q", current)
-        if (backup.path / "uv.lock").exists():
-            shutil.copy2(backup.path / "uv.lock", lock)
-        installed.sync()
-        installed.prepare_native()
-        maintenance.clear(held)
-        start(installed, root, running)
-        print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
-              f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
+        state = maintenance.read()
+        state.phase.hold_for(maintenance, state, MaintenanceOperator("upgrade-bus"))
+        print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
+              f"maintenance held, checkout and bus preserved; backup: {backup.path}",
+              file=sys.stderr)
         raise
     start(installed, root, running)
-    return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
-            "round_trip": round_trip, "backup": str(backup.path)}
+    return {"stopped_and_started": running, **passed, "services": services,
+            "backup": str(backup.path)}
 
 
 def start(stack: Stack, root: Path, names: list[str]) -> None:

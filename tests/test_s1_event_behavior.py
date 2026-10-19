@@ -25,6 +25,7 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
+from bus_history import read_history
 from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
@@ -67,7 +68,7 @@ class CompactionCase(EffectCase):
             ae.CompactionStart(),
             ae.ToolStart("tool", "read", "Read after summary"),
             ae.CompactionEnd(summary="summary"),
-            ae.AgentInfo(model="model", session_name="saved", context_size=PiCount.from_wire(1000)),
+            ae.AgentInfo(model="model", context_size=PiCount.from_wire(1000)),
             ae.ContextUsageObservation(context_used=PiCount.from_wire(20)),
             ae.Chunk("answer"),
         )
@@ -83,7 +84,7 @@ class CompactionAbortCase(CompactionCase):
         return (
             ae.CompactionStart(),
             ae.CompactionEnd(aborted=True),
-            ae.AgentInfo(model="model", session_name="saved", context_size=PiCount.from_wire(1000)),
+            ae.AgentInfo(model="model", context_size=PiCount.from_wire(1000)),
             ae.ContextUsageObservation(context_used=PiCount.from_wire(20)),
             ae.Chunk("answer"),
         )
@@ -92,7 +93,7 @@ class CompactionAbortCase(CompactionCase):
 class ContextCase(EffectCase):
     def body(self):
         return (
-            ae.AgentInfo(model="model", session_name="saved", context_size=PiCount.from_wire(1000)),
+            ae.AgentInfo(model="model", context_size=PiCount.from_wire(1000)),
             ae.ContextUsageObservation(context_used=PiCount.from_wire(20)),
             ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(1000)),
             ae.ContextInfo(context_used=PiCount.from_wire(35), context_size=PiCount.from_wire(1000)),
@@ -102,7 +103,7 @@ class ContextCase(EffectCase):
     async def assert_effect(self, execution, progress):
         await super().assert_effect(execution, progress)
         info = execution.runner.comms.agents.agent_info_of(execution.thread_name)
-        assert (info.model, info.session_name) == ("model", "saved")
+        assert info.model == "model"
         assert (info.context_used, info.context_size) == (35, 1000)
 
 
@@ -245,7 +246,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     if not value.successful:
         with pytest.raises(RequestError, match="Internal error"):
             await progress.publish_result()
-        messages = list(comms.bus.full_history_page().messages)
+        messages = read_history(comms)
         assert not any(row.body == "provisional" for row in messages)
         assert any(isinstance(row.role, NoticeRole) and "[Open diagnostic]" in row.body for row in messages)
         assert progress.result is not None and progress.result.diagnostic == diagnostic
@@ -265,7 +266,7 @@ async def test_usage_observation_keeps_metadata_without_reattachment(owner_turn,
     comms, name = execution.runner.comms, execution.thread_name
     comms.agents.observe_runtime_info(name, ae.ContextUsageObservation(context_used=PiCount.from_wire(20)))
     comms.agents.observe_runtime_info(name, ae.AgentInfo(
-        model="test/model", session_name="saved", context_size=PiCount.from_wire(1000),
+        model="test/model", context_size=PiCount.from_wire(1000),
     ))
 
     async def unexpected_metadata(event):
@@ -279,14 +280,14 @@ async def test_usage_observation_keeps_metadata_without_reattachment(owner_turn,
 
     await progress.consume(SampledContext(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(1000)))
     info = comms.agents.agent_info_of(name)
-    assert (info.model, info.session_name) == ("test/model", "saved")
+    assert info.model == "test/model"
     assert (info.context_used, info.context_size) == (None, 1000)
     await progress.consume(SampledContext(context_used=PiCount.from_wire(35), context_size=PiCount.from_wire(1000)))
     comms.agents.observe_runtime_info(name, ae.AgentInfo(
-        model="test/new-model", session_name="renamed", context_size=PiCount.from_wire(2000),
+        model="test/new-model", context_size=PiCount.from_wire(2000),
     ))
     info = comms.agents.agent_info_of(name)
-    assert (info.model, info.session_name) == ("test/new-model", "renamed")
+    assert info.model == "test/new-model"
     assert (info.context_used, info.context_size) == (35, 2000)
 
 
@@ -381,7 +382,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             assert native.provider.posts == (2 if committed_progress else 1)
         inputs = stored_inputs(comms.root).rows
         assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
-        rows = list(comms.bus.full_history_page().messages)
+        rows = read_history(comms)
         replies = [row for row in rows if row.sender == name]
         if provider_status == 200:
             assert [(row.body, isinstance(row.role, NoticeRole)) for row in replies] == (

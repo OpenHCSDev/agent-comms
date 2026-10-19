@@ -63,6 +63,27 @@ function fixedTime(action) {
     try { return action(); } finally { globalThis.Date = OriginalDate; }
 }
 const cases = {
+    'settings-without-index-walk': () => {
+        const {manager, file} = fixture();
+        manager.appendModelChange('fixture', 'saved-model');
+        manager.appendThinkingLevelChange('low');
+        const selected = manager.appendMessage(user('selected leaf'));
+        manager.branch(selected);
+        manager.appendModelChange('fixture', 'other-branch');
+        manager.appendThinkingLevelChange('high');
+        const before = fs.readFileSync(file);
+        const store = manager.entryStore;
+        store.metadata = () => { throw new Error('settings must not populate the selector index'); };
+        const model = {provider:'fixture', modelId:'explicit-model'};
+        assert.deepEqual(store.contextSettings(selected, {model, thinkingLevel:'medium'}),
+            {model, thinkingLevel:'medium'});
+        assert.deepEqual(store.contextSettings(selected, {model}), {model, thinkingLevel:'low'});
+        assert.deepEqual(store.contextSettings(selected, {thinkingLevel:'medium'}),
+            {model:{provider:'fixture',modelId:'saved-model'}, thinkingLevel:'medium'});
+        assert.deepEqual(store.contextSettings(selected),
+            {model:{provider:'fixture',modelId:'saved-model'}, thinkingLevel:'low'});
+        assert.deepEqual(fs.readFileSync(file), before, 'settings reads never write history');
+    },
     'duplicate-entry-id': () => {
         const { file } = fixture();
         const original = fs.readFileSync(file);

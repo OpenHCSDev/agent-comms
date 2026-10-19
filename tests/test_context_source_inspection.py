@@ -1,5 +1,6 @@
 """Source membership, public-only capture, and selected recorded values."""
 
+from bus_history import read_history
 from dataclasses import replace
 import hashlib
 import json
@@ -269,7 +270,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     comms.bus.log.record_context(captured)
     page = comms.bus.log.context_manifest_page(owner.name, comms.registry)
     assert tuple(resource.value for resource in page.resources) == (captured,)
-    assert list(comms.bus.full_history_page().messages) == []
+    assert read_history(comms) == []
     assert comms.bus.log.latest_sequence() == 0
     assert captured.public_text_recorded
     assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\
@@ -277,7 +278,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     from agent_comms.cli_commands import TurnContextCliCommand
 
     command = TurnContextCliCommand(thread=owner.name, turn=2)
-    assert command.encode_result(command.apply(comms))["text_recorded"] is True
+    assert command.apply(comms).to_wire()["text_recorded"] is True
 
 
 def test_authored_sdk_observation_retains_read_identity_without_minting_native_proof(tmp_path):

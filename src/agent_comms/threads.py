@@ -99,7 +99,9 @@ class Thread(ThreadProvenance):
     )
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
-    role: type[ThreadRole] = AgentThreadRole
+    role: type[ThreadRole] = field(
+        default=AgentThreadRole, metadata={"registration_inheritance": InheritPrevious}
+    )
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
     backend: type[AgentBackend] = field(
@@ -124,14 +126,19 @@ class Thread(ThreadProvenance):
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
         return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
 
+    @property
+    def project_path(self) -> Path:
+        """The physical current project declared by this thread."""
+        return Path(self.worktree).expanduser().resolve()
+
     def ran_in(self, worktree: str) -> bool:
         """The current project or one this conversation moved away from."""
         selected = Path(worktree).expanduser().resolve()
-        return selected == Path(self.worktree).expanduser().resolve() or selected in self.earlier_projects
+        return selected == self.project_path or selected in self.earlier_projects
 
     def moved_to_project(self, project: str) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
-        earlier = Path(self.worktree).expanduser().resolve()
+        earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
             self, worktree=project,
@@ -177,7 +184,7 @@ class Thread(ThreadProvenance):
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
         catalog = ThreadToolCatalogResult(tuple(NativeRequestTools.catalog()), self.service_tier)
-        _atomic_write_text(path, json.dumps(catalog.encoded(), separators=(",", ":")))
+        _atomic_write_text(path, json.dumps(catalog.to_wire(), separators=(",", ":")))
         return (*arguments.argv, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:

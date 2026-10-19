@@ -14,19 +14,19 @@ from pydantic import Field
 
 from agent_comms.cli_protocol import WireModel
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.typed_table import SQLiteSchemaObject, TypedRow
 
 from .history import OfflineHistory, OpenCodeHistory
 from .opencode_parts import SavedMessage
 from .opencode_protocol import Revert, Session
-from .shared import TranscriptUpdate
 
 
 class OpenCodeStore(OpenCodeHistory, OfflineHistory):
     @abstractmethod
     def load(self) -> tuple[Session, Iterator[SavedMessage]]: ...
 
-    def read(self) -> Iterator[TranscriptUpdate]:
+    def read(self) -> Iterator[RuntimeUpdate]:
         return self.saved(*self.load())
 
 

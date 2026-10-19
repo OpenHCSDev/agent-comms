@@ -46,6 +46,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
+from .acp_failure import NativeTurnError
 from .acp_extension import (
     CompactRequest,
     TextRouteUpdate,
@@ -185,7 +186,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if re.match(r"^/compact(?:\s|$)", text):
             self._require_compaction_text(prompt)
             request = CompactRequest(text[len("/compact") :].strip())
-        return await AcpRequestConsumer(self, session_id, prompt).run(request)
+        try:
+            return await AcpRequestConsumer(self, session_id, prompt).run(request)
+        except NativeTurnError as error:
+            raise RequestError.internal_error(error.request.error_data()) from error.__cause__
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         from . import manual_compaction_bridge

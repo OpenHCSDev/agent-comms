@@ -192,7 +192,7 @@ def delayed_launch(monkeypatch: pytest.MonkeyPatch):
 
     from agent_comms.child_process import Platform
 
-    with Platform.current().launch((sys.executable, "-c", "pass"), ()) as launch:
+    with Platform.current().launch((sys.executable, "-c", "pass"), (), LaunchRuntime.running()) as launch:
         launch_type = type(launch)
     original_verify = launch_type.verify_async
     original_release = launch_type.release
@@ -266,7 +266,7 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order: ())
 
     for created, name in enumerate(("lead", "worker"), 1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     return comms, ThreadCaller("lead")
@@ -289,7 +289,7 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         subprocess.run(["git", "-C", str(repo), *command], check=True)
     CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
         state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
-        skill=tmp_path / "skill.md", rules=(), repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
+        rules=(), repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
         disk=tmp_path).write(tmp_path)
     CommanderConfig.installed.cache_clear()
     from agent_comms.commander import order

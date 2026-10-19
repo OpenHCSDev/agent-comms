@@ -91,7 +91,7 @@ def test_read_only_journal_parser_is_not_recovery_authority(tmp_path: Path) -> N
     assert first.session_id == "sid"
     assert first.session_entry_id == "entry"
     assert first.request_generation == 1
-    with pytest.raises(NativePiUnavailable, match="specified input"):
+    with pytest.raises(NativePiUnavailable, match="assembled-context proof"):
         NativeContextProof.read_evidence(session, "d" * 32)
 
 
@@ -903,7 +903,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             with pytest.raises(NativePiPromptRejected) as failed:
                 await TrackedTurnSession.execute(VerifiedNativePackage.acquire(package), **request)
             response = failed.value.rejected_response
-            assert response.id == "native-prompt" and response.success is False
+            assert len(response.id) == 32 and response.success is False
             assert "No API key" in response.error
             assert calls == []
             assert not any(event["type"] == "input_committed" for event in rpc_events)
@@ -1114,12 +1114,13 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch, tmp_pat
         ("aborted", "provider failed"),
     ],
 )
-def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
-    from types import SimpleNamespace
-
+async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
     from agent_comms.pi_events import PiEvent
+    from agent_comms.tracked_turn import TrackedTurnSession
     from agent_comms.turn_failure import ModelRequestFailed
     from agent_comms.turn_output import TurnOutput
+    from agent_comms.turn_usage import UsageAccount
+    from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 
     event = PiEvent.from_wire({
         "type": "message_end",
@@ -1130,8 +1131,11 @@ def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detai
             "errorMessage": detail if stop_reason != "length" else None,
         },
     })
-    output = TurnOutput()
-    event.message.tracked_end(SimpleNamespace(output=output))
+    turn = object.__new__(TrackedTurnSession)
+    output = turn.output = TurnOutput()
+    turn.usage, turn.explicit_interrupt = UsageAccount(), False
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    [update async for update in event.message.stop_reason.apply(turn, event.message)]
 
     assert output.declared_failure == ModelRequestFailed(detail)
     with pytest.raises(NativePiTerminalFailure, match=detail) as caught:

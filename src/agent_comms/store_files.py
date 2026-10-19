@@ -10,12 +10,18 @@ import stat
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
-from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import (
+    AbstractAsyncContextManager,
+    ExitStack,
+    asynccontextmanager,
+    contextmanager,
+    suppress,
+)
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -27,6 +33,7 @@ with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode 
 if TYPE_CHECKING:
     import sqlite3
 
+    from .child_process import Platform
     from .private_bus_checkpoint import (
         CheckpointNeedsRepair,
         PrefixWitness,
@@ -34,7 +41,6 @@ if TYPE_CHECKING:
     )
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
-    from .child_process import Platform
 
 
 class LockMode(ABC):
@@ -233,39 +239,31 @@ class StoreOwner(DeclaredFamily):
 
 
 class StoreLockOwner(StoreOwner, declared_name=None):
-    """The composition root orders owners; each rank derives from that order."""
+    """Store transactions use ranks assigned by the complete ordered declaration."""
 
     __slots__ = ()
     path: Path
-    _lock_order: ClassVar[tuple[type[StoreLockOwner], ...]] = ()
+    lock_rank: ClassVar[int]
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if "lock_rank" in vars(cls):
-            raise TypeError("Store lock ranks derive from the composition root")
-
     @classmethod
-    def declare_lock_order(cls, *owners: type[StoreLockOwner]) -> None:
+    def declare_lock_order(cls, owners: tuple[type[StoreLockOwner], ...]) -> None:
         if len(set(owners)) != len(owners):
             raise TypeError("A store owner occurs twice in the lock order")
         missing = set(cls.members_with(cls)) - set(owners)
         if missing:
             names = ", ".join(sorted(owner.__name__ for owner in missing))
             raise TypeError(f"Store owners missing from the lock order: {names}")
-        StoreLockOwner._lock_order = owners
-
-    @property
-    def lock_rank(self) -> int:
-        try:
-            return StoreLockOwner._lock_order.index(type(self))
-        except ValueError:
-            raise TypeError(f"{type(self).__name__} is absent from the declared lock order") from None
+        for rank, owner in enumerate(owners):
+            owner.lock_rank = rank
 
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
                mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
         return _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
                            mode=mode, contention=contention, lock_type=self.lock_type)
+
+    def locked_async(self) -> AbstractAsyncContextManager[StoreLock]:
+        return _async_store_lock(self.path, lock_type=self.lock_type)
 
 
 def store_lock_path(store_path: Path) -> Path:
@@ -346,7 +344,7 @@ async def _async_store_lock(
     mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
     lock_type: type[StoreLock] = StoreLock,
-):
+) -> AsyncIterator[StoreLock]:
     """Borrow the same physical resource without blocking its owner event loop.
 
     Cancellation during acquisition closes only the unacquired descriptor. The

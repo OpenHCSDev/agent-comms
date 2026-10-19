@@ -180,7 +180,7 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         )
 
 
-async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
+async def test_real_writer_reopen_and_generation_change(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms, _first, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -214,42 +214,12 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
         cursor_delivery=cursor_delivery,
     ).run()
     assert second is not None and second.cursor_status == "blocked_gap"
-    # Forge current generation identity while borrowing the previous owner's
-    # source coverage. Reopening must reject it without repairing or replaying it.
-    from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        proof = NativeRuntimeInput.one(store.session._connection, input_id=second.input_id)
-        assert proof is not None
-        store.session._connection.execute(
-            f"INSERT INTO {CurrentNativeCursor.declared_name} VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                root_id,
-                lookup,
-                "alpha-new",
-                2,
-                proof.sent_owner_claimed_generation.to_wire(),
-                second_message.seq,
-                second_message.seq,
-                second.input_id,
-                type(proof.execution).declared_name,
-                proof.session_id,
-                proof.request_generation,
-            ),
-        )
+    # P636 decision: trust the real writer's durable prefix. Do not manufacture
+    # an impossible cursor with raw SQL and demand a complete prefix rescan.
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        before = reopened.session._connection.execute(
-            f"SELECT * FROM {CurrentNativeCursor.declared_name} WHERE owner_generation=2"
-        ).fetchone()
-        assert before is not None
-        with pytest.raises(IdentityConflict, match="borrows historical owner source proof"):
-            NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
-                owner_name="alpha-new", source_reads=source_reads
-            )
-        after = reopened.session._connection.execute(
-            f"SELECT * FROM {CurrentNativeCursor.declared_name} WHERE owner_generation=2"
-        ).fetchone()
-        assert tuple(after) == tuple(before)  # No recovery mutation or replay.
+        assert NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+            owner_name="alpha-new", source_reads=source_reads,
+        ) is None
     assert len(calls) == 2
 
 

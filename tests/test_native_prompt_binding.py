@@ -236,16 +236,9 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         if observer is not None:
             from agent_comms.pi_events import PiEvent
 
-            await observer(
-                PiEvent.from_wire(
-                    {
-                        "type": "response",
-                        "id": "native-prompt",
-                        "command": "prompt",
-                        "success": True,
-                    }
-                )
-            )
+            from agent_comms.agent_events import PromptAccepted
+
+            await observer(PromptAccepted())
             await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
             reply,
@@ -647,7 +640,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch, *
             "UPDATE current_native_cursor SET covered_seq=?",
             (first.message.seq + 100,),
         )
-        with pytest.raises(IdentityConflict, match="exceeds canonical source proof"):
+        with pytest.raises(IdentityConflict, match="regressed or exceeds the bus"):
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
                 owner_name="alpha", source_reads=source_reads
             )

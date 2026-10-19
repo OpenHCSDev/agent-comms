@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -69,6 +71,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -78,7 +82,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e src/agent_comms/skills/refactor-audit -e ".[dev]"
+
+      # A stale stack/pi-native.sha256 fails here, by name, before any native step.
+      - name: Check the native pin matches the tree
+        run: |
+          pytest tests/test_native_pin.py --no-cov -q
 
       # The saved-session loopback tests need Pi's published, byte-checked
       # executable. They never use credentials or an external model endpoint.
@@ -131,6 +140,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Python
         uses: actions/setup-python@v5

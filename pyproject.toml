@@ -32,7 +32,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@120c04fb9a0eb4afafab6d621d1c5fd421bb7552#subdirectory=skills/refactor-audit",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
@@ -58,6 +57,7 @@ agent-comms-claude-bridge = "agent_comms.cli_bridges.claude:main"
 agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
 agent-comms-commander = "agent_comms.commander.cli:main"
+agent-comms-watch-guard = "agent_comms_hooks.watch:main"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 
@@ -65,7 +65,7 @@ opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agent_comms"]
+packages = ["src/agent_comms", "src/agent_comms_hooks"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

@@ -10,7 +10,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
@@ -23,7 +23,7 @@ from .field_codec import FieldCodec
 from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
-from .transcript_events import TranscriptEvent, TurnDigest
+from .transcript_events import TranscriptEvent, TurnDigest, ToolStartTranscript
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
 from .typed_table import Column, ForeignKey, Index, RealStorage, StoreWriter, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
@@ -194,7 +194,8 @@ class ExternalEventRow(TypedTable):
     call_id: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool_call_id')")})
 
     foreign_keys = (ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),)
-    indexes = (Index(("thread", "kind", "tool", "timestamp", "call_id")),)
+    indexes = (Index(("thread", "kind", "tool", "timestamp", "call_id")),
+               Index(("thread", "kind", "seq", "ordinal")),)
 
     @classmethod
     def append(cls, connection, thread, seq, events) -> None:
@@ -252,17 +253,16 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
         if original is None:
             yield DraftPublication()
             return
-        transcript = ExternalTranscript(root, original.owner_lookup)
-        with transcript.writer_connection() as connection:
-            publication = TurnDraftPublication(original.owner_lookup, connection, input_id)
+        from .registration import Registration
+        thread = Registration(root / "registry.json").require(original.owner_thread)
+        original.require_recorded_owner(thread)
+        transcript = ExternalTranscript(root, thread.incarnation)
+        with transcript.writer_connection(check_same_thread=False) as connection:
+            publication = TurnDraftPublication(transcript, connection, input_id)
             try:
                 yield publication
             finally:
                 publication.retire_message()
-
-    def append_text(self, text: str):
-        from dataclasses import replace
-        return replace(self, events=tuple(replace(event, text=event.text + text) for event in self.events))
 
     def publish(self, transcript: StoreWriter) -> None:
         with transcript.writing() as connection:
@@ -350,7 +350,7 @@ class StoreRead(TranscriptSource):
         return self.transcript._cut(self.connection)
 
     @contextmanager
-    def draft_snapshot(self, root: Path, thread: str):
+    def draft_snapshot(self, root: Path, incarnation: ThreadIncarnation):
         yield self.connection
 
     def _records(self, where: str, parameters: tuple, *,
@@ -395,16 +395,29 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
-    lookup: str
+    incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, DraftRow)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
+    @property
+    def lookup(self) -> str:
+        return self.incarnation.require_recorded().lookup
+
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
         database = cls.path_in(root)
         return database, database.with_name(database.name + "-wal")
+
+    def last_tool_call(self) -> EventTime:
+        with self.snapshot() as connection:
+            timestamp = connection.execute(
+                f'SELECT (SELECT timestamp FROM "{ExternalEventRow.declared_name}" '
+                'WHERE thread=? AND kind=? ORDER BY seq DESC,ordinal DESC LIMIT 1)',
+                (self.lookup, FieldCodec.encode(ToolStartTranscript)),
+            ).fetchone()[0]
+        return GeneratedTimestamp.decode(timestamp)
 
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:
@@ -466,7 +479,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def end_turn(self) -> None:
         with self.reading() as records:
-            draft = records.current_draft(self.root, self.lookup)
+            draft = records.current_draft(self.root, self.incarnation)
         draft.end_turn(self)
 
     @contextmanager
@@ -485,10 +498,7 @@ class DraftPublication:
     def begin_message(self, timestamp: float) -> None:
         pass
 
-    def append_text(self, text: str) -> None:
-        pass
-
-    def publish(self) -> None:
+    def publish(self, parts: Iterable[str]) -> None:
         pass
 
     def retire_message(self) -> None:
@@ -498,11 +508,10 @@ class DraftPublication:
 class TurnDraftPublication(DraftPublication, StoreWriter):
     """A native turn owns one connection; each message owns one draft identity."""
 
-    def __init__(self, lookup: str, connection: Connection, turn_id: str):
-        self.lookup = lookup
+    def __init__(self, transcript: ExternalTranscript, connection: Connection, turn_id: str):
+        self.transcript = transcript
         self.connection = connection
         self.turn_id = turn_id
-        self.current: TranscriptDraft = NoDraft()
 
     @contextmanager
     def writing(self):
@@ -510,18 +519,16 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
             yield self.connection
 
     def begin_message(self, timestamp: float) -> None:
+        self.item_id = uuid4().hex
+        self.timestamp = timestamp
+
+    def publish(self, parts: Iterable[str]) -> None:
         from .transcript_events import AssistantTranscript
-        item_id = uuid4().hex
-        self.current = DraftRow(self.lookup, self.turn_id, item_id,
-                                (AssistantTranscript('', position=item_id, timestamp=timestamp),))
-
-    def append_text(self, text: str) -> None:
-        self.current = self.current.append_text(text)
-
-    def publish(self) -> None:
-        self.current.publish(self)
+        DraftRow(self.transcript.lookup, self.turn_id, self.item_id,
+                 (AssistantTranscript(''.join(parts), position=self.item_id,
+                                      timestamp=self.timestamp),)).publish(self)
 
     def retire_message(self) -> None:
-        self.current.end_turn(self)
-        self.current = NoDraft()
+        with self.writing() as connection:
+            DraftRow.delete(connection, thread=self.transcript.lookup, turn_id=self.turn_id)
 

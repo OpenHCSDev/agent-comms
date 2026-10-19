@@ -8,6 +8,7 @@ import sqlite3
 
 from .cli_result import CliResult
 from .coordination_database import CoordinationStore
+from .declared_family import UnknownFamilyMember
 from .field_codec import FieldCodec
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
 
@@ -63,7 +64,7 @@ class StoreSchemaReport:
         for table in tables:
             try:
                 owner = TypedTable.member_named(table.name)
-            except ValueError:
+            except UnknownFamilyMember:
                 unknown.append(table.name)
                 continue
             declarations = owner.schema_objects()
@@ -89,5 +90,5 @@ class StoreSchemaReports(CliResult):
     """Every store scanned at one read, available or not."""
     reports: tuple[StoreSchemaReport | UnavailableStoreSchemaReport, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.encode(self.reports)

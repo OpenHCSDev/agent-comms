@@ -23,6 +23,7 @@ from .response_policy import InformationalPolicy, ResponseEligibility
 from .thread_identity import AgentThreadRole, ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
+from .ui_model.message_category import MessageCategory, InboundCategory, OtherCategory
 
 from .page_traversal import LiveCursor, PageCursor
 
@@ -148,6 +149,8 @@ class MessageRoleWire:
 
 
 class MessageRole(InlineRecord):
+    category: ClassVar[type[MessageCategory]]
+
     @classmethod
     def wire_record(cls):
         return MessageRoleWire
@@ -188,6 +191,8 @@ class InformationalMessage:
 
 @dataclass(frozen=True, slots=True)
 class ConversationRole(MessageRole):
+    category = InboundCategory
+
     def wire_fields(self):
         return MessageRoleWire()
 
@@ -215,6 +220,8 @@ class ConversationRole(MessageRole):
 
 @dataclass(frozen=True, slots=True)
 class NoticeRole(InformationalMessage, MessageRole):
+    category = OtherCategory
+
     def wire_fields(self):
         return MessageRoleWire(notice=True)
 

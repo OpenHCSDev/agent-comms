@@ -27,21 +27,22 @@ class TurnOutput:
     # The live turn owns the one privacy-safe decoded retry result. Completion
     # and failure presentation retain this immutable value; they do not decode it.
     retry_result: ProviderRetryResult | None = None
-    _text: list[str] = field(default_factory=list, repr=False)
-    _message: list[str] = field(default_factory=list, repr=False)
+    # The text since the last tool round or later input, and the current message's text.
+    text_parts: list[str] = field(default_factory=list, repr=False)
+    message_parts: list[str] = field(default_factory=list, repr=False)
 
     def append(self, delta: str) -> None:
-        self._text.append(delta)
-        self._message.append(delta)
+        self.text_parts.append(delta)
+        self.message_parts.append(delta)
 
     def start_message(self) -> None:
-        self._message.clear()
+        self.message_parts.clear()
 
     def matches_message(self, text: str) -> bool:
-        return bool(text) and text == "".join(self._message)
+        return bool(text) and text == "".join(self.message_parts)
 
     def discard_text(self) -> None:
-        self._text.clear()
+        self.text_parts.clear()
 
     def interrupted(self) -> None:
         self.discard_text()
@@ -144,7 +145,7 @@ class TurnOutput:
         if self.failure is not None:
             return self.failure.text
         if success:
-            return "".join(self._text).strip()
+            return "".join(self.text_parts).strip()
         return (
             self.error_message
             or (self.redact(stderr) if stderr else "")

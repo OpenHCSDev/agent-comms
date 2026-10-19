@@ -231,9 +231,7 @@ class PrivateSendClaim(PromptBoundary):
                     self.bus._registry.store.path
                 ).allow_input())
             with self.selected.cursor_delivery.measurements.operation("registry_exclusion"):
-                document = authority.enter_context(self.bus._registry.store.reading())
-            with self.selected.cursor_delivery.measurements.operation("registry_snapshot"):
-                registry = document.snapshot()
+                registry = authority.enter_context(self.bus._registry.store.reading_snapshot())
             with self.selected.cursor_delivery.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
                     store, self.input_id, self.participant, self.wire_root_id,

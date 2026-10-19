@@ -52,8 +52,10 @@ class ActivityState(Enum):
         return member
 
     IDLE = ("idle", IdleThreadPresentationStatus())
+    STARTING = ("starting", WorkingThreadPresentationStatus())
     THINKING = ("thinking", WorkingThreadPresentationStatus())
     WORKING = ("working", WorkingThreadPresentationStatus())
+    WAITING_FOR_ROOM = ("waiting for room", WorkingThreadPresentationStatus())
     # Appended once when the thread is permanently deleted. The log stays
     # append-only; the latest-per-thread fold drops the thread on this record.
     DELETED = ("deleted", IdleThreadPresentationStatus())
@@ -199,6 +201,10 @@ class ActivityData:
     def with_status(self, state: ActivityState, detail: str) -> Self:
         """Project current status without changing this activity's provenance."""
         return replace(self, state=state, detail=self.format_detail(detail))
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        """Present ordinary activity; acquired observations add their own diagnostics."""
+        return self.ordinary_presentation(title)
 
     def ordinary_presentation(self, title: str) -> ThreadPresentation:
         """Activity alone; the view joins readiness after selecting its source."""

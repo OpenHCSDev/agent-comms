@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 import pytest
 from typing import Type
 
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
@@ -60,7 +60,7 @@ def test_declared_table_family(tmp_path):
             assert type(row).select(db) == [row]
         with pytest.raises(sqlite3.IntegrityError):
             replace(child, key="bad", parent="missing").insert(db)
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):
             replace(parent, key="bool", count=True).insert(db)
         replace(child, weight=3.25).upsert(db)
         assert TableChildRow.one(db, key="c").weight == 3.25
@@ -78,7 +78,7 @@ def test_declared_table_family(tmp_path):
             TableChildRow._column_list(())
         with pytest.raises(ValueError):
             TableChildRow.update(db, where="key=?", parameters=("c",), missing=1)
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):
             TableChildRow.update(db, where="key=?", parameters=("c",), enabled=1)
     with sqlite3.connect(db_path) as db:
         db.row_factory = sqlite3.Row
@@ -176,7 +176,9 @@ def test_new_row_declaration_needs_no_other_edit():
         with pytest.raises(ValueError):
             Projection.read(db.execute("SELECT 'a' AS label, 'b' AS label"))
         with pytest.raises(MalformedRecord, match="Missing required fields for TableChildRow"):
-            AddedTableRow.update(db, where="1", child={"kind": "table_child"})
+            AddedTableRow.update(db, where="1", child=FieldCodec.decode(
+                TableChildRow, {TableChildRow.family_discriminator: TableChildRow.declared_name}
+            ))
 
 
 def test_declared_values_and_partial_insertions_share_the_sqlite_boundary():

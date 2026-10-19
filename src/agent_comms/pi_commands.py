@@ -6,14 +6,14 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
 from . import agent_events as events
 from . import turn_phase as phases
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .native_session_reopen import NativeSessionIdentity
@@ -65,7 +65,9 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: str | None = field(default=None, metadata={"wire_omit_default": True})
+    id: str | None = field(
+        default_factory=lambda: uuid4().hex, metadata={"wire_absent_none": True}
+    )
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -73,14 +75,13 @@ class PiCommand(DeclaredFamily):
 
     @asynccontextmanager
     async def pending_response(self, channel, writer):
-        command = replace(self, id=self.id or uuid4().hex)
-        future = channel.track(command)
+        future = channel.track(self)
         try:
-            writer.write(channel.command_bytes(command))
+            writer.write(channel.command_bytes(self))
             await writer.drain()
             yield future
         finally:
-            channel.pending.discard(type(command), command.id)
+            channel.pending.discard(type(self), self.id)
             future.cancel()
 
     async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
@@ -106,20 +107,16 @@ class PiCommand(DeclaredFamily):
         data = dict(value)
         kind = data.pop("type", None)
         try:
-            member = cls.member_named(kind)
-        except ValueError:
-            return UnknownCommand(wire=value)
-        return FieldCodec.decode(cls, {"kind": kind, **member.decode_parameters(data)})
-
-    @classmethod
-    def decode_parameters(cls, data):
-        return data
+            cls.member_named(kind)
+        except UnknownFamilyMember:
+            return UnknownCommand(id=FieldCodec.field_plan(cls, "id").read(data), wire=value)
+        return FieldCodec.decode(cls, {"kind": kind, **data})
 
     @classmethod
     def response_owner(cls, name: str) -> type[PiCommand]:
         try:
             return cls.member_named(name)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownCommand
 
     @classmethod
@@ -155,46 +152,19 @@ class Prompt(PiCommand):
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )
 
-    def to_rpc(self):
-        data = super().to_rpc()
-        if self.images is not None:
-            data["images"] = [image.to_rpc() for image in self.images]
-        return data
-
-    @classmethod
-    def decode_parameters(cls, data):
-        if data.get("images") is not None:
-            images = data["images"]
-            if not isinstance(images, list) or any(
-                not isinstance(image, dict) or image.get("type") != "image" for image in images
-            ):
-                raise ValueError("Expected native image inputs")
-            data = {
-                **data,
-                "images": [
-                    {key: value for key, value in image.items() if key != "type"}
-                    for image in images
-                ],
-            }
-        return data
-
     @classmethod
     def on_response(
         cls, response: Response, session: TurnSession
     ) -> Iterable[events.AgentEvent]:
-        if response.id == session.prompt_id:
+        if response.id == session.command.id:
             session.watchdog.progress()
             if response.success:
                 session.prompt_state = session.prompt_state.acknowledge(response)
                 session.watchdog.prompt_accepted = True
                 session.watchdog.phase = phases.ModelWaitPhase()
+                yield events.PromptAccepted()
             else:
-                error = session.output.error(str(response.error or "Prompt was rejected"))
-                yield session.watchdog.state(
-                    "failed", "prompt_rejected", 0, phase=phases.ShutdownPhase()
-                )
-                yield error
-                session.finished = True
+                yield from session.reject_prompt(response)
                 return
         else:
             session.inputs.acknowledge(response)
@@ -220,7 +190,6 @@ class GetState(SessionSnapshot, NativeQuery):
             state = response.data.require_payload()
             session.native.attestation = session.native.attestation.observe(state)
             session.model_name = state.model.display_name
-            session.session_name = state.session_name
             session.active_session_file = state.session_file or session.active_session_file
             state.model.context_window.observe_size(session.usage)
             yield state.agent_info(session)

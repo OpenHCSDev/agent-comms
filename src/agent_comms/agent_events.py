@@ -76,6 +76,11 @@ class ContextObserved(AgentEvent):
     context: NativeContextManifestData
 
 
+@dataclass(frozen=True)
+class PromptAccepted(AgentEvent):
+    """The command's matching successful response acknowledged this turn's prompt."""
+
+
 class InputStarted(AgentEvent):
     @abstractmethod
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput: ...
@@ -319,13 +324,11 @@ class NativeMetadataObservation(RuntimeInfoObservation):
     """Only native state snapshots carry identity/configuration observations."""
 
     model: str | None = None
-    session_name: str | None = None
     session_file: str | None = None
     thinking_level: ThinkingLevelField = NoThinkingOverride
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current),
-                       model=self.model, session_name=self.session_name)
+        return replace(super().project_runtime_info(current), model=self.model)
 
     async def record_in(self, consumer: AgentEventConsumer) -> None:
         await consumer.before_native_metadata(self)

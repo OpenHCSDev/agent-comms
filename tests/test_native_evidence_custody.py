@@ -47,6 +47,53 @@ def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
                 reader.observe()
 
 
+def test_missing_proof_row_never_decodes_history(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+
+    def unexpected_observation(*args, **kwargs):
+        pytest.fail('A missing proof row cannot request a history observation')
+
+    monkeypatch.setattr(NativeEvidenceRead, 'observe', unexpected_observation)
+    with pytest.raises(NativePiUnavailable, match='assembled-context proof'):
+        NativeContextProof.read_evidence(session, 'd' * 32)
+
+
+def test_recorded_input_starts_at_native_entry_after_header_only_reopen(tmp_path, monkeypatch):
+    from agent_comms.native_session_reopen import NativeSessionIdentity
+
+    session = _evidence(tmp_path)
+    header, user = session.read_bytes().splitlines(keepends=True)
+    # Valid older external rows must not enter the typed input decoder.
+    older = (json.dumps({'type': 'custom', 'id': 'older',
+                         'timestamp': '2026-10-01T00:00:00.000Z',
+                         'data': 'old history' * 100}) + '\n').encode()
+    session.write_bytes(header + older * 10000 + user)
+    decoded = []
+    original = PrivateEvidenceRead._decode_row
+
+    def counted(raw):
+        row = original(raw)
+        decoded.append(row['id'])
+        return row
+
+    monkeypatch.setattr(PrivateEvidenceRead, '_decode_row', staticmethod(counted))
+    with NativeEvidenceScope() as scope:
+        evidence = scope.for_source(session)
+        assert NativeSessionIdentity.from_evidence(evidence).session_id == 'sid'
+        assert decoded == ['sid'] and not evidence.inputs
+        proof = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+        assert proof.session_entry_id == 'entry'
+        assert decoded == ['sid', 'entry']
+        assert evidence.tracked(INPUT_ID).id == 'entry'
+        index = dict(evidence.inputs)
+        with session.open('ab') as stream:
+            stream.write(older)
+        assert NativeSessionIdentity.from_evidence(evidence).session_id == 'sid'
+        assert evidence.inputs == index
+        assert NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence) == proof
+        assert decoded == ['sid', 'entry', 'older']
+
+
 def test_evidence_scope_switches_original_source_and_closes_previous_reader(tmp_path):
     first_dir, second_dir = tmp_path / "first", tmp_path / "second"
     first_dir.mkdir(mode=0o700)

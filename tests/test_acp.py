@@ -537,33 +537,6 @@ class TestAgentTurn:
         agent.turns.agent_bin = "pi"
         wired.goals.open_goal_store().require_generation(goal.id)
 
-    async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):
-        agent = self._agent_with_events(tmp_path, wired)
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-
-        async def events(*args, **kwargs):
-            yield fake_input_started(args, kwargs)
-            yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
-            yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
-            yield ae.StreamSettled()
-            yield ae.Done(ok=True, text="named")
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.turns.run_agent_turn("proj", "proj", "name this session")
-        title_updates = [
-            update
-            for update in sent
-            if isinstance(update, SessionInfoUpdate) and "title" in update.model_fields_set
-        ]
-        assert title_updates == []
-        assert wired.agents.agent_info_of("proj").session_name == "Agent-chosen title"
-
     async def test_thread_rename_updates_acp_title(self, wired, tmp_path, monkeypatch):
         agent = self._agent_with_events(tmp_path, wired)
         sent: list = []

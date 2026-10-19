@@ -132,14 +132,16 @@ export class EntryStore {
         const meta = this.latestMetadata(leafId, type);
         return meta ? this.get(meta.id) : undefined;
     }
-    contextSettings(leafId = this.lastId) {
-        let model = null, thinkingLevel = null;
-        for (const meta of this.ancestors(leafId)) {
-            model ??= meta.model;
-            thinkingLevel ??= meta.thinkingLevel;
-            if (model && thinkingLevel !== null) break;
+    *settingsMetadata(leafId = this.lastId) { yield* this.ancestors(leafId); }
+    contextSettings(leafId = this.lastId, {model = null, thinkingLevel = null} = {}) {
+        if (model === null || thinkingLevel === null) {
+            for (const meta of this.settingsMetadata(leafId)) {
+                model ??= meta.model;
+                thinkingLevel ??= meta.thinkingLevel;
+                if (model !== null && thinkingLevel !== null) break;
+            }
         }
-        return { model, thinkingLevel: thinkingLevel ?? 'off' };
+        return { model, thinkingLevel };
     }
     *contextMetadata(leafId = this.lastId) {
         this.assertCurrent();
@@ -369,6 +371,21 @@ export class DiskEntryStore extends EntryStore {
             if (parentId === null) while (this.#readPrevious()) {}
             else this.metadata(parentId);
             for (const row of this.#children.iterate(parentId)) yield this.get(row.id);
+        } finally { this.assertCurrent(); }
+    }
+    *settingsMetadata(leafId = this.lastId) {
+        this.assertCurrent();
+        let id = leafId;
+        try {
+            for (const {raw, offset} of this.#backwardLines()) {
+                if (id === null) return;
+                const entry = this.#decode(raw);
+                this.validate(entry);
+                if (entry.id !== id) continue;
+                yield new EntryMetadata(entry, offset, offset, raw.length);
+                id = entry.parentId;
+            }
+            if (id !== null) throw new Error('Invalid native settings ancestry');
         } finally { this.assertCurrent(); }
     }
     trackedInputMetadata(inputId) { return this.#find(this.#input, inputId); }

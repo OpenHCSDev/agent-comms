@@ -398,7 +398,7 @@ class TranscriptRead:
     def current_draft(self) -> TranscriptDraft:
         """Read current text beside this page, before its finished cut changes."""
         with self.source.records.reading() as records:
-            draft = records.current_draft(self.source.root, self.source.thread.incarnation.lookup)
+            draft = records.current_draft(self.source.root, self.source.thread.incarnation)
         self.identity.require_draft_snapshot(self.current_identity())
         return draft
 
@@ -639,7 +639,7 @@ class Transcripts:
                     reader, project, source, initial, frontier,
                     max_messages=max_messages, max_bytes=max_bytes,
                 )
-            draft = reader.current_draft(page.root, thread.incarnation.lookup)
+            draft = reader.current_draft(page.root, thread.incarnation)
             start, end = traversal.bounds(initial, consumed)
             has_older = reader.has_older(start.offset) or start.wire.sequence > 0
             requested_earlier = traversal.request_earlier(reader, start.offset)

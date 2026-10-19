@@ -55,7 +55,7 @@ class VerifiedGoalSettlement(MroDispatch):
 
     @handles(CompletedGoal)
     def completion(self, state: CompletedGoal) -> None:
-        if self.goal.reported_turn == self.turn.value:
+        if self.goal.reports_turn(self.turn.value):
             self.permit.record_verified_completion(self.store, self.completion_witness)
 
 

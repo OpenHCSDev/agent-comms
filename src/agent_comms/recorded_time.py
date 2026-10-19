@@ -59,6 +59,15 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         """Capture a recorded Unix-seconds fact, never the read time."""
         return RecordedEventTime(timestamp)
 
+    def since(self, timestamp: float) -> bool:
+        return False
+
+    def before(self, timestamp: float) -> bool:
+        return False
+
+    def clock(self) -> str:
+        return "-"
+
     def require_recorded(self, label: str) -> None:
         raise ValueError(f"{label} requires a recorded time.")
 
@@ -102,6 +111,15 @@ class RecordedEventTime(EventTime):
 
     def require_recorded(self, label: str) -> None:
         pass
+
+    def since(self, timestamp: float) -> bool:
+        return self.at >= timestamp
+
+    def before(self, timestamp: float) -> bool:
+        return self.at < timestamp
+
+    def clock(self) -> str:
+        return time.strftime("%H:%M:%S", time.localtime(self.at))
 
     def recorded_at(self, label: str) -> float:
         return self.at

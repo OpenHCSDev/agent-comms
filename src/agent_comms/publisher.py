@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
 from functools import partial
+from itertools import groupby
 
 from .bus_activity_index import ActivityClocks
 from pathlib import Path
@@ -28,6 +30,7 @@ from .channel_targets import CommandTarget, NamedTarget
 from .coordinator import Coordination
 from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (
+    ClaimOwner,
     ClaimRelease,
     ClaimTransition,
     FileClaimPath,
@@ -41,18 +44,19 @@ from .errors import (
 )
 from .field_codec import FieldCodec, Id128Text
 from .mentions import ThreadMention
-from .messages import Message
+from .messages import ClaimNoticeKind, Message
 from .private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import _store_lock
+from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
 
+    from .coordination_session import NativeBoundary
     from .private_bus_checkpoint import CheckedRead
     from .registration import Registration
 
@@ -132,6 +136,36 @@ class PrivateWrites(Publisher):
 
 class ClaimWrites(PrivateWrites):
     """Publishes claim envelopes."""
+
+    def release_resources(
+        self, boundary: NativeBoundary, claims: Sequence[ClaimOwner], wording: str,
+    ) -> None:
+        """Release only still-current acquisitions, in bounded whole-set envelopes.
+
+        The resource lifetime supplies its original acquisition witnesses. A
+        delayed retirement cannot release a successor's generation or a manual
+        claim absent from that lifetime. The caller holds the native boundary.
+        """
+        metadata = self.log.private_marker_unlocked()
+        with boundary.bus_lock.current_source(self.log, metadata) as source:
+            owned = tuple(claim for claim in claims if source.claim(claim.resource) == claim)
+        ordered = sorted(owned, key=lambda claim: claim.incarnation)
+        for incarnation, records in groupby(ordered, key=lambda claim: claim.incarnation):
+            recorded = tuple(records)
+            owner = boundary.registry.require(recorded[0].owner)
+            worktree = Path(owner.worktree).absolute()
+            for offset in range(0, len(recorded), ClaimTransition.max_resources):
+                released = recorded[offset:offset + ClaimTransition.max_resources]
+                paths = (Path(claim.resource) for claim in released)
+                names = ", ".join(str(path.relative_to(worktree) if path.is_relative_to(worktree)
+                                      else path) for path in paths)
+                self._publish_claim_envelope_unlocked(
+                    boundary.bus_lock, boundary.registry,
+                    Message(owner.name, owner.name, f"{wording}: {names}", ClaimNoticeKind),
+                    worktree=worktree, incarnation=incarnation, activity=boundary.activity,
+                    releases=tuple(ClaimRelease(claim.resource, claim.generation)
+                                   for claim in released),
+                )
 
     def publish_claim_envelope(
         self,
@@ -248,7 +282,7 @@ class InitialWrites(PrivateWrites):
                 self._initialize_private_protocol_unlocked()
             return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
-    def initialize_private_protocol(self) -> str:
+    def initialize_private_protocol(self, *, history: Sequence[Message] = ()) -> str:
         """Marker issuer for a NEW, isolated bus root only.
 
         Existing unmarked logs require an explicit offline rewrite. This issuer
@@ -256,10 +290,21 @@ class InitialWrites(PrivateWrites):
         """
         self.log.path.parent.mkdir(parents=True, exist_ok=True)
         with self.log.locked():
-            return self._initialize_private_protocol_unlocked()
+            return self._initialize_private_protocol_unlocked(history=history)
 
-    def _initialize_private_protocol_unlocked(self) -> str:
+    def _initialize_private_protocol_unlocked(self, *, history: Sequence[Message] = ()) -> str:
         self.log.require_fresh_private_root_unlocked()
+        # Selected public history precedes this root's first writable sequence. It is
+        # display content, never a copied delivery or permission to run old input.
+        previous = 0
+        rows = []
+        for message in history:
+            if message.seq <= previous:
+                raise ValueError("Initial history must have ascending unique sequences")
+            previous = message.seq
+            rows.append(json.dumps(message.to_wire(), ensure_ascii=False) + "\n")
+        if rows:
+            _atomic_write_text(self.log.path, "".join(rows), fsync_parent=True)
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
@@ -276,7 +321,8 @@ class InitialWrites(PrivateWrites):
             guard.create_pending()
             self.log.write_metadata_unlocked(
                 WireMetadata(
-                    last_seq=0,
+                    last_seq=previous,
+                    claimed_after_seq=previous,
                     writer_protocol_version=1,
                     wire_root_id=root_id,
                     claim_envelopes_version=1,

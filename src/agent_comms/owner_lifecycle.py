@@ -77,6 +77,16 @@ class OwnerRestartSelection:
             snapshot.claimed_generations[owner.name],
         )
 
+    @classmethod
+    def live(cls, selections, snapshot) -> tuple[OwnerRestartSelection, ...]:
+        """Retain only the exact selected processes that have not stopped."""
+        living = []
+        for selection in selections:
+            if selection.process.alive():
+                selection.require_current(snapshot)
+                living.append(selection)
+        return tuple(living)
+
     @property
     def name(self) -> str:
         return self.identity.incarnation.name
@@ -256,7 +266,8 @@ class OwnerLifecycle:
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
         agent_args: Sequence[str] | None = None,
     ) -> Thread:
-        with _store_lock(self._wire_lock_path):
+        with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
+              _store_lock(self._wire_lock_path)):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
@@ -274,7 +285,8 @@ class OwnerLifecycle:
     def start(
         self, name: str, *, agent_bin: str | None = None, agent_args: Sequence[str] | None = None
     ) -> OwnerStartResult:
-        with _store_lock(self._wire_lock_path):
+        with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
+              _store_lock(self._wire_lock_path)):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
@@ -434,6 +446,7 @@ class OwnerLifecycle:
                 cwd=thread.worktree,
                 output=output,
                 before_start=reserve,
+                runtime=launch_runtime,
             )
         assert owned is not None
         return owned

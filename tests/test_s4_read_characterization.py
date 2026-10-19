@@ -61,12 +61,12 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
         assert comms.bus.reads.read() == document
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         comms.views.mark_page_read(page, worktree=str(tmp_path))
-        assert rebuilt.counts(viewer, document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": 1, "receiver": 0}
+        assert rebuilt.counts(viewer, registry=comms.registry.snapshot(), document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": 1, "receiver": 0}
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         assert comms.bus.reads.read().transcripts == document.transcripts
         references = tuple(message.reference for message in comms.bus.inbox("receiver"))
         comms.messaging.acknowledge("receiver", references)
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 0
-        assert rebuilt.counts(viewer, document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": 1, "receiver": 0}
+        assert rebuilt.counts(viewer, registry=comms.registry.snapshot(), document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": 1, "receiver": 0}
     finally:
         rebuilt.close()

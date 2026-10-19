@@ -25,6 +25,7 @@ from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
+from .errors import ToolRefusedError
 from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
     boundary_decoder,
@@ -44,9 +45,32 @@ if TYPE_CHECKING:
     from .goal_management import Goals
 
 
+@dataclass(frozen=True)
+class DeliveryEvidence(DeclaredFamily, affix="DeliveryEvidence"):
+    def artifact(self) -> str:
+        raise ValueError("No application evidence was supplied at delivery; pass --artifact FILE.")
+
+
+@dataclass(frozen=True)
+class NoDeliveryEvidence(DeliveryEvidence):
+    pass
+
+
+@dataclass(frozen=True)
+class FileDeliveryEvidence(DeliveryEvidence):
+    path: str
+
+    def artifact(self) -> str:
+        if not Path(self.path).is_file():
+            raise ValueError("Delivery evidence must name an existing file.")
+        return self.path
+
+
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+    evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
+                                      metadata={"wire_omit_default": True})
 
     @property
     def work(self) -> str:
@@ -73,6 +97,13 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
 
     @abstractmethod
     async def delivery_time(self, check): ...
+
+    def strikes(
+        self, todo: Todo, order_id: str, actor: ThreadIncarnation
+    ) -> tuple[StrikeTodo, ...]:
+        """An operation has no commit time: recording it later is the commander's delay, so its
+        lateness is judged at the OVERDUE alarm and its delivery strikes nobody."""
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -103,6 +134,15 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
             await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
+
+    def strikes(
+        self, todo: Todo, order_id: str, actor: ThreadIncarnation
+    ) -> tuple[StrikeTodo, ...]:
+        """A commit delivered after the order's deadline strikes its holder once."""
+        lateness = self.at.lateness(todo.deadline)
+        reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
+                  f"(caught by {actor.name} at review)")
+        return (StrikeTodo(todo.revision, actor, todo.held(), reason),) * lateness.late()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -349,7 +389,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         try:
             return next((progress for member in members for progress in member.found(source)),
                         NoCommitProgress())
-        except (ValueError, subprocess.TimeoutExpired) as unread:
+        except subprocess.TimeoutExpired as unread:
             return UnreadProgress(str(unread))
 
     @property
@@ -537,8 +577,8 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         """One INSTALL line for every order waiting on install; it strikes nobody."""
 
     @abstractmethod
-    def refusal(self, work: str, commander: str) -> str:
-        """Why the commander does not run the installer's work itself."""
+    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
+        """Why the commander may not run the installer's work; none when it is the installer."""
 
     @abstractmethod
     def overdue(self, now: float) -> tuple[str, ...]:
@@ -552,10 +592,10 @@ class UnplannedInstallDeadline(InstallDeadline):
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
-    def refusal(self, work: str, commander: str) -> str:
+    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
         return (f"{work.capitalize()} is the installer's work, and no install is planned. "
                 "Plan one with agent-comms-commander order install HH:MM UNIT, "
-                f"then order the {work} from that unit.")
+                f"then order the {work} from that unit.",)
 
 
 @dataclass(frozen=True)
@@ -578,10 +618,10 @@ class PlannedInstallDeadline(InstallDeadline):
         staged.write_text(json.dumps({"at": self.at.at, "installer": self.installer}))
         staged.replace(path)
 
-    def refusal(self, work: str, commander: str) -> str:
+    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
         return (f"{work.capitalize()} is {self.installer}'s work, as the planned installer, not "
                 f"{commander}'s. Send it as an order: agent-comms-commander order send --to "
-                f"{self.installer}, naming the {work} to run.")
+                f"{self.installer}, naming the {work} to run.",) * (self.installer != commander)
 
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         if not waiting:
@@ -659,8 +699,12 @@ class NotifiedFirstCallEvent(FirstCallEvent):
 class OrderWords(WireValue):
     """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
+    # A path/file match starts at a token boundary or immediately after a
+    # quoted span. Retrying its greedy prefix at every character is quadratic
+    # for long ordinary words with no slash or filename suffix.
     CITED: ClassVar[re.Pattern] = re.compile(
-        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b')
+        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|'
+        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)')
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
     least_words: ClassVar[int] = 1
@@ -668,7 +712,7 @@ class OrderWords(WireValue):
 
     def __post_init__(self) -> None:
         if refused := self.refused(self.text):
-            raise ValueError(refused)
+            raise ToolRefusedError(refused)
 
     def to_wire(self) -> str:
         return self.text
@@ -793,6 +837,90 @@ class DefectText(BluntWords, OrderWords):
         return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
+class SlopKind(DeclaredFamily, affix="SlopKind"):
+    sentence: ClassVar[str]
+
+
+class IdentitySlopKind(SlopKind):
+    sentence = "which meaning this is"
+
+
+class MembershipSlopKind(SlopKind):
+    sentence = "which contract or set it belongs to"
+
+
+class ImplementationSlopKind(SlopKind):
+    sentence = "which implementation it gets"
+
+
+class StateSlopKind(SlopKind):
+    sentence = "a second writable copy of one value"
+
+
+class Derivation(DeclaredFamily, affix="Derivation"):
+    sentence: ClassVar[str]
+
+
+class NominalKeyDerivation(Derivation, declared_name="nominal-key"):
+    sentence = "the nominal key identifies it"
+
+
+class SubclassDerivation(Derivation):
+    sentence = "the subclass derives it"
+
+
+class MixinDerivation(Derivation):
+    sentence = "the mixed-in capability derives it"
+
+
+class BaseMethodDerivation(Derivation, declared_name="base-method"):
+    sentence = "the base method derives it"
+
+
+class InitSubclassDerivation(Derivation, declared_name="init-subclass"):
+    sentence = "subclass initialization derives it"
+
+
+class MetaclassDerivation(Derivation):
+    sentence = "the metaclass derives it"
+
+
+class DeclarationDerivation(Derivation):
+    sentence = "the declaration derives it"
+
+
+class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
+    sentence = "deleting the copy leaves its original declaration"
+
+
+@dataclass(frozen=True)
+class Slop:
+    kind: type[SlopKind]
+    fact: str
+    at: FileLine
+    derive: type[Derivation]
+    by: FileLine
+    LINE: ClassVar[re.Pattern] = re.compile(
+        r'^Slop: (?P<kind>\w+); fact (?P<fact>.+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)\s*$', re.M)
+
+    def __post_init__(self):
+        if len(self.fact.split()) < 4:
+            raise ValueError('The duplicated fact needs 4+ words.')
+        self.at.require_exists()
+        self.by.require_exists()
+
+    @classmethod
+    def from_order(cls, body):
+        found = [FieldCodec.decode(cls, m.groupdict()) for m in cls.LINE.finditer(body)]
+        if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
+            raise ValueError('An order naming slop needs Slop: KIND; fact WORDS; at PATH:LINE; derive MECHANISM on PATH:LINE')
+        return found
+
+    def render(self):
+        return (f'{self.at.to_wire()} restates a {self.kind.declared_name} fact ({self.kind.sentence}): {self.fact}. '
+                f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
+
+
 class DirectiveText:
     """What the commander and the owner's voice send units: order send, order say and the
     connector's send refuse a text failing any of these."""
@@ -804,9 +932,17 @@ class DirectiveText:
     def refused(cls, text: str) -> tuple[str, ...]:
         return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
 
+    @classmethod
+    def require(cls, text: str) -> None:
+        if refused := cls.refused(text):
+            raise ToolRefusedError("Directive refused, nothing sent: " + " ".join(refused))
+
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
     label: ClassVar[str] = "Works when:"
+
+    def require_artifact(self, path: str) -> None:
+        pass
 
     @abstractmethod
     def instructions(self) -> tuple[str, ...]: ...
@@ -827,6 +963,10 @@ class MechanicalOrderRun(OrderRun):
 
 @dataclass(frozen=True)
 class ApplicationOrderRun(OrderRun):
+    def require_artifact(self, path: str) -> None:
+        if not Path(path).is_file():
+            raise ValueError('This order needs --seen FILE showing its requested run.')
+
     text: str
     least_words: ClassVar[int] = 8  # the run, and the evidence that it happened
     quoted_words: ClassVar[int] = 4
@@ -896,9 +1036,99 @@ class FamilyDeletion(OrderDeletion):
                 f"{self.count.command}",)
 
 
+@dataclass(frozen=True)
+class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
+    def instructions(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class UnlocatedProblemFinding(ProblemFinding):
+    pass
+
+
+@dataclass(frozen=True)
+class LocatedProblemFinding(ProblemFinding):
+    where: FileLine
+
+    def instructions(self) -> tuple[str, ...]:
+        return (f"Where: {self.where.to_wire()}",)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
-    """One checked order lives on its Todo, independently of the unit's Goal."""
+    """A problem's order state; an unassigned finding is not a fabricated order."""
+    pending: ClassVar[bool] = False
+    line: ClassVar[str] = "No order"
+    pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
+    finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
+                                   metadata={"wire_omit_default": True})
+
+    @classmethod
+    def pull_request_ids(cls, body: str) -> tuple[str, ...]:
+        return tuple(line.removeprefix(cls.pull_request_label).strip()
+                     for line in body.splitlines() if line.startswith(cls.pull_request_label))
+
+    def require_transfer(self, todo: Todo) -> None:
+        raise ValueError("This problem cannot receive another order.")
+
+    def require_close(self):
+        raise ValueError("Closing requires recorded installed application evidence.")
+
+    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
+        return ()
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return ()
+
+    def closing_artifact(self) -> str:
+        raise ValueError("Only a delivered order has closing evidence.")
+
+    def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
+        raise ValueError("This problem already has an order; drop it before linking another.")
+
+    def folded(self, into: str, why: str) -> ProblemOrder:
+        if self.pending:
+            raise ValueError("The problem has open orders; link or drop them first.")
+        return FoldedProblemOrder(original=self, into=into, why=why)
+
+    @staticmethod
+    def request(sender: Thread, problems: tuple[str, ...]) -> str:
+        if not problems:
+            raise ValueError('An order needs its Problems line.')
+        request = sender.goal.require().require_active()
+        request.order.require_request()
+        return request.id
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnorderedProblemOrder(ProblemOrder):
+
+    def require_transfer(self, todo: Todo) -> None:
+        pass
+
+    def instructions(self, todo: Todo) -> str:
+        return "\n".join((f"Problem: {todo.id}: {todo.text}",
+                          *self.finding.instructions(), "No order"))
+
+    def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
+        return replace(order, finding=self.finding)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FoldedProblemOrder(ProblemOrder):
+    original: ProblemOrder
+    into: str
+    why: str
+    line: ClassVar[str] = "Folded"
+
+    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
+        return (f"{todo.id} folded into {self.into}: {self.why}",)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedProblemOrder(ProblemOrder, declared_name=None):
+    """A checked order keeps its actual body, check and source location."""
 
     id: str
     owner: FileLine
@@ -949,13 +1179,6 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
-    pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
-
-    @classmethod
-    def pull_request_ids(cls, body: str) -> tuple[str, ...]:
-        return tuple(line.removeprefix(cls.pull_request_label).strip()
-                     for line in body.splitlines() if line.startswith(cls.pull_request_label))
-
     @property
     def pull_request_reference(self) -> str:
         return f"{self.pull_request_label} {self.id}"
@@ -983,7 +1206,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
                 "--title '<title>' --body-file <file>; Core writes its required order identity.")
 
     def instructions(self, todo):
-        return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
+        return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(), f"Order: {self.id}",
             f"Owner: {self.owner.to_wire()}", self.pull_request_instruction(todo.id),
             f"Check: {self.check.directory} :: {self.check.command}",
             *self.deletes.instructions(),
@@ -1029,7 +1252,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PendingProblemOrder(ProblemOrder):
+class PendingProblemOrder(CheckedProblemOrder):
     def reissued(self, at: float) -> PendingProblemOrder:
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
                   - self.at.recorded_at("An order"))
@@ -1057,7 +1280,14 @@ class PendingProblemOrder(ProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliveredProblemOrder(ProblemOrder):
+class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
+    replacing_message: str
+    pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Dropped for a newer order"
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredProblemOrder(CheckedProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Delivered, waiting on install"
@@ -1070,6 +1300,9 @@ class DeliveredProblemOrder(ProblemOrder):
         if delivery != self.delivery:
             raise ValueError("The order already records a different delivery.")
         return self
+
+    def closing_artifact(self) -> str:
+        return self.delivery.evidence.artifact()
 
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
@@ -1109,7 +1342,7 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class WithdrawnProblemOrder(ProblemOrder):
+class WithdrawnProblemOrder(CheckedProblemOrder):
     """An order the commander sent in error and retired before delivery; it strikes no one."""
 
     previous: Assignment
@@ -1135,8 +1368,8 @@ class Hunt(DeclaredFamily, affix="Hunt"):
             raise ValueError("Describe the inspected code and verdict in ten or more words.")
         self.at.require_recorded("A hunt")
 
-    def require_order(self, order):
-        pass
+    def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+        self.where.require_exists()
 
 
 @dataclass(frozen=True)
@@ -1148,12 +1381,21 @@ class CleanHunt(Hunt):
 class OrderedHunt(Hunt):
     sent: str
 
-    def require_order(self, order):
-        if self.sent != order.id:
-            raise ValueError("The hunt must name this problem's current order.")
+    def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+        super().require_commander(store, commander)
+        if not any(todo.order.id == self.sent or todo.sent_in(self.sent)
+                   for todo in store.held_for_commander(commander)):
+            raise ValueError("The hunt must name this commander's current order.")
 
 
-class TodoError(ValueError):
+@dataclass(frozen=True)
+class HuntRecord(TypedTable):
+    id: str = field(metadata={"sql": Column(primary_key=True)})
+    commander: ThreadIncarnation = field(metadata={"sql": Column(index=True)})
+    hunt: Hunt
+
+
+class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
 
@@ -1442,13 +1684,66 @@ class OrderVerdict(TodoOperation, declared_name=None):
 class AcceptedVerdict(OrderVerdict):
     """The tool call carries out the order clause it quotes."""
     quote: str
+
+    @classmethod
+    def require_branches(cls, added: int, no_owner: str | None) -> None:
+        if added <= 0:
+            return
+        if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
+                and re.search(r'/\S+:\d+', no_owner)):
+            raise ValueError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
     line = "Accepted"
 
-    def judged(self, current: Todo) -> Todo:
+    def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
-        order = " ".join(current.order.instructions(current).split())
-        if len(quoted.split()) < 4 or quoted not in order:
+        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
             raise ValueError("Quote 4+ words of the order this tool call carries out.")
+
+    def judged(self, current: Todo) -> Todo:
+        self.require_quote(current.order.instructions(current))
+        return current
+
+
+@dataclass(frozen=True)
+class PeerAcceptedVerdict(AcceptedVerdict):
+    peer: str
+
+    def prepare(self, goals, current):
+        with goals.bus.log.opened_wire_snapshot() as source:
+            message = next((message for message in source.newest_messages()
+                            if message.message_id == self.peer), None)
+        if message is None:
+            raise ValueError("The peer order message is absent from recent retained history.")
+        if (message.sender == self.actor.name or
+                (message.target != current.holder and
+                 current.holder not in {mention.name for mention in message.mentions})):
+            raise ValueError("--peer must name another sender's message to this unit.")
+        self.require_quote(message.body)
+        return self
+
+    def judged(self, current: Todo) -> Todo:
+        # prepare checked the quote against its retained peer message, not our order.
+        return current
+
+
+@dataclass(frozen=True)
+class SupersededVerdict(OrderVerdict):
+    replacement: str
+    reason: str
+    line = "Superseded"
+
+    def prepare(self, goals, current):
+        replacing = [todo for todo in goals.todos.held_for_commander(self.actor)
+                     if todo.sent_in(self.replacement)]
+        if not replacing:
+            raise ValueError('The replacing message is not an open order from this commander.')
+        if any(todo.holder == current.holder for todo in replacing):
+            raise ValueError('The replacing order went to the same unit; judge its edits ok or back.')
+        if len(self.reason.split()) < 6:
+            raise ValueError('Say why this edit was replaced in 6+ words.')
+        return self
+
+    def judged(self, current: Todo) -> Todo:
         return current
 
 
@@ -1573,19 +1868,6 @@ class RecordFirstCallTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class RecordHuntTodo(TodoOperation):
-    actor: ThreadIncarnation
-    hunt: Hunt
-
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
-        self.hunt.where.require_exists()
-        self.hunt.require_order(current.order)
-        return replace(current, hunts=(*current.hunts, self.hunt), revision=current.revision + 1)
-
-
-@dataclass(frozen=True)
 class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
@@ -1604,7 +1886,10 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
+        return replace(current, order=current.order.delivered(self.delivery),
+                       strikes=(*current.strikes,
+                                *self.delivery.strikes(current, self.order_id, self.actor)),
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -1678,7 +1963,6 @@ class Todo(TypedTable):
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
     strikes: tuple[StrikeTodo, ...] = ()
-    hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
     verdicts: tuple[OrderVerdict, ...] = ()
@@ -1765,8 +2049,26 @@ class Todo(TypedTable):
             raise TodoConflict(self)
 
     def sent_in(self, message_id: str) -> bool:
-        """Whether the commander sent this order in that bus message."""
-        return any(message.message_id == message_id for message in self.messages)
+        """Only the latest recorded send names this order, not an earlier replacement."""
+        return bool(self.messages) and self.messages[-1].message_id == message_id
+
+    def require_replacement(self, message_id: str) -> None:
+        if not self.sent_in(message_id):
+            raise ValueError(f"{self.holder} already holds {self.id}; pass --replaces with its current message.")
+
+    @classmethod
+    def require_order_body(cls, body: str) -> None:
+        DirectiveText.require(body)
+        Slop.from_order(body)
+
+    def require_fold(self, target: Todo, why: str) -> None:
+        self.state.require_open(self)
+        target.state.require_open(target)
+        if self.id == target.id:
+            raise ValueError("Fold needs two different open problems.")
+        if len(why.split()) < 8:
+            raise ValueError("Say why they are the same problem in 8+ words.")
+        self.order.folded(target.id, why)
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
         if self.creator_identity != actor:
@@ -1836,7 +2138,66 @@ class TodoStore(TypedStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo,)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+
+    def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
+        hunt.require_commander(self, commander)
+        recorded = HuntRecord(uuid4().hex, commander, hunt)
+        with self.writing() as db:
+            recorded.upsert(db)
+        return recorded
+
+    def hunts_for_commander(self, commander: ThreadIncarnation) -> tuple[Hunt, ...]:
+        with self.snapshot() as db:
+            return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
+
+    def resolve_order(self, commander: ThreadIncarnation, unit: str, message: str) -> Todo:
+        found = [t for t in self.held_by(commander, unit)
+                 if t.sent_in(message) or t.order.id == message]
+        if len(found) != 1:
+            raise ValueError(f'{unit} owes no unique order {message}')
+        return found[0]
+
+    def drop(self, commander: ThreadIncarnation, unit: str, message: str, by: str) -> Todo:
+        old = self.resolve_order(commander, unit, message)
+        newer = self.resolve_order(commander, unit, by)
+        if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
+            raise ValueError('Only a live newer order to the same unit replaces an old one.')
+        with self.writing() as db:
+            current = self._current(db, old.id)
+            current.require_result(old)
+            self._current(db, newer.id).require_result(newer)
+            result = replace(current, order=current.order.copy_as(
+                DroppedProblemOrder, replacing_message=by), assignment=None,
+                released=(*current.released, ReleaseTodo(current.revision, commander,
+                    current.held(), StrikeReason(f'Order {message} was replaced by the newer order {by} without a strike.'))),
+                revision=current.revision + 1)
+            result.upsert(db)
+            return result
+
+    def fold(self, commander: ThreadIncarnation, problem: str, into: str, why: str) -> None:
+        with self.writing() as db:
+            source, target = self._current(db, problem), self._current(db, into)
+            source.require_commander(commander)
+            target.require_commander(commander)
+            source.require_fold(target, why)
+            replace(target, text=f'{target.text} [+{source.id}: {source.text}]',
+                    revision=target.revision + 1).upsert(db)
+            replace(source, state=DoneTodoState, order=source.order.folded(into, why),
+                    assignment=None, revision=source.revision + 1).upsert(db)
+
+    def link(self, commander: ThreadIncarnation, problem: str, unit: str, message: str) -> None:
+        sent = self.resolve_order(commander, unit, message)
+        with self.writing() as db:
+            source, target = self._current(db, sent.id), self._current(db, problem)
+            source.require_result(sent)
+            target.require_commander(commander)
+            target.state.require_open(target)
+            if target.holder not in (None, unit):
+                raise ValueError(f'{problem} is already held by {target.holder}')
+            replace(target, order=target.order.linked(source.order), assignment=source.held(),
+                    goal=source.goal, deadline=source.deadline, messages=source.messages,
+                    revision=target.revision + 1).upsert(db)
 
     def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         """Rows in creation order; an absent store has none, and a read never creates one."""
@@ -1975,7 +2336,7 @@ class TodoStore(TypedStore):
 
     def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
         """Correct every open order the unit holds when its published text uses jargon."""
-        if not (words := tuple(PlainText.found(text))) or not self.path.exists():
+        if not self.path.exists() or not (words := tuple(PlainText.found(text))):
             return ()
         with self.writing() as db:
             held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))

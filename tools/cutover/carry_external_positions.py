@@ -13,7 +13,7 @@ from contextlib import closing
 from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.external_transcript import ExternalDraftRow, ExternalEventRow, ExternalItemRow, ExternalTranscript
+from agent_comms.external_transcript import DraftRow, ExternalEventRow, ExternalItemRow, ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import TranscriptEvent
 
@@ -38,7 +38,6 @@ class ExternalPositions(carry.StoreCarry):
     """Saved events take the identity their original bridge item owns."""
 
     store = ExternalTranscript
-    after = "carry_check_revision"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
@@ -54,7 +53,7 @@ class ExternalPositions(carry.StoreCarry):
                     for _ in table.stream(source):
                         pass
                 return Carried(0)
-            expected = {ExternalItemRow.declared_name, ExternalDraftRow.declared_name}
+            expected = {ExternalItemRow.declared_name, DraftRow.declared_name}
             if tables != expected:
                 raise ValueError(f"Unexpected external transcript tables: {tables}")
             descriptor, temporary = tempfile.mkstemp(prefix=".external-positions-", dir=root)
@@ -79,10 +78,10 @@ class ExternalPositions(carry.StoreCarry):
                             positions += missing
                             events_count += len(events)
                         for thread, turn, item, encoded in source.execute(
-                            f'SELECT thread,turn_id,item_id,events FROM "{ExternalDraftRow.declared_name}"'
+                            f'SELECT thread,turn_id,item_id,events FROM "{DraftRow.declared_name}"'
                         ):
                             events, missing = located(encoded, item)
-                            ExternalDraftRow(thread, turn, item, events).insert(target)
+                            DraftRow(thread, turn, item, events).insert(target)
                             positions += missing
                         target.commit()
                     except BaseException:

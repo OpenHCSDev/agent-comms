@@ -13,7 +13,7 @@ from agent_comms.goal_generation import (
     BlockedGeneration, CancelledGeneration, CompletedGeneration, ReadyGeneration,
 )
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal
+from agent_comms.goals import Goal, ReportedTurn
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from agent_comms.owned_turn import OwnedTurn
@@ -46,7 +46,7 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
                 "work",
                 f"{settlement.__name__}-{state.declared_name}",
                 published_seq=0,
-                reported_turn=turn.value,
+                reported_turn=ReportedTurn(turn.value),
                 state=state,
             )
             store.create_goal(goal.id)

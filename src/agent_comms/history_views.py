@@ -104,7 +104,7 @@ class ThreadPoll(CliResult):
     ledger: Annotated[LedgerDocument, WireForm]
     peers: tuple[ThreadView, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.project(self, "presence")
 
 
@@ -200,7 +200,7 @@ class HistoryViews:
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
-        self.transcript_reads = transcript_read_state(bus.reads.path, registry)
+        self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
@@ -358,7 +358,7 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
             snapshot, self.agents, GoalWaits.at(self.root),
-            DEFAULT_ROSTER, names=names,
+            RosterVisibility(archived=True), names=names,
         )
         return ThreadPresentations(
             snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
@@ -380,8 +380,10 @@ class HistoryViews:
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
-        unread = self.transcript_reads.counts(captured_viewer, document=basis.document, visibility=visibility)
-        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
+        unread = self.transcript_reads.counts(
+            captured_viewer, registry=basis.registry, document=basis.document, visibility=visibility,
+        )
+        return replace(snapshot, thread_unread=unread.counts)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""
@@ -418,28 +420,27 @@ class HistoryViews:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
         return WireRevision.capture(self, expiry_tick=int(time.time()))
 
-    def who(self) -> Sequence[Mapping]:
-        """Presence: who is in the chat, with status and unread counts."""
+    def who(self) -> tuple[ThreadView, ...]:
+        """Presence records; their owner supplies the wire representation."""
         views = self._presence_views()
         pending = CountedRead().counts(self.bus, tuple(view.thread.name for view in views))
-        counted = (replace(view, pending=pending[view.thread.name]) for view in views)
-        return [FieldCodec.project(view, "presence") for view in counted]
+        return tuple(replace(view, pending=pending[view.thread.name]) for view in views)
 
-    def presence(self) -> Sequence[Mapping]:
-        """Presence without viewer-specific unread scans."""
-        return [FieldCodec.project(view, "presence") for view in self._presence_views()]
+    def presence(self) -> tuple[ThreadView, ...]:
+        """Presence records without viewer-specific unread scans."""
+        return tuple(self._presence_views())
 
     def _presence_views(self):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
 
-    def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
+    def list_threads(self, active_only: bool = False) -> tuple[ThreadRecord, ...]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
         threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
                         if not active_only or snapshot.statuses[name].active)
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
-        return [FieldCodec.project(record, "presence") for record in ThreadRecord.read(
-            snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)]
+        return ThreadRecord.read(
+            snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)
 
     def thread_detail(self, name: str, read: InboxRead) -> ThreadRecord:
         thread = self.registry.require(name)
@@ -453,4 +454,4 @@ class HistoryViews:
         name = target.thread(self.registry).name
         peers = tuple(view for view in self._presence_views() if view.thread.name != name)
         return ThreadPoll(self.thread_detail(name, CountedRead()), tuple(self.bus.inbox(name)),
-                          self.ledger.document(), peers)
+                          self.ledger.read(), peers)

@@ -131,9 +131,14 @@ async def test_pi_counts_share_reported_members_and_reader_outputs(observation):
     assert emitted.context_used == PiCount.from_wire(7)
     assert emitted.context_size == (PiCount.from_wire(2000) if observation == "reported" else PiCount.from_wire(4096))
     client = AsyncMock()
-    consumer = AcpEventConsumer(SimpleNamespace(), "unit", client)
+    sessions = SimpleNamespace(publish_metadata=AsyncMock())
+    consumer = AcpEventConsumer(SimpleNamespace(sessions=sessions), "unit", client)
     await consumer.on_context_info(ContextInfo(context_used=PiCount.from_wire(7), context_size=expected))
     assert client.session_update.await_count == (1 if observation == "reported" else 0)
+    if observation == "reported":
+        sessions.publish_metadata.assert_not_awaited()
+    else:
+        sessions.publish_metadata.assert_awaited_once_with("unit")
     client.reset_mock()
     await consumer.on_context_info(emitted)
     assert client.session_update.await_args.kwargs["update"].used == 7
@@ -197,19 +202,6 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
         assert event.result.text() == ""
         assert event.result.edit_diff(True) is None
         assert FieldCodec.decode(type(event), FieldCodec.encode(event)) == event
-
-
-def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
-    event = decode({
-        "type": "message_end",
-        "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
-    })
-    from agent_comms.turn_failure import ModelRequestFailed
-    from agent_comms.turn_output import TurnOutput
-
-    session = SimpleNamespace(output=TurnOutput())
-    event.message.tracked_end(session)
-    assert session.output.failure == ModelRequestFailed("original provider rejection")
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
