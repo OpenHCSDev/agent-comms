@@ -66,8 +66,8 @@ class CheckRoot:
         root.mkdir(mode=0o700, parents=True)  # Refuse an existing directory, including a symlink.
         try:
             copied = Comms(root)
+            self._populate(copied)
             try:
-                self._populate(copied)
                 yield copied
             finally:
                 for thread in copied.registry.snapshot().visible_threads(
