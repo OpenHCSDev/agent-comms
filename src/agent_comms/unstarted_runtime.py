@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from .thread_identity import ThreadIncarnation
-from .recorded_time import EventTime
 
 from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from .external_transcript import ExternalTranscript
+from .recorded_time import EventTime
 from .selected_session import SelectedSession
+from .thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True)

@@ -33,12 +33,13 @@ from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from .thread_identity import ThreadIncarnation
-    from .recorded_time import EventTime
+
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
+    from .recorded_time import EventTime
+    from .thread_identity import ThreadIncarnation
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
 

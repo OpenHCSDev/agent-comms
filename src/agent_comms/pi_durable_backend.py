@@ -22,8 +22,6 @@ from .agent_backend import (
 from .agent_events import Error
 from .coordination_database import CoordinationStore
 from .external_transcript import ExternalCut
-from .thread_identity import ThreadIncarnation
-from .recorded_time import EventTime
 from .native_child import PiChild
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
@@ -39,6 +37,8 @@ from .pi_commands import (
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
+from .recorded_time import EventTime
+from .thread_identity import ThreadIncarnation
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
 

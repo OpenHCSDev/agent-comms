@@ -27,11 +27,23 @@ class NativeToolActivity(AppendProjectionStore[NativeToolCheckpoint]):
     crawl, invented timestamp, or second copy of the record's timestamp.
     """
 
-    record_type = NativeToolCheckpoint
+    record_type: type[NativeToolCheckpoint] = NativeToolCheckpoint
 
     def __init__(self, root: Path, incarnation: ThreadIncarnation, source: Path) -> None:
         super().__init__(
             source, root / f"native_tool_activity_{incarnation.require_recorded().lookup}.json"
+        )
+
+    @staticmethod
+    def contains(record: NativeRecord, call_id: str) -> bool:
+        return any(
+            record.project(
+                lambda original: (
+                    call.id == call_id
+                    for message in original.entry.messages
+                    for call in message.tool_calls
+                )
+            )
         )
 
     def record(self, call_id: str) -> None:
@@ -39,12 +51,12 @@ class NativeToolActivity(AppendProjectionStore[NativeToolCheckpoint]):
             revision = FileRevision.from_stat(os.fstat(stream.fileno()))
             for start, end, raw in reverse_records(self.source_path, revision.size, stream=stream):
                 record = NativeRecord.read(start, end, raw)
-                if record.contains(call_id):
+                if self.contains(record, call_id):
                     checkpoint = NativeToolCheckpoint(
                         revision, end, AppendCheckpoint.fingerprint(stream, end), start, call_id
                     )
                     break
-                if record.input_boundary():
+                if any(record.project(lambda original: (original.entry.input_boundary,))):
                     raise ValueError(
                         f"Announced native tool call {call_id} is absent from its input"
                     )
@@ -62,7 +74,7 @@ class NativeToolActivity(AppendProjectionStore[NativeToolCheckpoint]):
                 checkpoint.offset,
                 stream.read(checkpoint.offset - checkpoint.start),
             )
-            if not record.contains(checkpoint.call_id):
+            if not self.contains(record, checkpoint.call_id):
                 raise ValueError("Native tool activity index names another record")
             (timestamp,) = record.project(
                 lambda original: (original.entry.timestamp.at.timestamp(),)

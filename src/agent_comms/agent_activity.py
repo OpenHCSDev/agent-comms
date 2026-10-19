@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
-from .notification_progress import AcknowledgedProgress
 from .native_tool_activity import NativeToolActivity
+from .notification_progress import AcknowledgedProgress
 
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
