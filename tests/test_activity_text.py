@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.activity import Activity, ActivityState, ObservedActivity, ReadyDrainReadiness
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.shared import ThreadOutput
+from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved

@@ -7,7 +7,8 @@ import pytest
 from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
-from agent_comms.cli_bridges.shared import Binding, ThreadOutput, Watch
+from agent_comms.cli_bridges.shared import Binding, Watch
+from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.cli_protocol import EarlierItems, WATCH_LINE
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable

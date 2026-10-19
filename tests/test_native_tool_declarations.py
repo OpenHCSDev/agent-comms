@@ -109,7 +109,7 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
 def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
     from agent_comms.cli_bridges.opencode_parts import ToolPart
-    from agent_comms.cli_bridges.shared import ToolCall
+    from agent_comms.tool_calls import ToolCall
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_tools import FilePatchTool
     from agent_comms.transcript_events import TranscriptEvent

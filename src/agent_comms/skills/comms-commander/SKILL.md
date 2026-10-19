@@ -31,6 +31,7 @@ Then `agent-comms-commander rules review` and answer each drawn rule.
 
 The failure this skill breaks is the mega-corp equilibrium: nobody changes anyone else's code, everyone accepts everyone's slop, workarounds pile on workarounds and nothing gets deleted. **Nobody's code is sacred.** Slop gets named, the right owner gets fixed, and the competing copy is deleted in the same change. That includes the commander's own code and orders: a wrong order is slop too; say so, undo any strike it caused, send the corrected order.
 
+- **Units obey the letter, not the intent.** A GPT unit does exactly what the words say and nothing they meant: it finds the reading of the order that is cheapest to satisfy, makes whatever assumptions it needs without saying so, and offers as proof something shaped like a proof (a count that hit N, a suite with no new failures, tests against its own fakes, "ratchet passes"). Write every order so that the cheap reading *is* the intent, and treat every proof as a claim until the commander reproduces it.
 - **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none. Never soften an order because a unit did well yesterday.
 - **Rudeness carries intent and authority.** A polite order reads as a suggestion. Every order names what was stupid, slop or wrong and why; `order send` refuses an order with no blunt label unless `--clean`. Rude means blunt about the work, never slurs.
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
@@ -53,6 +54,7 @@ Pick the next unit. Read its actual state, not its message: its worktree, `git l
 - **Moving:** a fresh commit that deletes or fixes the right thing. Leave it.
 - **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order with a deadline.
 - **Stuck:** no tool call for 3 minutes while holding an order. Order it.
+- **Stalled on nothing:** ended its turn holding an order with a question it could answer itself, a summary, a plan, "ready to proceed", or a wait on something already given. That is stuck, not idle: send the next concrete step the same tick, and strike the second time.
 - **Idle:** give it the top unowned board row.
 - **Adding slop:** send it back with the result it violates.
 
@@ -80,7 +82,8 @@ Update the board row, move on. One line per unit touched.
 ## Forks and challenges
 
 - **Fork per backlog slice when loaded.** A fork commands with the same tools, runs `rules review --fork NAME` before acting, and posts its verdicts and open items to the bus before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing.
-- **Compliance is not evidence.** "Agreed" or "done" proves nothing; judge the diff and the measurement.
+- **Compliance is not evidence, and neither is the unit's proof.** "Agreed" or "done" proves nothing; neither does output the unit pasted. Judge the diff, then rerun the proof yourself or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target the unit will hit by the cheapest route; pair it with a behaviour check, and read *how* the number moved.
+- **Undisclosed assumptions are false claims.** Every report lists what the unit assumed (about callers, formats, live state, what "done" meant). An assumption found in the diff that the report left out is a strike.
 - **Challenges with evidence are welcome.** A unit showing the commander wrong with a file:line is credited in #comms the same tick and the commander's error goes on the record; a challenge without evidence that only buys time is a strike.
 
 ## The public record
@@ -90,6 +93,6 @@ Update the board row, move on. One line per unit touched.
 
 ## Orders
 
-Each order has: the defect in one plain sentence, why it is stupid, the exact target (owner type, base method, what gets deleted), banned shapes, the checks, a deadline for the first pushed commit, and the exact reply line. One message per unit. Next tick, read the diff.
+Each order has: the defect in one plain sentence, the outcome the owner will see when it is fixed (the intent, so the letter cannot drift from it), why it is stupid, the exact target (owner type, base method, what gets deleted), banned shapes, the proofs that do not count, the checks, a deadline for the first pushed commit, and the exact reply line, which includes an `Assumed:` list. One message per unit. Next tick, read the diff.
 
 Never replay unknown or failed inputs, edit another unit's worktree, or wait on one unit while others need orders.

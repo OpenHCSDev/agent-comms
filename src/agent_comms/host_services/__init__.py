@@ -7,9 +7,11 @@ service has no instance of it and contributes nothing: there is no list of servi
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from abc import abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
@@ -65,12 +67,26 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         return f"{self} restarted onto {installed}"
 
 
-class SystemdUserService(HostService):
-    """A service a systemd user unit runs; the unit's own definition starts it again."""
+@dataclass(frozen=True)
+class SystemdUserService(HostService, declared_name=None):
+    """Systemd owns the unit's process; its definition starts that process again."""
 
-    @abstractmethod
-    def unit(self) -> str:
-        """The user unit this instance runs in."""
+    pid: int
+    unit: ClassVar[str]
+
+    @classmethod
+    def running(cls) -> tuple[Self, ...]:
+        pid = int(subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
+            text=True,
+        ))
+        return () if pid == 0 else (cls(pid),)
+
+    def runtime(self) -> Path:
+        executable = Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0")[0]
+        if not executable:
+            raise ServiceNotServingError(f"{self} has no running command")
+        return Path(os.fsdecode(executable))
 
     def restart(self) -> None:
-        subprocess.run(("systemctl", "--user", "restart", self.unit()), check=True)
+        subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)

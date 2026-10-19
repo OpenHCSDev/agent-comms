@@ -7,11 +7,11 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Generic, TypeVar, TYPE_CHECKING
+from typing import BinaryIO, ClassVar, TypeVar, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
 from .field_codec import FieldCodec, MalformedRecord
-from .locked_store import RuntimeFile
+from .locked_store import JsonDocument, RuntimeFile
 from .private_path import FileRevision
 from .store_files import _atomic_write_text, _store_lock
 
@@ -81,6 +81,9 @@ class NoCheckpoint:
     def publish(self, store):
         pass
 
+    def signed_payload(self) -> dict:
+        raise TypeError("An absent disposable checkpoint cannot be encoded")
+
 
 @dataclass(frozen=True)
 class AppendCheckpoint:
@@ -139,7 +142,7 @@ class AppendCheckpoint:
 Checkpoint = TypeVar("Checkpoint", bound=AppendCheckpoint)
 
 
-class AppendProjectionStore(RuntimeFile, Generic[Checkpoint]):
+class AppendProjectionStore(RuntimeFile, JsonDocument[Checkpoint | NoCheckpoint]):
     """Publish a prepared prefix without retaining its source's writer lock.
 
     AppendCheckpoint owns prefix validity. A projection may lag its source;
@@ -154,7 +157,7 @@ class AppendProjectionStore(RuntimeFile, Generic[Checkpoint]):
     def __init__(self, source_path: Path, path: Path):
         self.source_path, self.path = source_path, path
 
-    def _encode(self, record: Checkpoint) -> dict:
+    def _encode(self, record: Checkpoint | NoCheckpoint) -> dict:
         return record.signed_payload()
 
     def _decode(self, payload: object) -> Checkpoint:
@@ -165,16 +168,13 @@ class AppendProjectionStore(RuntimeFile, Generic[Checkpoint]):
             raise MalformedRecord("Damaged disposable projection")
         return FieldCodec.decode(self.record_type, payload)
 
-    def read(self) -> Checkpoint | NoCheckpoint:
-        return self._read_unlocked()
+    def empty(self) -> NoCheckpoint:
+        return NoCheckpoint()
 
-    def _read_unlocked(self) -> Checkpoint | NoCheckpoint:
-        try:
-            return self._decode(FieldCodec.parse(self.path.read_bytes()))
-        except (OSError, MalformedRecord):
-            return NoCheckpoint()  # Unreadable disposable index: rebuilt from its source.
+    def _unreadable(self, error: Exception) -> NoCheckpoint:
+        return self.empty()  # Disposable index: rebuilt from its source.
 
-    def _write_unlocked(self, text: str) -> None:
+    def _replace_unlocked(self, text: str) -> None:
         _atomic_write_text(self.path, text, fsync_parent=self.fsync_parent)
 
     def write(self, record: Checkpoint) -> None:

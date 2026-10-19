@@ -653,7 +653,7 @@ class FakeOpenCode:
         return self.saved
 
     async def status(self):
-        from agent_comms.cli_bridges.shared import TurnEnded
+        from agent_comms.runtime_updates import TurnEnded
 
         return TurnEnded()
 

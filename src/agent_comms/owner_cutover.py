@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import sys
 from abc import ABC, abstractmethod
-from contextlib import nullcontext
 from collections.abc import Sequence
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
@@ -120,6 +122,15 @@ class StoppedOwnerInstallation(OwnerCutover):
     @staticmethod
     def current_pointer() -> Path:
         return Path.home() / ".local/share/agent-comms/current"
+
+    @classmethod
+    def require_current_writer(cls) -> None:
+        """Live writers must run this installation's Python and imported Core."""
+        current = cls.current_pointer().resolve(strict=True)
+        if (Path(sys.prefix).resolve() != current
+                or not Path(__file__).resolve().is_relative_to(current)):
+            raise RelationViolationError(
+                "Live root writes require the installed current Core runtime")
 
     def launch_runtime(self, stopped: StoppedOwnerBatch) -> LaunchRuntime:
         """Only installation selects the runtime after publishing its pointer."""
