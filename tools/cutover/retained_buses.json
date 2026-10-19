@@ -1,0 +1,31 @@
+[
+  {
+    "name": "laptop",
+    "root": "~/.agent-comms",
+    "applied": [
+      "carry_todo_voids",
+      "carry_order_run",
+      "carry_storage_roots",
+      "carry_goal_publications",
+      "carry_goal_wait_owners",
+      "carry_read_ledger",
+      "carry_route_package",
+      "carry_external_pages",
+      "carry_display_counts",
+      "carry_turn_records",
+      "carry_route_index",
+      "carry_wake_index",
+      "carry_todo_releases"
+    ]
+  },
+  {
+    "name": "desktop",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "applied": [
+      "carry_route_package",
+      "carry_external_pages",
+      "carry_display_counts",
+      "carry_todo_voids"
+    ]
+  }
+]

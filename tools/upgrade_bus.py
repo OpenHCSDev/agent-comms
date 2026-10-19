@@ -46,17 +46,29 @@ from pathlib import Path
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cutover.carry import CarryChain, CarryLedger, Step
+from cutover.carry import Carried, CarryChain, CarryLedger, RetainedBus, Step, TodoColumnCarry
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.store_files import _store_lock
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
+HOLD_TRANSCRIPTS = """import sys
+from contextlib import closing
+from agent_comms.coordination_database import CoordinationStore
+with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as writer:
+    writer.execute("BEGIN IMMEDIATE")
+    with open(int(sys.argv[2]), "wb") as held:
+        held.write(b"held")
+    sys.stdin.read()
+    writer.execute("ROLLBACK")
+"""
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 
@@ -91,17 +103,27 @@ def transcripts_held(root: Path) -> Iterator[None]:
     """Bridges publish their CLI's items outside Core's maintenance refusal, so the operator
     holds the transcript store's writer: a bridge's write waits, then fails busy and is
     republished when its watch starts. A carry that needs this store fails the same way in
-    the rehearsal, before the backup."""
+    the rehearsal, before the backup.
+
+    SQLite's write lock is a POSIX record lock: the whole process owns it, and closing any
+    descriptor on the store's files drops it. The backup's tar and ``bus_files`` read those
+    files raw, so a separate holder process owns the hold."""
     path = ExternalTranscript.path_in(root)
     if not path.exists():
         yield
         return
-    with closing(CoordinationStore.writer(path, isolation_level=None)) as writer:
-        writer.execute("BEGIN IMMEDIATE")
-        try:
-            yield
-        finally:
-            writer.execute("ROLLBACK")
+    ready, held = os.pipe()
+    holder = subprocess.Popen([sys.executable, "-c", HOLD_TRANSCRIPTS, path, str(held)],
+                              stdin=subprocess.PIPE, pass_fds=(held,),
+                              env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+    os.close(held)
+    try:
+        with open(ready, "rb") as holding:
+            if not holding.read():
+                raise UpgradeRefused(f"Could not hold the transcript store {path}")
+        yield
+    finally:
+        holder.communicate()
 
 
 def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
@@ -188,26 +210,52 @@ class Revisions:
             subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(path)])
 
 
-def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> dict:
+def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> Carried:
     """Run one step from the revision that declares it, with that revision's src and
     ``stack``'s Python: the target's staged stack, never the installed one."""
+    if step.columns:
+        if "--before-stop" in flags:
+            return TodoColumnCarry.before_stop(root, apply=True)
+        return TodoColumnCarry.carry_step(
+            root, step, CarryChain.at(revisions.repo, step.chain_revision), apply=True)
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
-    output = run(stack.python, "-m", f"cutover.{step.name}", root, *flags, cwd=tree, env=environment)
-    return json.loads(output.strip().splitlines()[-1])
+    # Historical conversions use their own source, but their old CLI cannot decide
+    # the target chain's order or recognize steps added after that source revision.
+    worker = (
+        "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
+        "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
+        "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
+    )
+    operation = "before_stop" if "--before-stop" in flags else "carry"
+    output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
+                 operation, root, cwd=tree, env=environment)
+    return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
 
 
 def before_stop(
     root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
 ) -> list[dict]:
     """What the running installation needs before its own stop command reads the bus."""
-    return [carry(step, root, stack, revisions, "--before-stop", "--apply") for step in pending]
+    with _store_lock(root / "wire"):
+        return [carry(step, root, stack, revisions, "--before-stop", "--apply").report(
+            step.name, True) for step in pending]
 
 
 def carry_all(
     root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
 ) -> list[dict]:
-    return [carry(step, root, stack, revisions, "--apply") for step in pending]
+    results = []
+    for step in pending:
+        with _store_lock(root / "wire"):
+            CarryChain.at(revisions.repo, step.chain_revision).require_next(
+                step.name, CarryLedger(root).applied())
+            result = carry(step, root, stack, revisions, "--apply")
+            CarryLedger(root).record(step.name)
+            result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
+        results.append(result.report(step.name, True))
+        RetainedBus.record(revisions.repo, root)
+    return results
 
 
 def copy_bus(root: Path, copy: Path) -> None:
@@ -247,7 +295,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
             steps = [*before_stop(copy, pending, stack, revisions),
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
-        return {"steps": steps, "files": files, "read": stack.verify(copy)}
+            read = stack.verify(copy)
+        return {"steps": steps, "files": files, "read": read}
 
 
 @dataclass
@@ -276,11 +325,13 @@ class Backup:
         with tarfile.open(self.path / "bus.tar") as archive:
             archive.extractall(staged, filter="tar")
         failed = self.root.with_name(f".{self.root.name}.failed-{time.strftime('%Y%m%dT%H%M%S')}")
-        os.rename(self.root, failed)
-        os.rename(staged / self.root.name, self.root)
-        staged.rmdir()
-        if self.files() != bus_files(self.root):
-            raise UpgradeRefused(f"The restored bus differs from the backup; the failed bus is at {failed}")
+        with transcripts_held(staged / self.root.name):
+            os.rename(self.root, failed)
+            os.rename(staged / self.root.name, self.root)
+            staged.rmdir()
+            if self.files() != bus_files(self.root):
+                raise UpgradeRefused(
+                    f"The restored bus differs from the backup; the failed bus is at {failed}")
         if (self.path / "active-route.json").exists():
             shutil.copy2(self.path / "active-route.json", self.route)
         print(f"Restored the bus; the failed one is kept at {failed}", file=sys.stderr)
@@ -374,11 +425,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.prepare_native()
         steps = carry_all(root, pending, staged, revisions)
         files = carried(root, backup.files(), steps)
-        transcripts.close()
         read = installed.verify(root)
-    except BaseException as error:
         transcripts.close()
+    except BaseException as error:
+        # The failed bus keeps its hold until restore has swapped it out.
         backup.restore()
+        transcripts.close()
+        RetainedBus.restore(checkout, target)
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
