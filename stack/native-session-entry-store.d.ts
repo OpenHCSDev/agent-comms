@@ -29,6 +29,7 @@ export declare class EntryMetadata {
     model: {provider: string; modelId: string} | null;
     thinkingLevel: string | null;
     label: {targetId: string; label: string | null; timestamp: string} | null;
+    get liveLabel(): (NonNullable<EntryMetadata['label']> & {label: string}) | undefined;
 }
 
 export declare abstract class EntryStore {
@@ -66,7 +67,8 @@ export declare abstract class EntryStore {
     trackedInputs(): IterableIterator<SessionEntry>;
     trackedInput(inputId: string): SessionEntry | undefined;
     children(parentId: string | null): IterableIterator<SessionEntry>;
-    label(id: string): EntryMetadata['label'] | undefined;
+    labels(): IterableIterator<NonNullable<EntryMetadata['liveLabel']>>;
+    label(id: string): EntryMetadata['liveLabel'];
 }
 
 export declare class MemoryEntryStore extends EntryStore {

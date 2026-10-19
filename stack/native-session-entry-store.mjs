@@ -10,7 +10,7 @@ function revision(stat) {
     return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
 }
 
-/** One entry's selectors and billed usage, never its message body or summary. */
+/** One entry's selectors, never its message body or summary. */
 export class EntryMetadata {
     constructor(entry, sequence, offset = 0, length = 0) {
         this.id = entry.id;
@@ -30,6 +30,7 @@ export class EntryMetadata {
         this.thinkingLevel = entry.type === 'thinking_level_change' ? entry.thinkingLevel : null;
         this.label = entry.type === 'label' ? { targetId: entry.targetId, label: entry.label ?? null, timestamp: entry.timestamp } : null;
     }
+    get liveLabel() { return this.label?.label ? this.label : undefined; }
     static fromIndex(row) {
         if (!row) return undefined;
         return Object.assign(Object.create(EntryMetadata.prototype), JSON.parse(row.selectors));
@@ -181,9 +182,18 @@ export class EntryStore {
         for (const meta of this.chronologicalMetadata())
             if (meta.parentId === parentId) yield this.get(meta.id);
     }
+    *labels() {
+        const seen = new Set();
+        for (const meta of this.metadataEntries()) {
+            if (!meta.label || seen.has(meta.label.targetId)) continue;
+            seen.add(meta.label.targetId);
+            const label = meta.liveLabel;
+            if (label) yield label;
+        }
+    }
     label(id) {
         for (const meta of this.metadataEntries()) if (meta.label?.targetId === id)
-            return meta.label.label ? meta.label : undefined;
+            return meta.liveLabel;
         return undefined;
     }
 }
@@ -268,6 +278,8 @@ export class DiskEntryStore extends EntryStore {
     #metadata;
     #input;
     #label;
+    #labels;
+    #children;
     #insert;
     #lines;
     #headerEnd;
@@ -285,7 +297,8 @@ export class DiskEntryStore extends EntryStore {
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
                 input_id TEXT, selectors TEXT NOT NULL);
                 CREATE INDEX entry_input ON entries(input_id);
-                CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence);`);
+                CREATE INDEX entry_parent ON entries(parent,sequence);
+                CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence DESC);`);
             // SQLite has initialized and owns an exclusive open inode. Derived pages
             // live on persistent disk, but no pathname survives reader exit or SIGKILL.
             unlinkSync(index);
@@ -293,6 +306,13 @@ export class DiskEntryStore extends EntryStore {
             this.#metadata = this.#db.prepare('SELECT selectors FROM entries WHERE id=?');
             this.#input = this.#db.prepare('SELECT selectors FROM entries WHERE input_id=? ORDER BY sequence DESC LIMIT 1');
             this.#label = this.#db.prepare("SELECT selectors FROM entries WHERE json_extract(selectors,'$.label.targetId')=? ORDER BY sequence DESC LIMIT 1");
+            this.#labels = this.#db.prepare(`SELECT selectors FROM (
+                SELECT selectors, row_number() OVER (
+                    PARTITION BY json_extract(selectors,'$.label.targetId') ORDER BY sequence DESC
+                ) AS position FROM entries INDEXED BY entry_label
+                WHERE json_extract(selectors,'$.label.targetId') IS NOT NULL
+            ) WHERE position=1`);
+            this.#children = this.#db.prepare('SELECT id FROM entries WHERE parent IS ? ORDER BY sequence');
             this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?)');
             this.refresh();
         } catch (error) {
@@ -341,11 +361,28 @@ export class DiskEntryStore extends EntryStore {
                 yield EntryMetadata.fromIndex(row);
         } finally { this.assertCurrent(); }
     }
-    trackedInputMetadata(inputId) { return this.#find(this.#input, inputId); }
-    label(id) {
-        const label = this.#find(this.#label, id)?.label;
-        return label?.label ? label : undefined;
+    *children(parentId) {
+        this.assertCurrent();
+        try {
+            // A child follows its parent in the journal. Reading through that
+            // parent indexes every possible child; roots require the full index.
+            if (parentId === null) while (this.#readPrevious()) {}
+            else this.metadata(parentId);
+            for (const row of this.#children.iterate(parentId)) yield this.get(row.id);
+        } finally { this.assertCurrent(); }
     }
+    trackedInputMetadata(inputId) { return this.#find(this.#input, inputId); }
+    *labels() {
+        this.assertCurrent();
+        try {
+            while (this.#readPrevious()) {}
+            for (const row of this.#labels.iterate()) {
+                const label = EntryMetadata.fromIndex(row).liveLabel;
+                if (label) yield label;
+            }
+        } finally { this.assertCurrent(); }
+    }
+    label(id) { return this.#find(this.#label, id)?.liveLabel; }
     assertCurrent() {
         this.assertUsable();
         if (revision(fstatSync(this.#fd, { bigint: true })) !== this.#revision ||
