@@ -1,5 +1,8 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from dataclasses import replace
+
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import NoThreadCaller
@@ -55,7 +58,6 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 
 @pytest.mark.parametrize('direct', [False, True])
 def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct):  # noqa: F811
-    from dataclasses import replace
     from agent_comms.activity import StoppedDrainDiagnostic
 
     _path, _root_id, comms, initial, _people = _root(tmp_path, direct=direct)
@@ -139,7 +141,6 @@ def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp
 
 
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
-    from dataclasses import replace
     from agent_comms.field_codec import FieldCodec
     from agent_comms.routing import MessageRoute, TurnRouting
     from agent_comms.transcript_sources import AssignedTranscriptSource
@@ -189,11 +190,10 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     assert sent.source == message.reference
     assert sent.routing.reply.targets == (message.target,)
     # The reader's name changes; the original messages and sent source do not.
-    from dataclasses import replace
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
     assert reopened.events == (replace(events[0], reader="renamed"), events[1])
-    assert list(comms.bus.full_history_page().messages)[-1] == message
+    assert list(comms.views.history_page(ANY_CHANNEL).messages)[-1] == message
 
 
 async def test_original_target_handling_revokes_open_sender_read_without_new_message(tmp_path, monkeypatch, *, native_runtime_package):  # noqa: F811
@@ -253,7 +253,8 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     assert before.content_current()
     assert before.read() == sender_page
     assert after.identity.wire_frontier == before.identity.wire_frontier
-    assert after.read() == sender_page
+    assert after.identity.same_content(before.identity)
+    assert after.read() == replace(sender_page, snapshot=after.identity)
     assert comms.bus.log.path.read_bytes() == wire_before
     sender = comms.views.thread_presentations(("sender",)).require("sender")
     recipient = comms.views.thread_presentations(("beta",)).require("beta")
@@ -335,7 +336,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     with pytest.raises(StaleRevision, match="page window"):
         comms.transcripts.bind_page_read(
             "beta", identity,
-            before=identity.wire_frontier.cursor(identity.session_file, 0),
+            before=identity.page_bound.at_offset(0),
         )
     comms.registry.rename("beta", "renamed")
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity

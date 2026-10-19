@@ -33,7 +33,7 @@ from .read_basis import (
     CapturedSelection,
 )
 from .routing import DeliveryScope
-from .store_files import SharedLock, StoreLockOwner, _store_lock
+from .store_files import SharedLock, StoreLockOwner
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -102,7 +102,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         """
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
-            with _store_lock(self.log.path.parent / "wire", mode=SharedLock()):
+            with self.locked(mode=SharedLock()):
                 source = stack.enter_context(self.log.opened_wire_snapshot(
                     prepared_indexes=prepared,
                 ))

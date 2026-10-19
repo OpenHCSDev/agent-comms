@@ -276,13 +276,6 @@ def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
         {"type": "message_start", "message": {"role": "user", "inputId": 42}},
         {"type": "context_committed", "requestGeneration": True},
         {"type": "tool_execution_end", "isError": "false"},
-        {
-            "type": "message_end",
-            "message": {
-                "role": "assistant",
-                "content": [{"type": "toolCall", "id": "c", "name": "read", "arguments": []}],
-            },
-        },
     ],
 )
 def test_malformed_known_authority_fields_fail_at_boundary(record):
@@ -388,3 +381,19 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
         else:
             assert event.message.measured_tokens == UnreportedCount() and account.confirmed == PiCount.from_wire(None)
         assert "usage" not in event.to_wire() and decode(event.to_wire()).usage == event.usage
+
+
+def test_raw_tool_arguments_reach_the_declared_call_refusal():
+    from agent_comms.channel_coding_tools import CodingCall, RefusedCodingCall
+    from agent_comms.native_tool_call import SelectedToolDenied
+
+    event = decode({"type": "message_end", "message": {
+        "role": "assistant", "content": [
+            {"type": "toolCall", "id": "c", "name": "read", "arguments": []}],
+    }})
+    raw, = event.message.tool_calls
+    assert raw.arguments == []
+    call = CodingCall.decode(raw.id, raw.name, raw.arguments)
+    assert isinstance(call, RefusedCodingCall)
+    with pytest.raises(SelectedToolDenied, match="cannot execute"):
+        call.require_tool()
