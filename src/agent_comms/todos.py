@@ -580,11 +580,11 @@ class PushedProgress(CommittedProgress):
         """A push-ref update has its own time, not the commit's author time."""
         branch = source.git("branch", "--show-current").strip()
         for row in source.git("reflog", "show", "--all", "--date=unix",
-                              f"--since={source.git_since}",
-                              "--format=%gD%x09%H%x09%gs").splitlines():
-            selector, sha, subject = row.split("\t", 2)
+                              f"--since={source.git_since}", "--grep-reflog=update by push",
+                              "--format=%gD%x09%H").splitlines():
+            selector, sha = row.split("\t")
             reference, stamp = selector.rsplit("@{", 1)
-            if reference == f"refs/remotes/origin/{branch}" and subject == "update by push":
+            if reference == f"refs/remotes/origin/{branch}":
                 yield cls(sha[:9], at=float(stamp.removesuffix("}")))
 
     @classmethod
