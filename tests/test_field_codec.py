@@ -4,7 +4,7 @@ from typing import Annotated, ClassVar
 
 import pytest
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
     FieldCodec, InlineRecord, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember, PathText, SubclassUnion,
     RecordedTimestamp, TimestampText, TextRepresentation, WireValue,
@@ -13,6 +13,82 @@ from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
     MembershipNoticeRole, Message, MessageRole, NoticeRole,
 )
+
+
+def test_transient_plan_excludes_fields_before_decoder_or_value_access():
+    class Opaque:
+        pass
+
+    @dataclass
+    class Record:
+        value: str
+        local: Opaque = field(default_factory=Opaque, repr=False, compare=False,
+            metadata={"wire_transient": True, "wire_name": ""})
+
+        def __getattribute__(self, name):
+            if name == "local":
+                raise AssertionError("A wire operation read process-local state")
+            return object.__getattribute__(self, name)
+
+    record = Record("kept")
+    assert [key for _, key in FieldCodec.record_fields(Record)] == ["value"]
+    assert FieldCodec.encode(record) == {"value": "kept"}
+    assert FieldCodec.project(record, "status") == {"value": "kept"}
+    assert FieldCodec.decode(Record, {"value": "kept"}).value == "kept"
+    assert set(FieldCodec.value_schema(Record)["properties"]) == {"value"}
+    with pytest.raises(MalformedRecord, match="Unknown fields"):
+        FieldCodec.decode(Record, {"value": "kept", "local": {}})
+
+
+def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims():
+    @dataclass
+    class Record:
+        value: str = field(metadata={"wire_transient": True, "wire_context": True})
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.record_fields(Record)
+
+
+def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
+    from agent_comms.field_codec import DeclaredFieldPlan
+
+    class ProbePlan(DeclaredFieldPlan):
+        metadata_flag = "wire_registry_probe"
+
+        def omitted(self, value):
+            return value == "omit" or super().omitted(value)
+
+    @dataclass
+    class Record:
+        value: str = field(metadata={"wire_registry_probe": True})
+
+    assert isinstance(FieldCodec.field_plan(Record, "value"), ProbePlan)
+    assert FieldCodec.encode(Record("omit")) == {}
+    assert FieldCodec.encode(Record("kept")) == {"value": "kept"}
+    assert FieldCodec.decode(Record, {"value": "kept"}) == Record("kept")
+
+
+def test_field_plan_refuses_an_unclaimed_representation():
+    from agent_comms.field_codec import FieldPlan
+
+    class UnclaimedPath(PathText):
+        field_plan = FieldPlan  # The base has no registered field claim.
+
+    @dataclass
+    class Record:
+        value: Annotated[Path, UnclaimedPath]
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
+
+
+def test_field_plan_refuses_unrelated_claims_instead_of_ordering_flags():
+    @dataclass
+    class Record:
+        value: str | None = field(metadata={"wire_context": True, "wire_absent_none": True})
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
 
 
 def test_wire_absence_is_none_without_running_the_constructor_factory():
@@ -41,7 +117,7 @@ def test_wire_absence_is_none_without_running_the_constructor_factory():
             assert FieldCodec.project(decoded, "status") == {}
         assert plan.read(raw) is None
     assert created == ["created"]
-    with pytest.raises(ValueError):
+    with pytest.raises(MalformedRecord):
         FieldCodec.decode(Record, {"id": 3})
     assert created == ["created"]
 
@@ -305,7 +381,7 @@ def test_family_refusal_keeps_its_own_message_once(annotation, data):
     with pytest.raises(MalformedRecord) as refused:
         FieldCodec.decode(annotation, data)
     assert str(refused.value) == "Unknown Choice name: 'absent'"
-    assert type(refused.value.__cause__) is ValueError
+    assert type(refused.value.__cause__) is UnknownFamilyMember
     assert str(refused.value.__cause__) == str(refused.value)
 
 

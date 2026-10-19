@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 from . import store_files
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
@@ -59,8 +59,6 @@ def registry_digest(path: Path) -> bytes:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except FileNotFoundError:
         return _EMPTY
-    except OSError as error:
-        _reject(f"registry cannot be opened: {error.__class__.__name__}")
     try:
         info = os.fstat(fd)
         if (
@@ -130,7 +128,7 @@ class PrivateRegistryGuard(RegistryPrivacy):
     def __init__(self, registry_path: Path, wire_root_id: str):
         try:
             Id128Text.decode(wire_root_id)
-        except ValueError:
+        except MalformedRecord:
             _reject("root ID is invalid")
         self.registry_path = registry_path
         self.path = registry_path.parent / ".registry-owner-guard"
@@ -148,7 +146,7 @@ class PrivateRegistryGuard(RegistryPrivacy):
         while True:
             try:
                 info = cursor.lstat()
-            except OSError:
+            except FileNotFoundError:
                 _reject("has a missing directory ancestor")
             sticky_root = info.st_uid == 0 and bool(info.st_mode & stat.S_ISVTX)
             if (
@@ -170,8 +168,8 @@ class PrivateRegistryGuard(RegistryPrivacy):
         try:
             flags = os.O_RDWR if writable else os.O_RDONLY
             fd = os.open(self.path, flags | os.O_NOFOLLOW)
-        except OSError as error:
-            _reject(f"file is missing or redirected: {error.__class__.__name__}")
+        except FileNotFoundError as error:
+            _reject(f"file is missing: {error.__class__.__name__}")
         info = os.fstat(fd)
         if (
             not stat.S_ISREG(info.st_mode)

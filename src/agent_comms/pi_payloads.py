@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
@@ -297,7 +297,7 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownContent
 
 
@@ -384,7 +384,7 @@ class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
     def from_text(cls, value: str):
         try:
             member = cls.member_named(value)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnrecognizedTransportStage(value)
         return member()
 
@@ -484,7 +484,7 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownDiagnostic
 
     def refine_model_request_failure(self, failure):
@@ -526,12 +526,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         from .working_memory_disclosure import WithheldDisclosure
 
         return WithheldDisclosure()
-
-    async def tracked_end(self, session) -> None:
-        """Non-assistant messages cannot supply a tracked final response."""
-
-    async def tracked_start(self, session, event) -> None:
-        """Only a user message can be an input the tracked turn was handed."""
 
     @property
     def parts(self) -> tuple[PiContent, ...]:
@@ -603,7 +597,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownMessage
 
     @property
@@ -640,14 +634,6 @@ class AssistantMessage(PiMessage):
     provider_thinking_level: str | None = wire_field("providerThinkingLevel")
     assistant = True
 
-    async def tracked_start(self, session, event) -> None:
-        await session.assistant_started()
-
-    async def tracked_end(self, session) -> None:
-        from .coordinator import Coordination
-        self.stop_reason.tracked(session, self)
-        await Coordination.run_worker(session.draft_publication.retire_message)
-
     @property
     def authoritative_text(self) -> str:
         return "".join(part.final_text for part in self.content)
@@ -657,7 +643,7 @@ class AssistantMessage(PiMessage):
         return self.stop_reason.successful
 
     async def apply_start(self, session, event):
-        session.output.start_message()
+        await session.assistant_started()
         return ()
 
     @property
@@ -679,6 +665,7 @@ class AssistantMessage(PiMessage):
             updates.extend(self.usage.charges(session.usage))
         session.output.final_assistant_stop = reason.successful and session.started_input
         updates.extend([event async for event in reason.apply(session, self)])
+        await session.assistant_ended()
         return tuple(updates)
 
     @property
@@ -714,12 +701,8 @@ class UserMessage(PiMessage):
     def matches_input(self, text, native_id):
         return self.text == text and self.input_id == native_id
 
-    async def tracked_start(self, session, event) -> None:
-        if not self.matches_input(session.command.message, session.command.input_id):
-            await session.later_input_started(event)
-
     async def apply_start(self, session, event):
-        return tuple([update async for update in session.accept_user_message(self, event)])
+        return await session.accept_user_message(self, event)
 
     def observe_start_abort(self, session, event):
         session.observe_input_during_abort(event)
@@ -806,13 +789,13 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownDelta
 
     def events(self):
         return ()
 
-    def emit(self, session):
+    async def emit(self, session):
         return self.events()
 
 
@@ -828,8 +811,8 @@ class TextDelta(PiDelta, declared_name="text_delta"):
     def events(self):
         return (events.Chunk(text=self.delta),)
 
-    def emit(self, session):
-        session.output.append(self.delta)
+    async def emit(self, session):
+        await session.text_received(self.delta)
         return self.events()
 
 
@@ -849,7 +832,7 @@ class ToolDelta:
     progress = True
     response_progress = True
 
-    def emit(self, session):
+    async def emit(self, session):
         return ()
 
 
@@ -870,7 +853,7 @@ class UnknownDelta(PiDelta):
     payload: dict[str, Any]
     opaque = True
 
-    def emit(self, session):
+    async def emit(self, session):
         return ()
 
 

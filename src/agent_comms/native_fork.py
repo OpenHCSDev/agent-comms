@@ -61,6 +61,11 @@ class RuntimeForkRequest(ForkSessionRequest):
     runtime: LaunchRuntime = field(metadata={"wire_exclude": True})
 
 
+    @property
+    def launch_runtime(self) -> LaunchRuntime:
+        return self.runtime
+
+
 class RuntimeForkHelper(ForkSessionHelper):
     @classmethod
     def launch(cls, request, environment):

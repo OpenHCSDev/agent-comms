@@ -16,46 +16,31 @@ from agent_comms.threads import Thread
 
 async def test_installed_native_observation_producers_preserve_dates_without_input(native_backend, monkeypatch):
     import asyncio
-    from agent_comms.comms import Comms
-    from delivery_owner_fixture import canonical_agent
 
     native = native_backend
-    arguments = ["--provider=response-local", "--model=fixture", "--thinking=off", "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"]
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    agent = canonical_agent(
-        Comms(native.root), auto_wake=False, runtime_enabled=False,
-        agent_args=arguments,
-    )
-    child = None
-    try:
-        async with asyncio.timeout(15):
-            created = await agent.new_session(cwd=str(native.project), mcp_servers=[])
-            name = created.session_id
-            agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require(name)), str(native.session), process=attachment_owner.process_identity)
-            thread = agent._comms.registry.require(name)
-            # The original preparation/publication owner initializes a fresh
-            # native journal, then reobserves that same retained saved source.
-            await agent.turns.backend_for(name, thread).prepare(thread)
-            history = native.session.read_bytes()
-            before = time.time()
-            prepared = await agent.turns.backend_for(name, thread).prepare(thread)
-            assert prepared.model.display_name == "response-local/fixture"
-            child = agent.turns.persistent_backends[name].child_state.child.proc
-            assert child.alive()
-            captured = agent._comms.agents.agent_info_of(name)
-            assert before <= captured.timestamp <= time.time()
-            store = agent._comms.agents.runtime_info
-            original = store.path.read_bytes()
-            with patch("time.time", side_effect=AssertionError("Reading cannot capture an observation")):
-                assert RuntimeInfoStore(store.path).read().observations[name] == captured
-                store.rename_thread(name, "renamed-observation")
-                assert RuntimeInfoStore(store.path).read().observations["renamed-observation"].timestamp == captured.timestamp
-            assert json.loads(original)[name]["ts"] == captured.timestamp
-            assert native.session.read_bytes() == history
-            assert native.provider.posts == len(native.saved_inputs()) == 0
-    finally:
-        await agent.shutdown()
-    assert child is not None and not child.alive()
+    async with asyncio.timeout(15), native.open_owner() as (agent, name):
+        # The fixture starts the real owner socket before acquiring this saved
+        # session; preparation and shutdown keep their normal application paths.
+        thread = agent._comms.registry.require(name)
+        history = native.session.read_bytes()
+        before = time.time()
+        prepared = await agent.turns.backend_for(name, thread).prepare(thread)
+        assert prepared.model.display_name == "response-local/fixture"
+        child = agent.turns.persistent_backends[name].child_state.child.proc
+        assert child.alive()
+        captured = agent._comms.agents.agent_info_of(name)
+        assert before <= captured.timestamp <= time.time()
+        store = agent._comms.agents.runtime_info
+        original = store.path.read_bytes()
+        with patch("time.time", side_effect=AssertionError("Reading cannot capture an observation")):
+            assert RuntimeInfoStore(store.path).read().observations[name] == captured
+            store.rename_thread(name, "renamed-observation")
+            assert RuntimeInfoStore(store.path).read().observations["renamed-observation"].timestamp == captured.timestamp
+        assert json.loads(original)[name]["ts"] == captured.timestamp
+        assert native.session.read_bytes() == history
+        assert native.provider.posts == len(native.saved_inputs()) == 0
+    assert not child.alive()
 
 
 @pytest.mark.parametrize("store_type", [RuntimeInfoStore, SharedLedger])

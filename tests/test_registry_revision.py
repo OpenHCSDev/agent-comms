@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.registration import Registration
 from agent_comms.store_files import _atomic_write_text
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -42,7 +43,7 @@ def test_malformed_replacement_never_serves_stale_success(tmp_path):
     registry.require("worker")
     _atomic_write_text(path, "{")
     for _ in range(2):
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises(MalformedRecord):
             registry.require("worker")
     _atomic_write_text(path, saved)
     assert registry.require("worker").name == "worker"

@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from . import agent_events as events
 from . import turn_phase as phases
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .native_session_reopen import NativeSessionIdentity
@@ -108,7 +108,7 @@ class PiCommand(DeclaredFamily):
         kind = data.pop("type", None)
         try:
             cls.member_named(kind)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownCommand(id=FieldCodec.field_plan(cls, "id").read(data), wire=value)
         return FieldCodec.decode(cls, {"kind": kind, **data})
 
@@ -116,7 +116,7 @@ class PiCommand(DeclaredFamily):
     def response_owner(cls, name: str) -> type[PiCommand]:
         try:
             return cls.member_named(name)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownCommand
 
     @classmethod

@@ -123,14 +123,14 @@ def test_idle_reads_use_the_index_and_changed_source_recounts_only_the_cap(tmp_p
     state = comms.views.transcript_reads
     assert completed_counts(state, 'viewer').counts == expected
     with patch.object(ReplyIndex, 'prepare', side_effect=AssertionError('idle reparse')):
-        assert state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER).counts == expected
+        assert state.counts('viewer', registry=comms.registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER).counts == expected
         assert state.preparation is state._idle
     append(source)
     assert completed_counts(state, 'viewer').counts == expected
     fresh = native_reader(state.path)
     try:
         with patch.object(ReplyIndex, 'prepare', side_effect=AssertionError('reopen reparse')):
-            assert fresh.counts('viewer', document=fresh.reads.read(), visibility=DEFAULT_ROSTER).counts == expected
+            assert fresh.counts('viewer', registry=comms.registry.snapshot(), document=fresh.reads.read(), visibility=DEFAULT_ROSTER).counts == expected
             assert fresh.preparation is fresh._idle
     finally:
         fresh.close()
@@ -147,7 +147,7 @@ def test_registry_revision_refreshes_keys_on_register_delete_and_visibility(tmp_
         patch.object(TranscriptReadKeys, 'matches', side_effect=AssertionError('idle comparison')),
         patch.object(TranscriptReadKeys, 'capture', side_effect=AssertionError('idle capture')),
     ):
-        shown = state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER)
+        shown = state.counts('viewer', registry=comms.registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER)
         assert shown.counts == {'worker': ReplyUnread(1)}
     second = tmp_path / 'second.jsonl'
     session(second, 'second')
@@ -159,12 +159,25 @@ def test_registry_revision_refreshes_keys_on_register_delete_and_visibility(tmp_
     }
     comms.registry.archive('new-worker')
     assert completed_counts(state, 'viewer').counts == {'worker': ReplyUnread(1)}
-    shown = state.counts('viewer', document=state.reads.read(),
+    shown = state.counts('viewer', registry=comms.registry.snapshot(), document=state.reads.read(),
                          visibility=RosterVisibility(archived=True))
     assert shown.counts == {'worker': ReplyUnread(1), 'new-worker': ReplyUnread(1)}
     comms.registry.remove('new-worker')
     assert completed_counts(state, 'viewer').counts == {'worker': ReplyUnread(1)}
     assert tuple(state._thread_keys) == ('worker',)
+
+
+def test_read_uses_the_captured_registry_after_a_thread_is_archived(tmp_path):
+    comms, source = setup_thread(tmp_path)
+    captured = comms.registry.snapshot()
+    comms.registry.archive('worker')
+    state = comms.views.transcript_reads
+    shown = state.counts('viewer', registry=captured, document=state.reads.read(), visibility=DEFAULT_ROSTER)
+    assert set(shown.counts) == {'worker'}
+    latest = state.counts('viewer', registry=comms.registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER)
+    assert set(latest.counts) == set()
+    requested = comms.views.thread_presentations(('worker',))
+    assert requested.views['worker'].presentation.summary == 'Archived'
 
 
 def test_read_uses_the_captured_read_document(tmp_path):
@@ -176,7 +189,7 @@ def test_read_uses_the_captured_read_document(tmp_path):
     document = state.reads.read()
     shown = comms.transcripts.transcript_checkpoint('worker')
     comms.views.mark_thread_view_read('worker', worktree=str(tmp_path), through=shown)
-    assert state.counts(viewer, document=document, visibility=DEFAULT_ROSTER).counts == {'worker': ReplyUnread(1)}
+    assert state.counts(viewer, registry=comms.registry.snapshot(), document=document, visibility=DEFAULT_ROSTER).counts == {'worker': ReplyUnread(1)}
     assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(0)}
 
 
@@ -214,7 +227,7 @@ def test_busy_index_keeps_the_completed_source_for_a_later_publication(tmp_path)
     comms, source = setup_thread(tmp_path)
     append(source)
     state = comms.views.transcript_reads
-    state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER)
+    state.counts('viewer', registry=comms.registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER)
     for future in state.watch(frozenset(), lambda _: None):
         future.result(timeout=10)
     preparation = state.preparation
@@ -259,4 +272,4 @@ def test_a_closed_reader_is_not_reused_and_other_views_keep_their_marks(tmp_path
     assert fresh is not state
     assert completed_counts(fresh, 'two').counts == {'worker': ReplyUnread(1)}
     with pytest.raises(RuntimeError, match='closed'):
-        state.counts('one', document=state.reads.read(), visibility=DEFAULT_ROSTER)
+        state.counts('one', registry=comms.registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER)

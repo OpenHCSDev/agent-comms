@@ -372,7 +372,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         try:
             return next((progress for member in members for progress in member.found(source)),
                         NoCommitProgress())
-        except (ValueError, subprocess.TimeoutExpired) as unread:
+        except subprocess.TimeoutExpired as unread:
             return UnreadProgress(str(unread))
 
     @property
@@ -560,8 +560,8 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         """One INSTALL line for every order waiting on install; it strikes nobody."""
 
     @abstractmethod
-    def refusal(self, work: str, commander: str) -> str:
-        """Why the commander does not run the installer's work itself."""
+    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
+        """Why the commander may not run the installer's work; none when it is the installer."""
 
     @abstractmethod
     def overdue(self, now: float) -> tuple[str, ...]:
@@ -575,10 +575,10 @@ class UnplannedInstallDeadline(InstallDeadline):
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
-    def refusal(self, work: str, commander: str) -> str:
+    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
         return (f"{work.capitalize()} is the installer's work, and no install is planned. "
                 "Plan one with agent-comms-commander order install HH:MM UNIT, "
-                f"then order the {work} from that unit.")
+                f"then order the {work} from that unit.",)
 
 
 @dataclass(frozen=True)
@@ -601,10 +601,10 @@ class PlannedInstallDeadline(InstallDeadline):
         staged.write_text(json.dumps({"at": self.at.at, "installer": self.installer}))
         staged.replace(path)
 
-    def refusal(self, work: str, commander: str) -> str:
+    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
         return (f"{work.capitalize()} is {self.installer}'s work, as the planned installer, not "
                 f"{commander}'s. Send it as an order: agent-comms-commander order send --to "
-                f"{self.installer}, naming the {work} to run.")
+                f"{self.installer}, naming the {work} to run.",) * (self.installer != commander)
 
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         if not waiting:

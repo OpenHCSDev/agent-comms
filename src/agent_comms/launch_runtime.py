@@ -30,13 +30,17 @@ class LaunchRuntime:
         return cls(Path(sys.executable))
 
     @property
+    def prefix(self) -> Path:
+        return self.interpreter.parent.parent.resolve()
+
+    @property
     def native_entrypoint(self) -> str:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
             RestartEnvironment.inherit(source).for_interpreter(self.interpreter).without_pythonpath(),
-            virtual_env=str(self.interpreter.parent.parent),
+            virtual_env=str(self.prefix),
         )
         return configuration.apply_runtime(source)
 
@@ -171,10 +175,7 @@ class RestartEnvironment(EnvironmentRecord):
 
     def auth_revision(self) -> tuple[int, int]:
         """Observe this owner's credentials, never an ambient or fork directory."""
-        try:
-            info = (self.native_config / "auth.json").stat()
-        except FileNotFoundError:
-            return 0, 0  # No credentials file yet.
+        info = (self.native_config / "auth.json").stat()
         return info.st_mtime_ns, info.st_size
 
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:

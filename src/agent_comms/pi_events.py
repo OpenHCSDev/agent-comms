@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from . import agent_events as events
 from . import turn_phase as phases
 from .tool_declaration import ToolDeclaration
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
@@ -57,6 +57,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def unowned_event(event):
         """Idle native queries may interleave unsolicited Pi notifications."""
 
+    async def deliver_to(self, channel) -> None:
+        await channel.deliver_event(self)
+
     @classmethod
     def known_kinds(cls):
         return (cls.wire_kind(),)
@@ -82,7 +85,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     def wire_member(cls, wire):
         try:
             return cls.member_named(wire.get("type")).wire_case(wire)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownPiEvent
 
     @classmethod
@@ -232,21 +235,8 @@ class AgentSettled(NativePiEvent):
         if not self.settles(session):
             session.skip = True
             return
-        session.settlement_count += 1
-        if session.persistent_session is not None and session.inputs.pending:
-            session.skip = True
-            return
-        session.prompt_state = session.prompt_state.settle(self)
-        if not session.stats.requested:
-            session.watchdog.tick()
-            session.watchdog.progress()
-            session.watchdog.phase = phases.SettlingStatsPhase()
-            if session.persistent_session is not None:
-                await session.stats.request(session)
-            else:
-                yield events.StreamSettled()
-            if session.persistent_session is None and session.finish_event is None:
-                await session.stats.request(session)
+        for event in await session.agent_settled(self):
+            yield event
 
     @property
     def retry_progress(self) -> bool:
@@ -286,9 +276,7 @@ class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
         updates = self.outcome.apply(self, session)
-        session.output.retry_result = self.outcome.result(
-            self.attempt, session.output.redact
-        )
+        session.record_retry(self.outcome.result(self.attempt, session.output.redact))
         for event in updates:
             yield event
 
@@ -518,10 +506,7 @@ class ExtensionUiRequest(NativePiEvent):
 
     async def act(self, session: TurnSession) -> None:
         # Unknown methods never reach a controller or acquire reply authority.
-        try:
-            self.require_id()
-        except ValueError as error:
-            await session.extension_ui.fail(str(error), session)
+        self.require_id()
         session.skip = True
 
 
@@ -572,10 +557,7 @@ class PermissionUiRequest(DialogUiRequest):
 
         if self.title is None or not 0 < len(self.title) <= 160:
             return None
-        try:
-            body, options = self.permission_body(), self.permission_options()
-        except ValueError:
-            return None
+        body, options = self.permission_body(), self.permission_options()
         return (
             ToolCallUpdate(
                 tool_call_id=f"pi-ui-{turn_id}-{self.id}",
@@ -721,7 +703,7 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
                 yield event
 
         if self.assistant_message_event is not None:
-            for event in self.assistant_message_event.emit(session):
+            for event in await self.assistant_message_event.emit(session):
                 yield event
 
     def convert(self):
@@ -749,6 +731,9 @@ class Response(NativePiEvent, DurablePiEvent):
     error: str | None = field(default=None, metadata={"wire_name": "error"})
     id: str | None = field(default=None, metadata={"wire_name": "id"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
+
+    async def deliver_to(self, channel) -> None:
+        channel.correlate(self)
 
     def responds_to(self, request: PiCommand) -> bool:
         return self.id == request.id and self.command is type(request)
@@ -783,12 +768,10 @@ class Response(NativePiEvent, DurablePiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if self.command.invalidates_identity(self, session):
-            async for event in session.invalidate_identity():
-                yield event
-            return
         owner = session.native.reader.correlate(self)
-        if owner is None:
+        if owner.invalidates_identity(self, session):
+            for event in await session.invalidate_identity():
+                yield event
             return
         for event in owner.on_response(self, session):
             yield event
