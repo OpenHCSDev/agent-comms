@@ -34,9 +34,11 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
+from .standing_rules import ReasonedStandingRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .goal_management import Goals
 
 
@@ -393,8 +395,11 @@ class MergedProgress(FoundProgress):
 
 
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
-    """The fleet's next install: one time for the bus, set by the commander when it plans an
-    upgrade. Merged and delivered orders wait on it; none of them carries it as its own deadline."""
+    """When main is next installed on the bus. Each live install by ``tools/upgrade_bus.py``
+    records the commit it installed and plans the next install one cadence later. No order
+    waits on it; the InstallDue standing rule checks it."""
+
+    cadence: ClassVar[int] = 30 * 60
 
     @staticmethod
     def path_in(root: Path) -> Path:
@@ -405,35 +410,58 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         path = cls.path_in(root)
         if not path.exists():
             return UnplannedInstallDeadline()
-        return PlannedInstallDeadline(RecordedEventTime(**json.loads(path.read_text())))
+        return FieldCodec.decode(PlannedInstallDeadline, FieldCodec.parse(path.read_bytes()))
 
     @abstractmethod
-    def alarm(self, waiting: list[str], now: float) -> list[str]:
-        """One INSTALL line for every order waiting on install; it strikes nobody."""
+    def due(self, now: float) -> str:
+        """Why main is due on the bus now; empty while it is installed or not yet due."""
 
 
 class UnplannedInstallDeadline(InstallDeadline):
-    def alarm(self, waiting: list[str], now: float) -> list[str]:
-        return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
+    def due(self, now: float) -> str:
+        return "no install of main is recorded on this bus"
 
 
 @dataclass(frozen=True)
 class PlannedInstallDeadline(InstallDeadline):
     at: RecordedEventTime
+    installed: str
+    checkout: str
+
+    @classmethod
+    def after(cls, installed: str, checkout: Path, now: float) -> PlannedInstallDeadline:
+        """The schedule a live install leaves: the commit it installed, next due a cadence on."""
+        return cls(RecordedEventTime(now + cls.cadence), installed, str(checkout))
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
         staged = path.with_suffix(".tmp")
-        staged.write_text(json.dumps({"at": self.at.at}))
+        staged.write_text(json.dumps(FieldCodec.encode(self)))
         staged.replace(path)
 
-    def alarm(self, waiting: list[str], now: float) -> list[str]:
-        if not waiting:
-            return []
+    def due(self, now: float) -> str:
+        if now < self.at.at:
+            return ""
+        listed = subprocess.run(
+            ("git", "-C", self.checkout, "ls-remote", "origin", "refs/heads/main"),
+            capture_output=True, text=True, timeout=30).stdout.split()
+        if listed[:1] == [self.installed]:
+            return ""
         due = time.strftime("%H:%M", time.localtime(self.at.at))
-        if now > self.at.at:
-            return [f"INSTALL LATE (due {due}), not the orders; waiting: {', '.join(waiting)}"]
-        return [f"INSTALL due {due}; waiting: {', '.join(waiting)}"]
+        main = listed[0][:9] if listed else "unreadable"
+        return f"main is {main}, the bus runs {self.installed[:9]}; due {due}"
+
+
+@dataclass(frozen=True)
+class InstallDue(ReasonedStandingRule):
+    """Merged work reaches the bus on the install schedule, not at the end of an order."""
+
+    text = ("INSTALL DUE ({why}) -> bus-upgrade rehearses and installs main with "
+            "tools/upgrade_bus.py and posts the result to the commander")
+
+    @classmethod
+    def reason(cls, comms: Comms, commander: str) -> str:
+        return InstallDeadline.read(comms.root).due(time.time())
 
 
 @dataclass(frozen=True)

@@ -55,6 +55,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.todos import PlannedInstallDeadline
 from agent_comms.store_files import _store_lock
 
 REPO = Path(__file__).resolve().parents[1]
@@ -442,6 +443,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
               f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
         raise
+    PlannedInstallDeadline.after(target, checkout, time.time()).plan(root)
     maintenance.clear(held)
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
