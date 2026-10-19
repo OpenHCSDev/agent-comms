@@ -6,9 +6,11 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+import math
 import re
 import types
 from abc import abstractmethod
+from decimal import Decimal
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
@@ -218,11 +220,21 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
 
 @dataclass(frozen=True)
 class PiCost(PiPayload):
-    input: float | None = wire_field("input")
-    output: float | None = wire_field("output")
-    cache_read: float | None = wire_field("cacheRead")
-    cache_write: float | None = wire_field("cacheWrite")
-    total: float | None = wire_field("total")
+    input: float = wire_field("input", 0.0)
+    output: float = wire_field("output", 0.0)
+    cache_read: float = wire_field("cacheRead", 0.0)
+    cache_write: float = wire_field("cacheWrite", 0.0)
+    total: float = wire_field("total", 0.0)
+
+    @classmethod
+    def normalize_field(cls, target: object, key: str, value: object, record: object) -> object:
+        amount = super().normalize_field(target, key, value, record)
+        if type(amount) in (int, float) and not (math.isfinite(amount) and amount >= 0):
+            raise MalformedRecord(f"Pi cost {key} must be a finite nonnegative number.")
+        return amount
+
+    def charged(self) -> Decimal:
+        return Decimal(str(self.total))
 
 
 
@@ -240,13 +252,16 @@ class PiUsage(PiPayload):
     cache_read: NonnegativePiCount = wire_field("cacheRead", UnreportedCount())
     cache_write: NonnegativePiCount = wire_field("cacheWrite", UnreportedCount())
     total_tokens: PiCount = wire_field("totalTokens", UnreportedCount())
-    cost: PiCost | None = wire_field("cost")
+    cost: PiCost = wire_field("cost", PiCost())
     reasoning: NonnegativePiCount = wire_field("reasoning", UnreportedCount())
     cache_write_1h: NonnegativePiCount = wire_field("cacheWrite1h", UnreportedCount())
 
     @property
     def token_total(self) -> PiCount:
         return self.total_tokens
+
+    def charged(self) -> Decimal:
+        return self.cost.charged()
 
     def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
         return (account.charge(self),)

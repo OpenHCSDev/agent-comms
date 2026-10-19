@@ -46,6 +46,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
@@ -572,7 +573,7 @@ class NotificationsRead:
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         """The whole window changed, or one of its participants' activity did."""
-        if revision.notifications_changed_since(self.revision):
+        if revision.changed_since(NotificationsView(), self.revision):
             return True
         current = observed_activity(comms, self.activity) if self.activity else {}
         return any(current.get(name) != seen for name, seen in self.activity.items())
@@ -718,7 +719,7 @@ class SidebarSent(SendState):
     revision: WireRevision = field(compare=False)
 
     def changed_since(self, current: SidebarSent) -> bool:
-        return self.revision.sidebar_changed_since(current.revision) or self != current
+        return self.revision.changed_since(SidebarView(), current.revision) or self != current
 
 
 @dataclass(frozen=True)
@@ -857,7 +858,7 @@ class ViewReading(Observation[ObserveViews]):
         self.revision: ReadState = NoRevision()
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
-        if not self.revision.registrations_changed_since(revision):
+        if not self.revision.changed_since(RegistrationsView(), revision):
             return
         retired = comms.views.retired_views(self.request.threads, self.request.channels)
         self.revision = revision
@@ -1178,7 +1179,7 @@ class ObservationService:
 
     async def observe(self, attempted: set[int]) -> None:
         revision = self.comms.views.revision()
-        if self.revision.stores_changed_since(revision):
+        if self.revision.changed_since(StoresView(), revision):
             self.send(RevisionObserved(revision))
         self.revision = revision
         await self.interest.observe(self, revision, attempted)

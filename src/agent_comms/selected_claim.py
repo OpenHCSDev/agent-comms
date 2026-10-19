@@ -167,7 +167,7 @@ def publish_selected_resource_claim(
     pre-append check. A lost append result is UNKNOWN; this call never retries it.
     The returned claim is an ownership acknowledgement, not file-write authorization.
     """
-    with _selected_claim_boundary(comms, store, claim_scope, owner_name) as (
+    with comms.bus.opened_activity() as activity, _selected_claim_boundary(comms, store, claim_scope, owner_name) as (
         bus,
         bus_lock,
         metadata,
@@ -193,7 +193,7 @@ def publish_selected_resource_claim(
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],
-            claim=claim_scope,
+            claim=claim_scope, activity=activity,
         )
         transition = committed.claim_transition
         assert transition is not None and transition.generation is not None
