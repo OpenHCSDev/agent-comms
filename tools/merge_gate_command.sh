@@ -11,7 +11,7 @@ exec </dev/null
 # The host owns these logs; the runner namespace cannot see them.
 if env -i HOME="${HOME:?host home required}" USER="$(id -un)" PATH=/usr/bin:/bin LANG=C.UTF-8 \
   PYTHONDONTWRITEBYTECODE=1 TMPDIR="$state" \
-  PYTHONPATH="$repo/src:$repo/tools:$repo/src/agent_comms/skills/refactor-audit/scripts" \
+  PYTHONPATH="$repo/src:$repo/tools" \
   "$python" -X faulthandler "$(dirname "$0")/merge_queue.py" \
   --repo "$repo" --scratch "$state" -- "${SSH_ORIGINAL_COMMAND:?missing request}" \
   2>"$log"; then

@@ -40,7 +40,7 @@ jobs:
     if: github.event_name != 'status'
     name: debt-${{ matrix.kind }}
     runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

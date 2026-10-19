@@ -30,6 +30,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
+from cutover.backup import UpgradeRefused
 from install_snapshot import SnapshotHome
 
 from agent_comms.active_route import ActiveRoute
@@ -460,7 +461,8 @@ def rehearse(
         launch.verify()
         outcome = asyncio.run(process.wait())
     if not outcome.successful:
-        raise GateError(f"Rehearsal {outcome.summary}; see {log}")
+        reason = UpgradeRefused.public_message(log.read_text(errors="replace"))
+        raise GateError(f"Rehearsal {outcome.summary}: {reason}")
     try:
         return FieldCodec.decode(InstallerAnswer, FieldCodec.parse(answer.read_text())).rehearsal
     except MalformedRecord as error:
@@ -668,8 +670,11 @@ class MachinesGateResult(GateResult):
 
     @property
     def failures(self) -> tuple[str, ...]:
-        return tuple(f"{name}: {reason}" for name, result in self.machines.items()
-                     for reason in result.failures)
+        return tuple(
+            f"{name}: {reason}"
+            for name, result in self.machines.items()
+            for reason in result.failures
+        )
 
     @property
     def successful(self) -> bool:

@@ -12,12 +12,11 @@ import re
 import shlex
 import subprocess
 import sys
-import traceback
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 
-from debt_ratchet import compare
 from install_gate import (
     REPO,
     ExternalRecord,
@@ -25,15 +24,14 @@ from install_gate import (
     RepositoryAnswer,
     RunSummary,
     Target,
-    affected,
     run,
 )
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import ReviewedHeadVerdict
 
-WORKFLOW = ".github/workflows/debt-ratchet.yml"
+WORKFLOW = Path(".github/workflows/debt-ratchet.yml")
 
 
 @dataclass(frozen=True)
@@ -73,7 +71,7 @@ class QueuedPullRequest(ExternalRecord):
                     f"repos/{host.repository}/commits/{head}/pulls",
                     "--jq",
                     f'[.[] | select(.head.sha == "{head}" and .state == "open")'
-                    ' | {number: .number}]',
+                    " | {number: .number}]",
                 )
             ),
         )
@@ -107,8 +105,8 @@ class Administrator(ExternalRecord):
 
 class RunEvent(DeclaredFamily, affix="RunEvent"):
     @classmethod
-    def target(cls, host: Host, workflow: WorkflowRun) -> Target:
-        raise NotImplementedError
+    @abstractmethod
+    def target(cls, host: Host, workflow: WorkflowRun) -> Target: ...
 
 
 class WorkflowDispatchRunEvent(RunEvent, declared_name="workflow_dispatch"):
@@ -158,7 +156,7 @@ class WorkflowIdentity(ExternalRecord):
                 run("gh", "api", f"repos/{host.repository}/actions/runs/{identifier}")
             ),
         )
-        if result.path.partition("@")[0] != WORKFLOW:
+        if Path(result.path.partition("@")[0]) != WORKFLOW:
             raise GateError("The SSH key is restricted to the merge queue workflow")
         return result
 
@@ -173,32 +171,47 @@ class StatusWorkflowRun(WorkflowIdentity):
     event: Literal["status"]
 
 
+class CheckFailed(subprocess.SubprocessError):
+    def __init__(self, check: QueueCheck, completed: subprocess.CompletedProcess[str]):
+        self.check = check
+        self.completed = completed
+        super().__init__(f"{check.label}: {check.summary(completed)}")
+
+
 @dataclass(frozen=True)
 class Host:
     repo: Path
     repository: str
     scratch: Path
-    private_copies_authorized: bool
 
     def fetch(self, head: str) -> str:
         if re.fullmatch(r"[0-9a-f]{40}", head) is None:
             raise GateError("A check requires a full GitHub commit identifier")
         run("git", "fetch", "origin", head, cwd=self.repo)
+        run("git", "submodule", "update", "--init", "--recursive", cwd=self.repo)
         return run("git", "rev-parse", f"{head}^{{commit}}", cwd=self.repo)
 
-    def command(self, *arguments: str | Path | int) -> None:
-        subprocess.run(
+    def command(self, check: QueueCheck, *arguments: str | Path | int) -> None:
+        completed = subprocess.run(
             tuple(map(str, arguments)),
             cwd=self.repo,
-            check=True,
-            stdout=sys.stderr,
-            stderr=sys.stderr,
+            text=True,
+            capture_output=True,
+            timeout=check.limit,
+            check=False,
         )
+        if completed.returncode:
+            raise CheckFailed(check, completed)
 
 
 @dataclass(frozen=True)
 class QueueCheck(DeclaredFamily, affix="QueueCheck"):
     run_id: int
+    limit: ClassVar[int]
+
+    @property
+    def label(self) -> str:
+        return self.declared_name.title()
 
     @classmethod
     def from_tokens(cls, tokens: list[str]) -> Self:
@@ -209,30 +222,48 @@ class QueueCheck(DeclaredFamily, affix="QueueCheck"):
         workflow = WorkflowRun.require(host, self.run_id)
         self.check(host, workflow.event.target(host, workflow))
 
-    def check(self, host: Host, target: Target) -> None:
-        raise NotImplementedError
+    @abstractmethod
+    def check(self, host: Host, target: Target) -> None: ...
+
+    @abstractmethod
+    def summary(self, completed: subprocess.CompletedProcess[str]) -> str: ...
+
+
+@dataclass(frozen=True)
+class RatchetOutput(ExternalRecord):
+    introduced_lines: dict[str, tuple[int, ...]]
 
 
 class RatchetQueueCheck(QueueCheck, declared_name=None):
     root: ClassVar[str]
+    limit = 600
+
+    @property
+    def label(self) -> str:
+        return "Ratchet"
 
     def check(self, host: Host, target: Target) -> None:
-        result = compare(host.repo, target.base, target.head, self.root)
-        if result.failed:
-            for metric, increase in result.delta.items():
-                if increase > 0:
-                    _, _, path = metric.partition(":")
-                    for line in result.introduced_lines.get(metric, [1]):
-                        annotation(
-                            path.partition("::")[0] or "tools/debt_ratchet.py",
-                            line,
-                            f"{metric}: +{increase}",
-                        )
-            for metric, lines in result.introduced_lines.items():
-                _, _, path = metric.partition(":")
-                for line in lines:
-                    annotation(path, line, f"Introduced {metric}")
-            raise GateError(f"{self.root} debt ratchet rejected {target.head}")
+        host.command(
+            self,
+            sys.executable,
+            "-X",
+            "faulthandler",
+            host.repo / "tools/debt_ratchet.py",
+            "--root",
+            self.root,
+            "--base",
+            target.base,
+            "--head",
+            target.head,
+        )
+
+    def summary(self, completed: subprocess.CompletedProcess[str]) -> str:
+        report = FieldCodec.decode(RatchetOutput, FieldCodec.parse(completed.stdout))
+        sites = []
+        for key, lines in report.introduced_lines.items():
+            measure, _, path = key.partition(":")
+            sites.extend(f"{measure} {path}:{line}" for line in lines)
+        return "; ".join(sites) or completed.stdout.strip()
 
 
 class SrcQueueCheck(RatchetQueueCheck):
@@ -240,54 +271,47 @@ class SrcQueueCheck(RatchetQueueCheck):
 
 
 class ToolsQueueCheck(RatchetQueueCheck):
-    root = "tools"
+    root = Path(__file__).parent.name
 
 
 class InstallQueueCheck(QueueCheck):
+    limit = 3000
+
     def check(self, host: Host, target: Target) -> None:
-        if not host.private_copies_authorized and not target.outside(
-            tuple(affected(host.repo, target.base, target.head))
-        ):
-            raise GateError(
-                "Private-copy allocation is not authorized: worker cap 3 GB, desktop bus 26 GiB"
-            )
-        command = tuple(
-            map(
-                str,
-                (
-                    sys.executable,
-                    "-X",
-                    "faulthandler",
-                    host.repo / "tools/install_gate.py",
-                    "--repo",
-                    host.repo,
-                    "--revision",
-                    target.head,
-                    "--base",
-                    target.base,
-                    "--scratch",
-                    host.scratch,
-                ),
-            )
+        host.command(
+            self,
+            sys.executable,
+            "-X",
+            "faulthandler",
+            host.repo / "tools/install_gate.py",
+            "--repo",
+            host.repo,
+            "--revision",
+            target.head,
+            "--base",
+            target.base,
+            "--scratch",
+            host.scratch,
         )
-        completed = subprocess.run(
-            command,
-            cwd=host.repo,
-            stdout=subprocess.PIPE,
-            stderr=sys.stderr,
-            text=True,
-            check=False,
-        )
-        summary = FieldCodec.decode(RunSummary, FieldCodec.parse(completed.stdout))
-        if completed.returncode or not summary.result.successful:
-            raise GateError("; ".join(summary.result.failures) or summary.result.description)
+
+    def summary(self, completed: subprocess.CompletedProcess[str]) -> str:
+        report = FieldCodec.decode(RunSummary, FieldCodec.parse(completed.stdout))
+        return "; ".join(report.result.failures) or report.result.description
 
 
-class EnqueueQueueCheck(QueueCheck):
+class CommandQueueCheck(QueueCheck, declared_name=None):
+    limit = 120
+
+    def summary(self, completed: subprocess.CompletedProcess[str]) -> str:
+        return completed.stderr.strip() or completed.stdout.strip()
+
+
+class EnqueueQueueCheck(CommandQueueCheck):
     def check(self, host: Host, target: Target) -> None:
         ApprovedHead.require(host, target.head)
         pr = QueuedPullRequest.for_head(host, target.head)
         host.command(
+            self,
             "gh",
             "pr",
             "merge",
@@ -302,7 +326,7 @@ class EnqueueQueueCheck(QueueCheck):
 
 
 @dataclass(frozen=True)
-class DispatchQueueCheck(QueueCheck):
+class DispatchQueueCheck(CommandQueueCheck):
     head: str
     context: str
 
@@ -316,9 +340,14 @@ class DispatchQueueCheck(QueueCheck):
         if self.context != ReviewedHeadVerdict.context:
             return
         head = host.fetch(self.head)
-        ApprovedHead.require(host, head)
-        pr = QueuedPullRequest.for_head(host, head)
+        base = run("git", "merge-base", "origin/main", head, cwd=host.repo)
+        self.check(host, Target(head, base))
+
+    def check(self, host: Host, target: Target) -> None:
+        ApprovedHead.require(host, target.head)
+        pr = QueuedPullRequest.for_head(host, target.head)
         host.command(
+            self,
             "gh",
             "workflow",
             "run",
@@ -336,15 +365,6 @@ class HostArguments(argparse.Namespace):
     request: str
     repo: Path
     scratch: Path
-    private_copies_authorized: bool
-
-
-def annotation(path: str, line: int, reason: str) -> None:
-    def escape(value: str) -> str:
-        return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-
-    attribute = escape(path).replace(",", "%2C").replace(":", "%3A")
-    print(f"::error file={attribute},line={line}::{escape(reason)}", flush=True)
 
 
 def main() -> int:
@@ -352,7 +372,6 @@ def main() -> int:
     parser.add_argument("request", help="SSH_ORIGINAL_COMMAND, supplied as one quoted argument")
     parser.add_argument("--repo", type=Path, default=REPO)
     parser.add_argument("--scratch", type=Path, required=True)
-    parser.add_argument("--private-copies-authorized", action="store_true")
     args = parser.parse_args(namespace=HostArguments())
     tokens = shlex.split(args.request)
     if len(tokens) < 2:
@@ -363,14 +382,9 @@ def main() -> int:
         FieldCodec.parse(run("gh", "repo", "view", "--json", "nameWithOwner", cwd=args.repo)),
     )
     try:
-        check.execute(
-            Host(args.repo, repository.name, args.scratch, args.private_copies_authorized)
-        )
-    except (GateError, subprocess.CalledProcessError, MalformedRecord) as error:
-        frames = traceback.extract_tb(error.__traceback__)
-        location = frames[-1]
-        path = Path(location.filename).relative_to(args.repo)
-        annotation(str(path), location.lineno or 1, str(error))
+        check.execute(Host(args.repo, repository.name, args.scratch))
+    except CheckFailed as error:
+        print(str(error), flush=True)
         return 1
     return 0
 
