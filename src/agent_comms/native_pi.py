@@ -897,7 +897,7 @@ class PrivateEvidenceRead:
         size, digest, revision = self._capture_append()
         self._commit_snapshot(size, digest, revision)
 
-    def start_at_entry(self, session_entry_id: str) -> None:
+    def start_at_entry(self, session_entry_id: str) -> dict:
         """Locate a recorded native identity backwards within the pinned verified cut.
 
         The durable native acknowledgement supplies identity, never a byte offset.
