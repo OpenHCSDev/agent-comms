@@ -8,7 +8,6 @@ worktrees. Nothing here is stored.
 
 from __future__ import annotations
 
-import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,8 +16,8 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
-from .declared_family import DeclaredFamily
 from .cli_protocol import WireModel
+from .declared_family import DeclaredFamily
 from .field_codec import projected
 
 if TYPE_CHECKING:
@@ -94,36 +93,9 @@ class Connection[Node](ForgeAnswer):
     page_info: PageInfo | None = None
 
 
-class ForgeCommit(ForgeAnswer):
-    committed_date: str
-
-
-class ForgeComparison(ForgeAnswer):
-    behind_by: int
-
-
 class ForgePullRequest(ForgeAnswer):
     number: int
     head_ref_name: str
-
-
-class ForgeRef(ForgeAnswer):
-    name: str
-    target: ForgeCommit
-    compare: ForgeComparison | None
-    associated_pull_requests: Connection[ForgePullRequest]
-
-    @property
-    def unmerged_commits(self) -> int:
-        # ref.compare(main).behindBy counts the branch's commits that main lacks.
-        return 0 if self.compare is None else self.compare.behind_by
-
-    @property
-    def own_pull_requests(self) -> tuple[PullRequestBranchLink, ...]:
-        # A ref's associated PRs include those that only use it as their base.
-        return tuple(PullRequestBranchLink(pull.number)
-                     for pull in self.associated_pull_requests.nodes
-                     if pull.head_ref_name == self.name)
 
 
 class ForgeRefName(ForgeAnswer):
@@ -139,12 +111,12 @@ class ForgeIssue(ForgeAnswer):
     linked_branches: Connection[ForgeLinkedBranch]
 
 
-class RefsRepository(ForgeAnswer):
-    refs: Connection[ForgeRef]
+class PullsRepository(ForgeAnswer):
+    pull_requests: Connection[ForgePullRequest]
 
     @property
-    def connection(self) -> Connection[ForgeRef]:
-        return self.refs
+    def connection(self) -> Connection[ForgePullRequest]:
+        return self.pull_requests
 
 
 class IssuesRepository(ForgeAnswer):
@@ -171,17 +143,12 @@ class WorkBranches:
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
 
-    _REFS: ClassVar[str] = """
-query($owner: String!, $name: String!, $main: String!, $after: String) {
+    _PULLS: ClassVar[str] = """
+query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
-    refs(refPrefix: "refs/heads/", first: 100, after: $after) {
+    pullRequests(states: OPEN, first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
-      nodes {
-        name
-        target { ... on Commit { committedDate } }
-        compare(headRef: $main) { behindBy }
-        associatedPullRequests(states: OPEN, first: 50) { nodes { number headRefName } }
-      }
+      nodes { number headRefName }
     }
   }
 }"""
@@ -195,8 +162,14 @@ query($owner: String!, $name: String!, $after: String) {
   }
 }"""
 
-    def _run(self, *command: str) -> str:
-        result = subprocess.run(command, cwd=self.checkout, capture_output=True, timeout=self.timeout)
+    def _run(self, *command: str, input: str | None = None) -> str:
+        result = subprocess.run(
+            command,
+            cwd=self.checkout,
+            capture_output=True,
+            input=input.encode() if input is not None else None,
+            timeout=self.timeout,
+        )
         if result.returncode != 0:
             detail = result.stderr.decode(errors="replace").strip() or f"{command[0]} failed"
             raise WorkBranchError(f"{' '.join(command[:3])} in {self.checkout}: {detail}")
@@ -204,17 +177,20 @@ query($owner: String!, $name: String!, $after: String) {
 
     @property
     def repository(self) -> tuple[str, str]:
-        owner, name = self._run("gh", "repo", "view", "--json", "nameWithOwner", "-q",
-                                ".nameWithOwner").strip().split("/")
+        from .commander.config import Repo
+
+        owner, name = Repo.of(self.checkout).github.split("/")
         return owner, name
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]
         for after in pages:
             arguments = ["gh", "api", "graphql", "-f", f"query={query}"]
-            for key, value in {**variables, **dict(zip(("after",), after))}.items():
+            for key, value in {**variables, **dict(zip(("after",), after, strict=False))}.items():
                 arguments += ["-F", f"{key}={value}"]
-            connection = answer.model_validate_json(self._run(*arguments)).data.repository.connection
+            connection = answer.model_validate_json(
+                self._run(*arguments)
+            ).data.repository.connection
             yield from connection.nodes
             pages.extend(connection.page_info.following)
 
@@ -232,8 +208,13 @@ query($owner: String!, $name: String!, $after: String) {
     @staticmethod
     def _checkout(snapshot: RegistrySnapshot, worktree: str) -> BranchCheckout:
         resolved = str(Path(worktree).resolve())
-        threads = tuple(sorted(thread.name for thread in snapshot.threads.values()
-                               if str(Path(thread.worktree).expanduser().resolve()) == resolved))
+        threads = tuple(
+            sorted(
+                thread.name
+                for thread in snapshot.threads.values()
+                if str(Path(thread.worktree).expanduser().resolve()) == resolved
+            )
+        )
         if not threads:
             return UnregisteredBranchCheckout(worktree)
         return ThreadBranchCheckout(threads, worktree)
@@ -241,21 +222,65 @@ query($owner: String!, $name: String!, $after: String) {
     def read(self, snapshot: RegistrySnapshot) -> tuple[WorkBranch, ...]:
         """Every branch with commits not on main, most recently committed first."""
         owner, name = self.repository
-        issue_links: dict[str, list[BranchLink]] = {}
-        for issue in self._pages(self._ISSUES, ForgeQuery[IssuesRepository], owner=owner, name=name):
-            for linked in issue.linked_branches.nodes:
-                issue_links.setdefault(linked.ref.name, []).append(IssueBranchLink(issue.number))
-        worktrees = self._worktrees()
-        branches = tuple(
-            WorkBranch(
-                name=ref.name,
-                unmerged_commits=ref.unmerged_commits,
-                committed_at=ref.target.committed_date,
-                links=(*ref.own_pull_requests, *issue_links.get(ref.name, ())),
-                checkouts=tuple(self._checkout(snapshot, path) for path in worktrees.get(ref.name, ())),
+        refs = {
+            ref.removeprefix("refs/heads/"): oid
+            for oid, ref in (
+                line.split()
+                for line in self._run("git", "ls-remote", "--heads", "origin").splitlines()
             )
-            for ref in self._pages(self._REFS, ForgeQuery[RefsRepository],
-                                   owner=owner, name=name, main=self.main)
-            if ref.name != self.main and ref.unmerged_commits
+        }
+        main = refs[self.main]
+        # Git already owns commit ancestry. Ask it once for all locally named
+        # commits, rather than asking GitHub to compare every branch separately.
+        objects = self._run(
+            "git",
+            "cat-file",
+            "--batch-check=%(objectname) %(objecttype)",
+            input="\n".join(set(refs.values())) + "\n",
         )
+        missing = [line.split()[0] for line in objects.splitlines() if line.endswith(" missing")]
+        if missing:
+            self._run("git", "fetch", "--no-tags", "origin", *missing)
+        commits = {
+            oid: (int(ahead), date)
+            for oid, date, ahead, _behind in (
+                line.split()
+                for line in self._run(
+                    "git",
+                    "for-each-ref",
+                    f"--format=%(objectname) %(committerdate:iso-strict) %(ahead-behind:{main})",
+                    "refs/heads",
+                    "refs/remotes/origin",
+                ).splitlines()
+            )
+        }
+        links: dict[str, list[BranchLink]] = {}
+        for pull in self._pages(self._PULLS, ForgeQuery[PullsRepository], owner=owner, name=name):
+            links.setdefault(pull.head_ref_name, []).append(PullRequestBranchLink(pull.number))
+        for issue in self._pages(
+            self._ISSUES, ForgeQuery[IssuesRepository], owner=owner, name=name
+        ):
+            for linked in issue.linked_branches.nodes:
+                links.setdefault(linked.ref.name, []).append(IssueBranchLink(issue.number))
+        worktrees = self._worktrees()
+        branches = []
+        for branch, oid in refs.items():
+            if oid not in commits:
+                # A branch published since the last local fetch has no local
+                # ref yet. Compare its captured object, never an older ref.
+                commits[oid] = (
+                    int(self._run("git", "rev-list", "--count", f"{main}..{oid}")),
+                    self._run("git", "show", "-s", "--format=%cI", oid).strip(),
+                )
+            ahead, date = commits[oid]
+            if branch != self.main and ahead:
+                branches.append(
+                    WorkBranch(
+                        branch,
+                        ahead,
+                        date,
+                        tuple(links.get(branch, ())),
+                        tuple(self._checkout(snapshot, path) for path in worktrees.get(branch, ())),
+                    )
+                )
         return tuple(sorted(branches, key=lambda branch: branch.committed_at, reverse=True))
