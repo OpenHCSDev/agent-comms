@@ -55,7 +55,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="requires"):
         comms.goals.update_goal("worker", SetGoalAction(text=" "))
     with pytest.raises(ValueError, match="Unknown"):
-        GoalAction.decode("nonsense")
+        GoalAction.member_named("nonsense")
 
 
 def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path):
@@ -67,7 +67,7 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
 
     def absent(thread: Thread) -> None:
         assert thread.goal == NoGoal()
-        assert thread.wake_context()["current_goal"] is None
+        assert thread.wake_context(comms.goals)["current_goal"] is None
         assert thread.task_scope == TurnTaskScope(project=str(tmp_path))
         with pytest.raises(RelationViolationError, match="No goal is set"):
             thread.goal.require()
@@ -76,7 +76,7 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Ship the release"))
     thread = stored()
     assert thread.goal.require() == thread.goal.require().require_id(goal.id) == goal
-    assert thread.wake_context()["current_goal"] == {
+    assert thread.wake_context(comms.goals)["current_goal"] == {
         "text": "Ship the release", "status": "active", "progress": goal.progress,
     }
     scope = thread.task_scope

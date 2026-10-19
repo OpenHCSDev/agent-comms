@@ -20,8 +20,7 @@ from agent_comms.owner_protocol import (
 def test_every_declared_line_round_trips_through_its_family():
     owner_lines = (
         OwnerAnnouncement(),
-        OwnerReady(ready={"agentComms": {"updates": []}},
-                   config_options=[{"id": "model"}], controller_token="a" * 64),
+        OwnerReady(ready={"agentComms": {"updates": []}}, controller_token="a" * 64),
         OwnerUpdate(update={"sessionUpdate": "agent_message_chunk"}, meta={"agentComms": {}}),
         OwnerPermissionRequest(id="p", tool_call={"toolCallId": "call"},
                                options=[{"optionId": "allow"}]),

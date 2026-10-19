@@ -3,14 +3,16 @@
 Writes one line per call to activity.log. At each turn end (or every 25 calls in a
 long turn) prints one digest of what the unit did, for the commander to judge by reading it.
 """
-import json, os, time, glob, collections
+import os, time, glob, collections
 from pathlib import Path
 
 from . import order
 from .config import CommanderConfig
 from ..field_codec import MalformedRecord
+from ..native_entries import NativeEntry
 from ..native_tool_call import SelectedToolDenied
 from ..native_tools import CodingTool
+from ..pi_payloads import PiMessage, TextContent
 from ..tool_declaration import ToolDeclaration, one_line
 from ..registration import Registration
 
@@ -19,11 +21,10 @@ B = str(CONFIG.root)
 LOG = f'{CONFIG.state}/activity.log'
 
 
-def thread_names():
-    """Session file -> thread name, from the registry's session_file (read-only)."""
-    with open(f'{B}/registry.json') as f:
-        threads = json.load(f)['threads']
-    return {t['session_file']: name for name, t in threads.items() if t.get('session_file')}
+def thread_names(registry: Registration) -> dict[str, str]:
+    """Session file -> thread name, from the registry snapshot's threads."""
+    return {thread.session_file: name for name, thread in registry.snapshot().threads.items()
+            if thread.session_file}
 
 
 def decoded(name, args):
@@ -73,44 +74,49 @@ def emit(turns, thread, final=''):
     print('\n'.join(lines)[:3000], flush=True)
 
 
-def follow(registry, turns, thread, lines):
-    """Each assistant tool call in the session lines is decoded once, logged, digested, journaled
-    and judged for storage."""
-    for line in lines:
+def follow(registry: Registration, turns: dict[str, list[str]], thread: str, path: str,
+           start: int, data: bytes) -> None:
+    """Each complete session line from byte `start` is decoded once by Core's native entry
+    family; each assistant tool call is logged, digested and judged for storage. A line
+    Core refuses is reported."""
+    offset = start
+    for line in data.splitlines(keepends=True):
+        at, offset = offset, offset + len(line)
         try:
-            rec = json.loads(line)
-        except ValueError:
+            entry = NativeEntry.read(line)
+        except (ValueError, MalformedRecord) as refused:
+            print(f'REFUSED {path}@{at}: {one_line(str(refused), 200)}', flush=True)
             continue
-        msg = rec.get('message') or {}
-        if msg.get('role') != 'assistant':
-            continue
-        text = ''
-        for block in msg.get('content') or ():
-            if block.get('type') == 'text':
-                text += block.get('text') or ''
-            if block.get('type') != 'toolCall':
-                continue
-            name, args = block.get('name'), block.get('arguments')
-            tool = decoded(name, args)
-            digest = digest_line(name, args, tool)
-            with open(LOG, 'a') as log:
-                log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
-            turns[thread].append(digest)
-            enforce_storage(registry, thread, tool)
-            if len(turns[thread]) >= 25:
-                emit(turns, thread)
-        if msg.get('stopReason') == 'stop':
-            emit(turns, thread, text)
+        for message in entry.messages:
+            if message.assistant:
+                walk(registry, turns, thread, message)
+
+
+def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
+         message: PiMessage) -> None:
+    for call in message.tool_calls:
+        name, args = call.name, call.arguments
+        tool = decoded(name, args)
+        digest = digest_line(name, args, tool)
+        with open(LOG, 'a') as log:
+            log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
+        turns[thread].append(digest)
+        enforce_storage(registry, thread, tool)
+        if len(turns[thread]) >= 25:
+            emit(turns, thread)
+    if message.stop_reason.successful:
+        text = ''.join(part.text for part in message.parts if isinstance(part, TextContent))
+        emit(turns, thread, text)
 
 
 def main(a):
-    names, offsets = thread_names(), {}
     registry = Registration(Path(B) / 'registry.json')
+    names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)
     last_names = time.time()
     while True:
         if time.time() - last_names > 60:
-            names.update(thread_names()); last_names = time.time()
+            names.update(thread_names(registry)); last_names = time.time()
         for path in set(glob.glob(f'{B}/native-sessions/*/*.jsonl')) | set(names):
             try:
                 st = os.stat(path)
@@ -127,7 +133,7 @@ def main(a):
             cut = data.rfind(b'\n') + 1
             offsets[path] = start + cut
             if path not in names and time.time() - last_names > 10:
-                names.update(thread_names()); last_names = time.time()
+                names.update(thread_names(registry)); last_names = time.time()
             thread = names.get(path, path.split('/')[-2][:8])
-            follow(registry, turns, thread, data[:cut].splitlines())
+            follow(registry, turns, thread, path, start, data[:cut])
         time.sleep(2)

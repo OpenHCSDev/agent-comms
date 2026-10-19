@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.field_codec import FieldCodec
+from agent_comms.store_files import _atomic_write_text
 from agent_comms.todos import Todo, TodoStore
 
 STEPS = Path("tools/cutover")
@@ -46,9 +48,14 @@ class Carried:
     """What one run of a step changed, or would change on a dry run."""
 
     changed: int
-    detail: Mapping[str, int | bool] = field(default_factory=dict)
+    detail: dict[str, int | bool] = field(default_factory=dict)
     rewritten: tuple[str, ...] = ()
     """Files under the bus root this run wrote; every other file stays byte-identical."""
+
+
+    def report(self, name: str, applied: bool) -> dict[str, object]:
+        return {"carry": name, "changed": self.changed, "applied": applied,
+                "rewritten": self.rewritten, **self.detail}
 
 
 @dataclass(frozen=True)
@@ -91,6 +98,52 @@ class CarryLedger:
             os.close(directory)
 
 
+@dataclass(frozen=True)
+class RetainedBus:
+    """One running bus and the exact carry names its ledger records."""
+
+    name: str
+    root: str
+    applied: tuple[str, ...]
+    filename: ClassVar[str] = "retained_buses.json"
+
+    @classmethod
+    def at(cls, repo: Path, revision: str) -> tuple[RetainedBus, ...]:
+        files = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
+        if cls.filename not in files:
+            return ()
+        return FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(
+            git(repo, "show", f"{revision}:{STEPS}/{cls.filename}")))
+
+    def require_applied(self, retired: frozenset[str]) -> None:
+        missing = retired - set(self.applied)
+        if missing:
+            raise ValueError(
+                f"Retained bus {self.name} still needs retired steps: {sorted(missing)}")
+
+    @classmethod
+    def record(cls, checkout: Path, root: Path) -> None:
+        """Publish this bus's committed ledger after an upgrade applies a step."""
+        path = checkout / STEPS / cls.filename
+        if not path.exists():
+            return
+        buses = FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(path.read_bytes()))
+        updated = tuple(replace(bus, applied=CarryLedger(root).applied())
+                        if Path(bus.root).expanduser().resolve() == root.resolve() else bus
+                        for bus in buses)
+        if updated != buses:
+            _atomic_write_text(path, json.dumps(FieldCodec.encode(updated), indent=2) + "\n",
+                               fsync_parent=True)
+
+    @classmethod
+    def restore(cls, checkout: Path, revision: str) -> None:
+        """Restore the committed declaration before rolling its checkout back."""
+        path = checkout / STEPS / cls.filename
+        if path.exists():
+            source = git(checkout, "show", f"{revision}:{STEPS}/{cls.filename}").decode()
+            _atomic_write_text(path, source, fsync_parent=True)
+
+
 class Carry(ABC):
     after: ClassVar[str | None]
 
@@ -101,6 +154,12 @@ class Carry(ABC):
     @classmethod
     def name(cls) -> str:
         return cls.module().stem
+
+    @classmethod
+    def chain(cls) -> CarryChain:
+        """The chain declared by the revision this step's module was checked out from."""
+        checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
+        return CarryChain.at(Path(checkout), "HEAD")
 
     @classmethod
     @abstractmethod
@@ -125,9 +184,8 @@ class Carry(ABC):
         with _store_lock(args.root / "wire"):
             if args.apply and not args.before_stop:
                 applied = CarryLedger(args.root).applied()
-                checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
                 try:
-                    CarryChain.at(Path(checkout), "HEAD").require_next(cls.name(), applied)
+                    cls.chain().require_next(cls.name(), applied)
                 except ValueError as error:
                     raise SystemExit(f"{cls.name()}: {error}") from None
             if args.before_stop:
@@ -137,8 +195,7 @@ class Carry(ABC):
                 if args.apply:
                     CarryLedger(args.root).record(cls.name())
                     result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
-        print(json.dumps({"carry": cls.name(), "changed": result.changed, "applied": args.apply,
-                          "rewritten": result.rewritten, **result.detail}))
+        print(json.dumps(result.report(cls.name(), args.apply)))
 
 
 
@@ -172,7 +229,7 @@ class TodoRows(Carry):
         cls, root: Path, changed: int, detail: Mapping[str, int], *, apply: bool
     ) -> Carried:
         rewritten = tuple(path.name for path in root.glob(f"{TodoStore.path_in(root).name}*"))
-        return Carried(changed, detail, rewritten if changed and apply else ())
+        return Carried(changed, dict(detail), rewritten if changed and apply else ())
 
 
 @dataclass(frozen=True)
@@ -182,10 +239,32 @@ class Step:
     name: str
     after: str | None
     revision: str
+    declaration: str
+    chain_revision: str
+    columns: tuple[str, ...] = ()
+    """The todo column this step adds, as its ``column`` declares it."""
+    after_line: int = 0
+
+    @staticmethod
+    def declared_columns(source: bytes) -> tuple[str, ...]:
+        """The ``column`` a step module's class declares, read without importing it."""
+        return tuple(ast.literal_eval(statement.value)
+                     for node in ast.parse(source).body if isinstance(node, ast.ClassDef)
+                     for statement in node.body if isinstance(statement, ast.Assign)
+                     and [target.id for target in statement.targets
+                          if isinstance(target, ast.Name)] == ["column"])
+
+    @staticmethod
+    def holds_carry(source: bytes) -> bool:
+        """Whether a module declares a Carry subclass, read without importing it."""
+        return any(isinstance(node, ast.ClassDef)
+                   and any(parent_name(base) in carry_parents() for base in node.bases)
+                   for node in ast.parse(source).body)
 
     @classmethod
-    def declared(cls, name: str, source: bytes, revision: str) -> Step | None:
-        """The step a module declares, read without importing it; None if it holds no Carry."""
+    def declared(cls, name: str, source: bytes, revision: str) -> Step:
+        """The step a module declares, read without importing it. A ``carry_*`` module
+        holding no Carry is refused: a conversion outside the chain never runs."""
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef) and any(
                 parent_name(base) in carry_parents() for base in node.bases
@@ -194,9 +273,11 @@ class Step:
                     if (isinstance(statement, ast.Assign)
                             and [target.id for target in statement.targets
                                  if isinstance(target, ast.Name)] == ["after"]):
-                        return cls(name, ast.literal_eval(statement.value), revision)
+                        return cls(name, ast.literal_eval(statement.value), revision,
+                                   node.name, revision, cls.declared_columns(source),
+                                   statement.lineno)
                 raise ValueError(f"{name} declares no step it runs after")
-        return None
+        raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
 
 def parent_name(base: ast.expr) -> str | None:
@@ -224,8 +305,12 @@ class CarryChain:
 
     steps: tuple[Step, ...]
     retired: frozenset[str] = frozenset()
+    retired_columns: frozenset[str] = frozenset()
+    """Todo columns added by retired steps; a bus that never ran them still lacks them."""
     added: Mapping[str, int] = field(default_factory=dict)
     """Each step's first main-line addition, numbered oldest first."""
+    restored: Mapping[str, int] = field(default_factory=dict)
+    """When a kept reference restored a historical predecessor to the chain."""
 
     @classmethod
     def at(cls, repo: Path, revision: str) -> CarryChain:
@@ -235,24 +320,40 @@ class CarryChain:
         for path in tree:
             if path.startswith("carry_") and path.endswith(".py"):
                 name = path.removesuffix(".py")
-                step = Step.declared(name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
-                if step is not None:
-                    known[name] = step
+                known[name] = Step.declared(
+                    name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
         # Only a declared predecessor can keep a historical step reachable.
         # Deleting a finished step and reconnecting its successor retires it.
+        restored_by: dict[str, Step] = {}
         waiting = list(known.values())
         while waiting:
             step = waiting.pop()
             if step.after is not None and step.after not in known:
                 predecessor = cls.deleted(repo, revision, step.after)
-                if predecessor is None:
-                    raise ValueError(f"Carry step {step.after} is in no revision of {revision}")
+                restored_by[predecessor.name] = restored_by.get(step.name, step)
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
+        retired_steps = frozenset(
+            name for name in retired if Step.holds_carry(cls.source(repo, revision, name)[1]))
+        for bus in RetainedBus.at(repo, revision):
+            bus.require_applied(retired_steps)
+        retired_columns = frozenset(
+            column for name in retired
+            for column in Step.declared_columns(cls.source(repo, revision, name)[1]))
         if not known:
-            return cls((), retired)
-        added = cls.added_at(repo, revision)
+            return cls((), retired, retired_columns)
+        positions = {commit: index for index, commit in enumerate(
+            git(repo, "rev-list", "--first-parent", "--reverse", revision).decode().split())}
+        added = cls.added_at(repo, revision, positions)
+        restored = {}
+        for name, anchor in restored_by.items():
+            # A recovered predecessor enters the chain through this kept reference.
+            # Its old source date does not make it an obligation of an older ledger.
+            reference = git(repo, "blame", "--first-parent", "--porcelain",
+                            "-L", f"{anchor.after_line},{anchor.after_line}", revision,
+                            "--", f"{STEPS}/{anchor.name}.py").decode().split()[0]
+            restored[name] = max(added[name], positions[reference])
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -270,17 +371,20 @@ class CarryChain:
                 raise ValueError(f"Carry chain loops at {step.name}")
         if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
-        return cls(tuple(reversed(steps)), retired, added)
+        return cls(tuple(replace(step, chain_revision=revision) for step in reversed(steps)),
+                   retired, retired_columns, added, restored)
 
     @staticmethod
-    def added_at(repo: Path, revision: str) -> dict[str, int]:
+    def added_at(repo: Path, revision: str, positions: Mapping[str, int]) -> dict[str, int]:
         """Number each step file's first main-line addition, oldest first."""
         log = git(repo, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=A",
-                  "--reverse", "--name-only", "--format=%x00", revision, "--", str(STEPS))
+                  "--reverse", "--name-only", "--format=%x00%H", revision, "--", str(STEPS))
         added: dict[str, int] = {}
-        for index, commit in enumerate(log.decode().split("\0")):
-            for path in commit.split():
-                added.setdefault(Path(path).stem, index)
+        for commit in log.decode().split("\0"):
+            fields = commit.split()
+            if fields:
+                for path in fields[1:]:
+                    added.setdefault(Path(path).stem, positions[fields[0]])
         return added
 
     @staticmethod
@@ -296,14 +400,26 @@ class CarryChain:
                          and path.endswith(".py")) - set(kept)
 
     @staticmethod
-    def deleted(repo: Path, revision: str, name: str) -> Step | None:
+    def deleted(repo: Path, revision: str, name: str) -> Step:
         """A step no longer in the tree, at the main-line revision that last wrote it: the
-        source it was written against, not the later source beside its deletion. None if
-        that revision held a plain script rather than a step."""
+        source it was written against, not the later source beside its deletion."""
+        written, source = CarryChain.source(repo, revision, name)
+        return Step.declared(name, source, written)
+
+    @staticmethod
+    def source(repo: Path, revision: str, name: str) -> tuple[str, bytes]:
+        """The main-line revision that last wrote a step file, and that file."""
         path = f"{STEPS}/{name}.py"
         written = git(repo, "log", "-m", "--first-parent", "--no-renames", "-1", "--format=%H",
                       "--diff-filter=AM", revision, "--", path).decode().strip()
-        return Step.declared(name, git(repo, "show", f"{written}:{path}"), written)
+        return written, git(repo, "show", f"{written}:{path}")
+
+    def lacking(self, name: str) -> frozenset[str]:
+        """Todo columns a bus may still lack when step ``name`` runs: its own, those the
+        kept steps after it add, and those retired steps added."""
+        names = [step.name for step in self.steps]
+        return frozenset(column for step in self.steps[names.index(name):]
+                         for column in step.columns) | self.retired_columns
 
     def require_next(self, name: str, applied: tuple[str, ...]) -> None:
         """A step applies to a bus that already records it or whose next pending step it is.
@@ -327,7 +443,7 @@ class CarryChain:
         done = [name in applied for name in names]
         for index, name in enumerate(names):
             if not done[index] and any(
-                later in applied and self.added[later] >= self.added[name]
+                later in applied and self.added[later] >= self.restored.get(name, self.added[name])
                 for later in names[index + 1:]
             ):
                 raise ValueError("Bus ledger skips a step that a later recorded step runs after")
@@ -341,13 +457,20 @@ class TodoColumnCarry(Carry):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
+        chain = cls.chain()
+        step = next(step for step in chain.steps if step.name == cls.name())
+        return cls.carry_step(root, step, chain, apply=apply)
+
+    @classmethod
+    def carry_step(cls, root: Path, step: Step, chain: CarryChain, *, apply: bool) -> Carried:
+        """One column owner applies current or recovered immutable declarations."""
         path = TodoStore.path_in(root)
         if not path.exists():
             return Carried(0)
         with closing(CoordinationStore.writer(path)) as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                changed = cls._carry(db, apply=apply)
+                changed = cls._carry(db, step, chain, apply=apply)
             except BaseException:
                 db.rollback()
                 raise
@@ -355,27 +478,32 @@ class TodoColumnCarry(Carry):
         return Carried(changed, {}, rewritten if changed and apply else ())
 
     @classmethod
-    def _carry(cls, db: sqlite3.Connection, *, apply: bool) -> int:
+    def _carry(cls, db: sqlite3.Connection, step: Step, chain: CarryChain, *, apply: bool) -> int:
         table, fields = Todo.declared_name, Todo._fields()
-        (added,) = (item for item in fields if item.name == cls.column)
         actual = tuple(row[1] for row in db.execute(f'PRAGMA table_info("{table}")'))
         expected = tuple(item.wire_name for item in fields)
         if actual == expected:
-            for _row in Todo.stream(db):
-                pass
             db.rollback()
             return 0
-        if actual != tuple(item.wire_name for item in fields if item is not added):
+        # The chain says which declared columns this bus may still lack here; the
+        # rebuild fills each one empty, as the step that declares it does.
+        added = tuple(item for item in fields if item.wire_name not in actual)
+        (column,) = step.columns
+        lacking = chain.lacking(step.name)
+        if (actual != tuple(item.wire_name for item in fields if item not in added)
+                or column not in {item.name for item in added}
+                or not {item.name for item in added} <= lacking):
             raise ValueError(f"Unexpected todo columns: {actual!r}")
-        selected = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
+        selected = ", ".join(f'? AS "{item.wire_name}"' if item in added else f'"{item.wire_name}"'
                              for item in fields)
-        empty = (added.encode(()),)
-        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
-        count = sum(1 for _row in Todo.iterate(rows))
+        empty = tuple(item.encode(()) for item in added)
+        # Rows decode only once every step before the last has carried them; this one
+        # adds columns, so it counts rows without reading them as today's Todo.
+        count = int(db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0])
         if not apply:
             db.rollback()
             return count
-        saved = f"{table}_before_{cls.column}"
+        saved = f"{table}_before_{column}"
         indexes = tuple(db.execute(
             "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
             (table,)))

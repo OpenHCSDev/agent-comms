@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -8,7 +7,7 @@ import pytest
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
     FieldCodec, InlineRecord, MalformedRecord, NullMember, PathText, SubclassUnion,
-    TimestampText, TextRepresentation, WireValue,
+    RecordedTimestamp, TimestampText, TextRepresentation, WireValue,
 )
 from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
@@ -123,7 +122,7 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
     assert calls == [first, second]
     assert First.members_with(First) == (first, Text, Empty)
     assert Second.members_with(Second) == (second,)
-    assert First.decode('number') is first
+    assert First.member_named('number') is first
     assert FieldCodec.encode_document(Empty(), Empty) is None
     assert FieldCodec.decode_document(Empty, None) == Empty()
     assert FieldCodec.decode_document(dict[str, Empty], {'empty': None}) == {'empty': Empty()}
@@ -156,7 +155,6 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
 
 
 def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
-    from datetime import UTC, datetime
     from pathlib import Path
     from agent_comms.typed_table import Column, TextStorage, TypedTable
     import sqlite3
@@ -175,12 +173,12 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     @dataclass(frozen=True)
     class Scalars:
         path: Annotated[Path | None, PathText]
-        timestamp: Annotated[datetime, TimestampText]
+        timestamp: Annotated[RecordedTimestamp, TimestampText]
         count: Annotated[int, HexInteger]
 
-    value = Scalars(Path("/saved/history"), datetime.now(UTC), 31)
+    value = Scalars(Path("/saved/history"), RecordedTimestamp("2026-10-01T00:00:00.000Z"), 31)
     encoded = FieldCodec.encode(value)
-    assert encoded == {"path": "/saved/history", "timestamp": value.timestamp.isoformat(), "count": "0x1f"}
+    assert encoded == {"path": "/saved/history", "timestamp": "2026-10-01T00:00:00.000Z", "count": "0x1f"}
     assert FieldCodec.decode(Scalars, encoded) == value
     assert FieldCodec.project(value, "status") == encoded
     assert FieldCodec.value_schema(Annotated[Path | None, PathText]) == {
@@ -191,7 +189,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(Scalars, {**encoded, key: 7})
     with pytest.raises(TypeError):
-        FieldCodec.encode(value.timestamp)
+        FieldCodec.encode(value.path)
 
     @dataclass(frozen=True)
     class ScalarRow(TypedTable, declared_name="field_representation_rows"):
@@ -609,7 +607,7 @@ def test_message_role_keeps_the_exact_external_envelope(role, external):
 @dataclass(frozen=True)
 class _SavedRow:
     path: Annotated[Path, PathText]
-    at: Annotated[datetime, TimestampText]
+    at: Annotated[RecordedTimestamp, TimestampText]
     count: int
 
 

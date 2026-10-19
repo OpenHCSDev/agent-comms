@@ -511,7 +511,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         Schema owners load their row modules before querying capabilities. A
         checkpoint read must not import unrelated application modules while
         holding its bus lock. External table-name decoding still uses the
-        registry's complete lazy discovery through DeclaredFamily.decode.
+        registry's complete lazy discovery through DeclaredFamily.member_named.
         """
         return tuple(dict.values(cls.__registry__))
 
@@ -781,6 +781,7 @@ class TypedStore(RootFile):
 
     rows: ClassVar[tuple[type[TypedTable], ...]]
     synchronous: ClassVar[str] = "FULL"
+    schema_error: ClassVar[type[Exception]] = RelationViolationError
     root: Path
 
     @property
@@ -875,7 +876,7 @@ class TypedStore(RootFile):
 
     def require_schema(self, actual: list[SQLiteSchemaObject]) -> None:
         if SQLiteSchemaObject.differences(actual, self.declared_schema()):
-            raise RelationViolationError(f"{self.filename} differs from its declaration")
+            raise self.schema_error(f"{self.filename} differs from its declaration")
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:

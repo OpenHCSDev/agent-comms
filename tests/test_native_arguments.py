@@ -76,7 +76,7 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     assert selected.model == "response-local/fixture" and selected.thinking is OffThinkingLevel
     assert selected.rpc() == (
         "--offline",
-        "-e",
+        "--extension",
         "extension.mjs",
         "--provider",
         "response-local",
@@ -120,6 +120,24 @@ def test_option_declaration_extends_consumption_rendering_and_mode_validation():
             NativeArguments.parse(mode).rpc()
 
 
+def test_managed_and_ephemeral_launches_own_distinct_extension_arguments(
+    tmp_path, native_runtime_package, selected_model
+):
+    import shlex
+
+    from agent_comms.native_pi import NativePiRpcLaunch
+
+    options = dict(package=native_runtime_package, worktree=tmp_path, root=tmp_path)
+    ephemeral = NativePiRpcLaunch.catalog("pi", (), **options)
+    managed = NativePiRpcLaunch.managed("pi", (), **options)
+    assert "--no-extensions" in ephemeral.argv and "-e" not in ephemeral.argv
+    assert "-e" in managed.argv and "--no-extensions" not in managed.argv
+    assert managed.retained_managed("pi", (), worktree=tmp_path, root=tmp_path,
+        environment=None, session_file=None) == managed
+    print("P576_EPHEMERAL=" + shlex.join(ephemeral.argv))
+    print("P576_MANAGED=" + shlex.join(managed.argv))
+
+
 def test_backend_cannot_reintroduce_independent_launch_option_readers():
     package = Path(__file__).parents[1] / "src/agent_comms"
     removed = {
@@ -157,6 +175,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     owner = canonical_agent(
         Comms(native.root),
         auto_wake=False,
+        runtime_enabled=True,
         agent_args=[
             "--provider=response-local",
             "--model=fixture",
@@ -208,7 +227,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             assert native.session.read_bytes().startswith(history)
             assert all(row in read_proof_rows(native.session) for row in proof)
             assert len(native.saved_inputs()) == 2 and native.provider.posts == 2
-            assert not owner._comms.registry.require(sid).active_turn.executing
+            assert not owner._comms.registry.require(sid).executing
     finally:
         await owner.shutdown()
     assert not owner.turns.persistent_backends

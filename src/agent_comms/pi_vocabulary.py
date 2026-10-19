@@ -22,6 +22,10 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     tracked_failure = "Provider returned an unsuccessful terminal"
 
     @classmethod
+    def error_notice(cls, message) -> str:
+        return ""
+
+    @classmethod
     def unpublished_attempt(cls):
         from .attempt_states import UnknownOutcomeAttempt
         from .coordination_tables.attempts import ReplayFact
@@ -34,7 +38,7 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
 
         value = FieldCodec.decode(str | None, value)
         try:
-            return cls.decode(value)
+            return cls.member_named(value)
         except ValueError:
             return UnreportedStopReason
 
@@ -98,6 +102,10 @@ class FailedPiStop(FinishedPiStop):
     """An explicit failed terminal records the same failure on every live path."""
 
     failed = True
+
+    @classmethod
+    def error_notice(cls, message) -> str:
+        return (message.error_message or "").strip()
 
     @classmethod
     async def apply(cls, session, message):
@@ -164,7 +172,7 @@ class CompactionReason(DeclaredFamily, affix="CompactionReason"):
 
         value = FieldCodec.decode(str | None, value)
         try:
-            return cls.decode(value)
+            return cls.member_named(value)
         except ValueError:
             return UnknownCompactionReason
 
@@ -248,7 +256,7 @@ class ThinkingLevelValue(FieldRepresentation):
     def decode(cls, value: object) -> type[ThinkingChoice]:
         if value is None:
             return NoThinkingOverride
-        return ThinkingLevel.decode(FieldCodec.decode(str, value))
+        return ThinkingLevel.member_named(FieldCodec.decode(str, value))
 
     @classmethod
     def encode(cls, value: object) -> str | None:

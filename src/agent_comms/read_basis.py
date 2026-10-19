@@ -7,6 +7,8 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+from .bus_activity_index import ActivityClocks
+
 import asyncio
 import json
 from abc import ABC, abstractmethod
@@ -17,7 +19,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, ClassVar, TextIO
 
 from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
@@ -37,7 +39,7 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay | None: ...
+    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> SelectedDisplay: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document, source) -> ReadCursor: ...
@@ -57,8 +59,8 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> None:
-        return None
+    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> NoDisplaySelection:
+        return NoDisplaySelection()
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return ReadCursor()
@@ -70,7 +72,7 @@ class AnonymousViewer(DisplayViewer):
         raise ValueError("Viewer metrics require a named viewer")
 
     def read_page(self, scope, bounds, basis, source) -> MessagePage:
-        return replace(bounds.conversation(scope).read_opened(source), display_scope=scope)
+        return bounds.conversation(scope).read_opened(source)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,11 +82,11 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay:
+    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalSelection:
         historical.validate()
-        return HistoricalDisplay(historical, presentation.bus.reads.capture_indexed(
+        return HistoricalSelection(HistoricalDisplay(historical, presentation.bus.reads.capture_indexed(
             self.resolve(snapshot).name, page.messages, snapshot, source, index,
-            conversation_snapshot=historical.provenance, document=document))
+            conversation_snapshot=historical.provenance, document=document)))
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return document.cursor(self.name, snapshot, source)
@@ -99,64 +101,26 @@ class NamedViewer(DisplayViewer):
         result = bounds.conversation(scope).displayed(
             basis.reads, basis.document, self.name, basis.registry, basis.registry, source,
         )
-        return replace(result.page, display_scope=replace(scope, displayed=result.displayed))
-
-
-class DisplaySelection(ABC):
-    """The conversation selected by an original page or store observation."""
-
-    __slots__ = ()
-
-    @property
-    @abstractmethod
-    def has_evidence(self) -> bool: ...
-
-    def select(self, page, sequences):
-        selected = frozenset(sequences)
-        return self.select_evidence(replace(page,
-            messages=tuple(message for message in page.messages if message.seq in selected),
-            source_pages=tuple(source.select(selected) for source in page.source_pages)), selected)
-
-    @abstractmethod
-    def select_evidence(self, page, selected): ...
+        return replace(result.page, selection=ChannelSelection(
+            replace(scope, displayed=result.displayed)))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SelectedDisplay(DisplaySelection):
+class DisplayIdentity:
+    """The scope observation compared between pages, independent of paint evidence."""
+
     viewer: ThreadIncarnation
     history_revision: FileRevision | None
 
-    def page_selection(self) -> SelectedDisplay:
-        return (HistoricalSelection(viewer=self.viewer, history_revision=self.history_revision)
-                if self.history_revision is not None else self)
-
-    @property
-    def has_evidence(self) -> bool:
-        return True
-
 
 @dataclass(frozen=True, slots=True)
-class NoDisplaySelection(DisplaySelection):
-    def select_evidence(self, page, selected):
-        return page
-
-    @property
-    def has_evidence(self) -> bool:
-        return False
-
-
-@dataclass(frozen=True, slots=True)
-class ChannelSelection(SelectedDisplay):
+class ChannelDisplayIdentity(DisplayIdentity):
     bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
 
-    def select_evidence(self, page, selected):
-        return replace(page, display_scope=replace(self.scope,
-            displayed=self.scope.require_displayed().select(selected)))
-
 
 @dataclass(frozen=True, slots=True)
-class DMSelection(SelectedDisplay):
+class DMDisplayIdentity(DisplayIdentity):
     root_identity: tuple[int, int]
     bus_identity: RecordedBusIdentity
     worktree: str
@@ -164,28 +128,107 @@ class DMSelection(SelectedDisplay):
     peer: ThreadIncarnation
     scope: DMDisplayScope
 
-    def select_evidence(self, page, selected):
-        basis = page.display_basis
-        return replace(page, display_basis=replace(basis, displayed=basis.displayed.select(selected)))
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SelectedDisplay(ABC):
+    """The builder's declared read proof; never recovered from a page's fields."""
+
+    history_revision: FileRevision | None = None
+    has_evidence: ClassVar[bool] = True
+
+    @property
+    @abstractmethod
+    def identity(self) -> DisplayIdentity | NoDisplaySelection: ...
+
+    @abstractmethod
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None: ...
+
+    def select(self, page, sequences):
+        selected = frozenset(sequences)
+        return replace(page,
+            messages=tuple(message for message in page.messages if message.seq in selected),
+            source_pages=tuple(source.select(selected) for source in page.source_pages),
+            selection=self.select_evidence(selected))
+
+    @abstractmethod
+    def select_evidence(self, selected) -> SelectedDisplay: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NoDisplaySelection(SelectedDisplay):
+    has_evidence: ClassVar[bool] = False
+
+    @property
+    def identity(self):
+        return self
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        raise DMPaintedBoundChanged()
+
+    def select_evidence(self, selected):
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelSelection(SelectedDisplay):
+    scope: ChannelDisplayScope
+
+    @property
+    def identity(self):
+        return self.scope.identity(self.history_revision)
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        from .presentation import ReadThrough
+
+        views.presentation.mark_channel_read(
+            self.scope.channel, viewer=views.messaging.user_identity(worktree).name,
+            mark=ReadThrough(page.newest_seq, self.scope),
+        )
+
+    def select_evidence(self, selected):
+        return replace(self, scope=replace(self.scope,
+            displayed=self.scope.require_displayed().select(selected)))
+
+
+@dataclass(frozen=True, slots=True)
+class DMSelection(SelectedDisplay):
+    basis: DMDisplayBasis
+
+    @property
+    def identity(self):
+        return self.basis.identity(self.history_revision)
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        self.basis.acknowledge(
+            views.bus, views.registry, views.root, self.basis.requested_peer,
+            worktree=worktree, through=page.newest_seq,
+        )
+
+    def select_evidence(self, selected):
+        return replace(self, basis=replace(self.basis,
+            displayed=self.basis.displayed.select(selected)))
 
 
 @dataclass(frozen=True, slots=True)
 class HistoricalSelection(SelectedDisplay):
-    """The original viewer and attached-source revision select an archive page."""
+    displayed: HistoricalDisplay
 
-    def select_evidence(self, page, selected):
-        return replace(page, historical_display=page.historical_display.select(selected))
+    @property
+    def identity(self):
+        return DisplayIdentity(viewer=self.displayed.displayed.viewer_identity,
+                               history_revision=self.history_revision)
+
+    def acknowledge(self, views, page, *, worktree) -> None:
+        self.displayed.acknowledge(views.bus.history, views.registry)
+
+    def select_evidence(self, selected):
+        return replace(self, displayed=self.displayed.select(selected))
 
 
 @dataclass(frozen=True, slots=True)
 class HistoricalDisplay:
     source: HistorySource
     displayed: DisplayBasis
-
-    def selection(self, history_revision: FileRevision | None) -> HistoricalSelection:
-        return HistoricalSelection(
-            viewer=self.displayed.viewer_identity, history_revision=history_revision,
-        )
 
     def select(self, sequences) -> HistoricalDisplay:
         return HistoricalDisplay(self.source, self.displayed.select(sequences))
@@ -250,6 +293,7 @@ if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
     from .channels import TagChannel
     from .historical_views import HistoryArchive, HistorySource
+    from .history_views import HistoryViews
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .channels import Channels
@@ -410,7 +454,7 @@ class DMConversation(Conversation):
         )))
 
     def scope(self, snapshot: RegistryProvenance) -> DMDisplayScope:
-        first, second = self.participants
+        first, second = self.participants[0], self.participants[-1]
         return DMDisplayScope.capture(first.name, second.name, snapshot)
 
     def recorded_keys(self, snapshot: RegistryProvenance) -> Iterable[Conversation]:
@@ -421,7 +465,7 @@ class DMConversation(Conversation):
         return any(snapshot.names_for(p.name).intersection(targets) for p in self.participants)
 
     def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]:
-        first, second = self.participants
+        first, second = self.participants[0], self.participants[-1]
         a, b = snapshot.names_for(first.name), snapshot.names_for(second.name)
         return tuple((target, sender) for senders, targets in ((a, b), (b, a))
                      for sender in senders for target in targets)
@@ -609,16 +653,16 @@ class DMDisplayBasis:
             )
             with registry.store.locked(mode=SharedLock()):
                 basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path))
-            return replace(page, display_basis=basis)
+            return replace(page, selection=DMSelection(basis))
 
-    def selection(self, history_revision: FileRevision | None) -> SelectedDisplay:
-        return DMSelection(
+    def identity(self, history_revision: FileRevision | None) -> DMDisplayIdentity:
+        return DMDisplayIdentity(
             root_identity=self.root_identity, bus_identity=self.bus_identity,
             worktree=self.worktree, requested_peer=self.requested_peer,
             viewer=self.viewer_identity, peer=self.peer_identity,
             scope=DMDisplayScope(self.viewer_names, self.peer_names),
             history_revision=history_revision,
-        ).page_selection()
+        )
 
     @property
     def viewer(self) -> str:
@@ -843,13 +887,12 @@ class ChannelDisplayScope(MessageDisplayScope):
                   if (row := index.latest_target(target, source.boundary)) is not None),
             source.bus_identity)
 
-    def selection(self, history_revision: FileRevision | None) -> DisplaySelection:
-        if self.displayed is None:
-            return NoDisplaySelection()
-        return ChannelSelection(
-            viewer=self.displayed.viewer_identity, bus_identity=self.displayed.bus_identity,
+    def identity(self, history_revision: FileRevision | None) -> ChannelDisplayIdentity:
+        displayed = self.require_displayed()
+        return ChannelDisplayIdentity(
+            viewer=displayed.viewer_identity, bus_identity=displayed.bus_identity,
             scope=self, history_revision=history_revision,
-        ).page_selection()
+        )
 
     def require_displayed(self) -> DisplayBasis:
         if self.displayed is None:
@@ -885,8 +928,14 @@ class AllChannelDisplayScope(ChannelDisplayScope):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
-                                     snapshot, source, index, document=document)
+        prefixes: dict[Conversation, int] = {}
+        for row in index.latest_by_conversation(self, source.boundary):
+            conversation = self.read_key(row.sender, row.target, snapshot)
+            prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            tuple(DisplayedConversation(conversation, (), sequence)
+                  for conversation, sequence in prefixes.items()),
+            source.bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
@@ -894,6 +943,14 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
     """Member activity may match a sender, DM peer or mention on any target."""
 
     participant_names: frozenset[str] = frozenset()
+
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
+        # Mentions and authorship may select only part of a channel conversation.
+        # Unlike the whole-bus view, they cannot grant its unseen prefix.
+        rows = self.offsets(index, lower=None, upper=None, descending=False,
+                            before_offset=source.boundary)
+        return reads.capture_indexed(viewer, rows, snapshot, source, index, document=document)
 
     @classmethod
     def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
@@ -925,6 +982,7 @@ class CapturedSelection:
 
     registry: RegistrySnapshot
     catalog: CatalogDocument
+    activity: ActivityClocks
     viewer: DisplayViewer
     reads: ReadLedger
     document: ReadDocument
@@ -936,15 +994,16 @@ class CapturedSelection:
     def capture(
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
         reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
+        activity: ActivityClocks,
     ) -> CapturedSelection:
         viewer = viewer.resolve(snapshot)
-        return cls(snapshot, catalog, viewer, reads, document)
+        return cls(snapshot, catalog, activity, viewer, reads, document)
 
     @classmethod
     @contextmanager
     def reading(
         cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: DisplayViewer,
+        reads: ReadLedger, viewer: DisplayViewer, activity: ActivityClocks,
     ) -> Iterator[CapturedSelection]:
         """Borrow the original identity resources and read the ledger once.
 
@@ -954,13 +1013,13 @@ class CapturedSelection:
         with registry.store.reading() as document, catalog.reading() as channels:
             with reads.reading() as read_document:
                 selected = cls.capture(
-                    document.snapshot(), channels, reads, read_document, viewer
+                    document.snapshot(), channels, reads, read_document, viewer, activity
                 )
             yield selected
 
     @property
     def channels(self) -> Channels:
-        return self.catalog.views()
+        return self.catalog.views(self.activity)
 
     @property
     def scopes(self) -> tuple[ChannelDisplayScope, ...]:
@@ -977,5 +1036,5 @@ class CapturedSelection:
         return self.viewer.require_name(self.registry)
 
     def scope(self, target: str) -> ChannelDisplayScope:
-        channel = self.catalog.require_channel(target)
+        channel = self.catalog.require_channel(target, self.activity)
         return channel.display_scope(self.registry)

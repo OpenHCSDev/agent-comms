@@ -5,14 +5,17 @@ from __future__ import annotations
 import multiprocessing
 import os
 import sqlite3
-import tempfile
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty
+from threading import Event
 
 import pytest
 
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.diagnostics import FailureReason
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_attempts import (
     GoalAttemptSchema,
     GoalAttemptStore,
@@ -29,7 +32,8 @@ from agent_comms.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from agent_comms.pi_counts import PiCount
+from agent_comms.pi_counts import PiCount, UnreportedCount
+from agent_comms.pi_payloads import PiUsage
 from agent_comms.typed_table import StringEnumStorage
 
 pytestmark = pytest.mark.skipif(
@@ -67,11 +71,36 @@ def _die_before_ready_ack(root: str) -> None:
 
 
 @pytest.fixture
-def store() -> Iterator[GoalAttemptStore]:
-    with tempfile.TemporaryDirectory(prefix="ac-goal-ledger-", dir="/var/tmp") as base:
-        root = Path(base) / "owner"
-        root.mkdir(mode=0o700)
-        yield GoalAttemptStore.initialize(root)
+def store(tmp_path) -> Iterator[GoalAttemptStore]:
+    root = tmp_path / "owner"
+    root.mkdir(mode=0o700)
+    yield GoalAttemptStore.initialize(root)
+
+
+def test_concurrent_initialization_never_opens_an_incomplete_schema(tmp_path, monkeypatch):
+    root = tmp_path / "owner"
+    root.mkdir(mode=0o700)
+    paused, resume = Event(), Event()
+    writer = CoordinationStore.writer
+
+    def pause_first_writer(path, *args, **kwargs):
+        if not paused.is_set():
+            paused.set()
+            assert resume.wait(5)
+        return writer(path, *args, **kwargs)
+
+    monkeypatch.setattr(CoordinationStore, "writer", staticmethod(pause_first_writer))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(GoalAttemptStore.initialize, root)
+        assert paused.wait(5)
+        try:
+            second = GoalAttemptStore.initialize(root)
+        finally:
+            resume.set()
+        first = pending.result(timeout=5)
+    original = first.create_goal("shared")
+    assert second.snapshot("shared") == original
+    assert not tuple(root.glob(".goal-attempts-init-*"))
 
 
 def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
@@ -412,8 +441,10 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     store.create_goal("goal")
     reservation = store.reserve("goal", 1)
     permit = store.claim_launch(reservation)
-    first = {"input": 100, "output": 20, "totalTokens": 120, "cost": {"total": 0.1}}
-    second = {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}}
+    first = PiUsage.from_wire(
+        {"input": 100, "output": 20, "totalTokens": 120, "cost": {"total": 0.1}})
+    second = PiUsage.from_wire(
+        {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}})
 
     permit.record_provider_usage(store, "response-1", first)
     permit.record_provider_usage(store, "response-1", first)
@@ -424,10 +455,20 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     reopened = GoalAttemptStore(store.root)
     totals = ProviderUsageTotal.for_goal(reopened, "goal")
     assert totals.responses == 2
-    assert totals.input_tokens == 140
-    assert totals.output_tokens == 30
+    assert totals.input_tokens == PiCount.from_wire(140)
+    assert totals.output_tokens == PiCount.from_wire(30)
     assert totals.total_tokens == PiCount.from_wire(170)
     assert str(totals.cost_total) == "0.3"
+
+
+@pytest.mark.parametrize("cost", [-0.1, float("nan"), float("inf")])
+def test_usage_decoding_refuses_a_cost_that_is_not_a_finite_nonnegative_number(cost):
+    with pytest.raises(MalformedRecord, match="finite nonnegative"):
+        PiUsage.from_wire({"input": 1, "cost": {"total": cost}})
+
+
+def test_a_negative_token_count_decodes_as_unreported():
+    assert PiUsage.from_wire({"input": -1, "output": 2}).input == UnreportedCount()
 
 
 @pytest.mark.parametrize("phase", ["reserved", "claimed"])

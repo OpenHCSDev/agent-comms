@@ -15,6 +15,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .cli_result import ThreadToolCatalogResult
 from .launch_runtime import RestartEnvironment
+from .native_arguments import NativeArguments
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
 from .goals import (
@@ -47,6 +48,7 @@ from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
 from .task_sources import TaskScope
 
 if TYPE_CHECKING:
+    from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
 
 class _GeneratedCreationTime(float):
@@ -166,14 +168,17 @@ class Thread(ThreadProvenance):
             **project.environment(root),
         }
 
-    def native_launch_arguments(self, arguments: tuple[str, ...]) -> tuple[str, ...]:
-        """Write this native launch's catalog in its config directory, not a CLI cache."""
+    def native_launch_arguments(self, arguments: NativeArguments, package: Path) -> tuple[str, ...]:
+        """Write this native launch's catalog in its config directory, not a CLI cache; only a
+        launch that loads the agent-comms extension registers the flag that reads it."""
+        if not arguments.loads(NativeRequestTools.native_extension(package)):
+            return arguments.argv
         directory = RestartEnvironment.inherit(os.environ).native_config
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
         catalog = ThreadToolCatalogResult(tuple(NativeRequestTools.catalog()), self.service_tier)
         _atomic_write_text(path, json.dumps(catalog.encoded(), separators=(",", ":")))
-        return (*arguments, "--comms-catalog", str(path))
+        return (*arguments.argv, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""
@@ -283,11 +288,11 @@ class Thread(ThreadProvenance):
     def task_scope(self) -> TaskScope:
         return TaskScope.for_goal(self.worktree, self.goal)
 
-    def wake_context(self) -> dict[str, object]:
+    def wake_context(self, goals: Goals) -> dict[str, object]:
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
-            "current_goal": self.goal.wake_context(),
+            "current_goal": self.goal.wake_context(goals, self.incarnation),
         }
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
@@ -395,8 +400,9 @@ class Thread(ThreadProvenance):
             return None
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
 
-    def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
-        return self.goal.accepts_observation(goal_id, minimum_revision)
+    def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
+        """Only the exact latest completed turn can release a dependency."""
+        return not self.executing and self.observed_turn(claim_scope) == fence.renamed(self.name)
 
     @property
     def is_fork(self) -> bool:

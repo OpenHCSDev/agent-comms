@@ -1,7 +1,7 @@
 """The commander's verdict on every unit edit, judged against the order that unit is carrying out.
 
-A send-back's --roast is posted to #comms with the unit and the quoted slop line, so the whole
-fleet learns what was stupid and nobody repeats it; a send-back without a roast is refused.
+A send-back's --roast is posted to its verdict's audience with the quoted slop line, so the
+unit learns what was stupid and nobody repeats it; a send-back without a roast is refused.
 --serves quotes the order Todo, which also owns every verdict.
 
 A verdict is a set of semantic claims the tool can falsify: --serves must be words from
@@ -93,15 +93,15 @@ def show(pending: list[Edit]) -> None:
     print(f'{len(pending)} unjudged')
 
 
-def roast(thread, lines, text, fix, slop):
-    """Every send-back is a fleet lesson, sent to the unit that wrote the slop and to #comms: the quoted slop,
+def roast(audience, thread, lines, text, fix, slop):
+    """Every send-back is a lesson, sent to its verdict's audience: the quoted slop,
     the required fact it restates and the declaration that derives it (paper 1's definition), why that is
     stupid, and what replaces it."""
     body = (f'{thread}, this is stupid slop and it is going back:\n'
             + '\n'.join(f'    {l.strip()}' for l in lines)
             + f'\nThe slop: {slop.render()}'
             + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
-    print('roast sent to the unit and #comms: ' + order.post([thread, '#comms'], body))
+    print(f'roast sent to {", ".join(audience.threads)}: ' + order.post(audience, body))
 
 
 def alarm():
@@ -234,7 +234,7 @@ class OkUnownedVerb(OkVerb, declared_name="ok-unowned"):
 
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
-    help = "send the edit back; the roast is posted to #comms"
+    help = "send the edit back; the roast is posted to the verdict's audience"
     roast: str = option(help="blunt, why it is stupid, with because")
     fix: str = option(help="owner and replacing shape")
     slop_kind: str = option("--slop", help="|".join(order.Slop.KINDS))
@@ -262,11 +262,12 @@ class BackVerb(VerdictVerb):
 
     def report(self, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
-            roast(todo.holder, self.lines, self.roast, self.fix, self.slop())
+            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
+            roast(audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
                     f'(strike {todo.strike_count} on {todo.id}; caught by {ME} at review): '
                     f'{todo.strikes[-1].reason}')
-            order.on_record(line, 'Send-back')
+            order.on_record(line, 'Send-back', audience)
 
 
 def main(args):

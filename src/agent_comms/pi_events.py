@@ -42,7 +42,6 @@ class PiEvent(PiPayload, DeclaredFamily):
     """One declaration-owned record received by the Pi RPC channel."""
 
     wire_tag = "type"
-    opaque = False
 
     def __init_subclass__(
         cls, *, starts: type[phases.TurnPhase] | None = None,
@@ -82,7 +81,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     @classmethod
     def wire_member(cls, wire):
         try:
-            return cls.decode(wire.get("type")).wire_case(wire)
+            return cls.member_named(wire.get("type")).wire_case(wire)
         except ValueError:
             return UnknownPiEvent
 
@@ -135,7 +134,6 @@ class NativePiEvent(PiEvent, declared_name=None):
 
 
 class DurablePiEvent(PiEvent, declared_name=None):
-
     @staticmethod
     def unowned_event(event):
         raise RuntimeError('Pi event arrived with no open turn')
@@ -718,7 +716,7 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.message.update_context and not session.native.attestation.uncertain:
-            tokens = self.message.measured_tokens.otherwise(self.usage.token_total)
+            tokens = self.message.measured_tokens.otherwise(self.usage.total_tokens)
             for event in tokens.provisional(session):
                 yield event
 

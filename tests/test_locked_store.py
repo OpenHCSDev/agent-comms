@@ -1,4 +1,4 @@
-"""Real canonical locks, durable GoalWaits bytes, and bounded process tests."""
+"""Real canonical locks, durable WaitDocument bytes, and bounded process tests."""
 
 from __future__ import annotations
 
@@ -7,17 +7,47 @@ import multiprocessing
 import os
 import stat
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.goal_waits import GoalWaits
+from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.locked_store import LockedStore
 from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
-from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.thread_identity import RecordedThreadIncarnation
+
+
+@dataclass(frozen=True, slots=True)
+class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
+    """A JSON transaction exemplar, independent of the indexed wait store."""
+    lock_rank = 9
+
+    @property
+    def record_type(self):
+        return dict[str, RecordedGoalWait]
+
+    def empty(self):
+        return {}
+
+    def record(self, wait):
+        self.update(lambda rows: {**rows, wait.goal_id: wait})
+
+    def clear(self, goal_id, *, wait_id=None):
+        removed = False
+
+        def change(rows):
+            nonlocal removed
+            current = rows.get(goal_id)
+            if current is None or (wait_id is not None and current.wait_id != wait_id):
+                return rows
+            removed = True
+            return {key: row for key, row in rows.items() if key != goal_id}
+
+        self.update(change)
+        return removed
+
 
 
 def wait(goal_id="goal"):
@@ -43,7 +73,7 @@ def _hold_lock(path, mode, ready, release):
 
 def _read(path, started, done):
     started.set()
-    GoalWaits(path).read()
+    WaitDocument(path).read()
     done.set()
 
 
@@ -51,12 +81,12 @@ def _record(path, start, prefix):
     if not start.wait(10):
         raise TimeoutError("writer was not started")
     for index in range(12):
-        GoalWaits(path).record(wait(f"{prefix}-{index}"))
+        WaitDocument(path).record(wait(f"{prefix}-{index}"))
 
 
 def _record_under_wire(path, ready):
     with _store_lock(path.parent / "wire"):
-        store = GoalWaits(path)
+        store = WaitDocument(path)
         store.record(wait())
         assert store.read() == {"goal": wait()}
         assert store.clear("goal", wait_id="wait")
@@ -90,12 +120,12 @@ def event():
 def test_abstract_parent_and_real_adopter(tmp_path):
     with pytest.raises(TypeError, match="abstract"):
         LockedStore(tmp_path / "document")
-    assert GoalWaits.read is LockedStore.read
-    assert GoalWaits.update is LockedStore.update
+    assert WaitDocument.read is LockedStore.read
+    assert WaitDocument.update is LockedStore.update
 
 
 def test_current_wait_persistence_and_noop(tmp_path):
-    store = GoalWaits(tmp_path / "goal_waits.json")
+    store = WaitDocument(tmp_path / "goal_waits.json")
     assert store.read() == {}
     assert not store.path.exists()
     assert not store.clear("absent")
@@ -111,7 +141,7 @@ def test_current_wait_persistence_and_noop(tmp_path):
 
 
 def test_mode_preserved_and_new_inode_published(tmp_path):
-    store = GoalWaits(tmp_path / "goal_waits.json")
+    store = WaitDocument(tmp_path / "goal_waits.json")
     store.record(wait())
     store.path.chmod(0o640)
     inode = store.path.stat().st_ino
@@ -126,7 +156,7 @@ def test_mode_preserved_and_new_inode_published(tmp_path):
 
 
 def test_unknown_wait_fields_are_rejected_without_rewriting_saved_data(tmp_path):
-    store = GoalWaits(tmp_path / "goal_waits.json")
+    store = WaitDocument(tmp_path / "goal_waits.json")
     data = FieldCodec.encode({"goal": wait()})
     data["goal"]["future_field"] = {"not_authoritative_here": True}
     store.path.write_text(json.dumps(data))
@@ -141,7 +171,7 @@ def test_unknown_wait_fields_are_rejected_without_rewriting_saved_data(tmp_path)
 @pytest.mark.parametrize("existing", [False, True])
 @pytest.mark.parametrize("stage", ["file_sync", "replace", "directory_sync"])
 def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing, stage):
-    store = GoalWaits(tmp_path / "goal_waits.json")
+    store = WaitDocument(tmp_path / "goal_waits.json")
     if existing:
         store.record(wait())
         store.path.chmod(0o640)
@@ -177,7 +207,7 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
 
 
 def test_callback_and_encoding_fail_before_publication(tmp_path):
-    store = GoalWaits(tmp_path / "goal_waits.json")
+    store = WaitDocument(tmp_path / "goal_waits.json")
     store.record(wait())
 
     def fail(rows):
@@ -192,7 +222,7 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
 
 
 def test_invalid_boundary_is_not_overwritten(tmp_path):
-    store = GoalWaits(tmp_path / "goal_waits.json")
+    store = WaitDocument(tmp_path / "goal_waits.json")
     data = FieldCodec.encode({"goal": wait()})
     data["goal"]["revision"] = True
     text = json.dumps(data)
@@ -205,7 +235,7 @@ def test_invalid_boundary_is_not_overwritten(tmp_path):
 @pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
 def test_shared_readers_overlap_and_exclude_writer(tmp_path):
     path = tmp_path / "goal_waits.json"
-    GoalWaits(path).record(wait())
+    WaitDocument(path).record(wait())
     ready1, ready2, release = event(), event(), event()
     with (
         process(_hold_lock, path, SharedLock(), ready1, release),
@@ -244,7 +274,7 @@ def test_concurrent_writers_keep_all_rows(tmp_path):
     path, start = tmp_path / "goal_waits.json", event()
     with process(_record, path, start, "first"), process(_record, path, start, "second"):
         start.set()
-    assert set(GoalWaits(path).read()) == {
+    assert set(WaitDocument(path).read()) == {
         f"{prefix}-{index}" for prefix in ("first", "second") for index in range(12)
     }
 

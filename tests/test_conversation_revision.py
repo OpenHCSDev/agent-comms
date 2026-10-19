@@ -6,7 +6,7 @@ from agent_comms.comms import wire
 from agent_comms.historical_views import (
     ChannelDisplayHistory,
     DMDisplayHistory,
-    DMSelection,
+    DMDisplayIdentity,
 )
 from agent_comms.threads import Thread
 
@@ -35,7 +35,7 @@ def test_peer_rename_replaces_display_once(tmp_path):
     after = DMDisplayHistory.revision(comms.views, "peer", worktree=str(tmp_path))
     settled = DMDisplayHistory.revision(comms.views, "peer", worktree=str(tmp_path))
 
-    assert isinstance(after.selection, DMSelection)
+    assert isinstance(after.selection, DMDisplayIdentity)
     assert after.selection.peer.name == "renamed"
     assert after.selection.scope.second_names == frozenset({"peer", "renamed"})
     assert after.display_changed_since(before)

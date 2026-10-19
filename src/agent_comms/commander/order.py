@@ -38,7 +38,7 @@ from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
@@ -61,12 +61,15 @@ def refuse(text, *families):
         sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
 
 
-def post(recipients, body):
-    """Send one message its caller refused with OUTGOING; judge reads it from bus history."""
-    command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
-    for unit in recipients:
-        command += ['--to', unit]
-    out = subprocess.run(command + ['--type', 'info', '--body', body], capture_output=True, text=True)
+def post(audience: VerdictAudience, body: str) -> str:
+    """Send one message its caller refused with OUTGOING; judge reads it from bus history.
+
+    One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
+    """
+    target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
+    out = subprocess.run(['timeout', '300', CLI, '--root', B, 'send', '--from', ME, '--to', target,
+                          '--type', 'info', '--body', audience.addressed(target, body)],
+                         capture_output=True, text=True)
     if '"id"' not in out.stdout:
         sys.exit(f'Send failed: {out.stdout}{out.stderr}')
     return json.loads(out.stdout)['id']
@@ -90,6 +93,12 @@ def held_orders() -> tuple[Todo, ...]:
 def held_by(unit: str) -> tuple[Todo, ...]:
     """This commander's open orders held by one unit."""
     return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
+
+
+def units() -> frozenset[str]:
+    """The threads this commander gives orders to; the owner, claude-ai and peer commanders
+    are not among them."""
+    return COMMS.goals.todos.units(COMMS.registry.require(ME).incarnation)
 
 
 def progress() -> dict[str, OrderProgress]:
@@ -234,7 +243,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append(str(refused))
     serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
     try:
-        phase = OrderPhase.decode(serves[1] if serves else UnplannedPhase.declared_name)
+        phase = OrderPhase.member_named(serves[1] if serves else UnplannedPhase.declared_name)
     except ValueError as refused:
         problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
@@ -334,13 +343,14 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
-    sent = post([unit], message)
+    message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
+    sent = post(VerdictAudience((unit,)), message)
     # The message is each order's recorded link; a verdict citing it lands on that order.
     for pid in group:
         call(CommsTodoTool(id=pid, operation=OrderMessage(
             COMMS.goals.todos.get(pid).revision, COMMS.registry.require(ME).incarnation, sent)))
     for other, text in taken.items():
-        post([other], text)
+        post(VerdictAudience((other,)), text)
     print(order.id)
     if replaces and not clean and struck_already:
         print(f'{unit} already struck on this order of {group[0]}; '
@@ -459,8 +469,8 @@ def board():
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
 
 
-def on_record(line: str, recorded: str) -> None:
-    """Put one line on the public record: the narrative file, then #comms.
+def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
+    """Put one line on the public record: the narrative file, then its audience.
 
     Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
     """
@@ -471,9 +481,9 @@ def on_record(line: str, recorded: str) -> None:
                     'Written by agent-comms-commander order; never edited.\n\n')
         f.write(f'- {line}\n')
     try:
-        post(['#comms'], f'On the record: {line}')
+        post(audience, f'On the record: {line}')
     except SystemExit as failed:
-        print(f'{recorded} recorded, but the #comms post failed ({failed}). '
+        print(f'{recorded} recorded, but the post failed ({failed}). '
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
 
@@ -498,7 +508,7 @@ def strike(unit, why, caught=f'{ME} at review'):
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
             f'caught by {caught}): {why}')
-    on_record(line, 'Strike')
+    on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
@@ -524,11 +534,10 @@ def done(pid, sha, delivered=None):
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
     call(CommsOrderDoneTool(problem=pid, delivery=delivery))
-    at = COMMS.goals.todos.get(pid).order.delivery.at
+    lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
-    if not operation and at.at > todo.deadline.at:
-        strike(unit, f'late on {pid}: order {todo.order.id} due {hhmm(todo.deadline)} '
-                     f'delivered {hhmm(at)} as {delivered}')
+    if not operation and lateness.late():
+        strike(unit, f'{pid} order {todo.order.id} {lateness} as {delivered}')
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 
@@ -635,30 +644,33 @@ def replied(latest: dict | None) -> str:
 
 
 def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
-    """Each order that entered lateness (OVERDUE or DUE PASSED), changed it by a reply or push, or
-    entered STALL after the previous poll at ``since``; a tick where nothing changed is silent."""
+    """Every past-due unrecorded order alarms with its state until recorded.
+    Stall crossings remain separate from deadline alarms."""
     now = time.time()
-    late, stalled, passed = [], [], []
+    late, stalled = [], []
     for t in pending:
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
-        if (entered := work.stalled_since(ordered)) is not None and since < entered < now:
+        if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
-        if (crossed := t.late_since(now)) is None:
+        if not t.overdue(now):
             continue
-        answer = reply(t.holder, ordered) if work.strikes else None
-        if since < max(crossed, work.moved or 0, float(answer.get('ts', 0)) if answer else 0):
-            if work.strikes:
-                due = f'due {hhmm(t.deadline)}, order {t.order.id}'
-                late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
-            else:
-                passed.append(f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {work.line}')
-    alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
-             'missed = order strike, 2 strikes = fire')
-    return [alarm] * bool(late) + stalled + passed
+        answer = reply(t.holder, ordered)
+        due = f'due {hhmm(t.deadline)}, order {t.order.id}'
+        late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
+    alarm = (f'OVERDUE: {", ".join(late)} -> record merged work; '
+             'push or merge unfinished work now')
+    return [alarm] * bool(late) + stalled
+
+
+def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: float) -> list[str]:
+    """One INSTALL line naming every held order that waits on the fleet's install."""
+    waiting = [f'{w.id} {w.holder}' for t in held for w in t.order.waiting_on_install(t, read)]
+    return InstallDeadline.read(COMMS.root).alarm(waiting, now)
 
 
 def overdue():
-    since = 0.0  # the previous poll: a line prints once, when its state is entered after it
+    since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
+    installs: list[str] = []
     while True:
         now = time.time()
         if missing := first_calls():
@@ -673,10 +685,14 @@ def overdue():
         read = progress() if pending else {}
         for line in deadline_lines(pending, read, since):
             print(line, flush=True)
+        if (lines := install_lines(held, read, now)) != installs:
+            for line in lines:
+                print(line, flush=True)
+            installs = lines
         # Units leave finished PRs open and wander off. An order's open PR that nobody has touched for
         # 5 minutes is a stall, whatever the unit says it is doing; until its deadline, OVERDUE owns the alarm.
         idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
-                    for t in pending if now > t.deadline.at and read[t.id].untouched(now)]
+                    for t in pending if t.overdue(now) and read[t.id].untouched(now)]
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
         for _ in HuntDue.broken(COMMS, ME, since):
@@ -725,7 +741,7 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.decode(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_namespace(args)
 
 
 class RuledVerb(CommanderVerb):
@@ -753,7 +769,7 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
             f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
-    on_record(line, 'Void')
+    on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
     print(f'{unit}: {n} strike(s) on {task}')
 
 
@@ -769,7 +785,8 @@ def due(pid: str, at: str, why: str) -> None:
     call(CommsTodoTool(id=pid, operation=AssignTodo(
         todo.revision, todo.assignment, moved, todo.order, todo.goal)))
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
-              f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline')
+              f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline',
+              VerdictAudience.of(todo.held().owner, todo.goal))
     print(f'{pid}: due {hhmm(moved)}')
 
 
@@ -782,9 +799,11 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
     call(CommsTodoTool(id=pid, operation=WithdrawTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, why,
         superseded_by)))
+    unit = todo.held().owner
     withdrawal, = COMMS.goals.todos.get(pid).order.withdrawals(todo)
-    on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal')
-    post([todo.assignment.owner],
+    on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
+              VerdictAudience.of(unit, todo.goal))
+    post(VerdictAudience((unit,)),
          f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
     board()
     print(withdrawal)
@@ -876,6 +895,17 @@ class DueVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class InstallVerb(RuledVerb):
+    help = "plan the fleet's next install; merged and delivered orders wait on it"
+    at: str = option("at", help="HH:MM the install is due")
+    installer: str = option("installer", help="the unit that runs the install")
+
+    def run(self) -> None:
+        PlannedInstallDeadline(deadline(self.at), self.installer).plan(COMMS.root)
+        print(f'install due {self.at}, run by {self.installer}')
+
+
+@dataclass(frozen=True, kw_only=True)
 class WithdrawVerb(OrderVerb, RuledVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
     pid: str = option("pid")
@@ -900,6 +930,20 @@ class DoneVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class PullRequestVerb(OrderVerb, declared_name="pr"):
+    help = "open the problem's PR with its required immutable order identity"
+    pid: str = option("pid")
+    title: str = option("--title")
+    body_file: str = option("--body-file")
+
+    def run(self) -> None:
+        todo = COMMS.goals.todos.get(self.pid)
+        checkout = COMMS.registry.storage_rule.order_checkout(todo.holder, todo.id)
+        print(todo.order.open_pull_request(
+            todo, checkout, self.title, Path(self.body_file).read_text()))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb, RuledVerb):
     help = "replace an open order's wrong check with one passing on main; keeps deadline, strikes"
     pid: str = option("pid")
@@ -917,7 +961,7 @@ class ServeVerb(OrderVerb, RuledVerb):
     phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
 
     def run(self) -> None:
-        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.decode(self.phase)))
+        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
         print(f'{self.pid} serves {self.phase}')
 
 

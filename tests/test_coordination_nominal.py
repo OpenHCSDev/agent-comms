@@ -69,7 +69,7 @@ def test_response_extension_decodes_transitions_and_projects_without_catalog_edi
     try:
         state = FieldCodec.decode(ResponseState, {"kind": "reviewed"})
         assert state.may_become(SilentResponse())
-        assert ResponseState.decode("reviewed") is ReviewedResponse
+        assert ResponseState.member_named("reviewed") is ReviewedResponse
     finally:
         ResponseState.__registry__.pop("reviewed")
 

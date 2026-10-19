@@ -15,14 +15,15 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
-from agent_comms.standing_rules import BridgeDown, DiskLow, HuntDue, PlanIdle, RulesDue, StandingRule
+from agent_comms.standing_rules import BoardDisagrees, BridgeDown, DiskLow, HuntDue, PlanIdle, RulesDue, StandingRule
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import CleanHunt, RecordHuntTodo, Todo
+from agent_comms.todos import (CleanHunt, MergedProgress, NoCommitProgress, OpenPrProgress,
+    OrderProgress, PullRequest, PullRequests, RecordHuntTodo, Todo, UnreadProgress)
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsStandingRulesTool, CommsTodoTool
 
-from test_commander_problem_orders import create
+from test_commander_problem_orders import create, native_judge_edits
 
 
 @pytest.fixture
@@ -33,12 +34,50 @@ def standing(commander, commander_script):
         importlib.reload(module)
     module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
     state = CommanderConfig.installed().state
-    (state / "activity.log").write_text("")
     return commander[0], state, module
 
 
 def lines(comms, member, commander="lead"):
     return [found.line() for found in member.violations(comms, commander)]
+
+
+@pytest.mark.parametrize("reported,alarms", [
+    (NoCommitProgress(), True),
+    (MergedProgress("d" * 9), False),
+    (OpenPrProgress(1581, "b" * 9, at=500), False),
+    (UnreadProgress("forge unavailable"), False),
+])
+def test_board_self_check_uses_order_progress_and_its_linked_merge(
+        commander, standing, monkeypatch, reported, alarms):
+    comms, caller = commander
+    owned, pending, foreign = (create(commander, pid) for pid in ("P77", "P109", "P117"))
+    stamp = "1970-01-01T00:08:20Z"
+    merged = PullRequest.listed(1581, "docs/module-layers", "b" * 40, "d" * 40,
+        stamp, stamp, owned.order.pull_request_body("Module layer map"))
+    opened = PullRequest.listed(1624, "ratchet/none-absence", "c" * 40, "", "",
+        stamp, pending.order.pull_request_body("Declared measure"))
+    other = PullRequest.listed(1629, "ratchet/decoder-marker", "e" * 40, "f" * 40,
+        stamp, stamp, "Agent-Comms-Order: another-order\n")
+
+    def forge(self, repo, state, order):
+        return (merged, other) if state == "merged" else (opened,)
+
+    monkeypatch.setattr(PullRequests, "read", forge)
+    assert BoardDisagrees.violations(comms, "lead") == ()
+    reads = []
+
+    def broken_board(cls, todo, storage, pulls):
+        reads.append(todo.id)
+        return reported
+
+    monkeypatch.setattr(OrderProgress, "read", classmethod(broken_board))
+    expected = [f"BOARD DISAGREES: P77 order {owned.order.id} reads no commit, "
+                "but its linked PR merged as ddddddddd -> repair the progress read this wake"] if alarms else []
+    assert lines(comms, BoardDisagrees) == expected
+    assert set(reads) == {owned.id, pending.id, foreign.id}
+    # Rotation calls this tool each wake. A still-broken board must survive its after cursor.
+    read = CommsStandingRulesTool(after=time.time() + 100).apply(comms, caller)
+    assert [line for line in read.broken if line.startswith("BOARD DISAGREES:")] == expected
 
 
 def test_plan_idle_names_a_ready_phase_until_an_order_serving_it_is_open(commander):
@@ -84,20 +123,23 @@ def test_bridge_down_while_the_commander_endpoint_receives_nothing(commander, tm
 
 def test_idle_units_lists_active_units_without_an_order(commander, standing):
     comms, state, module = standing
-    (state / "activity.log").write_text("12:00:00 worker read a file\n12:00:01 lead sent\n")
+    native_judge_edits(commander, module.judge, [dict(id='recent', at=time.time(), path='a.py',
+        hunks=[dict(old='before', new='after')])])
     assert lines(comms, module.IdleUnits) == [
         "IDLE UNITS with no order: worker -> give each the top unowned row now"]
     create(commander, "P1")
     assert lines(comms, module.IdleUnits) == []
 
 
-def test_fork_now_and_unjudged_follow_the_unjudged_edits(standing):
+def test_fork_now_and_unjudged_follow_the_unjudged_edits(commander, standing):
     comms, state, module = standing
     assert lines(comms, module.ForkNow) == lines(comms, module.Unjudged) == []
-    (state / "edits.jsonl").write_text("".join(json.dumps({"id": f"e{n}", "at": 1.0, "thread": "worker", "path": "a.py", "hunks": []}) + "\n" for n in range(70)))
+    create(commander, 'P1')
+    native_judge_edits(commander, module.judge, [dict(id=f'e{n}', at=200., path='a.py',
+        hunks=[dict(old='before', new='after')]) for n in range(70)])
     assert lines(comms, module.Unjudged) == ["UNJUDGED 70 edits -> judge or fork a judge slice"]
     [fork] = lines(comms, module.ForkNow)
-    assert fork.startswith("FORK NOW: load 7 (0 open orders, 0 overdue, 70 unjudged edits) needs 1")
+    assert fork.startswith("FORK NOW: load 10 (1 open orders, 1 overdue, 70 unjudged edits) needs 1")
 
 
 def test_fork_now_reads_the_load_of_the_bus_it_is_asked_about(commander, standing, tmp_path):

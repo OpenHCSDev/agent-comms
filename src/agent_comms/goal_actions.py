@@ -25,7 +25,16 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal, GoalDeclaration, GoalOrder, NoGoal, ProblemGoalOrder, UnorderedGoalOrder
+from .goals import (
+    Goal,
+    GoalDeclaration,
+    GoalOrder,
+    NoGoal,
+    ProblemGoalOrder,
+    RequestDirective,
+    RequestGoalOrder,
+    UnorderedGoalOrder,
+)
 from .recorded_time import EventTime
 from .threads import Thread
 from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
@@ -99,6 +108,11 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
     @classmethod
+    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+        """What the unit's own goal tool expects before this action: its active goal."""
+        return GoalPrecondition(goal_id=goal_id, expected_state=ActiveGoal())
+
+    @classmethod
     async def submit_control(
         cls,
         observe: Callable[[], Awaitable[GoalSnapshot]],
@@ -168,7 +182,7 @@ class TransitionGoalAction(GoalAction[Goal]):
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_order(goal, ctx.goals, ctx.thread.incarnation)
         state = self.next_state(goal, ctx)
-        goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
+        self.require_transition(goal, state, ctx)
         self.before_transition(goal, ctx)
         changed = replace(
             goal,
@@ -179,6 +193,10 @@ class TransitionGoalAction(GoalAction[Goal]):
         )
         self.before_goal_publish(changed, ctx)
         return changed
+
+    def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+        """The goal's own state machine allows this transition."""
+        goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
 
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
         pass
@@ -364,11 +382,10 @@ class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredOrderGoalAction(HeldOrderGoalAction):
     operation: DeliverTodo
-    progress: str = ""
 
     def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
-        return replace(goal, state=goal.state.after_order_delivery(pending), progress=self.progress)
+        return replace(goal, state=goal.state.after_order_delivery(pending))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -376,7 +393,7 @@ class SentBackOrderGoalAction(HeldOrderGoalAction):
     operation: SendBackVerdict
 
     def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        return replace(goal, progress=f"Sent back on {self.problem}: {self.operation.reason.text}")
+        return goal
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -384,6 +401,8 @@ class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Ru
     block_reason: str | None = None
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        if ctx.model_report:
+            goal.order.require_model_block()
         return BlockedGoal(
             required_block_reason(
                 self.block_reason if self.block_reason is not None else self.progress
@@ -457,6 +476,29 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
 
 @dataclass(frozen=True, kw_only=True)
+class DirectiveGoalAction(GoalAction[GoalDeclaration], RuntimeInvocable):
+    """A claude-ai message to a thread that holds owner requests becomes one of its requests."""
+
+    text: str
+    seq: int
+    at: float
+
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return goal.order.directed(goal, self, ctx)
+
+    def create(self, ctx: GoalActionContext) -> GoalDeclaration:
+        return ctx.thread.goal
+
+    def directive(self, served: int) -> RequestDirective:
+        return RequestDirective(self.seq, self.at + RequestDirective.window, served)
+
+    def request(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        ReplacementGoalAction.retire(goal, ctx)
+        order = RequestGoalOrder((self.directive(0),))
+        return SetGoalAction(text=self.text, order=order).change(goal, ctx)
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     problem: str
     order: PendingProblemOrder
@@ -474,7 +516,11 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
             return self.create(ctx)
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
-        return replace(goal, order=ProblemGoalOrder(), revision=goal.revision + 1)
+        revision = goal.revision + 1
+        return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
+                       revision=revision, mention_source=bind_goal_mentions(
+                           ProblemGoalOrder.text, goal.id, revision, ctx.thread,
+                           ctx.goals.registry.snapshot()))
 
     def request_ref(self, ctx: GoalActionContext) -> GoalRef:
         """Refuse invalid orders before reserving their Todo."""
@@ -488,7 +534,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def create(self, ctx: GoalActionContext) -> Goal:
         request = self.request_ref(ctx)
-        fresh = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder())
+        fresh = SetGoalAction(text=ProblemGoalOrder.text, order=ProblemGoalOrder())
         self.reserve(ctx, fresh.goal_id, request)
         return fresh.create(ctx)
 
@@ -560,8 +606,13 @@ def required_block_reason(reason: str | None) -> str:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryGoalAction(GoalAction[Goal], OwnerInvocable):
-    """Explicit owner retry; existing store grants still fence every attempt."""
+class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+    """Retry a blocked goal: the unit itself, its commander or the owner; authorize_retry fences
+    every attempt against the unresolved one."""
+
+    @classmethod
+    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+        return GoalPrecondition(goal_id=goal_id)
 
     @classmethod
     async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
@@ -573,12 +624,13 @@ class RetryGoalAction(GoalAction[Goal], OwnerInvocable):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
-    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        if self.expect.expected_owner is None:
-            raise ValueError("Retry requires the executing owner's private goal authority.")
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        return ActiveGoal()
+
+    def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+        """A blocked goal leaves its state machine only through the attempt ledger's retry."""
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
-        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)

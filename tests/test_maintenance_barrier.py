@@ -247,7 +247,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
     control = gate
     first = control.begin(FieldCodec.decode(MaintenanceOperatorField, "operator-one"))
-    assert first.phase == MaintenancePhase.decode("draining") and first.generation == 1
+    assert first.phase == MaintenancePhase.member_named("draining") and first.generation == 1
     assert MaintenanceBarrier(comms.registry.store.path).read() == first
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.agents.begin_turn("owner", "after")
@@ -259,17 +259,17 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
         )
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.owners.start("owner")
-    second = control.advance(first, MaintenancePhase.decode("paused"))
+    second = control.advance(first, MaintenancePhase.member_named("paused"))
     assert second.generation == 2
     with pytest.raises(RelationViolationError, match="generation/operator"):
-        control.advance(first, MaintenancePhase.decode("paused"))
+        control.advance(first, MaintenancePhase.member_named("paused"))
     with pytest.raises(ValueError, match="valid expected successor"):
-        control.advance(second, MaintenancePhase.decode("ready"))
+        control.advance(second, MaintenancePhase.member_named("ready"))
     with pytest.raises(RelationViolationError, match="Maintenance"):
         Registration(comms.registry.store.path).lease_local_turn("owner", "cold")
     assert control.advance(
-        second, MaintenancePhase.decode("installing")
-    ).phase == MaintenancePhase.decode("installing")
+        second, MaintenancePhase.member_named("installing")
+    ).phase == MaintenancePhase.member_named("installing")
 
 
 @pytest.mark.parametrize("generation", [True, 1.0, "1", -1, 0, 1, 2])
@@ -284,9 +284,9 @@ def test_state_generation_requires_exact_matching_positive_int(
     state["generation"] = generation
     gate.state_path.write_text(json.dumps(state))
     if type(generation) is int and generation == 1:
-        assert gate.read().phase == MaintenancePhase.decode("ready")
+        assert gate.read().phase == MaintenancePhase.member_named("ready")
         with gate.allow_input() as hold:
-            assert hold.phase == MaintenancePhase.decode("ready")
+            assert hold.phase == MaintenancePhase.member_named("ready")
     else:
         with pytest.raises(RelationViolationError, match="Maintenance witness"):
             gate.read()
@@ -369,7 +369,7 @@ def test_unknown_parent_fsync_does_not_reopen_claim(
         with pytest.raises(RelationViolationError, match="Maintenance"):
             gate.read()
     else:
-        assert gate.read().phase == MaintenancePhase.decode(
+        assert gate.read().phase == MaintenancePhase.member_named(
             "draining"
         )  # Visible state is not an ACK.
 
@@ -525,3 +525,33 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
     assert written() == before
     gate.clear(hold)
     assert cli('send', '--from', 'a', '--to', 'b', '--body', 'hi')[0] == 0
+
+
+async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
+    from functools import partial
+    from agent_comms.activity import ActivityState
+    from agent_comms.cli_bridges.shared import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
+    from agent_comms.maintenance_barrier import MaintenanceOperator
+    from agent_comms.recorded_time import RecordedEventTime
+    from agent_comms.transcript_events import AssistantTranscript
+
+    comms = Comms(tmp_path)
+    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
+    updates = [StartedItem('turn', 'item', ActivityState.WORKING, 'Replying',
+                          TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
+               AppendDraftItem('turn', 'item', ' once')]
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    hold = barrier.begin(MaintenanceOperator('batch-check'))
+    pending = asyncio.create_task(comms.bus.when_open(partial(output.publish_batch, updates)))
+    try:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(.05):
+                await asyncio.shield(pending)
+        assert output.drafts == {}
+        assert not output.transcript.path.exists()
+    finally:
+        barrier.clear(hold)
+    await asyncio.wait_for(pending, 3)
+    with output.transcript.reading() as source:
+        assert source.current_draft().external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)

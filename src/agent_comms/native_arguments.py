@@ -93,6 +93,10 @@ class ModelArgument(NamedOption, ValueArgument):
     pass
 
 
+class ExtensionArgument(NamedOption, ValueArgument):
+    short = "-e"
+
+
 @dataclass(frozen=True)
 class SelectedModel:
     provider: str
@@ -132,7 +136,7 @@ class ThinkingArgument(NamedOption, ValueOption):
 
     @classmethod
     def from_text(cls, value: str) -> ThinkingArgument:
-        return cls(ThinkingLevel.decode(value))
+        return cls(ThinkingLevel.member_named(value))
 
     @property
     def argv(self) -> tuple[str, ...]:
@@ -172,15 +176,17 @@ class ModeArgument(NamedOption, ValueArgument):
             raise ValueError("Managed Pi requires RPC mode")
 
 
-class OneShotArgument(OptionArgument):
+class FlagArgument(OptionArgument):
     @classmethod
-    def consume(cls, inline: str | None, arguments: Iterator[str]) -> OneShotArgument:
+    def consume(cls, inline: str | None, arguments: Iterator[str]) -> FlagArgument:
         return cls()
 
     @property
     def argv(self) -> tuple[str, ...]:
         return (self.flag(),)
 
+
+class OneShotArgument(FlagArgument):
     def validate_rpc(self) -> None:
         raise ValueError("Managed Pi cannot run a one-shot CLI command")
 
@@ -207,6 +213,10 @@ class HelpArgument(NamedOption, OneShotArgument):
 
 class VersionArgument(NamedOption, OneShotArgument):
     short = "-v"
+
+
+class NoExtensionsArgument(NamedOption, FlagArgument):
+    pass
 
 
 @dataclass(frozen=True)
@@ -272,6 +282,11 @@ class NativeArguments:
             (entry.value for entry in reversed(self.entries) if isinstance(entry, member)), None
         )
 
+    def loads(self, extension: Path) -> bool:
+        """Pi discovers installed extensions unless told not to; ``-e`` always loads its own."""
+        return (NoExtensionsArgument() not in self.entries
+                or ExtensionArgument(str(extension)) in self.entries)
+
     @property
     def model(self) -> str | None:
         selected = self.value(ModelArgument)
@@ -299,6 +314,12 @@ class NativeArguments:
 
     def with_thinking(self, selected: type[ThinkingChoice]) -> NativeArguments:
         return self.replace(ThinkingArgument, *selected.native_arguments(ThinkingArgument))
+
+    def managed_rpc(self, package: Path) -> tuple[str, ...]:
+        """Managed sessions load the protocol extensions; ephemeral RPC does not."""
+        from .native_tools import NativeExecutableTool
+
+        return (*NativeExecutableTool.extension_arguments(package), *self.rpc())
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:

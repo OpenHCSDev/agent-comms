@@ -17,6 +17,7 @@ from .rule_reviews import RuleReviews
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .goals import Goal, RequestDirective
     from .storage_rules import StorageRule
     from .todos import Todo
 
@@ -35,7 +36,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
-        return tuple(comms.goals.todos.for_commander(comms.registry.require(commander).incarnation))
+        return comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation)
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
@@ -99,6 +100,35 @@ class HuntDue(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
+class DirectiveUnacted(StandingRule):
+    """A claude-ai directive recorded on an open request, past its deadline with no order since."""
+
+    goal: Goal
+    directive: RequestDirective
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        thread, now = comms.registry.require(commander), time.time()
+        return tuple(
+            cls(goal, directive)
+            for goal in thread.goal.active()
+            for directive in goal.order.overdue_directives(
+                goal, comms.goals, thread.incarnation, now
+            )
+        )
+
+    def began(self) -> float:
+        return self.directive.deadline
+
+    def line(self) -> str:
+        due = time.strftime("%H:%M", time.localtime(self.directive.deadline))
+        return (
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.goal.id},"
+            f" due {due} -> order its next step or mark the request done"
+        )
+
+
+@dataclass(frozen=True)
 class RulesDue(StandingRule):
     """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
@@ -130,6 +160,30 @@ class BridgeDown(ReasonedStandingRule):
     def reason(cls, comms: Comms, commander: str) -> str | None:
         receiving = comms.registry.snapshot().statuses[commander].receiving
         return None if receiving else f"{commander} is not receiving"
+
+
+@dataclass(frozen=True)
+class BoardDisagrees(StandingRule):
+    """An open order reads as no commit despite its linked pull request having merged."""
+
+    problem: str
+    order: str
+    merge: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(
+            cls(todo.id, todo.order.id, merged.sha)
+            for todo, merged in comms.goals.todos.board_disagreements(
+                comms.registry.require(commander).incarnation, comms.registry.storage_rule
+            )
+        )
+
+    def line(self) -> str:
+        return (
+            f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
+            f"but its linked PR merged as {self.merge} -> repair the progress read this wake"
+        )
 
 
 @dataclass(frozen=True)

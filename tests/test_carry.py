@@ -24,7 +24,9 @@ from agent_comms.maintenance_barrier import (
     MaintenanceHeldError,
     MaintenanceOperator,
 )
-from agent_comms.read_basis import Conversation, ReadCursor
+from agent_comms.read_basis import (
+    ChannelConversation, ConversationCursor, DMConversation, ReadCursor,
+)
 from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
@@ -32,11 +34,12 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
+from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, RetainedBus
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
 from tools.upgrade_bus import (
+    Backup,
     Revisions,
     Stack,
     UpgradeRefused,
@@ -110,6 +113,45 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
     repo.commit({"carry_c": None})
     assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
         ("carry_a", held), ("carry_b", "HEAD")]
+
+
+
+def test_retirement_requires_every_retained_bus_to_have_applied_the_step(tmp_path):
+    repo = Repository(tmp_path)
+    bus_root = tmp_path / "laptop-bus"
+    bus_root.mkdir()
+    declarations = repo.path / STEPS / RetainedBus.filename
+    repo.commit({"carry_a": step_source(None), "carry_b": step_source("carry_a")})
+    buses = [
+        {"name": "laptop", "root": str(bus_root), "applied": ["carry_a"]},
+        {"name": "desktop", "root": "/desktop/bus", "applied": []},
+    ]
+    declarations.write_text(json.dumps(buses))
+    repo.commit({"carry_a": None, "carry_b": step_source(None)})
+    with pytest.raises(ValueError, match="desktop.*carry_a"):
+        CarryChain.at(tmp_path, "HEAD")
+    repo.commit({"carry_b": step_source("carry_a")})
+    restored = CarryChain.at(tmp_path, "HEAD")
+    assert [step.name for step in restored.pending(("carry_b",))] == ["carry_a"]
+    repo.commit({"carry_b": step_source(None)})
+    buses[1]["applied"] = ["carry_a"]
+    buses[0]["applied"] = []
+    declarations.write_text(json.dumps(buses))
+    repo.commit({"carry_b": step_source(None)})
+    with pytest.raises(ValueError, match="laptop.*carry_a"):
+        CarryChain.at(tmp_path, "HEAD")
+    buses[0]["applied"] = ["carry_a"]
+    declarations.write_text(json.dumps(buses))
+    repo.commit({"carry_b": step_source(None)})
+    assert CarryChain.at(tmp_path, "HEAD").retired == {"carry_a"}
+    for name in ("carry_a", "carry_b"):
+        CarryLedger(bus_root).record(name)
+    RetainedBus.record(repo.path, bus_root)
+    saved = json.loads(declarations.read_text())
+    assert saved[0]["applied"] == ["carry_a", "carry_b"]
+    assert saved[1] == buses[1]
+    RetainedBus.restore(repo.path, "HEAD")
+    assert declarations.read_text() == repo.git("show", f"HEAD:{STEPS}/{RetainedBus.filename}")
 
 
 def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):
@@ -187,6 +229,15 @@ def test_steps_that_do_not_form_one_chain_are_refused(tmp_path, steps):
     repo = Repository(tmp_path)
     repo.commit(steps)
     with pytest.raises(ValueError, match="one chain"):
+        CarryChain.at(tmp_path, "HEAD")
+
+
+def test_a_carry_module_outside_the_chain_is_refused(tmp_path):
+    """A conversion written as a standalone script would never run on an upgraded bus."""
+    repo = Repository(tmp_path)
+    repo.commit({"carry_a": step_source(None),
+                 "carry_script": "def carry(root):\n    pass\n"})
+    with pytest.raises(ValueError, match="carry_script holds no Carry step"):
         CarryChain.at(tmp_path, "HEAD")
 
 
@@ -318,8 +369,8 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 
 
 def todos_before_order_runs(root: Path, scratch: Path) -> None:
-    """A todo store as the first pending todo step found it: its order declares no run (before
-    P511), and it lacks only the messages column; corrections/releases/verdicts are already carried."""
+    """A todo store as the live bus held it: its order declares no run (before P511), and it
+    lacks the verdicts, corrections and messages columns; releases are already carried."""
     lead = thread("lead", scratch, 1)
     todo = TodoStore(scratch).create("one", "OpenHCSDev/agent-comms", "Repair the thread list",
         creator=lead, owner=lead, generation="one", deadline=RecordedEventTime(1000),
@@ -328,7 +379,8 @@ def todos_before_order_runs(root: Path, scratch: Path) -> None:
         db.execute(Todo.schema_objects()[Todo.declared_name])
         todo.upsert(db)
         db.execute("""UPDATE todo SET "order" = json_remove("order", '$.run')""")
-        db.execute("ALTER TABLE todo DROP COLUMN messages")
+        for column in ("messages", "corrections", "verdicts"):
+            db.execute(f"ALTER TABLE todo DROP COLUMN {column}")
         db.commit()
 
 
@@ -342,9 +394,10 @@ def run_step(name: str, root: Path, *flags: str) -> dict:
 def retained_read_ledger(root: Path) -> None:
     """The earlier bus already ran the retired read-key step."""
     user = RecordedThreadIncarnation("user", 1.5)
-    direct = Conversation("", (RecordedThreadIncarnation("alice", 2.5), user))
+    direct = DMConversation((RecordedThreadIncarnation("alice", 2.5), user))
     ReadLedger.at(root).replace(ReadDocument(
-        messages={user: {Conversation("#comms"): ReadCursor(2, (4,)), direct: ReadCursor(0, (3,))}},
+        messages={user: ReadCursor({ChannelConversation("#comms"): ConversationCursor(2, (4,)),
+                            direct: ConversationCursor(0, (3,))})},
         bus_identity=RecordedBus(FileIdentity(66308, 6861023)),
         transcripts={("user", "/sessions/a.jsonl", 6860966): 4881511},
     ))
@@ -394,9 +447,10 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.earlier_projects == (Path("/earlier/project"),)
     user = RecordedThreadIncarnation("user", 1.5)
-    direct = Conversation("", (RecordedThreadIncarnation("alice", 2.5), user))
+    direct = DMConversation((RecordedThreadIncarnation("alice", 2.5), user))
     reads = ReadLedger.at(root).read()
-    assert reads.messages == {user: {Conversation("#comms"): ReadCursor(2, (4,)), direct: ReadCursor(0, (3,))}}
+    assert reads.messages == {user: ReadCursor({ChannelConversation("#comms"): ConversationCursor(2, (4,)),
+                            direct: ConversationCursor(0, (3,))})}
     assert reads.transcripts == {("user", "/sessions/a.jsonl", 6860966): 4881511}
     assert json.loads(route.read_text()) == {"version": 2, "root": str(root), "wire_root_id": root_id}
     assert route.stat().st_mode & 0o777 == 0o600
@@ -490,6 +544,87 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
     assert "stopped by SIGTERM" in err and "aborted before the backup" in err
     assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
     assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+
+
+@pytest.mark.parametrize("registered", [True, False])
+def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp_path, monkeypatch, registered):
+    """The upgrade's last step sends through the connector Core declares and reads the message
+    back; a connector that cannot fails the upgrade through its restore."""
+    import tools.upgrade_bus as upgrade_bus
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
+
+    comms.registry.declare(comms.registry.new_thread("user", frozenset(), str(comms.root)))
+    if registered:
+        comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
+
+    class Owners(Stack):
+        python = Path(sys.executable)
+
+        def cli(self, root, *arguments):
+            return {"threads": []}
+
+        def relock(self):
+            pass
+
+        def prepare_native(self):
+            pass
+
+        def verify(self, root):
+            return {}
+
+    ran = upgrade_bus.run
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: (
+        "" if command[0] in ("git", "uv") else ran(*command, **options)))
+    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
+    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
+    stack = Owners(REPO, tmp_path / "home")
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+
+    def upgrading():
+        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None)
+
+    failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
+    if registered:
+        assert "Upgrade round trip" in upgrading()["round_trip"]
+        assert not list(failed)
+    else:
+        with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
+            upgrading()
+        assert len(list(failed)) == 1
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+
+
+def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):
+    """A bridge publishes from its own process, and the upgrade reads the store's files raw
+    for the backup and its digests. Neither may let the bridge write before the carry is
+    judged, nor into the failed bus an abort keeps as evidence."""
+    unit = comms.registry.declare(comms.registry.new_thread(
+        "hold-unit", frozenset({"hold"}), str(comms.root), execution=ExternalThreadExecution))
+    transcript = ExternalTranscript(comms.root, unit.incarnation)
+    with transcript.writing():
+        pass
+
+    def bridge_publishes(bus: Path) -> str:
+        writer = ("import sqlite3, sys\n"
+                  "db = sqlite3.connect(sys.argv[1], timeout=0.2, isolation_level=None)\n"
+                  "db.execute('BEGIN IMMEDIATE'); db.execute('COMMIT'); print('wrote')")
+        result = subprocess.run([sys.executable, "-c", writer, ExternalTranscript.path_in(bus)],
+                                capture_output=True, text=True, timeout=60)
+        return result.stdout.strip() or result.stderr.strip().splitlines()[-1]
+
+    with transcripts_held(comms.root):
+        before = bus_files(comms.root)
+        backup = Backup.take(comms.root, comms.root.parent / "no-route.json")
+        assert bridge_publishes(comms.root).endswith("database is locked")
+        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
+        backup.restore()  # the carry aborted
+        failed, = comms.root.parent.glob(f".{comms.root.name}.failed-*")
+        assert bridge_publishes(failed).endswith("database is locked")
+    assert bridge_publishes(comms.root) == "wrote"
+    name = str(ExternalTranscript.path_in(comms.root).relative_to(comms.root))
+    assert backup.files() == before
+    assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):

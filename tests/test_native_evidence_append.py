@@ -8,6 +8,7 @@ import os
 
 import pytest
 
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import (
     NativePiUnavailable,
@@ -17,7 +18,7 @@ from agent_comms.native_pi import (
 from agent_comms.private_path import FileRevision
 from test_native_pi import _evidence
 
-APPEND = (json.dumps({"type": "custom", "id": "concurrent-append",
+APPEND = (json.dumps({"type": "custom", "timestamp": "2026-10-01T00:00:00.000Z", "id": "concurrent-append",
                       "customType": "isolated-evidence-check", "data": {}}) + "\n").encode()
 
 
@@ -138,16 +139,10 @@ async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend,
 
     async def during_tool_start(turn, event):
         starts.append(event.tool_call_id)
+        await tool_started(turn, event)
+        # Appended bytes extend the retained digest; the start leaves its verified prefix behind.
         source = turn.evidence.source
-        verify = source.verify_snapshot
-
-        def verified_prefix(size, digest):
-            verify(size, digest)
-            verified.append((source.path, size))
-
-        with monkeypatch.context() as observation:
-            observation.setattr(source, "verify_snapshot", verified_prefix)
-            await tool_started(turn, event)
+        verified.append((source.path, source.prefix))
 
     monkeypatch.setattr(TrackedTurnSession, "tool_started", during_tool_start)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
@@ -157,11 +152,12 @@ async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend,
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 40)
         assert len(starts) == len(verified) == 1
+        assert isinstance(verified[0][1], VerifiedNativeEvidencePrefix) and verified[0][1].size
         assert native.provider.posts == 2
         assert native.session.read_bytes().startswith(original)
         rows = [json.loads(line) for line in native.session.read_text().splitlines()]
         results = [row["message"] for row in rows if row.get("type") == "message"
                    and row["message"].get("role") == "toolResult"]
         assert len(results) == 1 and not results[0].get("isError")
-        assert any(native.provider.text in row.body for row in list(comms.views.full_history_page().messages)
+        assert any(native.provider.text in row.body for row in list(comms.views.history_page(ANY_CHANNEL).messages)
                    if isinstance(row, Message))

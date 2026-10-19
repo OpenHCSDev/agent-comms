@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
@@ -12,7 +13,7 @@ from .declared_family import DeclaredFamily
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
-from .locked_store import LockedStore, RootFile
+from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .wire_log import WireLog
@@ -255,50 +256,93 @@ class GoalInputReview:
             else:
                 eligible.append(UnresolvedInput.of(row))
         return StandbyReview(
-            self.goal_id, tuple(target.incarnation.name for target in self.targets),
-            tuple(item.input_id for item in eligible), tuple(eligible), tuple(reviewed),
-            tuple(excluded))
+            self.goal_id,
+            tuple(target.incarnation.name for target in self.targets),
+            tuple(item.input_id for item in eligible),
+            tuple(eligible),
+            tuple(reviewed),
+            tuple(excluded),
+        )
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
-    lock_rank = 9
-    filename: ClassVar[str] = "goal_waits.json"
+class StoredGoalWaitRow(TypedTable):
+    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
+    wait: RecordedGoalWait
 
-    @property
-    def record_type(self) -> type[dict[str, RecordedGoalWait]]:
-        return dict[str, RecordedGoalWait]
 
-    def empty(self) -> dict[str, RecordedGoalWait]:
-        return {}
+@dataclass(frozen=True, slots=True)
+class GoalWaitTargetRow(TypedTable):
+    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
+    position: int = field(metadata={"sql": Column(primary_key=True)})
+    target_lookup: str
+    indexes = (Index(("target_lookup", "goal_id")),)
+
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(("goal_id",), StoredGoalWaitRow, ("goal_id",), on_delete="CASCADE"),)
+
+
+@dataclass(frozen=True, slots=True)
+class GoalWaits(ThreadOwnedState, TypedStore):
+    path: Path = field()
+    filename: ClassVar[str] = "goal_waits.sqlite3"
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (StoredGoalWaitRow, GoalWaitTargetRow)
+
+    def read(self) -> dict[str, RecordedGoalWait]:
+        with self.snapshot() as db:
+            return {
+                row.goal_id: row.wait
+                for row in StoredGoalWaitRow.read(
+                    db.execute(f"SELECT * FROM {StoredGoalWaitRow.declared_name}")
+                )
+            }
 
     def record(self, wait: RecordedGoalWait) -> None:
-        self.update(lambda rows: {**rows, wait.goal_id: wait})
+        self.record_many((wait,))
+
+    def record_many(self, waits: Iterable[RecordedGoalWait]) -> None:
+        with self.writing() as db:
+            for wait in waits:
+                StoredGoalWaitRow(wait.goal_id, wait).upsert(db)
+                GoalWaitTargetRow.delete(db, goal_id=wait.goal_id)
+                for position, target in enumerate(wait.targets):
+                    GoalWaitTargetRow(wait.goal_id, position, target.incarnation.lookup).insert(db)
+
+    def targeting(
+        self, target: RecordedThreadIncarnation
+    ) -> tuple[RecordedGoalWait, ...]:
+        with self.snapshot() as db:
+            return tuple(
+                row.wait
+                for row in StoredGoalWaitRow.read(
+                    db.execute(
+                        f"SELECT * FROM {StoredGoalWaitRow.declared_name} WHERE goal_id IN "
+                        f"(SELECT goal_id FROM {GoalWaitTargetRow.declared_name} "
+                        "WHERE target_lookup=?)",
+                        (target.lookup,),
+                    )
+                )
+            )
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """A wait belongs to its owner's goal, which ends with the declaration."""
         owners = {thread.incarnation.require_recorded().lookup for thread in threads}
-        self.update(
-            lambda rows: (
-                {key: row for key, row in rows.items() if row.owner.lookup not in owners}
-                if any(row.owner.lookup in owners for row in rows.values())
-                else rows
-            )
-        )
+        with self.writing() as db:
+            for row in StoredGoalWaitRow.read(
+                db.execute(f"SELECT * FROM {StoredGoalWaitRow.declared_name}")
+            ):
+                if row.wait.owner.lookup in owners:
+                    StoredGoalWaitRow.delete(db, goal_id=row.goal_id)
 
     def clear(self, goal_id: str, *, wait_id: str | None = None) -> bool:
-        removed = False
-
-        def change(rows: dict[str, RecordedGoalWait]) -> dict[str, RecordedGoalWait]:
-            nonlocal removed
-            current = rows.get(goal_id)
-            if current is None or (wait_id is not None and current.wait_id != wait_id):
-                return rows
-            removed = True
-            return {key: row for key, row in rows.items() if key != goal_id}
-
-        self.update(change)
-        return removed
+        if not self.path.exists():
+            return False
+        with self.writing() as db:
+            return StoredGoalWaitRow.delete(
+                db, where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
+                parameters=(goal_id, wait_id, wait_id),
+            ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
         return self.for_goal(goal, self.read())
@@ -309,7 +353,10 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
 
     @classmethod
     def execution(
-        cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
+        cls,
+        goal: GoalDeclaration,
+        rows: dict[str, RecordedGoalWait],
+        snapshot: RegistrySnapshot,
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""

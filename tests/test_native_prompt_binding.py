@@ -39,7 +39,8 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import (
     NativePiRpcLaunch,
     NativePiUnavailable,
-    read_tracked_input_digest,
+    CommittedInput,
+    read_tracked_input_commitment,
 )
 from agent_comms.native_prompt_binding import binding_store_path, install_prompt_binding_schema, native_request_digest
 from agent_comms.native_source_cursor import NativeSourceCursor
@@ -168,7 +169,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         if fresh:
             session_file = session_dir / f"{input_id}.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "id": "isolated-session"}) + "\n"
+                json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "isolated-session"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None
@@ -182,7 +183,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
 
         await asyncio.to_thread(authorized)
         if fresh:
-            entries = [{"type": "session", "id": "isolated-session"}]
+            entries = [{"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "isolated-session"}]
             proof_rows = []
         else:
             entries = [json.loads(line) for line in session_file.read_text().splitlines()]
@@ -194,7 +195,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         digest = digest_override or native_request_digest(prompt)
         entries.append(
             {
-                "type": "message",
+                "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
                 "id": entry_id,
                 "message": {"role": "user", "inputId": input_id, "inputDigest": digest},
             }
@@ -319,7 +320,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         # prompt bytes sent to Pi (not the bare text hash).
         assert binding.expected_prompt_digest == native_request_digest(calls[0][1])
         session_file = evidence[0].context.session_file
-        assert read_tracked_input_digest(session_file, evidence[0].input_id) == (
+        assert read_tracked_input_commitment(session_file, evidence[0].input_id) == CommittedInput(
             binding.expected_prompt_digest
         )
         assert evidence[0].expected_prompt_digest == binding.expected_prompt_digest

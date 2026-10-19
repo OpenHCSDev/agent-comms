@@ -9,7 +9,7 @@ import json
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import ClassVar, TYPE_CHECKING
+from typing import ClassVar, NoReturn, TYPE_CHECKING
 
 from acp import RequestError
 
@@ -217,9 +217,9 @@ class NativeTurnOutcome(ABC):
     @abstractmethod
     def raise_if_failed(self) -> None: ...
 
-    @property
-    def request_failure(self) -> RequestFailure | None:
-        return None
+    def raise_fault(self, cause: Exception) -> NoReturn:
+        """Without a completed failure, preserve the original fault."""
+        raise cause
 
 
 @dataclass(frozen=True)
@@ -287,9 +287,8 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         # returns False when nobody accepted the notification.
         return replace(self, request=replace(self.request, notification_published=accepted is not False))
 
-    @property
-    def request_failure(self) -> RequestFailure:
-        return self.request
+    def raise_fault(self, cause: Exception) -> NoReturn:
+        raise self.request.request_error() from cause
 
     def raise_if_failed(self) -> None:
         raise self.request.request_error()
@@ -437,7 +436,7 @@ class TextErrorValue(ErrorValue, JsonShapeMember):
 
     def declared_input(self, body: ErrorValue) -> ErrorValue:
         try:
-            attempt = InputAttempt.decode(self.value)
+            attempt = InputAttempt.member_named(self.value)
         except ValueError:
             # An external public status may be unambiguous; redacted UNKNOWN
             # cannot distinguish reserved from bound input and grants nothing.

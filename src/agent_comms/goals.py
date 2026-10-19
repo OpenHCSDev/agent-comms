@@ -22,7 +22,7 @@ from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalAction, GoalActionContext
+    from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
     from .goal_presentation import ThreadGoalExecution
     from .goal_waits import GoalWait, GoalWaits
     from .agent_activity import AgentActivity
@@ -322,6 +322,26 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         return ()
 
+    def goal_text(self, goal: Goal) -> str:
+        return goal.text
+
+    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+        return goal.progress
+
+    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
+        return f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
+
+    def require_model_block(self) -> None:
+        pass
+
+    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
+        """Only a thread holding owner requests records a claude-ai directive."""
+        return goal
+
+    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
+                           now: float) -> tuple[RequestDirective, ...]:
+        return ()
+
     @abstractmethod
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
@@ -339,9 +359,27 @@ class UnorderedGoalOrder(GoalOrder):
 
 
 @dataclass(frozen=True)
+class RequestDirective:
+    """One claude-ai message to the commander that the request answers. It is acted on once an
+    order sent after it serves the request, or the request closes; until then it is due by its
+    deadline."""
+
+    window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
+    seq: int
+    deadline: float
+    served: int  # orders serving the request when the directive arrived
+
+    def overdue(self, served: int, now: float) -> bool:
+        return served == self.served and self.deadline < now
+
+
+@dataclass(frozen=True)
 class RequestGoalOrder(GoalOrder):
     """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open."""
+    request stays open until no order serving it is open. Each claude-ai directive the commander
+    receives is recorded on it when it arrives."""
+
+    directives: tuple[RequestDirective, ...] = ()
 
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
@@ -360,6 +398,19 @@ class RequestGoalOrder(GoalOrder):
     def serving(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> tuple[Todo, ...]:
         return tuple(todo for todo in goals.todos.for_request(owner, goal.id) if todo.pending)
 
+    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
+        """A closed request is replaced by one the directive opens; an open one records it."""
+        if goal.state.terminal:
+            return directive.request(goal, ctx)
+        served = len(ctx.goals.todos.for_request(ctx.thread.incarnation, goal.id))
+        return replace(goal, revision=goal.revision + 1, order=replace(
+            self, directives=(*self.directives, directive.directive(served))))
+
+    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
+                           now: float) -> tuple[RequestDirective, ...]:
+        served = len(goals.todos.for_request(owner, goal.id))
+        return tuple(directive for directive in self.directives if directive.overdue(served, now))
+
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation
     ) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
@@ -371,6 +422,7 @@ class ProblemGoalOrder(GoalOrder):
     """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
     StrikeLimit: ClassVar[int] = 2  # live strikes the commanded unit may take on one problem
+    text: ClassVar[str] = "Complete the assigned problems."
 
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         raise ValueError("Complete each problem with its checked delivered commit.")
@@ -388,6 +440,22 @@ class ProblemGoalOrder(GoalOrder):
 
     def instructions(self, todos: Sequence[Todo]) -> str:
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
+
+    def goal_text(self, goal: Goal) -> str:
+        return self.text
+
+    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+        """Each problem's order state and latest verdict, as Core records them on its Todo."""
+        return "\n".join(" · ".join((f"{todo.id}: {todo.order.line}",
+                                     *(verdict.line for verdict in todo.verdicts[-1:])))
+                         for todo in todos)
+
+    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
+        return goal.progress
+
+    def require_model_block(self) -> None:
+        raise ValueError("A problem goal is not blocked by text: ask the commander to block the "
+                         "problem's Todo, or standby with wait_for naming the decider.")
 
 
 @dataclass(frozen=True)
@@ -479,7 +547,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
     @abstractmethod
-    def wake_context(self) -> dict[str, object] | None: ...
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> object: ...
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
@@ -548,7 +616,7 @@ class NoGoal(NullMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return False
 
-    def wake_context(self) -> None:
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> None:
         return None
 
     shows_document: ClassVar[bool] = False
@@ -632,8 +700,10 @@ class Goal(RecordMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return waits.clear(self.id, wait_id=wait_id)
 
-    def wake_context(self) -> dict[str, object]:
-        return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> dict[str, object]:
+        todos = self.order.todos(goals, owner, self.id)
+        return {"text": self.order.goal_text(self), "status": self.state.declared_name,
+                "progress": self.order.progress(self, todos)}
 
     shows_document: ClassVar[bool] = True
 
@@ -722,10 +792,10 @@ class Goal(RecordMember, GoalDeclaration):
         return PresentGoalCheckpoint(self.checkpoint)
 
     def render_instructions(self, orders_text: str) -> str:
-        return "\n\n".join(part for part in (self.text, orders_text) if part)
+        return "\n\n".join(part for part in (self.order.goal_text(self), orders_text) if part)
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
-        progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
+        progress = self.order.failed_turn_progress(self, diagnostic)
         state = self.state.after_failed_turn(diagnostic)
         if state is self.state:
             return self

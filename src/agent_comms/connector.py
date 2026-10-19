@@ -35,18 +35,35 @@ from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
-from .comms import client_wire
+from .comms import Comms, client_wire
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
+from .goal_actions import DirectiveGoalAction
 from .locked_store import LockedStore, RootFile
+from .messages import Message
 from .tool_caller import ThreadCaller
 from .tools import ReadTool, ToolRequest
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
-CALLER = ThreadCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
+
+
+@dataclass(frozen=True)
+class DirectorCaller(ThreadCaller):
+    """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
+    request when that thread holds owner requests."""
+
+    def sent(self, comms: Comms, message: Message) -> None:
+        if message.target in comms.registry:  # a channel holds no requests
+            comms.goals.update_goal(
+                message.target,
+                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
+            )
+
+
+CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
@@ -539,7 +556,7 @@ class ConnectorVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.decode(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_namespace(args)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -561,6 +578,33 @@ class ServeVerb(ConnectorVerb):
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         web.run_app(app, host=LOOPBACK, port=PORT, access_log=None)
+        return 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class RoundTripVerb(ConnectorVerb):
+    """What an upgrade proves last: claude.ai's message to the owner, sent through the
+    connector's tool calls, reads back through them; the owner sees it unread."""
+
+    help = "Send a message through the connector's tool calls and read it back"
+    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        connector = Connector(ctx, f"http://{LOOPBACK}:{PORT}", self.root)
+        body = f"Upgrade round trip {secrets.token_hex(8)}: the connector reads the upgraded bus"
+        calls = (
+            ToolCall("comms_send", {"from": CALLER.name, "to": "user", "body": body}),
+            ToolCall("comms_inbox", {"thread": "user", "target": CALLER.name, "ack": False}),
+        )
+        replies = [
+            asyncio.run(ToolsCallMessage(jsonrpc="2.0", id=call, params=params).result(connector))
+            for call, params in enumerate(calls)
+        ]
+        if refused := [reply for reply in replies if reply.get("isError")]:
+            return f"The connector round trip was refused: {json.dumps(refused[0])}"
+        if body not in json.dumps(replies[-1].get("structuredContent")):
+            return f"The connector sent {body!r} but did not read it back"
+        print(json.dumps({"round_trip": body}))
         return 0
 
 

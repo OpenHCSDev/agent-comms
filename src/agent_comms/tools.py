@@ -23,8 +23,8 @@ from .thread_execution import (
     StartOwnerControl, ThreadCommandAvailability,
 )
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
-from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
-from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .channel_targets import ChannelTarget, CommandTarget
+from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -45,7 +45,6 @@ from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
-from .goal_states import ActiveGoal
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .rule_reviews import RuleReviewEntry, RuleReviews
 from .standing_rules import RulesDue, StandingRule
@@ -61,7 +60,7 @@ from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
-                    TodoOperation)
+                    TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -667,7 +666,7 @@ class CommsGoalTool(ThreadToolRequest):
         name = caller.name
         command = replace(
             self.status(progress=self.progress),
-            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
+            expect=self.status.model_precondition(self.goal_id),
             **{key: value for key, value in (
                 ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
             ) if value},
@@ -826,7 +825,7 @@ class CommsTodoListTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
-        pulls, storage = PullRequests(), comms.registry.storage_rule
+        pulls, storage = PullRequests(listed), comms.registry.storage_rule
         return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
                                  for todo in listed if todo.holder})
 
@@ -886,8 +885,7 @@ class CommsOrderDoneTool(ThreadToolRequest):
         assignment = todo.assignment
         goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
             expect=GoalPrecondition(goal_id=assignment.generation), problem=self.problem,
-            operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery),
-            progress="The problem's own delivery check passed."))
+            operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery)))
         return GoalRead(goal)
 
 
@@ -1054,6 +1052,9 @@ class CommsSendTool(ToolRequest):
     sender: str = tool_field("Sender thread name", wire_name="from")
     target: str = tool_field("Target thread name or channel", wire_name="to")
     body: str = tool_field("Message text")
+    audience: tuple[str, ...] = tool_field(
+        "Threads a channel message is for; no other member is woken", default=()
+    )
     type: Type[MessageKind] = tool_field(
         "Message kind", default=InfoKind, choices=MessageKind.sendable_names
     )
@@ -1062,9 +1063,9 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        result = comms.messaging.send(
-            self.sender, self.target, self.body, self.type, report=self.report
-        )
+        body = VerdictAudience(self.audience).addressed(self.target, self.body)
+        result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 
 
@@ -1171,7 +1172,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
-    target: str = tool_field("Channel or peer conversation", default=BuiltinChannel.ANY.value)
+    target: str = tool_field("Channel or peer conversation", default=ANY_CHANNEL.name)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
@@ -1346,7 +1347,7 @@ def context_tool_catalog(context: str) -> list[dict[str, object]]:
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
 ) -> dict[str, JsonValue]:
-    return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
+    return ToolRequest.member_named(name).invoke(comms, arguments, caller=caller)
 
 
 def invoke_context_tool(
@@ -1357,7 +1358,7 @@ def invoke_context_tool(
     actor: str | None,
     arguments: Mapping[str, object] | None = None,
 ) -> dict[str, JsonValue]:
-    tool = ToolRequest.decode(name)
+    tool = ToolRequest.member_named(name)
     if tool.context is None:
         raise ValueError(f"Tool {name!r} is not a context action.")
     bound = dict(arguments or {})

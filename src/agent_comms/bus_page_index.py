@@ -19,9 +19,10 @@ from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
-from .private_path import FileRevision
+from .private_path import FileRevision, ObservedPath
+from .recorded_bus import RecordedBus
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
+from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -88,39 +89,49 @@ class BusPageMetrics(TypedRow):
     human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
 
 
-class BusPageIndex:
+@dataclass(frozen=True)
+class LatestConversation(TypedRow):
+    target: str
+    sender: str
+    seq: int
+
+
+class BusPageIndex(TypedStore):
+    filename = "bus_page_index.sqlite3"
+    rows = tuple(TypedTable.members_with(PageIndexTable))
+    schema_error = StaleBusPageIndexError
     batch_bytes = 4 * 1024 * 1024
 
     def __init__(self, bus_path: Path):
+        self.root = bus_path.parent
         self.bus_path = bus_path
-        self.path = bus_path.with_name("bus_page_index.sqlite3")
         self._resources = ExitStack()
 
     @cached_property
     def connection(self):
         with ExitStack() as resources:
-            db = resources.enter_context(closing(CoordinationStore.read_snapshot(self.path)))
-            self._schema(db)
+            db = resources.enter_context(self._attached(
+                lambda: closing(CoordinationStore.read_snapshot(self.path))))
+            if actual := self._schema(db):
+                self.require_schema(actual)
             db.execute("ROLLBACK")
             self._resources.enter_context(resources.pop_all())
             return db
 
-    @staticmethod
-    def _schema(db, *, writer: bool = False):
-        actual = SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
-        ))
-        expected = {name: sql for table in TypedTable.members_with(PageIndexTable)
-                    for name, sql in table.schema_objects().items()}
-        if actual and SQLiteSchemaObject.differences(actual, expected):
-            if not writer:
-                raise StaleBusPageIndexError("Bus page index schema is not its declaration")
-            # Offsets derive from the bus: the writer discards a schema other
-            # than the declaration and rebuilds it under its lock.
-            for table in TypedTable.members_with(PageIndexTable):
-                table.drop(db)
-            actual = ()
-        return actual, expected
+    def _open_writer(self):
+        """Keep disposable-schema repair inside the store's WAL attachment boundary."""
+        with ExitStack() as opening:
+            db = opening.enter_context(closing(super()._open_writer()))
+            try:
+                self.require_schema(self._schema(db))
+            except StaleBusPageIndexError:
+                db.execute("BEGIN IMMEDIATE")
+                for table in self.rows:
+                    table.drop(db)
+                    table.create(db)
+                db.execute("COMMIT")
+            opening.pop_all()
+            return db
 
     def __enter__(self) -> BusPageIndex:
         return self
@@ -135,7 +146,7 @@ class BusPageIndex:
             yield False
             return
         with self.snapshot():
-            actual, _ = self._schema(self.connection)
+            actual = self._schema(self.connection)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
             yield saved is not None and saved.covers(opened)
 
@@ -144,13 +155,8 @@ class BusPageIndex:
             return covered
 
     @contextmanager
-    def prepared(self, opened: WireSnapshot):
-        with self.covered_snapshot(opened) as covered:
-            if covered:
-                yield
-                return
-        opened.metadata.access.require_append()
-        self.prepare(opened)
+    def covered_read(self, opened: WireSnapshot):
+        """Pin a covered read; only the append or explicit sync builds offsets."""
         with self.covered_snapshot(opened) as covered:
             if not covered:
                 raise StaleBusPageIndexError("Page index does not cover its opened source")
@@ -168,23 +174,23 @@ class BusPageIndex:
             if not borrowed and self.connection.in_transaction:
                 self.connection.execute("ROLLBACK")
 
-    def sync(self) -> bool:
-        """Prepare a freshly opened source; incomplete source is an error."""
-        from .wire_log import CurrentSnapshotOpening, WireLog
+    def replaced_by(self, source: ObservedPath) -> bool:
+        """Only a different file retires the saved offsets; stale rows do not."""
+        if source.shows_no_bus() or not self.path.exists():
+            return False
+        with self.snapshot():
+            saved = BusPageSource.one(self.connection, singleton=1)
+            return saved is not None and not RecordedBus(saved.revision.identity).matches(source)
 
-        with WireLog(self.bus_path).opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-            self.prepare(source)
-        return True
-
-    def prepare(self, opened: WireSnapshot) -> None:
-        """Advance bounded batches from the coverage held by SQLite's writer lock."""
+    def sync(self, opened: WireSnapshot) -> bool:
+        """Advance the source supplied by its writer; never acquire another bus lock."""
         revision = opened.revision
         size = opened.complete_prefix.boundary
         while size:
-            with self._writing() as db:
+            with self.writing() as db:
                 saved = BusPageSource.one(db, singleton=1)
                 if saved is not None and saved.covers(opened):
-                    return
+                    return True
                 offset = saved.revision.size if saved is not None else 0
                 valid = (
                     saved is not None
@@ -206,22 +212,12 @@ class BusPageIndex:
                         last_sequence = message.seq
                 through = opened.position
                 BusPageSource(replace(revision, size=through), opened.fingerprint(through)).upsert(db)
+        return True
 
     def invalidate(self) -> None:
         """Discard damaged derived coverage under the index's writer exclusion."""
-        with self._writing() as db:
+        with self.writing() as db:
             BusPageSource.delete(db, singleton=1)
-
-    @contextmanager
-    def _writing(self):
-        with closing(CoordinationStore.writer(self.path)) as db, db:
-            db.execute("PRAGMA synchronous=FULL")
-            db.execute("BEGIN IMMEDIATE")
-            actual, expected = self._schema(db, writer=True)
-            if not actual:
-                for statement in expected.values():
-                    db.execute(statement)
-            yield db
 
     def offsets(
         self,
@@ -286,10 +282,13 @@ class BusPageIndex:
                                  descending=True, limit=1)
         return rows[0] if rows else None
 
-    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int) -> list[BusPageRow]:
+    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
         predicate, parameters = scope.index_predicate
-        return BusPageRow.select(self.connection, where=f"offset<? AND ({predicate})",
-                                 parameters=(before_offset, *parameters), order_by=("seq",))
+        return LatestConversation.read(self.connection.execute(
+            f'SELECT target, sender, MAX(seq) AS seq '
+            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND ({predicate}) '
+            f'GROUP BY target, sender', (before_offset, *parameters),
+        ))
 
     def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,
                            sequences: tuple[int, ...], before_offset: int) -> int:
@@ -333,7 +332,7 @@ class EmptyBusPageIndex(BusPageIndex):
     def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
         return None
 
-    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int) -> list[BusPageRow]:
+    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
         return []
 
     def display_snapshot(self, scopes, boundary):

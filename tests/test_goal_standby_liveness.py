@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import NoTurn
+from agent_comms.turn_lease import NoFinishedTurn, NoTurn
 
 import agent_comms.agent_events as ae
 from agent_comms.schedule_rules import WakeScheduleCheck
@@ -116,7 +116,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
     _thread(comms, "child", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Work"))
     assert goal is not None
-    authoritative = ("registry.json", "goal_waits.json", "input_dispositions.sqlite3")
+    authoritative = ("registry.json", "goal_waits.sqlite3", "input_dispositions.sqlite3")
     before = {
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
         for name in authoritative
@@ -368,7 +368,7 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     new_claim = _begin(comms, "child", "child-turn")
     assert new_claim.identity.generation == old_claim.identity.generation + 1
     active = comms.registry.require("child").active_turn
-    assert comms.agents.finish_turn(old_claim) is None
+    assert comms.agents.finish_turn(old_claim) == NoFinishedTurn()
     assert comms.registry.require("child").active_turn == active
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
     assert comms.registry.require("owner").goal.state.active
@@ -436,10 +436,10 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
 def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):
     comms, _goal = _waiting(tmp_path)
     wait = comms.goals.goal_wait("owner")
-    before = GoalWaits(comms.root / "goal_waits.json").path.read_bytes()
+    before = GoalWaits(comms.root / "goal_waits.sqlite3").path.read_bytes()
     with pytest.raises(ValueError, match="aligned target turns"):
-        GoalWaits(comms.root / "goal_waits.json").record(replace(wait, target_turn_generations=()))
-    assert GoalWaits(comms.root / "goal_waits.json").path.read_bytes() == before
+        GoalWaits(comms.root / "goal_waits.sqlite3").record(replace(wait, target_turn_generations=()))
+    assert GoalWaits(comms.root / "goal_waits.sqlite3").path.read_bytes() == before
 
 
 async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(

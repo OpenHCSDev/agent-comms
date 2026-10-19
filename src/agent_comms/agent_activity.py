@@ -38,7 +38,7 @@ from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .store_files import SharedLock, _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
 from .turn_phase import PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
@@ -287,12 +287,12 @@ class AgentActivity:
             )
             return effects
 
-    def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
+    def finish_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
         """Persist this lease's terminal identity before publishing idle activity."""
         with _store_lock(self._wire_lock_path):
             released, fence = self.registry.release_turn(lease)
             if not released:
-                return None
+                return NoFinishedTurn()
             self._emit_activity(Activity(lease.identity.incarnation.name, ActivityState.IDLE))
             return fence
 

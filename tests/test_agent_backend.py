@@ -28,10 +28,10 @@ from agent_comms.unstarted_runtime import UnstartedRuntime
 
 def test_registry_holds_the_pi_native_backend_and_is_frozen():
     assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
-    assert ab.AgentBackend.decode("pi_native") is PiNativeBackend
+    assert ab.AgentBackend.member_named("pi_native") is PiNativeBackend
     assert ab.AgentBackend.for_new_threads() is PiNativeBackend
     assert isinstance(ab.AgentBackend.__registry__, MappingProxyType)
-    assert ab.AgentBackend.decode("pi_durable") is PiDurableBackend
+    assert ab.AgentBackend.member_named("pi_durable") is PiDurableBackend
 
 
 def test_a_backend_declared_after_sealing_fails_loud():

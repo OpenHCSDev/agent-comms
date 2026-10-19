@@ -165,7 +165,7 @@ class GoalScheduler:
             ),
             actor=OwnerInvocable,
         ))
-        await self.sessions.config.sync_thread(session_id)
+        await self.sessions.config.apply_stored_settings(session_id)
         return edited
 
     async def update_goal(
@@ -192,7 +192,7 @@ class GoalScheduler:
         finally:
             # Resume can discover that a paused attempt failed. Publish the
             # reconciled BLOCKED state even when the action returns an error.
-            await self.sessions.config.sync_thread(session_id)
+            await self.sessions.config.apply_stored_settings(session_id)
         if action.schedules_goal:
             await self.schedule_goal(session_id)
         return updated

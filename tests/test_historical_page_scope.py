@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import HistoryCursor
 from agent_comms.mentions import ThreadMention
@@ -84,7 +85,7 @@ def selected(kind, message):
 def reader(live, kind):
     if kind in ("dm", "dm-alias"):
         name = "alice-old" if kind == "dm-alias" else "alice"
-        return lambda bounds: live.views.dm_history_page(name, "carol", bounds)
+        return lambda bounds: live.views.history_page(CommandTarget.named("carol"), bounds, viewer=name)
     if kind == "any-mode":
         live.channels.set_channel_any_mode("#api", True)
         return lambda bounds: live.views.channel_display_page("#api", bounds=bounds)
@@ -94,7 +95,7 @@ def reader(live, kind):
         "all": "#all",
         "none": "#none",
     }[kind]
-    return lambda bounds: live.views.channel_history_page(target, bounds)
+    return lambda bounds: live.views.history_page(CommandTarget.named(target), bounds)
 
 
 @pytest.mark.parametrize(

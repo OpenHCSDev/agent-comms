@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from .field_codec import RecordedTimestamp
 from .native_entries import SessionEntry
 from .native_pi import NativePiUnavailable, _durable_private_session_dir
 from .native_session_reopen import NativeSessionIdentity
@@ -27,7 +28,7 @@ def create_fresh_private_session(
     path = session_dir / f"enrolled-{session_id}.jsonl"
     header = SessionEntry(
         id=session_id, version=3, cwd=str(worktree),
-        timestamp=datetime.now(UTC),
+        timestamp=RecordedTimestamp.written(datetime.now(UTC)),
     )
     encoded = json.dumps(header.to_wire(), separators=(",", ":"), allow_nan=False).encode() + b"\n"
     try:

@@ -19,7 +19,7 @@ from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .agent_backend import AgentBackend, TurnInbox
-from .channel_targets import BuiltinChannel
+from .channels import AllChannel
 from .comms import Comms
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -235,7 +235,7 @@ class TurnRunner:
         name = self.sessions.bindings.get(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
         if thread is not None:
-            await Coordination.run_worker(self.pause_active_goal, thread)
+            await Coordination.run_worker(partial(self.pause_active_goal, thread))
         task = self.turn_tasks.get(session_id)
         if task is not None:
             current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
@@ -492,4 +492,4 @@ def parse_target(text: str) -> tuple[str, str]:
             name = parts[0].rstrip("@#")
             if name and len(parts) == 2 and parts[1].strip():
                 return template.format(name), parts[1].strip()
-    return BuiltinChannel.ALL.value, stripped
+    return AllChannel.declared_name, stripped

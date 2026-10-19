@@ -187,12 +187,12 @@ class SessionLifecycle:
         thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
         await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
-        async with self.config.session_options(thread.name) as options:
-            return NewSessionResponse(
-                session_id=thread.name,
-                config_options=options,
-                field_meta=await self.metadata(thread.name, session_id=thread.name),
-            )
+        response = NewSessionResponse(
+            session_id=thread.name,
+            field_meta=await self.metadata(thread.name, session_id=thread.name),
+        )
+        await self.config.observe_configuration(thread.name, self.client)
+        return response
 
     async def load_session(
         self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
@@ -202,12 +202,12 @@ class SessionLifecycle:
         if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
-        async with self.config.session_options(thread.name) as options:
-            self.effects.inputs.ensure_live_drain(session_id)
-            return LoadSessionResponse(
-                config_options=options,
-                field_meta=await self.metadata(thread.name, session_id=session_id),
-            )
+        self.effects.inputs.ensure_live_drain(session_id)
+        response = LoadSessionResponse(
+            field_meta=await self.metadata(thread.name, session_id=session_id),
+        )
+        await self.config.observe_configuration(session_id, self.client)
+        return response
 
     async def start_owner(self, cwd: str, session_id: str) -> None:
         """Take a headless owner's session; no ACP consumer awaits a load response.
@@ -279,7 +279,6 @@ class SessionLifecycle:
                 if self.proxies.get(session_id) is not proxy:
                     await proxy.close()
             return LoadSessionResponse(
-                config_options=metadata.pop("configOptions", []),
                 field_meta={**metadata, **ExistingSessionLoadPlan(binding).metadata()},
             )
 
@@ -324,7 +323,6 @@ class SessionLifecycle:
             self.comms.threads.initialize_native_configuration,
             thread_name, model=event.model, thinking_level=event.thinking_level,
         ))
-        await self.config.publish_configuration(session_id, thread_name)
 
     def configuration_updates(
         self, thread_name: str,
@@ -382,6 +380,7 @@ class SessionLifecycle:
                 except (OSError, ValueError) as error:
                     failures.append(error)
         finally:
+            await self.config.close()
             await self.runtime.close()
         if failures:
             raise ExceptionGroup("Owned threads were not released at shutdown", failures)
@@ -416,7 +415,6 @@ class AttachedSessionLifecycle(SessionLifecycle):
         loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
         return NewSessionResponse(
             session_id=thread.name,
-            config_options=loaded.config_options,
             field_meta=loaded.field_meta,
         )
 

@@ -55,6 +55,10 @@ class LockMode(ABC):
         """Verify a writable bus checkpoint as this lock's holder may."""
 
     @abstractmethod
+    def require_writer(self) -> None:
+        """Require the exclusive holder before rebuilding a replaced source."""
+
+    @abstractmethod
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         """The mode that may repair what this holder could only name."""
 
@@ -73,6 +77,10 @@ class SharedLock(LockMode):
                           stream: BinaryIO) -> PrefixWitness:
         return checkpoint.check_final(bus, marker, db, stream)
 
+    def require_writer(self) -> None:
+        from .private_bus_checkpoint import CheckpointNeedsRepair
+        raise CheckpointNeedsRepair("Replaced bus file needs its page index rebuilt.")
+
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         return ExclusiveLock()
 
@@ -90,6 +98,9 @@ class ExclusiveLock(LockMode):
                           marker: WireMetadata, db: sqlite3.Connection,
                           stream: BinaryIO) -> PrefixWitness:
         return checkpoint.verify_with_repair(bus, marker, db, stream)
+
+    def require_writer(self) -> None:
+        pass
 
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         raise error
@@ -167,11 +178,18 @@ class StoreLock:
 
     @classmethod
     @contextmanager
+    def open_source(cls, path: Path, mode: LockMode):
+        """Generic file locks lend no bus data or recovery authority."""
+        yield None
+
+    @classmethod
+    @contextmanager
     def ordered(cls, requests, *, blocking=True, contention=None):
         """Acquire store owners by their declared rank, never their filenames."""
         with ExitStack() as resources:
             yield {owner: resources.enter_context(_store_lock(owner.path,
-                mode=requests[owner], blocking=blocking, contention=contention))
+                mode=requests[owner], blocking=blocking, contention=contention,
+                lock_type=owner.lock_type))
                 for owner in sorted(requests, key=lambda owner: (owner.lock_rank, str(owner.path)))}
 
     @classmethod
@@ -229,7 +247,7 @@ class StoreLock:
             source.require_open_prefix()
             yield source
             return
-        with log.verify_before_read_unlocked() as refreshed:
+        with self.open_source(log.path, ExclusiveLock()) as refreshed:
             if refreshed is None:
                 raise RelationViolationError("Store has no certified original wire source.")
             refreshed.require_marker(metadata)
@@ -258,7 +276,7 @@ def _store_lock_file(store_path: Path):
 
 
 @contextmanager
-def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, mode):
+def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, mode, lock_type):
     """Check durability after locking; release the lock if the check refuses access."""
     try:
         if max_bus_bytes is not None:
@@ -268,10 +286,8 @@ def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, mode):
                 bus_info = store_path.lstat()
                 if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
                     raise RelationViolationError("Bus exceeds bounded read budget.")
-        from .wire_log import WireLog
-
-        with WireLog(store_path).verify_before_read_unlocked(mode=mode) as source:
-            yield StoreLock(lock_file.fileno(), source)
+        with lock_type.open_source(store_path, mode) as source:
+            yield lock_type(lock_file.fileno(), source)
     finally:
         platform.release_store_lock(lock_file.fileno())
 
@@ -284,6 +300,7 @@ def _store_lock(
     max_bus_bytes: int | None = None,
     mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
+    lock_type: type[StoreLock] = StoreLock,
 ) -> Iterator[StoreLock]:
     """Acquire a store lock synchronously; inherited POSIX locks end at last close."""
     from .child_process import Platform
@@ -297,7 +314,7 @@ def _store_lock(
             else:
                 contention.acquire(lock_file.fileno(), platform, mode=mode)
             return resources.enter_context(_held_store_source(
-                store_path, lock_file, platform, max_bus_bytes, mode=mode))
+                store_path, lock_file, platform, max_bus_bytes, mode=mode, lock_type=lock_type))
 
         try:
             lock = acquire(mode)
@@ -314,6 +331,7 @@ async def _async_store_lock(
     max_bus_bytes: int | None = None,
     mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
+    lock_type: type[StoreLock] = StoreLock,
 ):
     """Borrow the same physical resource without blocking its owner event loop.
 
@@ -328,7 +346,7 @@ async def _async_store_lock(
     with _store_lock_file(store_path) as lock_file:
         await wait.acquire_async(lock_file.fileno(), platform, mode=mode)
         with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
-                                mode=mode) as lock:
+                                mode=mode, lock_type=lock_type) as lock:
             yield lock
 
 

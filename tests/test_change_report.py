@@ -153,7 +153,7 @@ class TestKindDeclarations:
         assert stored.type is HandoffKind and stored.report is None
 
     def test_kind_selector_resolves_once(self):
-        assert MessageKind.decode("change-report") is ChangeReportKind
+        assert MessageKind.member_named("change-report") is ChangeReportKind
         assert MessageKind.field_value("alert") is AlertKind
         assert MessageKind.field_value(AlertKind) is AlertKind
 

@@ -635,7 +635,7 @@ def _settle_fenced_response(
 
                 conversation = ResponseConversation.capture(bus, snapshot, obligation)
                 matched = bus.publisher._publish_keyed_response_unlocked(
-                    intent, conversation=conversation, registry_snapshot=registry_snapshot
+                    intent, conversation=conversation, registry_snapshot=registry_snapshot, activity=boundary.activity
                 )
             return Applied(
                 dispatch.complete(store, boundary, snapshot, intent, obligation, matched)
