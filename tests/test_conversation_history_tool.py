@@ -1,6 +1,7 @@
 """The connector reads one conversation through the existing bounded pager."""
 import pytest
 
+from agent_comms.errors import UnregisteredThreadError
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 
@@ -44,5 +45,5 @@ def test_explicit_user_conversation_does_not_read_the_callers_conversation(comms
 
 def test_history_refuses_a_channel_target(comms):
     conversation(comms)
-    with pytest.raises((ValueError, KeyError)):
+    with pytest.raises(UnregisteredThreadError):
         invoke_tool(comms, "comms_history", {"peer": "#any"}, caller=ThreadCaller("claude-ai"))
