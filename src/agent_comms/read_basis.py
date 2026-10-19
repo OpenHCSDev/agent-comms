@@ -776,6 +776,18 @@ class MessageDisplayScope(ABC):
         return index.offsets(lower=lower, upper=upper, descending=descending,
                              predicate=self.index_predicate, before_offset=before_offset)
 
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document,
+                    audience: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
+        prefixes: dict[Conversation, int] = {}
+        for row in index.latest_by_conversation(self, source.boundary, through=through):
+            if audience.includes(row):
+                conversation = self.read_key(row.sender, row.target, snapshot)
+                prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            tuple(DisplayedConversation(conversation, (), sequence)
+                  for conversation, sequence in prefixes.items()), source.bus_identity)
+
     @property
     @abstractmethod
     def index_predicate(self) -> tuple[str, tuple]:
@@ -879,14 +891,6 @@ class ChannelDisplayScope(MessageDisplayScope):
         targets = tuple(self.index_targets)
         return "target IN (" + ",".join("?" for _ in targets) + ")", targets
 
-    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
-            tuple(DisplayedConversation(ChannelConversation(target), (), row.seq)
-                  for target in self.targets
-                  if (row := index.latest_target(target, source.boundary)) is not None),
-            source.bus_identity)
-
     def identity(self, history_revision: FileRevision | None) -> ChannelDisplayIdentity:
         displayed = self.require_displayed()
         return ChannelDisplayIdentity(
@@ -926,17 +930,6 @@ class AllChannelDisplayScope(ChannelDisplayScope):
     def includes(self, message: Message) -> bool:
         return True
 
-    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        prefixes: dict[Conversation, int] = {}
-        for row in index.latest_by_conversation(self, source.boundary):
-            conversation = self.read_key(row.sender, row.target, snapshot)
-            prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
-            tuple(DisplayedConversation(conversation, (), sequence)
-                  for conversation, sequence in prefixes.items()),
-            source.bus_identity)
-
 
 @dataclass(frozen=True, slots=True)
 class MemberActivityDisplayScope(AllChannelDisplayScope):
@@ -945,12 +938,14 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
     participant_names: frozenset[str] = frozenset()
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
+                    source: OpenedWireSource, index: BusPageIndex, *, document,
+                    audience: MessageDisplayScope, through: int | None = None) -> DisplayBasis:
         # Mentions and authorship may select only part of a channel conversation.
         # Unlike the whole-bus view, they cannot grant its unseen prefix.
-        rows = self.offsets(index, lower=None, upper=None, descending=False,
-                            before_offset=source.boundary)
-        return reads.capture_indexed(viewer, rows, snapshot, source, index, document=document)
+        rows = self.offsets(index, lower=None, upper=through + 1 if through is not None else None,
+                            descending=False, before_offset=source.boundary)
+        return reads.capture_indexed(viewer, (row for row in rows if audience.includes(row)),
+                                     snapshot, source, index, document=document)
 
     @classmethod
     def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:

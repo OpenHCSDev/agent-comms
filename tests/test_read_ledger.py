@@ -33,6 +33,31 @@ def read_message(comms, viewer, message):
     return message.seq in comms.bus.reads.cursor(viewer, snapshot).for_conversation(key)
 
 
+def test_delivery_watermark_keeps_other_peer_and_newer_messages_unread(tmp_path):
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    first = comms.messaging.send('alice', viewer, 'first').message
+    later = comms.messaging.send('alice', viewer, 'later').message
+    other = comms.messaging.send('bob', viewer, 'other peer').message
+    comms.bus.mark_delivered_through(viewer, first.seq, target=CommandTarget.named('alice'))
+    assert read_message(comms, viewer, first)
+    assert not read_message(comms, viewer, later)
+    assert not read_message(comms, viewer, other)
+    comms.bus.mark_delivered_through(viewer, later.seq, target=CommandTarget.named('alice'))
+    assert read_message(comms, viewer, later)
+    assert not read_message(comms, viewer, other)
+
+
+def test_mark_all_uses_conversation_prefixes_without_sparse_message_lists(tmp_path):
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    messages = [comms.messaging.send('alice', viewer, str(i)).message for i in range(3)]
+    comms.views.mark_user_view_read('#any', worktree=str(tmp_path))
+    assert all(read_message(comms, viewer, message) for message in messages)
+    cursor = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+    assert all(not position.exceptions for position in cursor.conversations.values())
+
+
 def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_path):
     comms = prepared(tmp_path)
     message = comms.messaging.send("alice", "#team", "shown").message
