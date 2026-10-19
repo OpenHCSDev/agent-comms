@@ -220,21 +220,21 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
 
 @dataclass(frozen=True)
 class PiCost(PiPayload):
-    input: float | None = wire_field("input")
-    output: float | None = wire_field("output")
-    cache_read: float | None = wire_field("cacheRead")
-    cache_write: float | None = wire_field("cacheWrite")
-    total: float | None = wire_field("total")
+    input: float = wire_field("input", 0.0)
+    output: float = wire_field("output", 0.0)
+    cache_read: float = wire_field("cacheRead", 0.0)
+    cache_write: float = wire_field("cacheWrite", 0.0)
+    total: float = wire_field("total", 0.0)
 
     @classmethod
-    def normalize_field(cls, target, key, value, record):
+    def normalize_field(cls, target: object, key: str, value: object, record: object) -> object:
         amount = super().normalize_field(target, key, value, record)
         if type(amount) in (int, float) and not (math.isfinite(amount) and amount >= 0):
             raise MalformedRecord(f"Pi cost {key} must be a finite nonnegative number.")
         return amount
 
     def charged(self) -> Decimal:
-        return Decimal(0) if self.total is None else Decimal(str(self.total))
+        return Decimal(str(self.total))
 
 
 
