@@ -46,12 +46,13 @@ from pathlib import Path
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cutover.carry import CarryChain, CarryLedger, RetainedBus, Step
+from cutover.carry import Carried, CarryChain, CarryLedger, RetainedBus, Step, TodoColumnCarry
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.store_files import _store_lock
@@ -189,9 +190,14 @@ class Revisions:
             subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(path)])
 
 
-def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> dict:
+def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> Carried:
     """Run one step from the revision that declares it, with that revision's src and
     ``stack``'s Python: the target's staged stack, never the installed one."""
+    if step.columns:
+        if "--before-stop" in flags:
+            return TodoColumnCarry.before_stop(root, apply=True)
+        return TodoColumnCarry.carry_step(
+            root, step, CarryChain.at(revisions.repo, step.chain_revision), apply=True)
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
     # Historical conversions use their own source, but their old CLI cannot decide
@@ -204,9 +210,7 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
     operation = "before_stop" if "--before-stop" in flags else "carry"
     output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
                  operation, root, cwd=tree, env=environment)
-    result = json.loads(output.strip().splitlines()[-1])
-    return {"carry": step.name, "changed": result["changed"], "applied": True,
-            "rewritten": result["rewritten"], **result["detail"]}
+    return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
 
 
 def before_stop(
@@ -214,7 +218,8 @@ def before_stop(
 ) -> list[dict]:
     """What the running installation needs before its own stop command reads the bus."""
     with _store_lock(root / "wire"):
-        return [carry(step, root, stack, revisions, "--before-stop", "--apply") for step in pending]
+        return [carry(step, root, stack, revisions, "--before-stop", "--apply").report(
+            step.name, True) for step in pending]
 
 
 def carry_all(
@@ -227,8 +232,8 @@ def carry_all(
                 step.name, CarryLedger(root).applied())
             result = carry(step, root, stack, revisions, "--apply")
             CarryLedger(root).record(step.name)
-            result["rewritten"] = [*result["rewritten"], CarryLedger.name]
-        results.append(result)
+            result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
+        results.append(result.report(step.name, True))
         RetainedBus.record(revisions.repo, root)
     return results
 

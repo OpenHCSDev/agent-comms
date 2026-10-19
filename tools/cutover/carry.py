@@ -53,6 +53,11 @@ class Carried:
     """Files under the bus root this run wrote; every other file stays byte-identical."""
 
 
+    def report(self, name: str, applied: bool) -> dict[str, object]:
+        return {"carry": name, "changed": self.changed, "applied": applied,
+                "rewritten": self.rewritten, **self.detail}
+
+
 @dataclass(frozen=True)
 class CarryLedger:
     """The steps applied to one bus, oldest first."""
@@ -182,8 +187,7 @@ class Carry(ABC):
                 if args.apply:
                     CarryLedger(args.root).record(cls.name())
                     result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
-        print(json.dumps({"carry": cls.name(), "changed": result.changed, "applied": args.apply,
-                          "rewritten": result.rewritten, **result.detail}))
+        print(json.dumps(result.report(cls.name(), args.apply)))
 
 
 
@@ -261,8 +265,9 @@ class Step:
                     if (isinstance(statement, ast.Assign)
                             and [target.id for target in statement.targets
                                  if isinstance(target, ast.Name)] == ["after"]):
-                        return cls(name, ast.literal_eval(statement.value), revision, node.name, revision,
-                                   cls.declared_columns(source), statement.lineno)
+                        return cls(name, ast.literal_eval(statement.value), revision,
+                                   node.name, revision, cls.declared_columns(source),
+                                   statement.lineno)
                 raise ValueError(f"{name} declares no step it runs after")
         raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
@@ -444,13 +449,20 @@ class TodoColumnCarry(Carry):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
+        chain = cls.chain()
+        step = next(step for step in chain.steps if step.name == cls.name())
+        return cls.carry_step(root, step, chain, apply=apply)
+
+    @classmethod
+    def carry_step(cls, root: Path, step: Step, chain: CarryChain, *, apply: bool) -> Carried:
+        """One column owner applies current or recovered immutable declarations."""
         path = TodoStore.path_in(root)
         if not path.exists():
             return Carried(0)
         with closing(CoordinationStore.writer(path)) as db:
             db.execute("BEGIN IMMEDIATE")
             try:
-                changed = cls._carry(db, apply=apply)
+                changed = cls._carry(db, step, chain, apply=apply)
             except BaseException:
                 db.rollback()
                 raise
@@ -458,7 +470,7 @@ class TodoColumnCarry(Carry):
         return Carried(changed, {}, rewritten if changed and apply else ())
 
     @classmethod
-    def _carry(cls, db: sqlite3.Connection, *, apply: bool) -> int:
+    def _carry(cls, db: sqlite3.Connection, step: Step, chain: CarryChain, *, apply: bool) -> int:
         table, fields = Todo.declared_name, Todo._fields()
         actual = tuple(row[1] for row in db.execute(f'PRAGMA table_info("{table}")'))
         expected = tuple(item.wire_name for item in fields)
@@ -468,9 +480,10 @@ class TodoColumnCarry(Carry):
         # The chain says which declared columns this bus may still lack here; the
         # rebuild fills each one empty, as the step that declares it does.
         added = tuple(item for item in fields if item.wire_name not in actual)
-        lacking = cls.chain().lacking(cls.name())
+        (column,) = step.columns
+        lacking = chain.lacking(step.name)
         if (actual != tuple(item.wire_name for item in fields if item not in added)
-                or cls.column not in {item.name for item in added}
+                or column not in {item.name for item in added}
                 or not {item.name for item in added} <= lacking):
             raise ValueError(f"Unexpected todo columns: {actual!r}")
         selected = ", ".join(f'? AS "{item.wire_name}"' if item in added else f'"{item.wire_name}"'
@@ -482,7 +495,7 @@ class TodoColumnCarry(Carry):
         if not apply:
             db.rollback()
             return count
-        saved = f"{table}_before_{cls.column}"
+        saved = f"{table}_before_{column}"
         indexes = tuple(db.execute(
             "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
             (table,)))
