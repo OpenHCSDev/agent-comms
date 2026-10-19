@@ -160,17 +160,10 @@ class RegistryGoalConversion(DocumentConversion):
     def converted(cls, raw: dict) -> dict:
         if cls.version(raw) == cls.target_version():
             return raw
-        threads = {name: dict(thread) for name, thread in raw["threads"].items()}
-        for thread in threads.values():
-            if thread.get("goal") == {}:
-                thread["goal"] = None
-        statuses = dict(raw["statuses"])
-        for name, thread in threads.items():
-            if thread.get("execution") == "external" and statuses[name]["kind"] in (
-                "connected", "no_bridge"
-            ):
-                statuses[name] = {"kind": "cli_inbox"}
-        return {**raw, "version": cls.target_version(), "threads": threads, "statuses": statuses}
+        document = FieldCodec.decode(RegistryDocument, {**raw, "version": cls.target_version()})
+        for name, status in tuple(document.statuses.items()):
+            document.set_status(name, status)
+        return FieldCodec.encode(document)
 
 
 @dataclass(frozen=True, slots=True)

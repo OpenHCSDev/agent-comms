@@ -164,7 +164,7 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
         """The status owner reads the bridge; registration stores its declaration."""
-        return CliInboxThreadStatus().registered(thread)
+        return CliInboxThreadStatus()
 
     @classmethod
     def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,

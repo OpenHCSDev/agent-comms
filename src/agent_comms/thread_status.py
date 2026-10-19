@@ -162,10 +162,14 @@ class CliInboxPresence:
     """The declared inbox resolves its bridge process at every read."""
 
     def registered(self, thread: Thread) -> ThreadStatus:
-        return ConnectedThreadStatus() if thread.process_identity.alive() else NoBridgeThreadStatus()
+        return (ConnectedThreadStatus() if thread.process_identity.alive()
+                else NoBridgeThreadStatus())
 
     def declaration(self) -> ThreadStatus:
         return CliInboxThreadStatus()
+
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return True
 
     def restored(self) -> ThreadStatus:
         """Restoration preserves the inbox declaration, never a liveness answer."""
@@ -177,13 +181,8 @@ class CliInboxPresence:
         return self
 
 
-class CliInboxThreadStatus(CliInboxPresence, ThreadStatus):
+class CliInboxThreadStatus(CliInboxPresence, StoppedThreadStatus):
     """Stored external inbox declaration; connectedness is never persisted."""
-
-    receiving = False
-
-    def in_view(self, visibility: RosterVisibility) -> bool:
-        return True
 
 
 class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
@@ -197,9 +196,6 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
     """
 
     receiving = False
-
-    def in_view(self, visibility: RosterVisibility) -> bool:
-        return True
 
     def require_self_rename(self) -> None:
         """The CLI participant itself calls rename; it needs no bridge."""

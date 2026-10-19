@@ -64,11 +64,8 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         self.statuses[name] = status.declaration()
 
     def status(self, name: str) -> ThreadStatus:
-        canonical = self.canonical_name(name)
-        try:
-            return self.statuses[canonical].registered(self.require(canonical))
-        except KeyError as error:
-            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+        thread = self.require(name)
+        return self.statuses[thread.name].registered(thread)
 
     def require_active(self, name: str) -> Thread:
         try:
