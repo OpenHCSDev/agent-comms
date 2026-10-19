@@ -8,6 +8,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
+from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, AuthoredObservationWireRecord, RecordedContextManifestWireObservation
 from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
@@ -117,7 +118,8 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     assert sum(source.length for source in rendered.contributions) == len(raw)
     assert next(source for source in rendered.contributions if source.kind is UserInputSegment).images == (0,)
     command = Prompt(input_id='a'*32, message=rendered.text, images=images,
-                     context_contributions=rendered.contributions)
+                     context_contributions=rendered.contributions,
+                     owner_tools=OwnerToolConnection('/unused', 'a' * 64))
     decoded = Prompt.from_wire(command.to_rpc())
     assert decoded == command
     assert decoded.message.encode() == raw and decoded.images == images

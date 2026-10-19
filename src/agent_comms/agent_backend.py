@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
+    from .native_tool_call import NativeToolMode
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
 
@@ -300,6 +301,7 @@ class TurnDelivery:
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
     ui_request: Callable[..., Awaitable[Any]]
+    tool_mode: NativeToolMode
 
 
 class RunsTurns(ABC):

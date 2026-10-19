@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field, replace
 from pathlib import Path
@@ -30,8 +30,8 @@ from .envelope_claim_transitions import (
 from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
 from .native_arguments import NativeArguments
 from .native_tools import NativeExecutableTool
+from .native_tool_transport import ToolTransport
 from .selected_tool_broker import (
-    OwnerToolSocket,
     consume_selected_slot,
     record_selected_terminal,
     verify_sent_full_input,
@@ -132,16 +132,51 @@ class CoordinationCall(ExecutableCodingCall):
     arguments: dict[str, object]
 
 
-@dataclass
-class CodingToolOwner:
+@dataclass(frozen=True, kw_only=True)
+class CodingToolOwner(ABC):
     comms: Comms
-    store: Coordination
-    claim_scope: WakeClaim
     owner_name: str
-    session_dir: Path
-    input_id: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+
+    async def allow(self, turn, round_number: int, call: CodingCall) -> None:
+        def check(store: Coordination) -> None:
+            self.verify(store, turn, self.comms.registry.snapshot())
+            slot = call.slot(turn.command.input_id, round_number)
+            consume_selected_slot(turn.launch.session.directory, slot, slot)
+            owner = self.comms.registry.require(self.owner_name)
+            tool = call.require_tool()
+            try:
+                effects = tool.storage_effects(Path(owner.worktree))
+                if effects:
+                    self.comms.registry.decide_storage(self.owner_name, effects)
+            except SelectedToolDenied as error:
+                raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
+            resource = tool.claim
+            if resource is not None:
+                canonical = resource.normalized(Path(owner.worktree))
+                self.claims[canonical] = self.claim_resource(
+                    store, turn, resource, slot, self.claims.get(canonical))
+
+        async with self.check_lock:
+            await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+
+    @abstractmethod
+    def verify(self, store, turn, snapshot): ...
+
+    @abstractmethod
+    def claim_resource(self, store, turn, resource, slot, prior): ...
+
+    def for_original(self, assignment, operation_id):
+        raise SelectedToolDenied("An ordinary input has no selected original")
+
+
+@dataclass(frozen=True)
+class SelectedCodingToolOwner(CodingToolOwner):
+    store: Coordination
+    claim_scope: WakeClaim
+    session_dir: Path
+    input_id: str
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
@@ -162,38 +197,16 @@ class CodingToolOwner:
             operation_id=operation_id,
         ))
 
-    async def allow(self, round_number: int, call: CodingCall) -> None:
-        def check(store: Coordination) -> None:
-            verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
-            verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
-            slot = call.slot(self.input_id, round_number)
-            consume_selected_slot(self.session_dir, slot, slot)
-            owner = self.comms.registry.require(self.owner_name)
-            tool = call.require_tool()
-            try:
-                effects = tool.storage_effects(Path(owner.worktree))
-                if effects:
-                    self.comms.registry.decide_storage(self.owner_name, effects)
-            except SelectedToolDenied as error:
-                raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
-            resource = tool.claim
-            if resource is not None:
-                canonical = resource.normalized(Path(owner.worktree))
-                prior = self.claims.get(canonical)
-                claim_authority = (
-                    prior.claim_scope
-                    if prior is not None
-                    else replace(self.claim_scope, operation_id=slot)
-                )
-                claimed = publish_selected_resource_claim(
-                    self.comms, store, claim_authority, self.owner_name, resource
-                )
-                self.claims[canonical] = claimed
+    def verify(self, store, turn, snapshot):
+        if self.input_id != turn.command.input_id:
+            raise SelectedToolDenied("Native tool input changed")
+        verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
+        verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
 
-        # Shared original-input views keep one claim map. Serialize its checks;
-        # the native tools themselves remain free to execute in parallel.
-        async with self.check_lock:
-            await Coordination.run_async(self.store.session.path, check)
+    def claim_resource(self, store, turn, resource, slot, prior):
+        scope = prior.claim_scope if prior is not None else replace(self.claim_scope, operation_id=slot)
+        return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
+
 
 
 @dataclass(frozen=True)
@@ -207,13 +220,11 @@ class CodingToolMode(NativeToolMode):
         thread = self.owner.comms.registry.require(self.owner.owner_name)
         return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
 
-    async def open_transport(self, turn, ownership) -> OwnerToolSocket:
+    async def open_transport(self, turn, ownership) -> ToolTransport:
         return await CodingToolSocket.open(turn, ownership, self.owner)
 
-class CodingToolSocket(OwnerToolSocket[CodingCall]):
+class CodingToolSocket(ToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
-
-    max_request = 1024 * 1024
 
     def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
         super().__init__(directory, token)
@@ -235,7 +246,7 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
-        await self.owner.allow(round_number, call)
+        await self.owner.allow(self.turn, round_number, call)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}

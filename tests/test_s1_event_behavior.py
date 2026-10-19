@@ -167,6 +167,7 @@ async def owner_turn(comms, tmp_path, fake_native_catalog):
 async def start_owned_input(execution, progress):
     claim_scope = OwnedSend(
         comms=execution.runner.comms,
+        owner_name=execution.thread.name,
         inputs=execution.runner.inputs,
         goal_store=execution.runner.comms.goals.open_goal_store(),
         session_id=execution.session_id,

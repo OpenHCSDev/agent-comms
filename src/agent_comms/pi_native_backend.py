@@ -276,6 +276,7 @@ class PiNativeBackend(
             package=package,
             root=self.comms.root,
             ui_request=delivery.ui_request,
+            tool_mode=delivery.tool_mode,
         ):
             yield event
 

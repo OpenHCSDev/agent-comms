@@ -15,6 +15,7 @@ import pytest
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_commands import GetState, Prompt
+from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_events import ContextCommitted, InputCommitted, Response
 from native_proof_cases import read_proof_rows, write_proof_rows
 
@@ -283,10 +284,12 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
         (unknown_id, unknown_text),
     ):
         assert (
-            await probe(Prompt(id="duplicate-" + identifier, input_id=identifier, message=text))
+            await probe(Prompt(id="duplicate-" + identifier, input_id=identifier, message=text,
+                               owner_tools=OwnerToolConnection(str(owner.session.parent / 's'), 'a' * 64)))
         ).success
         refused = await probe(
-            Prompt(id="conflict-" + identifier, input_id=identifier, message="different")
+            Prompt(id="conflict-" + identifier, input_id=identifier, message="different",
+                   owner_tools=OwnerToolConnection(str(owner.session.parent / 's'), 'a' * 64))
         )
         assert not refused.success and "Conflicting replay" in refused.error
     idle = await probe(GetState(id="after-dedup"))

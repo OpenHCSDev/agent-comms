@@ -9,6 +9,7 @@ from dataclasses import replace
 
 import pytest
 from agent_comms.native_startup import NativeStartup
+from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_vocabulary import OffThinkingLevel
 
 import agent_comms.backend as backend
@@ -309,7 +310,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         worktree=native_backend.project,
     )
     # The command result owner needs a session; this probe never opens its child.
-    session = backend.TurnSession(launch, "", native_session=PersistentPiSession(), startup=NativeStartup(native_backend.project))
+    session = NativeSessionPreparation(launch, native_session=PersistentPiSession(), startup=NativeStartup(native_backend.project))
     observed = []
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=10) as child:
         channel = PiRpcChannel(child.stdout)

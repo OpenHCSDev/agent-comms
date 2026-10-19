@@ -28,7 +28,7 @@ from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
 from .native_input_record import NativeInputCommit
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
-from .native_tool_call import NativeToolMode, NoNativeTools
+from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 
 if TYPE_CHECKING:
@@ -602,7 +602,7 @@ class NativePiRpcLaunch:
         model: SelectedModel,
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         environment: dict[str, str] | None = None,
-        selected_tool_mode: NativeToolMode = NoNativeTools(),
+        selected_tool_mode: NativeToolMode,
     ) -> NativePiRpcLaunch:
         """Construct a complete launch through its acquired immutable artifact.
 

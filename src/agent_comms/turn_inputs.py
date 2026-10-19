@@ -145,6 +145,7 @@ class InputForwarding:
             message=text,
             images=item.content.images or None,
             context_contributions=item.content.contributions,
+            owner_tools=session.tool_socket.connection,
             streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
         )
         def write():

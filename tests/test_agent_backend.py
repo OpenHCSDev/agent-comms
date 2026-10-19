@@ -17,6 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
@@ -364,6 +365,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         input_started=lambda public_id, native_id, text: starts.append(text) or True,
         request_progress=lambda progress, process: None,
         ui_request=None,
+        tool_mode=NoSelectedTools(),
     )
     events = []
     try:
