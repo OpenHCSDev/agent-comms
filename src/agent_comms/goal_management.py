@@ -33,7 +33,7 @@ from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
-from .turn_lease import FinishedTurnFence
+from .turn_lease import TurnCompletion
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
@@ -267,7 +267,7 @@ class Goals:
             return ()
         return closed
 
-    def release_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
+    def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
         """Release waits after the latest exact, still-idle child turn.
 
         ACP invokes this after terminal publication, never at the earlier UI
@@ -276,15 +276,13 @@ class Goals:
         """
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            sources = snapshot.idle_after(fence)
+            sources = fence.idle_sources(snapshot)
             if not sources:
                 return ()
             (source,) = sources
             canonical = source.name
             released: list[str] = []
-            for wait in self.waits.targeting(
-                source.incarnation.require_recorded(), source.turn_generation
-            ):
+            for wait in self.waits.targeting(source.incarnation.require_recorded()):
                 for owner in snapshot.threads_for(wait.owner):
                     if any(
                         self._release_finished_wait(

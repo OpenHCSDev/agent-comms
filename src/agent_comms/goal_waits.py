@@ -276,8 +276,7 @@ class GoalWaitTargetRow(TypedTable):
     goal_id: str = field(metadata={"sql": Column(primary_key=True)})
     position: int = field(metadata={"sql": Column(primary_key=True)})
     target_lookup: str
-    generation: int | None
-    indexes = (Index(("target_lookup", "generation", "goal_id")),)
+    indexes = (Index(("target_lookup", "goal_id")),)
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
@@ -307,19 +306,11 @@ class GoalWaits(ThreadOwnedState, TypedStore):
             for wait in waits:
                 StoredGoalWaitRow(wait.goal_id, wait).upsert(db)
                 GoalWaitTargetRow.delete(db, goal_id=wait.goal_id)
-                for position, (target, generation) in enumerate(
-                    zip(
-                        wait.targets,
-                        wait.target_turn_generations,
-                        strict=True,
-                    )
-                ):
-                    GoalWaitTargetRow(
-                        wait.goal_id, position, target.incarnation.lookup, generation
-                    ).insert(db)
+                for position, target in enumerate(wait.targets):
+                    GoalWaitTargetRow(wait.goal_id, position, target.incarnation.lookup).insert(db)
 
     def targeting(
-        self, target: RecordedThreadIncarnation, generation: int
+        self, target: RecordedThreadIncarnation
     ) -> tuple[RecordedGoalWait, ...]:
         with self.snapshot() as db:
             return tuple(
@@ -328,8 +319,8 @@ class GoalWaits(ThreadOwnedState, TypedStore):
                     db.execute(
                         f"SELECT * FROM {StoredGoalWaitRow.declared_name} WHERE goal_id IN "
                         f"(SELECT goal_id FROM {GoalWaitTargetRow.declared_name} "
-                        "WHERE target_lookup=? AND generation>0 AND generation<=?)",
-                        (target.lookup, generation),
+                        "WHERE target_lookup=?)",
+                        (target.lookup,),
                     )
                 )
             )
@@ -347,13 +338,11 @@ class GoalWaits(ThreadOwnedState, TypedStore):
     def clear(self, goal_id: str, *, wait_id: str | None = None) -> bool:
         if not self.path.exists():
             return False
-        condition = "goal_id=?"
-        parameters: tuple[str, ...] = (goal_id,)
-        if wait_id is not None:
-            condition += " AND json_extract(wait, '$.wait_id')=?"
-            parameters += (wait_id,)
         with self.writing() as db:
-            return StoredGoalWaitRow.delete(db, where=condition, parameters=parameters).rowcount > 0
+            return StoredGoalWaitRow.delete(
+                db, where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
+                parameters=(goal_id, wait_id, wait_id),
+            ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
         return self.for_goal(goal, self.read())

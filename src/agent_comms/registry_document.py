@@ -35,7 +35,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
@@ -525,21 +525,21 @@ class RegistryDocument(RegistryPresence):
         self.statuses[name] = resumed
         self.last_seen[name] = time.time()
 
-    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
+    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]:
         """Release only this exact lease; a revoked input grant cannot confirm completion."""
         name = self.canonical_name(lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None:
-            return False, None
+            return False, NoFinishedTurn()
         canonical_lease = lease.renamed(name)
         record = current.turn_record
         if record != canonical_lease.record:
-            return False, None
+            return False, NoFinishedTurn()
         if TurnIdentity(current.incarnation, current.turn_generation) != canonical_lease.identity:
-            return False, None
+            return False, NoFinishedTurn()
         turn = record.read().require_active()
         if not turn.may_release(canonical_lease):
-            return False, None
+            return False, NoFinishedTurn()
         attested = canonical_lease.can_attest(self.claims.generations[name])
         attested = attested and turn.claimed_generation is not None and self.statuses[name].active
         keeps_resume = turn.phase.keeps_project_resume
@@ -551,7 +551,7 @@ class RegistryDocument(RegistryPresence):
         )
         self.last_seen[name] = time.time()
         if not attested:
-            return True, None
+            return True, NoFinishedTurn()
         return True, FinishedTurnFence(
             identity=canonical_lease.identity,
             turn_id=lease.turn_id,
@@ -622,9 +622,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
 
-    def idle_after(self, fence: FinishedTurnFence | None) -> tuple[Thread, ...]:
-        if fence is None:
-            return ()
+    def idle_after(self, fence: FinishedTurnFence) -> tuple[Thread, ...]:
         return tuple(
             thread
             for thread in self.threads_for(fence.identity.incarnation.require_recorded())

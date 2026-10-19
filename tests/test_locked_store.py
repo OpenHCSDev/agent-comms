@@ -35,12 +35,19 @@ class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
         self.update(lambda rows: {**rows, wait.goal_id: wait})
 
     def clear(self, goal_id, *, wait_id=None):
-        before = self.read()
-        current = before.get(goal_id)
-        if current is None or (wait_id is not None and current.wait_id != wait_id):
-            return False
-        self.update(lambda rows: {key: value for key, value in rows.items() if key != goal_id})
-        return True
+        removed = False
+
+        def change(rows):
+            nonlocal removed
+            current = rows.get(goal_id)
+            if current is None or (wait_id is not None and current.wait_id != wait_id):
+                return rows
+            removed = True
+            return {key: row for key, row in rows.items() if key != goal_id}
+
+        self.update(change)
+        return removed
+
 
 
 def wait(goal_id="goal"):

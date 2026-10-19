@@ -1,5 +1,6 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
+from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 from agent_comms.messages import ConversationRole, NoticeRole
 import asyncio
 import os
@@ -368,7 +369,7 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     new_claim = _begin(comms, "child", "child-turn")
     assert new_claim.identity.generation == old_claim.identity.generation + 1
     active = comms.registry.require("child").active_turn
-    assert comms.agents.finish_turn(old_claim) is None
+    assert comms.agents.finish_turn(old_claim) == NoFinishedTurn()
     assert comms.registry.require("child").active_turn == active
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
     assert comms.registry.require("owner").goal.state.active
