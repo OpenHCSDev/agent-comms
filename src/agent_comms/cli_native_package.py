@@ -12,7 +12,16 @@ from pathlib import Path
 
 from .cli_commands import DeclaredOptions, option
 from .declared_family import DeclaredFamily
-from .native_build import NativeBuild
+from .field_codec import FieldCodec
+from .native_build import (
+    DependencyPackage,
+    DependencySource,
+    NativeBuild,
+    NoDependencyPackage,
+    NoPublish,
+    PublishRoot,
+    PublishTarget,
+)
 from .native_package import (
     MANIFEST,
     install_declared_sources,
@@ -47,16 +56,43 @@ class NativePackageVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
 class PrepareVerb(NativePackageVerb):
     help = "Build the checkout's pinned native package using explicit stack configuration"
     checkout: StoragePath = option("checkout", help="the source checkout")
-    directory: StoragePath = option("--directory", default=MANIFEST.parent, help="the package destination root")
-    python: StoragePath = option("--python", default=Path(sys.executable), help="the shared stack interpreter")
-    dependencies: StoragePath | None = option("--dependencies", default=None, help="a verified MCP dependency package")
-    publish: StoragePath | None = option("--publish", default=None, help="a deployment root")
-    update_pins: bool = option("--update-pins", default=False, action="store_true", help="regenerate the source pin")
+    directory: StoragePath = option(
+        "--directory", default=MANIFEST.parent, help="the package destination root"
+    )
+    python: StoragePath = option(
+        "--python", default=Path(sys.executable), help="the shared stack interpreter"
+    )
+    dependencies: DependencySource = option(
+        "--dependencies",
+        default=NoDependencyPackage(),
+        parser_default=NoDependencyPackage(),
+        action="store",
+        type=lambda value: DependencyPackage(Path(value)),
+        normalize=FieldCodec.encode,
+        help="a verified MCP dependency package",
+    )
+    publish: PublishTarget = option(
+        "--publish",
+        default=NoPublish(),
+        parser_default=NoPublish(),
+        action="store",
+        type=lambda value: PublishRoot(Path(value)),
+        normalize=FieldCodec.encode,
+        help="a deployment root",
+    )
+    update_pins: bool = option(
+        "--update-pins", default=False, action="store_true", help="regenerate the source pin"
+    )
 
     def apply(self, ctx: None = None) -> None:
-        environment = {"HOME": str(Path.home()), "PATH": os.defpath,
-                       "PYTHONPATH": str(self.checkout / "src")}
-        step = NativeBuild(self.checkout, self.python, self.directory, environment, self.dependencies)
+        environment = {
+            "HOME": str(Path.home()),
+            "PATH": os.defpath,
+            "PYTHONPATH": str(self.checkout / "src"),
+        }
+        step = NativeBuild(
+            self.checkout, self.python, self.directory, environment, self.dependencies
+        )
         print(step.prepare(update_pins=self.update_pins, publish=self.publish))
 
 

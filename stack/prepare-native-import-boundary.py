@@ -13,6 +13,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from agent_comms.native_package import verify_native_package
+
 LOADER_SHA = "a1393de916487a2c47107ac7239f3139dcdb938705f88ba1ea5a954b3c8bb483"
 
 
@@ -166,11 +168,7 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         # Reuse only a whole-package committed input, never an arbitrary npm
         # directory. The existing owner checks its current native tree pin.
         dependency_package = dependency_package.resolve(strict=True)
-        subprocess.run(
-            [sys.executable, "-m", "agent_comms.cli_native_package", "verify", str(dependency_package)],
-            env=environment,
-            check=True,
-        )
+        verify_native_package(dependency_package)
         staging = dependency_package / "agent-comms-extensions/pi-mcp-client"
         for name in ("package.json", "package-lock.json", "index.mjs", "README.md"):
             if (extension / name).read_bytes() != (staging / name).read_bytes():

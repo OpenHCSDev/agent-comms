@@ -38,7 +38,6 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -46,13 +45,12 @@ from pathlib import Path
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
+from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
@@ -92,13 +90,13 @@ class Stack:
     """One checkout's stack environment: the Python and CLI an installation runs."""
 
     checkout: Path
+    python: Path
+    native_root: Path
     home: Path = Path.home()
-    interpreter: Path | None = None
-    native_root: Path | None = None
 
-    @property
-    def python(self) -> Path:
-        return self.interpreter if self.interpreter is not None else self.checkout / "stack/.venv/bin/python"
+    @classmethod
+    def at(cls, checkout: Path) -> Stack:
+        return cls(checkout, checkout / "stack/.venv/bin/python", checkout / "stack")
 
     @property
     def lock(self) -> Path:
@@ -128,10 +126,9 @@ class Stack:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
 
     def prepare_native(self) -> Path:
-        directory = self.checkout / "stack" if self.native_root is None else self.native_root
-        return NativeBuild(self.checkout, self.python, directory, self.environment()).prepare()
+        return NativeBuild(self.checkout, self.python, self.native_root, self.environment()).prepare()
 
-    def environment(self, *paths: Path) -> dict:
+    def environment(self, *paths: Path) -> dict[str, str]:
         """``paths`` first; then this checkout's ``src``. ``home`` holds the route its clients read."""
         return {**os.environ, "HOME": str(self.home),
                 "PYTHONPATH": os.pathsep.join(map(str, (*paths, self.checkout / "src")))}
@@ -334,7 +331,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
         pending = CarryChain.at(checkout, target).pending(applied)
     except ValueError as error:
         raise UpgradeRefused(str(error)) from None
-    installed = Stack(checkout)
+    installed = Stack.at(checkout)
     if not rehearse_only:
         installed.require_uv()
     if not rehearse_only and not installed.python.exists():
@@ -345,11 +342,11 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
     with tempfile.TemporaryDirectory(prefix="upgrade-bus.", dir=workspace) as scratch:
         revisions = Revisions(checkout, Path(scratch))
         try:
-            staged = Stack(revisions.tree(target))
+            staged = Stack.at(revisions.tree(target))
             if rehearse_only:
                 # Read/carry the target source with shared dependencies; rehearsal neither
                 # installs Python packages nor needs a second copy of the current checkout.
-                staged = replace(staged, interpreter=Path(sys.executable),
+                staged = replace(staged, python=Path(sys.executable),
                                  native_root=native_environment(workspace / "native"))
                 staged.imports()
                 return {"from": current, "to": target, "pending": [step.name for step in pending],
