@@ -195,10 +195,9 @@ class OperationDelivery(OrderDelivery):
 
 @dataclass(frozen=True, kw_only=True)
 class CheckedDelivery(OrderDelivery, declared_name=None):
-    """A verified receipt keeps the print alongside the delivery it measures."""
+    """A checked delivery keeps its actual measured print."""
 
     printed: CheckPrinted
-    submission: ClassVar[type[OrderDelivery]]
 
     @property
     def check_line(self) -> str:
@@ -207,7 +206,7 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     @classmethod
     def record(cls, delivery: OrderDelivery, printed: CheckPrinted) -> CheckedDelivery:
         for member in cls.members_with(cls):
-            if isinstance(delivery, member.submission):
+            if issubclass(member, type(delivery)):
                 values = {item.name: getattr(delivery, item.name) for item in fields(delivery)}
                 return member(**(values | {"printed": printed}))
         raise ValueError(f"No checked receipt declared for {type(delivery).__name__}.")
@@ -215,12 +214,12 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class CheckedCommitDelivery(CheckedDelivery, CommitDelivery):
-    submission = CommitDelivery
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
 class CheckedOperationDelivery(CheckedDelivery, OperationDelivery):
-    submission = OperationDelivery
+    pass
 
 
 @dataclass(frozen=True)
@@ -1013,6 +1012,7 @@ class PermissionQuestion:
 
     words: tuple[str, ...]
     modals: ClassVar[frozenset[str]] = frozenset({"should", "shall", "may", "can", "could"})
+    subjects: ClassVar[frozenset[str]] = frozenset({"i", "we"})
 
     @classmethod
     def read(cls, text: str) -> Iterator[PermissionQuestion]:
@@ -1027,7 +1027,7 @@ class PermissionQuestion:
             subject = self.words[:at]
             if subject[-2:] == ("me", "to"):
                 return True
-            if len(subject) == 2 and subject[0] in self.modals and subject[1] in ("i", "we"):
+            if len(subject) == 2 and subject[0] in self.modals and subject[1] in self.subjects:
                 return True
         return False
 
