@@ -479,8 +479,10 @@ class DeliveredInput(QueuedInput):
 
         def read(store: Coordination):
             with store.session.read():
-                assignments = pending_sealed_assignments(
-                    store, lookup, owner.name, after_seq=after_seq
+                assignments = tuple(
+                    assignment for assignment in pending_sealed_assignments(
+                        store, lookup, owner.name, after_seq=after_seq
+                    ) if assignment.audience.joins_active_turn()
                 )
             with bus.log.checked_read() as source:
                 if source.marker.root_id != root_id:
