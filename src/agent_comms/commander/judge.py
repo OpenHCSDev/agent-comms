@@ -28,10 +28,8 @@ from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
 from ..cli_commands import option
 from .order import CommanderVerb, RuledVerb
-from .config import CommanderConfig
+from .config import me
 
-CONFIG = CommanderConfig.installed()
-ME = CONFIG.commander
 
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
@@ -106,7 +104,7 @@ def roast(audience, thread, lines, text, fix, slop):
 
 def alarm():
     while True:
-        late = [edit for edit in Edit.unjudged(order.COMMS, ME) if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(me().comms, me().name) if time.time() - edit.at > 300]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
@@ -128,7 +126,7 @@ class ShowVerb(JudgeVerb):
         return True
 
     def run(self) -> None:
-        show([edit for edit in Edit.unjudged(order.COMMS, ME) if self.selects(edit)])
+        show([edit for edit in Edit.unjudged(me().comms, me().name) if self.selects(edit)])
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -170,7 +168,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
         orders = {todo.id: todo for todo in order.held_orders() if todo.sent_in(self.msg)}
-        edits = {edit.id: edit for edit in Edit.unjudged(order.COMMS, ME) if edit.problem in orders}
+        edits = {edit.id: edit for edit in Edit.unjudged(me().comms, me().name) if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
@@ -189,7 +187,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         for i, todo in selected.items():
             result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
             current[todo.id] = result.todo
-        left = len(Edit.unjudged(order.COMMS, ME))
+        left = len(Edit.unjudged(me().comms, me().name))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
         self.report(tuple(current.values()))
 
@@ -200,7 +198,7 @@ class OkVerb(VerdictVerb):
     serves: str = option(help="exact words of the order")
 
     def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        return AcceptedVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
+        return AcceptedVerdict(todo.revision, me().incarnation,
                                todo.held(), edit_id, quote=self.serves)
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -247,7 +245,7 @@ class BackVerb(VerdictVerb):
         return order.Slop(self.slop_kind, self.fact, self.at, self.derive, self.by)
 
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
+        return SendBackVerdict(todo.revision, me().incarnation,
                                todo.held(), edit_id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 
@@ -265,7 +263,7 @@ class BackVerb(VerdictVerb):
             audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
             roast(audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {ME} at review): '
+                    f'(strike {todo.strike_count} on {todo.id}; caught by {me().name} at review): '
                     f'{todo.strikes[-1].reason}')
             order.on_record(line, 'Send-back', audience)
 

@@ -463,7 +463,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
-    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={'repos': (
+    monkeypatch.setattr(script, 'CONFIG', script.me().config.model_copy(update={'repos': (
         script.Repo(checkout=toad, github='OpenHCSDev/toad'),)}))
     (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
     edit = 'Delete src/agent_comms/acp_ingress.py.'
@@ -1068,7 +1068,7 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
     assert not saved.strikes
     assert importlib.reload(judge).Edit.unjudged(comms, 'lead') == []
-    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+    assert not (judge.me().config.state / 'verdicts.jsonl').exists()
 
 
 @pytest.mark.parametrize('verb', ['ok', 'back'])
@@ -1088,7 +1088,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
-    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+    assert not (judge.me().config.state / 'verdicts.jsonl').exists()
 
 
 def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_script, monkeypatch):
@@ -1117,7 +1117,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     assert judge.Edit.unjudged(comms, 'lead') == []
     audience = SendBackVerdict.audience.of('worker', saved.goal)
     assert [to for to, _ in posted] == [audience, audience]
-    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+    assert not (judge.me().config.state / 'verdicts.jsonl').exists()
 
 
 @pytest.mark.parametrize('kind', [AcceptedVerdict, SendBackVerdict])

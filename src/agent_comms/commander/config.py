@@ -1,24 +1,33 @@
-"""The one record of this machine's commander facts, written by `agent-comms install`.
+"""The commander facts a commander thread's registration holds, recorded by `agent-comms install`.
 
-Every commander tool reads its paths, names and repositories from here; none of them
-hardcodes a home directory, a bus root or a unit name.
+Every commander tool reads its board, paths and repositories from the registration of the
+thread calling it; none of them hardcodes a home directory, a bus root or a unit name.
 """
 from __future__ import annotations
 
+import os
 import subprocess
+from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from pydantic import BaseModel, ConfigDict
+from ..child_process import ProcessIdentity
+from ..errors import RelationViolationError
+from ..field_codec import PathText
+
+if TYPE_CHECKING:
+    from ..comms import Comms
+    from ..thread_identity import ThreadIncarnation
+    from ..todos import TodoStore
 
 
-class Repo(BaseModel):
+@dataclass(frozen=True)
+class Repo:
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
-    model_config = ConfigDict(frozen=True)
-
-    checkout: Path
+    checkout: Annotated[Path, PathText]
     github: str
     source: str = 'src'
 
@@ -31,44 +40,89 @@ class Repo(BaseModel):
         return cls(checkout=checkout.resolve(), github='/'.join(github))
 
 
-class CommanderConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
+@dataclass(frozen=True)
+class CommanderConfig:
+    """What one commander works with, held on its own thread's registration."""
 
-    commander: str
-    root: Path
-    cli: Path
-    state: Path
-    board: Path
-    narrative: Path
-    skill: Path
-    rules: tuple[Path, ...]
+    TAG: ClassVar[str] = 'commander'
+
+    cli: Annotated[Path, PathText]
+    state: Annotated[Path, PathText]
+    board: Annotated[Path, PathText]
+    narrative: Annotated[Path, PathText]
+    skill: Annotated[Path, PathText]
+    rules: tuple[Annotated[Path, PathText], ...]
     repos: tuple[Repo, ...]
-    worktrees: Path
-    scratch: Path
-    disk: Path
+    worktrees: Annotated[Path, PathText]
+    scratch: Annotated[Path, PathText]
+    disk: Annotated[Path, PathText]
     parked: frozenset[str] = frozenset()
-
-    @staticmethod
-    def path(home: Path | None = None) -> Path:
-        return (home or Path.home()) / '.config/agent-comms/commander.json'
 
     @staticmethod
     def packaged_rules() -> Path:
         return Path(str(files('agent_comms.commander') / 'rules'))
 
-    @classmethod
-    @cache
-    def installed(cls) -> CommanderConfig:
-        return cls.model_validate_json(cls.path().read_text())
-
-    def write(self, home: Path) -> Path:
-        """Record the config and start each state file empty, so every tool reads a real file."""
-        path = self.path(home)
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path.write_text(self.model_dump_json(indent=1) + '\n')
+    def prepare(self) -> None:
+        """Start each state file empty, so every tool reads a real file."""
         for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
         if not (self.state / 'activity.log').exists():
             (self.state / 'activity.log').write_text('')
-        return path
+
+
+def lineage(pid: int) -> tuple[ProcessIdentity, ...]:
+    """The process and each ancestor, nearest first."""
+    line: list[ProcessIdentity] = []
+    while pid > 1:
+        # Fields after comm's final ')' start at field 3, so ppid is the second.
+        stat = Path(f'/proc/{pid}/stat').read_text()
+        line.append(ProcessIdentity.capture(pid))
+        pid = int(stat.rsplit(') ', 1)[1].split()[1])
+    return tuple(line)
+
+
+@dataclass(frozen=True)
+class Commander:
+    """The commander a tool acts for: the registered thread whose process runs the tool, itself or
+    through an ancestor, tagged commander and holding its facts."""
+
+    comms: Comms
+    name: str
+    config: CommanderConfig
+
+    @classmethod
+    def of(cls, comms: Comms, pid: int) -> Commander:
+        threads = comms.registry.snapshot().threads.values()
+        caller = next((thread for identity in lineage(pid) for thread in threads
+                       if thread.process_identity == identity), None)
+        if caller is None:
+            raise RelationViolationError(f'pid {pid} runs for no registered thread, so no commander')
+        if CommanderConfig.TAG not in caller.tags or caller.commander_config is None:
+            raise RelationViolationError(
+                f'{caller.name} is not a registered commander: its registration lacks the '
+                f'{CommanderConfig.TAG} tag or its facts; run agent-comms install --commander NAME')
+        return cls(comms, caller.name, caller.commander_config)
+
+    @classmethod
+    @cache
+    def calling(cls) -> Commander:
+        """This process's commander, read once at its first dispatch."""
+        from ..active_route import resolve_comms_route
+        from ..comms import Comms
+
+        return cls.of(Comms(resolve_comms_route()), os.getpid())
+
+    @property
+    def todos(self) -> TodoStore:
+        """The Todo store that owns problems, orders, deadlines and strikes."""
+        return self.comms.goals.todos
+
+    @property
+    def incarnation(self) -> ThreadIncarnation:
+        return self.comms.registry.require(self.name).incarnation
+
+
+def me() -> Commander:
+    """The commander this tool acts for, read from its registration at dispatch."""
+    return Commander.calling()

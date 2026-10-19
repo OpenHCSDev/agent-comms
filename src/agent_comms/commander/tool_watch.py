@@ -7,7 +7,7 @@ import os, time, glob, collections
 from pathlib import Path
 
 from . import order
-from .config import CommanderConfig
+from .config import me
 from ..channel_coding_tools import CodingCall, RefusedCodingCall
 from ..field_codec import MalformedRecord
 from ..native_entries import NativeEntry
@@ -18,9 +18,6 @@ from ..tool_declaration import ToolDeclaration, one_line
 from ..registration import Registration
 from ..todos import StorageStrikeTodo
 
-CONFIG = CommanderConfig.installed()
-B = str(CONFIG.root)
-LOG = f'{CONFIG.state}/activity.log'
 
 
 def thread_names(registry: Registration) -> dict[str, str]:
@@ -103,7 +100,7 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
         name, args = call.name, call.arguments
         tool = decoded(name, args, call.id)
         digest = digest_line(name, args, tool)
-        with open(LOG, 'a') as log:
+        with open(str(me().config.state / 'activity.log'), 'a') as log:
             log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
         turns[thread].append(digest)
         enforce_storage(registry, thread, tool)
@@ -115,14 +112,14 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
 
 
 def main(a):
-    registry = Registration(Path(B) / 'registry.json')
+    registry = Registration(Path(str(me().comms.root)) / 'registry.json')
     names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)
     last_names = time.time()
     while True:
         if time.time() - last_names > 60:
             names.update(thread_names(registry)); last_names = time.time()
-        for path in set(glob.glob(f'{B}/native-sessions/*/*.jsonl')) | set(names):
+        for path in set(glob.glob(f'{me().comms.root}/native-sessions/*/*.jsonl')) | set(names):
             try:
                 st = os.stat(path)
             except OSError:

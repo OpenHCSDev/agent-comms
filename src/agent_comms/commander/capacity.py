@@ -14,22 +14,21 @@ from dataclasses import dataclass
 
 from ..comms import Comms
 from . import order
-from .config import CommanderConfig
+from .config import me
 
-FORKS = f'{CommanderConfig.installed().state}/forks'
 PER_COMMANDER = 6
 BEAT_AGE = 10 * 60
 
 
 def live_forks() -> list[str]:
-    os.makedirs(FORKS, exist_ok=True)
-    return [n[:-5] for n in os.listdir(FORKS) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{FORKS}/{n}') < BEAT_AGE]
+    os.makedirs(me().config.state / 'forks', exist_ok=True)
+    return [n[:-5] for n in os.listdir(me().config.state / 'forks') if n.endswith('.beat') and time.time() - os.path.getmtime(f'{me().config.state / 'forks'}/{n}') < BEAT_AGE]
 
 
 def beat(name: str):
-    os.makedirs(FORKS, exist_ok=True)
-    with open(f'{FORKS}/{name}.beat', 'a'):
-        os.utime(f'{FORKS}/{name}.beat')
+    os.makedirs(me().config.state / 'forks', exist_ok=True)
+    with open(f'{me().config.state / 'forks'}/{name}.beat', 'a'):
+        os.utime(f'{me().config.state / 'forks'}/{name}.beat')
 
 
 @dataclass(frozen=True)
@@ -72,5 +71,5 @@ class Load:
 
 
 def main(a):
-    load = Load.of(order.COMMS, order.ME)
+    load = Load.of(me().comms, me().name)
     print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')

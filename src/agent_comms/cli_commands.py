@@ -677,12 +677,12 @@ class SubagentsImportedResult(CliResult):
 
 @dataclass(frozen=True)
 class InstallResult(CliResult):
-    config: str
+    commander: str
     harnesses: Mapping[str, HarnessInstalled]
 
     def encoded(self) -> object:
-        # Each harness's installation sits beside the config path on the wire.
-        return {"config": self.config,
+        # Each harness's installation sits beside the registered commander on the wire.
+        return {"commander": self.commander,
                 **{name: FieldCodec.encode(installed)
                    for name, installed in self.harnesses.items()}}
 
@@ -1433,16 +1433,21 @@ class InstallCliCommand(CliCommand):
         home = Path.home()
         project = self.project.resolve()
         config = CommanderConfig(
-            commander=self.commander, root=ctx.root, cli=Harness.bin("agent-comms"),
-            state=home / ".local/state/agent-comms/commander",
+            cli=Harness.bin("agent-comms"), state=home / ".local/state/agent-comms/commander",
             board=project / "docs/agents/fleet-board.md", narrative=project / "docs/agents/fleet-narrative.md",
             skill=Path(str(files("agent_comms") / "skills/comms-commander/SKILL.md")), rules=(CommanderConfig.packaged_rules(),),
             repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
-        return InstallResult(str(config.write(home)), {
-            type(harness).declared_name: harness.install(ctx, self.commander, project)
-            for harness in Harness.present(home)})
+        installed = {type(harness).declared_name: harness.install(ctx, self.commander, project)
+                     for harness in Harness.present(home)}
+        # The facts belong to the commander's own registration; a harness may have just declared it.
+        current = ctx.registry.snapshot().threads.get(self.commander)
+        ctx.registry.declare(ctx.registry.new_thread(
+            self.commander, (current.tags if current else frozenset()) | {CommanderConfig.TAG},
+            str(project), commander_config=config, execution=ExternalThreadExecution))
+        config.prepare()
+        return InstallResult(self.commander, installed)
 
 
 @dataclass(frozen=True, kw_only=True)

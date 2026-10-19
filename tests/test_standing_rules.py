@@ -389,7 +389,7 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update={"repos": (
+    monkeypatch.setattr(module, "CONFIG", module.me().config.model_copy(update={"repos": (
         Repo(checkout=checkout, github="fleet/growth"),)}))
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [

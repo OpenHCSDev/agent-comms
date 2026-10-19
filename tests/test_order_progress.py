@@ -124,7 +124,7 @@ def test_unread_github_is_explicit(checkout):
 def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
     # worker's P1 checkout, on the branch its merged PR came from.
-    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    monkeypatch.setattr(script.me().comms.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
     unit = tmp_path / 'wt' / 'worker--P1'
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')
@@ -249,7 +249,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     installed order does not. Nobody is struck, and a late install is named, not the orders."""
     comms, caller = commander
     script, _ = commander_script
-    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    monkeypatch.setattr(script.me().comms.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
     unit = tmp_path / 'wt' / 'worker--P1'
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')
@@ -282,7 +282,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     script, _ = commander_script
     todo = create(commander, pid, deadline=1)
     storage = StorageRule(checkout_base=tmp_path / "wt")
-    monkeypatch.setattr(script.COMMS.registry, "storage_rule", storage)
+    monkeypatch.setattr(script.me().comms.registry, "storage_rule", storage)
     body_file = tmp_path / "pr-body.md"
     body_file.write_text(subject)
     bodies = []

@@ -27,7 +27,6 @@ from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
-from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
@@ -44,16 +43,8 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo)
 from . import capacity
-from .config import CommanderConfig, Repo
+from .config import Repo, me
 
-CONFIG = CommanderConfig.installed()
-ME = CONFIG.commander
-COMMS = Comms(CONFIG.root)  # the bus whose Todo store owns problems, orders, deadlines and strikes
-RTS = str(CONFIG.state)
-BOARD = str(CONFIG.board)
-NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain words
-B = str(CONFIG.root)
-CLI = str(CONFIG.cli)
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
 def refuse(text, *families):
@@ -68,7 +59,7 @@ def post(audience: VerdictAudience, body: str) -> str:
     One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
     """
     target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-    out = subprocess.run(['timeout', '300', CLI, '--root', B, 'send', '--from', ME, '--to', target,
+    out = subprocess.run(['timeout', '300', str(me().config.cli), '--root', str(me().comms.root), 'send', '--from', me().name, '--to', target,
                           '--type', 'info', '--body', audience.addressed(target, body)],
                          capture_output=True, text=True)
     if '"id"' not in out.stdout:
@@ -78,28 +69,28 @@ def post(audience: VerdictAudience, body: str) -> str:
 
 def call(tool):
     """Every order write is one Core tool request made as the commander's thread."""
-    return ThreadCaller(ME).invoke(tool, COMMS)
+    return ThreadCaller(me().name).invoke(tool, me().comms)
 
 
 def todos():
     """The problems this commander created; Core's Todo store is their one owner."""
-    return COMMS.goals.todos.for_commander(COMMS.registry.require(ME).incarnation)
+    return me().todos.for_commander(me().incarnation)
 
 
 def held_orders() -> tuple[Todo, ...]:
     """This commander's open orders that a unit holds."""
-    return COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+    return me().todos.held_for_commander(me().incarnation)
 
 
 def held_by(unit: str) -> tuple[Todo, ...]:
     """This commander's open orders held by one unit."""
-    return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
+    return me().todos.held_by(me().incarnation, unit)
 
 
 def units() -> frozenset[str]:
     """The threads this commander gives orders to; the owner, claude-ai and peer commanders
     are not among them."""
-    return COMMS.goals.todos.units(COMMS.registry.require(ME).incarnation)
+    return me().todos.units(me().incarnation)
 
 
 def progress() -> dict[str, OrderProgress]:
@@ -231,7 +222,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     problems = []
     # Below the floor Core's StorageRule denies each allocating tool call, so the order prose is not checked.
     try:
-        COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
+        me().comms.registry.storage_rule.require_quota(me().comms.registry.require(unit))
     except SelectedToolDenied as quota:
         problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
     Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
@@ -315,7 +306,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
     if problems:
         sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + COMMS.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in CONFIG.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + me().comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in me().config.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                + '\nStart now and push as you go.')  # a unit shown a due time takes until then
     taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
@@ -337,19 +328,19 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
-    common = dict(order=order, request=request, deadline=deadline(due), commander=ME)
+    common = dict(order=order, request=request, deadline=deadline(due), commander=me().name)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
+            problem=pid, expected_revision=me().todos.get(pid).revision, traced=trace, **common)))
     message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
     sent = post(VerdictAudience((unit,)), message)
     # The message is each order's recorded link; a verdict citing it lands on that order.
     for pid in group:
         call(CommsTodoTool(id=pid, operation=OrderMessage(
-            COMMS.goals.todos.get(pid).revision, COMMS.registry.require(ME).incarnation, sent)))
+            me().todos.get(pid).revision, me().incarnation, sent)))
     for other, text in taken.items():
         post(VerdictAudience((other,)), text)
     print(order.id)
@@ -367,7 +358,7 @@ def importers(modules: set[str], check: OrderCheck) -> list[str]:
     """The other configured repos whose `from agent_comms` imports name a module, unless the
     check reads them."""
     pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
-    return [str(repo.checkout) for repo in CONFIG.repos
+    return [str(repo.checkout) for repo in me().config.repos
             if repo.checkout != Path(check.directory).resolve()
             and str(repo.checkout) not in check.command
             and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
@@ -378,7 +369,7 @@ def correct_check(pid: str, line: str, why: str) -> None:
     """Core replaces a wrong check of an open order. The new check must already pass on main, so a
     correction fixes the commander's check and never passes undelivered work: done still runs it on
     the --sha it is given."""
-    todo = COMMS.goals.todos.get(pid)
+    todo = me().todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
     if not (check := OrderCheck.parse(line)):
@@ -421,7 +412,7 @@ def problem(text, unit, due, order_file, request):
         sys.exit('Refused: the order file needs a "Problem: NEW" line; a problem is never logged without its order')
     if len(text.split()) < 8:
         sys.exit('Refused: describe the problem (8+ words): what is wrong, what it costs')
-    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
+    history = me().todos.history_for_commander(me().incarnation)
     pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
@@ -435,13 +426,13 @@ def problem(text, unit, due, order_file, request):
 
 def close(pid, works, artifact):
     """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
-    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact), COMMS)
+    ThreadCaller(me().name).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact), me().comms)
     board()
     print(f'{pid} closed')
 
 
 def last_activity(unit):
-    lines = open(ACTIVITY).read().splitlines()[-6000:]
+    lines = open(str(me().config.state / 'activity.log')).read().splitlines()[-6000:]
     stamps = [l[:8] for l in lines if l[9:].startswith(unit + ' ')]
     return stamps[-1] if stamps else None
 
@@ -461,10 +452,10 @@ def board():
                      f'{hhmm(t.deadline)} | {read[t.id].line if t.id in read else "-"} | '
                      f'{"no" if t.pending else "yes, install pending"} | '
                      f'{unit and last_activity(unit) or "-"} |')
-    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
+    history = me().todos.history_for_commander(me().incarnation)
     lines += ['', '## Withdrawn orders', '',
               *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
-    open(BOARD, 'w').write('\n'.join(lines) + '\n')
+    open(str(me().config.board), 'w').write('\n'.join(lines) + '\n')
 
 
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
@@ -475,8 +466,8 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
 
     Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
     """
-    new_file = not os.path.exists(NARRATIVE)
-    with open(NARRATIVE, 'a') as f:
+    new_file = not os.path.exists(str(me().config.narrative))
+    with open(str(me().config.narrative), 'a') as f:
         if new_file:
             f.write('# What the fleet actually did\n\nEvery failure, in plain words, as it happened. '
                     'Written by agent-comms-commander order; never edited.\n\n')
@@ -488,25 +479,26 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
 
-def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
+def strike(unit: str, task: str, why: str, caught: str | None = None, *,
            kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
 
     Core records the strike on the task's Todo; the strike is written to the narrative file and posted to
     #comms in the same step, so no failure stays private and none is described in words that hide what happened.
     """
+    caught = caught or f'{me().name} at review'
     # What matters is how a mistake happened, how often, and how and when it was caught.
     if not any(stage in caught for stage in STAGES):
-        sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{ME} at review".')
-    todo = COMMS.goals.todos.get(task)
+        sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{me().name} at review".')
+    todo = me().todos.get(task)
     if not todo.state.open or todo.held().owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
     recorded = call(CommsTodoTool(id=task, operation=kind(
-        todo.revision, COMMS.registry.require(ME).incarnation, todo.held(), f'{why} (caught by {caught})')))
+        todo.revision, me().incarnation, todo.held(), f'{why} (caught by {caught})')))
     if recorded.todo.revision == todo.revision:
         return
-    n = struck(COMMS.goals.todos.get(task), unit)
+    n = struck(me().todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
             f'caught by {caught}): {why}')
     on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
@@ -515,7 +507,7 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
 
 def done(pid, sha, delivered=None, screenshot=''):
     """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
-    todo = COMMS.goals.todos.get(pid)
+    todo = me().todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
     unit, repo = todo.assignment.owner, todo.order.check.directory
@@ -526,17 +518,17 @@ def done(pid, sha, delivered=None, screenshot=''):
         after = [subprocess.run(['git', '-C', repo, 'show', f'{sha}:{f}'], capture_output=True, text=True).stdout for f in changed]
         if added := forwarders_added(diff, after):
             sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
-    thread = COMMS.registry.require(unit)
-    if left := [str(t) for t in COMMS.registry.storage_rule.checkouts_of(thread) if pid.lower() in t.name.lower()]:
+    thread = me().comms.registry.require(unit)
+    if left := [str(t) for t in me().comms.registry.storage_rule.checkouts_of(thread) if pid.lower() in t.name.lower()]:
         sys.exit(f'Refused: {unit} still has the checkout {left} for this order; storage rule: it removes it before the order counts as done.')
     try:
-        COMMS.registry.storage_rule.require_quota(thread)
+        me().comms.registry.storage_rule.require_quota(thread)
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
     claim = WorkingClaim(screenshot) if operation else MergedClaim(delivered)
     call(CommsOrderDoneTool(problem=pid, delivery=delivery, claims=(claim,)))
-    lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
+    lateness = me().todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
         strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered}')
@@ -544,12 +536,11 @@ def done(pid, sha, delivered=None, screenshot=''):
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 
 
-ACTIVITY = f'{RTS}/activity.log'
 
 
 def first_calls():
     """Each order starts a first-tool-call clock: 2 minutes, separate from its commit deadline. Core records each mark."""
-    lines = open(ACTIVITY).read().splitlines()[-4000:]
+    lines = open(str(me().config.state / 'activity.log')).read().splitlines()[-4000:]
     watched = {line[9:].split(' ', 1)[0] for line in lines}
     missing = []
     for todo in held_orders():
@@ -562,13 +553,15 @@ def first_calls():
             continue
         event = ObservedFirstCallEvent if acted else NotifiedFirstCallEvent
         call(CommsTodoTool(id=todo.id, operation=RecordFirstCallTodo(
-            todo.revision, COMMS.registry.require(ME).incarnation, event)))
-        if not acted and COMMS.goals.todos.get(todo.id).revision != todo.revision:
+            todo.revision, me().incarnation, event)))
+        if not acted and me().todos.get(todo.id).revision != todo.revision:
             missing.append(f'{unit} (order {order.id}, sent {hhmm(order.at)})')
     return missing
 
 
-HUNT_ROOTS = [(str(repo.checkout), repo.source) for repo in CONFIG.repos]
+
+def hunt_roots() -> list[tuple[str, str]]:
+    return [(str(repo.checkout), repo.source) for repo in me().config.repos]
 
 
 def hunt(where, pid, why, sent=None):
@@ -587,13 +580,13 @@ def hunt(where, pid, why, sent=None):
                  + HuntVerb.usage())
     ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
     call(CommsTodoTool(id=todo.id, operation=RecordHuntTodo(
-        todo.revision, COMMS.registry.require(ME).incarnation,
+        todo.revision, me().incarnation,
         OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))))
     print(f'hunt recorded: {where} -> {sent or "clean"}')
 
 
 def hunts():
-    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
+    history = me().todos.history_for_commander(me().incarnation)
     return [h for t in history for h in t.hunts]
 
 
@@ -603,7 +596,7 @@ def next_hunt():
     for h in hunts():
         hunted[h.where.file] = max(hunted.get(h.where.file, 0), h.at.at)
     candidates = []
-    for repo, root in HUNT_ROOTS:
+    for repo, root in hunt_roots():
         log = subprocess.run(['git', '-C', repo, 'log', 'origin/main', '--since=7.days', '--name-only', '--format=', '--', root],
                              capture_output=True, text=True).stdout.split()
         churn = {}
@@ -617,9 +610,9 @@ def next_hunt():
 
 def reply(unit: str, since: float) -> dict | None:
     """The unit's latest message to me after ``since``, or None."""
-    if not os.path.exists(f'{B}/bus.jsonl'):
+    if not os.path.exists(f'{me().comms.root}/bus.jsonl'):
         return None
-    with open(f'{B}/bus.jsonl', 'rb') as f:
+    with open(f'{me().comms.root}/bus.jsonl', 'rb') as f:
         f.seek(start := max(0, os.path.getsize(f.name) - 3_000_000))
         lines = f.read().splitlines()[bool(start):]
     latest = None
@@ -629,7 +622,7 @@ def reply(unit: str, since: float) -> dict | None:
         except ValueError:
             continue
         to = str(m.get('to'))
-        if m.get('from') == unit and float(m.get('ts', 0)) > since and (ME in to or '#comms' in to):
+        if m.get('from') == unit and float(m.get('ts', 0)) > since and (me().name in to or '#comms' in to):
             latest = m
     return latest
 
@@ -664,7 +657,7 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
 def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: float) -> list[str]:
     """One INSTALL line naming every held order that waits on the fleet's install."""
     waiting = [f'{w.id} {w.holder}' for t in held for w in t.order.waiting_on_install(t, read)]
-    return InstallDeadline.read(COMMS.root).alarm(waiting, now)
+    return InstallDeadline.read(me().comms.root).alarm(waiting, now)
 
 
 def overdue():
@@ -694,7 +687,7 @@ def overdue():
                     for t in pending if t.overdue(now) and read[t.id].untouched(now)]
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        for _ in HuntDue.broken(COMMS, ME, since):
+        for _ in HuntDue.broken(me().comms, me().name, since):
             print(HuntVerb.due(next_hunt()), flush=True)
         since = now
         time.sleep(60)
@@ -707,7 +700,7 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
 
     @property
     def who(self) -> str:
-        return self.fork or ME
+        return self.fork or me().name
 
     def apply(self, ctx: None = None) -> None:
         self.gate()
@@ -748,24 +741,24 @@ class RuledVerb(CommanderVerb):
 
     def gate(self) -> None:
         super().gate()
-        for due in RulesDue.violations(COMMS, self.who):
-            flag = '' if self.who == ME else f' --as {self.who}'
+        for due in RulesDue.violations(me().comms, self.who):
+            flag = '' if self.who == me().name else f' --as {self.who}'
             sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
                      f' rules review{flag}, then answer each drawn rule{flag}.')
 
 
 def unstrike(task: str, why: str, at: str | None = None) -> None:
     """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
-    todo = COMMS.goals.todos.get(task)
+    todo = me().todos.get(task)
     live = [s for s in todo.live_strikes() if at in (None, hhmm(s.at))]
     if not live:
         sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
     voided = live[-1]
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the void
     call(CommsTodoTool(id=task, operation=VoidStrikeTodo(
-        todo.revision, COMMS.registry.require(ME).incarnation, voided, why)))
+        todo.revision, me().incarnation, voided, why)))
     unit = voided.previous.owner
-    n = struck(COMMS.goals.todos.get(task), unit)
+    n = struck(me().todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
             f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
     on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
@@ -774,7 +767,7 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
 
 def due(pid: str, at: str, why: str) -> None:
     """Core moves a held order's deadline, its assignment unchanged; the reason goes on record."""
-    todo = COMMS.goals.todos.get(pid)
+    todo = me().todos.get(pid)
     if not todo.pending:
         sys.exit(f'Refused: {pid} holds no pending order whose deadline could move.')
     if len(why.split()) < 8:
@@ -793,13 +786,13 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
     """Core retires an undelivered order sent in error.
 
     The reason goes on the public record and to the unit that held it."""
-    todo = COMMS.goals.todos.get(pid)
+    todo = me().todos.get(pid)
     refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
     call(CommsTodoTool(id=pid, operation=WithdrawTodo(
-        todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, why,
+        todo.revision, me().incarnation, todo.assignment, why,
         superseded_by)))
     unit = todo.held().owner
-    withdrawal, = COMMS.goals.todos.get(pid).order.withdrawals(todo)
+    withdrawal, = me().todos.get(pid).order.withdrawals(todo)
     on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
               VerdictAudience.of(unit, todo.goal))
     post(VerdictAudience((unit,)),
@@ -823,7 +816,7 @@ class LoadedVerb(RuledVerb):
 
     def gate(self) -> None:
         if not self.fork:
-            capacity.Load.of(COMMS, ME).require()
+            capacity.Load.of(me().comms, me().name).require()
         super().gate()
 
 
@@ -855,7 +848,7 @@ class StrikeVerb(OrderVerb, RuledVerb):
     unit: str = option("unit")
     pid: str = option("pid", help="the problem the strike is for; strikes count per problem")
     why: str = option("--why")
-    caught: str = option("--caught", default=f'{ME} at review', help='"WHO at STAGE"; stage is review/install/live/user')
+    caught: str | None = option("--caught", default=None, help='"WHO at STAGE" (default: this commander at review); stage is review/install/live/user')
 
     def run(self) -> None:
         strike(self.unit, self.pid, self.why, self.caught)
@@ -901,7 +894,7 @@ class InstallVerb(RuledVerb):
     installer: str = option("installer", help="the unit that runs the install")
 
     def run(self) -> None:
-        PlannedInstallDeadline(deadline(self.at), self.installer).plan(COMMS.root)
+        PlannedInstallDeadline(deadline(self.at), self.installer).plan(me().comms.root)
         print(f'install due {self.at}, run by {self.installer}')
 
 
@@ -939,8 +932,8 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
     body_file: str = option("--body-file")
 
     def run(self) -> None:
-        todo = COMMS.goals.todos.get(self.pid)
-        checkout = COMMS.registry.storage_rule.order_checkout(todo.holder, todo.id)
+        todo = me().todos.get(self.pid)
+        checkout = me().comms.registry.storage_rule.order_checkout(todo.holder, todo.id)
         print(todo.order.open_pull_request(
             todo, checkout, self.title, Path(self.body_file).read_text()))
 
