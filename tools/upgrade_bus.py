@@ -38,7 +38,7 @@ import tarfile
 import tempfile
 import time
 from collections.abc import Iterator
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -46,17 +46,18 @@ from pathlib import Path
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cutover.carry import Carried, CarryChain, CarryLedger, RetainedBus, Step, TodoColumnCarry
+from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
+from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
-from agent_comms.todos import PlannedInstallDeadline
 from agent_comms.store_files import _store_lock
+from agent_comms.todos import PlannedInstallDeadline
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -187,7 +188,8 @@ class Stack:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
         history = self.cli(root, "history", "--everything", "--limit", "50")
-        return {"threads": len(threads), "who": len(present), "history": len(history.get("messages", ()))}
+        return {"threads": len(threads), "who": len(present),
+                "history": len(history[EverythingHistoryPageResult.messages_key])}
 
     def round_trip(self, root: Path) -> str:
         """The connector Core declares for this bus sends one message and reads it back; it
@@ -379,9 +381,7 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
     target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
     if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]).returncode:
         raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
-    changed = {line[3:] for line in run(
-        "git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").splitlines()}
-    if changed - RetainedBus.derived(checkout, root):
+    if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
         raise UpgradeRefused("The checkout has local changes")
     applied = CarryLedger(root).applied()
     try:
@@ -432,12 +432,10 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         raise
     shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
     try:
-        RetainedBus.restore(checkout, current)
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         installed.relock()
         installed.prepare_native()
         steps = carry_all(root, pending, staged, revisions)
-        RetainedBus.record(checkout, root)
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
         maintenance.clear(held)
@@ -451,9 +449,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         # The failed bus keeps its hold until restore has swapped it out.
         backup.restore()
         transcripts.close()
-        RetainedBus.restore(checkout, target)
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
-        RetainedBus.record(checkout, root)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
         run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=checkout)
