@@ -783,12 +783,10 @@ class Response(NativePiEvent, DurablePiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if self.command.invalidates_identity(self, session):
+        owner = session.native.reader.correlate(self)
+        if owner.invalidates_identity(self, session):
             async for event in session.invalidate_identity():
                 yield event
-            return
-        owner = session.native.reader.correlate(self)
-        if owner is None:
             return
         for event in owner.on_response(self, session):
             yield event
