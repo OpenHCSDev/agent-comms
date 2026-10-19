@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
+from .turn_failure import ProviderTransportFailed
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
 from .pi_vocabulary import (
@@ -33,8 +34,8 @@ from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
-    from .turn_usage import UsageAccount
     from .turn_phase import TurnPhase
+    from .turn_usage import UsageAccount
 
 
 def wire_field(name: str, default=None):
@@ -507,11 +508,10 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     timestamp: int | None = None
 
     def turn_phase(self, phase: TurnPhase) -> TurnPhase:
-        return phase.failed(self.error)
+        from .turn_phase import FailedPhase
+        return FailedPhase(error=self.error)
 
     def refine_model_request_failure(self, failure):
-        from .turn_failure import ProviderTransportFailed
-
         return ProviderTransportFailed(failure.text)
 
     @property

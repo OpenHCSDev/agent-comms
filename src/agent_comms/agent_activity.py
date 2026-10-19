@@ -274,9 +274,7 @@ class AgentActivity:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = transition(lease, phase)
         for state in effects:
-            current = state.active.phase
-            current.phase_effects(self, lease)
-            self._emit_activity(current.activity_event(lease.identity.incarnation.name))
+            state.active.phase.phase_effects(self, lease)
         return effects
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:

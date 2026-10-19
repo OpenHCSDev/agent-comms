@@ -124,11 +124,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
 
-    def failed(self, error: ProviderDiagnosticError) -> TurnPhase:
-        return FailedPhase(error=error)
-
     def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
-        pass
+        agents._emit_activity(self.activity_event(lease.identity.incarnation.name))
 
 
 class Excursion(TurnPhase, declared_name=None):
@@ -162,10 +159,6 @@ class IdlePhase(ActivityWord, TurnPhase):
 @dataclass(frozen=True, kw_only=True)
 class FailedPhase(IdlePhase):
     error: ProviderDiagnosticError
-
-    @property
-    def activity_detail(self) -> str:
-        return self.error.message
 
 
 class CancellingPhase(TurnPhase):
