@@ -2,8 +2,8 @@
 
 Edits are derived from native turn calls, not journaled by the watcher (7e8a0ef8d)."""
 import collections
-import json
 import importlib
+import json
 
 from agent_comms.channel_coding_tools import RefusedCodingCall
 from agent_comms.native_tool_call import SelectedToolDenied

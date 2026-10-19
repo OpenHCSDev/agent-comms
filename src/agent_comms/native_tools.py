@@ -5,13 +5,17 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
+
+
+if TYPE_CHECKING:
+    from .channel_coding_tools import CodingCall, CoordinationCall, ExecutableCodingCall
 
 
 class NativeExecutableTool(ToolDeclaration):
@@ -25,7 +29,7 @@ class NativeExecutableTool(ToolDeclaration):
 
     @classmethod
     @abstractmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]): ...
+    def create_call(cls, call_id: str, arguments: dict[str, object]) -> CodingCall: ...
 
     @classmethod
     @abstractmethod
@@ -41,7 +45,7 @@ class NativeExecutableTool(ToolDeclaration):
         return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
 
     @classmethod
-    def from_call(cls, name: str, arguments: object, *, call_id: str):
+    def from_call(cls, name: str, arguments: object, *, call_id: str) -> CodingCall:
         decoded = FieldCodec.decode(dict[str, object], arguments)
         return cls.field_value(name).create_call(call_id, decoded)
 
@@ -54,7 +58,7 @@ class NativeRequestTools:
         return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
 
     @classmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]):
+    def create_call(cls, call_id: str, arguments: dict[str, object]) -> CoordinationCall:
         from .channel_coding_tools import CoordinationCall
 
         return CoordinationCall(call_id, cls, arguments)
@@ -111,7 +115,7 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
         return ()
 
     @classmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]):
+    def create_call(cls, call_id: str, arguments: dict[str, object]) -> ExecutableCodingCall:
         from .channel_coding_tools import ExecutableCodingCall
 
         return ExecutableCodingCall(call_id, cls.parse_arguments(arguments))

@@ -487,7 +487,8 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
 
-def strike(unit, why, caught=f'{ME} at review', *, kind: type[StrikeTodo] = StrikeTodo):
+def strike(unit: str, why: str, caught: str = f'{ME} at review', *,
+           kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
 
     Core records the strike on the task's Todo; the strike is written to the narrative file and posted to
@@ -496,15 +497,16 @@ def strike(unit, why, caught=f'{ME} at review', *, kind: type[StrikeTodo] = Stri
     # What matters is how a mistake happened, how often, and how and when it was caught.
     if not any(stage in caught for stage in STAGES):
         sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{ME} at review".')
-    task = (re.search(r'\bP\d+\b', why) or re.search('', '')).group(0) or None
-    if task is None:
+    match = re.search(r'\bP\d+\b', why)
+    if not match:
         sys.exit('Refused: name the task (P-number) the strike is for; strikes count per task.')
+    task = match.group(0)
     todo = COMMS.goals.todos.get(task)
-    if not todo.state.open or todo.assignment.owner != unit:
+    if not todo.state.open or todo.held().owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
     recorded = call(CommsTodoTool(id=task, operation=kind(
-        todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, f'{why} (caught by {caught})')))
+        todo.revision, COMMS.registry.require(ME).incarnation, todo.held(), f'{why} (caught by {caught})')))
     if recorded.todo.revision == todo.revision:
         return
     n = struck(COMMS.goals.todos.get(task), unit)

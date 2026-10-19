@@ -29,7 +29,7 @@ def thread_names(registry: Registration) -> dict[str, str]:
             if thread.session_file}
 
 
-def decoded(name, args, call_id) -> CodingCall:
+def decoded(name: str, args: object, call_id: str) -> CodingCall:
     """The recorded call owns either its decoded tool or its argument refusal."""
     try:
         return CodingTool.from_call(name, args, call_id=call_id)
@@ -38,7 +38,7 @@ def decoded(name, args, call_id) -> CodingCall:
         return RefusedCodingCall(call_id, name, args, str(refused))
 
 
-def digest_line(name, args, call: CodingCall):
+def digest_line(name: str, args: object, call: CodingCall) -> str:
     """What the call does, in enough detail to judge it."""
     try:
         tool = call.require_tool()
@@ -47,7 +47,7 @@ def digest_line(name, args, call: CodingCall):
     return ToolDeclaration.call_digest(name, tool, args)
 
 
-def enforce_storage(registry, thread, call: CodingCall):
+def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> None:
     """Core judges its units and records each storage violation once."""
     if thread not in order.units() or thread not in registry:
         return
