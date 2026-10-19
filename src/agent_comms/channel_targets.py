@@ -309,8 +309,6 @@ class ChannelTarget(NamedTarget):
 
     def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        if viewer is not None:
-            raise ValueError("--as is only valid for DM history.")
         return channel(require_channel(self.name).history_scope())
 
     def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
