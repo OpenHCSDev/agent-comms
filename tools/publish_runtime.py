@@ -15,6 +15,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from importlib.metadata import distribution
 import os
+import hashlib
 from pathlib import Path
 import signal
 import subprocess
@@ -30,6 +31,8 @@ from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
+from agent_comms.maintenance_barrier import MaintenanceOperator, DrainingPhase, ReadyPhase
+from agent_comms.restart_refusals import OwnerBusyRefusal
 
 
 @dataclass(frozen=True)
@@ -148,21 +151,50 @@ class RuntimePublication:
                 f'Runtime CLI refused publication (exit {result.returncode}): {result.stdout}{result.stderr}'
             )
 
-    def publish(self, root: Path, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
-        """Publish, then end what the retired runtime still runs apart from waiting owners."""
+    def publish(self, root: Path, owners: tuple[ProcessState, ...], *, timeout: float = 1200) -> tuple[RunningProcess, ...]:
+        """Hold new turns, wait for Core's idle proof, and release our hold on exit."""
         self.require_cli(root)
         path = active_route_path()
         previous_route = read_active_route(path)
         if previous_route is None or previous_route.root != root.resolve():
             raise ValueError('Publication requires the selected active root')
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        comms = wire(previous_route)
+        barrier = comms.owners.maintenance
+        operator = MaintenanceOperator('runtime-publication:' + hashlib.sha256(
+            os.fsencode(self.runtime.resolve())).hexdigest())
+        current = barrier.read()
+        if current.phase is ReadyPhase:
+            hold = barrier.begin(operator)
+        elif current.phase is DrainingPhase and current.operator == operator:
+            hold = current
+        else:
+            raise ValueError('Another maintenance operation holds this root')
         try:
-            acquire_exclusive_route_lock(directory)
-            if read_active_route(path) != previous_route:
-                raise ValueError('Active route changed during CLI check')
-            return self.publish_links(owners)
+            deadline = time.monotonic() + timeout
+            while True:
+                busy = []
+                snapshot = comms.registry.snapshot()
+                for thread in OwnerRestartRequest().threads(snapshot):
+                    try:
+                        comms.owners.require_restart_idle(thread)
+                    except OwnerBusyRefusal:
+                        busy.append(thread.name)
+                if not busy:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('Active turns still running: ' + ', '.join(busy))
+                time.sleep(min(0.25, max(0, deadline - time.monotonic())))
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                acquire_exclusive_route_lock(directory)
+                if read_active_route(path) != previous_route:
+                    raise ValueError('Active route changed during idle wait')
+                return self.publish_links(owners)
+            finally:
+                os.close(directory)
         finally:
-            os.close(directory)
+            if barrier.read() == hold:
+                barrier.clear(hold)
 
     def publish_links(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
         current = StoppedOwnerInstallation.current_pointer()
