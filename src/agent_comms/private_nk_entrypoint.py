@@ -24,6 +24,7 @@ from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .acp_extension import CursorScope
+    from .active_route import CommsRoute
     from .cursor_publication import CursorPublication
     from .launch_runtime import LaunchRuntime
     from .threads import Thread
@@ -36,16 +37,14 @@ class RootLaunch(ABC):
     __slots__ = ()
 
     @staticmethod
-    def derive(root: Path | str | None = None) -> RootLaunch:
-        """This root's launch from the owners of its facts.
+    def derive(route: CommsRoute) -> RootLaunch:
+        """This route's launch from the owners of its facts.
 
-        Without a root, the process's selected route names it. The marker owns
-        the root ID and this installation's pin owns the package. A parent and
-        its child read the same marker and pin, so they derive the same launch.
+        The marker owns the root ID and this installation's pin owns the package.
+        A parent and its child read the same marker and pin, so they derive the
+        same launch.
         """
-        from .active_route import resolve_comms_route
-
-        root = resolve_comms_route(root).root
+        root = route.root
         metadata = WireLog(root / "bus.jsonl").read_metadata_unlocked()
         if not metadata.private:
             return SharedRootLaunch(root)

@@ -107,9 +107,9 @@ class NativePiPromptRejected(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .private_nk_entrypoint import RootLaunch
+    from .active_route import resolve_comms_route
 
-    package = RootLaunch.derive().require_private().validate()
+    package = resolve_comms_route().launch().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
         package, tuple(sys.argv[1:]), Path.cwd(), environment,
@@ -466,9 +466,9 @@ class NativePiRpcLaunch:
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        from .private_nk_entrypoint import RootLaunch
+        from .active_route import resolve_comms_route
 
-        package = RootLaunch.derive(root).package_for(command)
+        package = resolve_comms_route(root).launch().package_for(command)
         cls._command_selection(command, runtime, package)
         return package
 
