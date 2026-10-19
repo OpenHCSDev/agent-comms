@@ -296,18 +296,31 @@ class UnownedWork(UndatedStandingRule):
         threads = comms.registry.snapshot().threads.values()
         holders = tuple(thread.process_identity for thread in threads)
         return tuple(
-            cls(table, process, any(runtime != current and runtime.parent == current.parent
-                                    for runtime in process.runtimes()))
+            cls(
+                table,
+                process,
+                any(
+                    runtime != current and runtime.parent == current.parent
+                    for runtime in process.runtimes()
+                ),
+            )
             for process in table.running.values()
-            if process.runtimes() and process.identity not in table.reader()
-            and not table.held(process, holders))
+            if process.runtimes()
+            and process.identity not in table.reader()
+            and not table.held(process, holders)
+        )
 
     def enforce(self, comms: Comms, commander: str) -> None:
         if self.retired:
             self.table.end((self.process,))
 
     def line(self) -> str:
-        fate = "it runs on a retired runtime, so Core ends it" if self.retired else (
-            "give it an owner or end it")
-        return (f"UNOWNED WORK: pid {self.process.identity.pid} ({self.process.command}) runs for"
-                f" no registered thread or open order -> {fate}")
+        fate = (
+            "it runs on a retired runtime, so Core ends it"
+            if self.retired
+            else ("give it an owner or end it")
+        )
+        return (
+            f"UNOWNED WORK: pid {self.process.identity.pid} ({self.process.command}) runs for"
+            f" no registered thread or open order -> {fate}"
+        )

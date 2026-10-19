@@ -28,25 +28,29 @@ class RunningProcess:
     @classmethod
     def read(cls, entry: Path) -> RunningProcess:
         # Fields after comm's final ')' start at field 3: ppid is 4, pgrp 5, starttime 22.
-        fields = (entry / 'stat').read_text().rsplit(') ', 1)[1].split()
-        if fields[0] in {'Z', 'X'}:
+        fields = (entry / "stat").read_text().rsplit(") ", 1)[1].split()
+        if fields[0] in {"Z", "X"}:
             raise ProcessLookupError(entry.name)
-        argv = (entry / 'cmdline').read_bytes().rstrip(b'\0').split(b'\0')
+        argv = (entry / "cmdline").read_bytes().rstrip(b"\0").split(b"\0")
         argv0 = Path(os.fsdecode(argv[0]))
-        launched: tuple[Path, ...] = ((argv0.parent.resolve() / argv0.name,)
-                                      if argv0.is_absolute() else ())
+        launched: tuple[Path, ...] = (
+            (argv0.parent.resolve() / argv0.name,) if argv0.is_absolute() else ()
+        )
         with suppress(PermissionError):
-            launched += (Path(os.readlink(entry / 'exe')),)
+            launched += (Path(os.readlink(entry / "exe")),)
         identity = ProcessIdentity.in_group(int(entry.name), int(fields[19]), int(fields[2]))
-        return cls(identity, int(fields[1]), ' '.join(map(os.fsdecode, argv)), launched)
+        return cls(identity, int(fields[1]), " ".join(map(os.fsdecode, argv)), launched)
 
     def runs_from(self, runtime: Path) -> bool:
         return any(path.is_relative_to(runtime) for path in self.executables)
 
     def runtimes(self) -> tuple[Path, ...]:
         """The agent-comms runtimes it started from: each a bin/ directory holding agent-comms."""
-        return tuple(path.parent.parent for path in self.executables
-                     if (path.parent / 'agent-comms').is_file())
+        return tuple(
+            path.parent.parent
+            for path in self.executables
+            if (path.parent / "agent-comms").is_file()
+        )
 
 
 @dataclass(frozen=True)
@@ -60,7 +64,7 @@ class ProcessTable:
     def read(cls) -> ProcessTable:
         """A process that exits during the read is left out."""
         running = {}
-        for entry in Path('/proc').iterdir():
+        for entry in Path("/proc").iterdir():
             if entry.name.isdecimal():
                 with suppress(FileNotFoundError, ProcessLookupError):
                     running[int(entry.name)] = RunningProcess.read(entry)
