@@ -26,14 +26,14 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-    message = comms.messaging.send_message("sender", "beta", "ordinary send")
+    message = comms.messaging.send("sender", "beta", "ordinary send").message
     metadata = comms.bus.log.read_metadata_unlocked(required=True)
     assert metadata.private and metadata.claims
     initial = comms.bus.log.read_delivery_cohort(metadata.root_id, message.seq)
     assert initial.message == message
     assert initial.audience.canonical_members == frozenset({"beta"})
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    reply = comms.messaging.send_message("sender", viewer, "human notification")
+    reply = comms.messaging.send("sender", viewer, "human notification").message
     human = comms.bus.log.read_delivery_cohort(metadata.root_id, reply.seq)
     assert isinstance(human.message.role, NoticeRole)
     assert human.audience.recipients == ()
@@ -55,6 +55,6 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
     with pytest.raises(
         RelationViolationError, match="Bus protocol marker is missing or redirected"
     ):
-        comms.messaging.send_message("sender", "beta", "must not append")
+        comms.messaging.send("sender", "beta", "must not append").message
     assert comms.bus.log.path.read_bytes() == before
     assert not comms.bus.log.metadata_path.exists()

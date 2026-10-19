@@ -37,6 +37,7 @@ from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
+from .send_result import SendResult
 from .maintenance_barrier import MaintenanceHeldError
 from .command import Command
 from .comms import Comms
@@ -542,7 +543,13 @@ class TargetCatalogResult(CliResult):
 
 @dataclass(frozen=True)
 class MessageSentResult(CliResult):
-    id: str
+    sent: SendResult
+
+    def encoded(self) -> object:
+        message_id = self.sent.message.message_id
+        return {'id': message_id, 'message': f'Message {message_id} was sent',
+                'correction': FieldCodec.encode(self.sent.correction),
+                'notices': self.sent.notices}
 
 
 @dataclass(frozen=True)
@@ -1051,12 +1058,12 @@ class SendCliCommand(CliCommand):
     )
 
     def apply(self, ctx: Comms) -> CliResult:
-        mid = ctx.messaging.send(
+        result = ctx.messaging.send(
             self.sender, self.target, self.body, self.type,
             report=None if self.report is None
             else FieldCodec.decode(ChangeReport, self.report),
         )
-        return MessageSentResult(mid)
+        return MessageSentResult(result)
 
 
 @dataclass(frozen=True, kw_only=True)

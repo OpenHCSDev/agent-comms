@@ -4,10 +4,8 @@
 set -euo pipefail
 umask 077
 usage='Usage: pi-native-test-env [--python PATH] [--cache DIR] [--from BUILT_STACK_DIR]'
-stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-repo_root=$(cd -- "$stack_root/.." && pwd)
+source "${BASH_SOURCE[0]%/*}/native-source"
 # The stack environment `uv sync --project stack` installs, as prepare-pi-native uses.
-python="$stack_root/.venv/bin/python"
 cache=()
 built=$stack_root
 while [[ $# -gt 0 ]]; do
@@ -25,9 +23,7 @@ if [[ ! -x "$python" ]]; then
     exit 1
 fi
 # The checkout's own agent_comms reads the checkout's own pin and owns its layout.
-export PYTHONPATH="$repo_root/src"
 manifest="$stack_root/pi-native.sha256"
-native() { "$python" -m agent_comms.cli_native_package "$@"; }
 environment=$(native environment "${cache[@]}")
 
 verify() (

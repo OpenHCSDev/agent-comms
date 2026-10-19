@@ -67,24 +67,25 @@ export default function (pi: ExtensionAPI) {
 		}
 		return { ...event.payload, service_tier: serviceTier };
 	});
-	const activity = (state: string, detail = "") => {
-		if (!forkThread) return;
-		try {
-			run([
-				"activity",
-				"--name",
-				forkThread,
-				"--state",
-				state,
-				"--detail",
-				detail.slice(0, 240),
-			]);
-		} catch {
-			// Activity reporting must never disrupt the agent turn.
-		}
-	};
+	// Managed lifetimes belong to Core's attested session/turn owners. Only
+	// standalone forks attach themselves, checkpoint, publish activity and release.
+	if (forkThread && !managed) {
+		const activity = (state: string, detail = "") => {
+			try {
+				run([
+					"activity",
+					"--name",
+					forkThread,
+					"--state",
+					state,
+					"--detail",
+					detail.slice(0, 240),
+				]);
+			} catch {
+				// Activity reporting must never disrupt the agent turn.
+			}
+		};
 
-	if (forkThread) {
 		pi.on("session_start", async (_event, ctx) => {
 			const sessionFile = ctx.sessionManager.getSessionFile();
 			if (sessionFile) {
@@ -94,13 +95,11 @@ export default function (pi: ExtensionAPI) {
 					forkThread,
 					"--session-file",
 					sessionFile,
-					...(managed ? [] : ["--pid", String(process.pid)]),
+					"--pid", String(process.pid),
 				]);
 			}
 		});
-	}
 
-	if (forkThread) {
 		// Before compaction starts (manual, threshold or overflow), the thread's
 		// uncommitted worktree changes become a pushed branch checkpoint. The
 		// command's named state is logged; the checkpoint never blocks or skips
@@ -115,11 +114,7 @@ export default function (pi: ExtensionAPI) {
 				);
 			}
 		});
-	}
 
-	// Managed turns publish their fenced native phase through OwnedTurn. Only
-	// standalone participants need this adapter's activity and release hooks.
-	if (forkThread && !managed) {
 		pi.on("agent_start", async () => activity("thinking", task));
 		pi.on("tool_call", async (event) => {
 			const input = JSON.stringify(event.input ?? {});

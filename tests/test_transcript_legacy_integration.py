@@ -45,7 +45,7 @@ def _case(tmp_path):
 
 def test_unbound_saved_whole_prompt_stays_plain_until_exact_entry_is_annotated(tmp_path):
     comms, session = _case(tmp_path)
-    message = comms.messaging.send_message("peer", "owner", "hello")
+    message = comms.messaging.send("peer", "owner", "hello").message
     exact = _entry(message)
     copied = _entry(message, text=ScheduledTurn.incoming(message).prompt + "\nMore", row_id="copy")
     header = _entry(message, text="[agent-comms from peer to owner]", row_id="header")
@@ -73,13 +73,13 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
         source.registry.declare(
             source.registry.new_thread(name, frozenset(), str(tmp_path), session_file=str(source_session) if name == 'owner' else None)
         )
-    foreign = source.messaging.send_message("peer", "owner", "the same routine message")
+    foreign = source.messaging.send("peer", "owner", "the same routine message").message
     _session(source_session, _entry(foreign))
 
     viewer = wire(tmp_path / "A")
     for name in ("peer", "owner"):
         viewer.registry.declare(viewer.registry.new_thread(name, frozenset(), str(tmp_path)))
-    local = viewer.messaging.send_message("peer", "owner", "the same routine message")
+    local = viewer.messaging.send("peer", "owner", "the same routine message").message
     assert local.message_id != foreign.message_id
     assert ScheduledTurn.incoming(local).prompt == ScheduledTurn.incoming(foreign).prompt
     viewer.threads.attach_session((attachment_owner := viewer.registry.require("owner")), str(source_session), process=attachment_owner.process_identity)
@@ -91,11 +91,11 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
 
 def test_foreign_recipient_sender_deletion_and_duplicate_prompt_fail_closed(tmp_path):
     comms, session = _case(tmp_path)
-    message = comms.messaging.send_message("peer", "other", "not for owner")
+    message = comms.messaging.send("peer", "other", "not for owner").message
     _session(session, _entry(message))
     assert comms.transcripts.thread_transcript_page("owner").events[0].routing is None
-    message = comms.messaging.send_message("peer", "owner", "duplicate")
-    comms.messaging.send_message("peer", "owner", "duplicate")
+    message = comms.messaging.send("peer", "owner", "duplicate").message
+    comms.messaging.send("peer", "owner", "duplicate").message
     _session(session, _entry(message))
     assert comms.transcripts.thread_transcript_page("owner").events[0].routing is None
     comms.registry.remove("peer")
@@ -104,7 +104,7 @@ def test_foreign_recipient_sender_deletion_and_duplicate_prompt_fail_closed(tmp_
 
 def test_imported_and_inherited_sessions_never_gain_legacy_route(tmp_path):
     comms, session = _case(tmp_path)
-    message = comms.messaging.send_message("peer", "owner", "hello")
+    message = comms.messaging.send("peer", "owner", "hello").message
     _session(session, _entry(message))
     comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='owner'))
     inherited = comms.transcripts.thread_transcript_page("child")
@@ -118,7 +118,7 @@ def test_imported_and_inherited_sessions_never_gain_legacy_route(tmp_path):
 
 def test_existing_stored_route_wins_and_plain_pages_never_scan_bus(tmp_path, monkeypatch):
     comms, session = _case(tmp_path)
-    message = comms.messaging.send_message("peer", "owner", "hello")
+    message = comms.messaging.send("peer", "owner", "hello").message
     _session(session, _entry(message))
     comms.transcripts.routes.record(
         str(session), ("input",), TurnRouting((message,), None)

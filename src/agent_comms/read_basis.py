@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from bisect import bisect_left
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -32,7 +33,9 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay | None: ...
+    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
+                              registry: Registration) -> MessagePage:
+        """The historical page carrying what this viewer was shown, read from the bus."""
 
     @abstractmethod
     def cursor(self, reads, snapshot, document) -> ReadCursor: ...
@@ -44,7 +47,7 @@ class DisplayViewer(ABC):
     def require_name(self, snapshot) -> str: ...
 
     @abstractmethod
-    def displayed_scope(self, scope, page, basis, presentation): ...
+    def displayed_scope(self, scope, page, basis, bus): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,8 +55,9 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> None:
-        return None
+    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
+                              registry: Registration) -> MessagePage:
+        return page
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return ReadCursor()
@@ -64,7 +68,7 @@ class AnonymousViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         raise ValueError("Viewer metrics require a named viewer")
 
-    def displayed_scope(self, scope, page, basis, presentation):
+    def displayed_scope(self, scope, page, basis, bus):
         return scope
 
 
@@ -75,18 +79,19 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay:
+    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
+                              registry: Registration) -> MessagePage:
         source = page.messages[0].source
         source.validate()
-        snapshot = presentation.registry.snapshot()
-        return HistoricalDisplay(
+        snapshot = registry.snapshot()
+        return replace(page, historical_display=HistoricalDisplay(
             source,
-            presentation.bus.reads.capture(
+            bus.reads.capture(
                 self.resolve(snapshot).name, page.messages, snapshot,
                 Path(source.root) / "bus.jsonl",
                 conversation_snapshot=source.provenance,
             ),
-        )
+        ))
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return reads.cursor(self.name, snapshot, document=document)
@@ -97,9 +102,9 @@ class NamedViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         return snapshot.canonical_name(self.name)
 
-    def displayed_scope(self, scope, page, basis, presentation):
-        return replace(scope, displayed=presentation.bus.reads.capture(
-            self.name, page.messages, basis.registry, presentation.bus.log.path,
+    def displayed_scope(self, scope, page, basis, bus):
+        return replace(scope, displayed=bus.reads.capture(
+            self.name, page.messages, basis.registry, bus.log.path,
         ))
 
 
@@ -226,12 +231,14 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 if TYPE_CHECKING:
     from .historical_views import HistoryArchive, HistorySource
-    from .presentation import BusPresentation
+    from .catalog_document import CatalogDocument
+    from .catalog_store import ChannelCatalog
+    from .channels import Channels
     from .channels import Channel
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
     from .messages import Message
-    from .read_ledger import ReadLedger
+    from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -688,3 +695,62 @@ class ChannelDisplayScope(MessageDisplayScope):
             or any(name in self.participant_names for name in CommandTarget.named(message.target).direct_names)
             or any(mention.thread in self.participant_names for mention in message.mentions)
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedSelection:
+    """One captured registry/catalog/read basis for local human presentation."""
+
+    registry: RegistrySnapshot
+    catalog: CatalogDocument
+    viewer: DisplayViewer
+    seen: ReadCursor
+    document: ReadDocument
+
+    @classmethod
+    def capture(
+        cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+        reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
+    ) -> CapturedSelection:
+        viewer = viewer.resolve(snapshot)
+        return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
+
+    @classmethod
+    @contextmanager
+    def reading(
+        cls, registry: Registration, catalog: ChannelCatalog,
+        reads: ReadLedger, viewer: DisplayViewer,
+    ) -> Iterator[CapturedSelection]:
+        """Borrow the original identity resources and read the ledger once.
+
+        Finish reading the ledger before yielding: painted acknowledgement may
+        write that same ledger while identity and membership remain acquired.
+        """
+        with registry.store.reading() as document, catalog.reading() as channels:
+            with reads.reading() as read_document:
+                selected = cls.capture(
+                    document.snapshot(), channels, reads, read_document, viewer
+                )
+            yield selected
+
+    @property
+    def channels(self) -> Channels:
+        return self.catalog.views(self.registry.threads)
+
+    @property
+    def scopes(self) -> tuple[ChannelDisplayScope, ...]:
+        return tuple(
+            ChannelDisplayScope.capture(channel, self.registry)
+            for channel in self.channels.values()
+        )
+
+    @property
+    def viewer_names(self) -> frozenset[str]:
+        return self.viewer.names(self.registry)
+
+    def require_viewer(self) -> str:
+        return self.viewer.require_name(self.registry)
+
+    def scope(self, target: str) -> ChannelDisplayScope:
+        channel = self.catalog.require_channel(target, self.registry.threads)
+        return ChannelDisplayScope.capture(channel, self.registry)

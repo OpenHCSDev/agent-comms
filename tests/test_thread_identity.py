@@ -213,7 +213,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    message = comms.messaging.send_message("owner", viewer, "already painted")
+    message = comms.messaging.send("owner", viewer, "already painted").message
     page = comms.views.dm_display_page("owner", worktree=str(tmp_path))
     comms.views.mark_dm_view_read(
         "owner",
@@ -230,7 +230,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
                 viewer_identity, comms.registry.require("owner").incarnation}
     reopened = Comms(tmp_path)
     assert message.seq in reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
-    next_message = reopened.messaging.send_message("owner", viewer, "new paint")
+    next_message = reopened.messaging.send("owner", viewer, "new paint").message
     page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
     reopened.views.mark_dm_view_read(
         "owner",
