@@ -11,7 +11,6 @@ import fcntl
 import hashlib
 import json
 import shlex
-import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -105,9 +104,8 @@ class WatchGuard(ClaudeHookProgram):
 
 
 def main() -> None:
-    """Claude Code hook: warn the session whose bridge watch lapsed."""
-    try:
-        hook = ClaudeHook.read()
-        WatchClaim(hook.session_id).state().report(hook.hook_event_name)
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        print(f"{Path(sys.argv[0]).name}: {type(error).__name__}: {error}")
+    """Claude Code hook: warn the session whose bridge watch lapsed.
+
+    A failure exits nonzero, which Claude Code reports without blocking the session."""
+    hook = ClaudeHook.read()
+    WatchClaim(hook.session_id).state().report(hook.hook_event_name)

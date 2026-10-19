@@ -57,7 +57,7 @@ class CommanderSession:
 
     def refusals(self, kind: type[TacticalCommand]) -> tuple[str, ...]:
         try:
-            return (kind.refusal(),) if self.commander() else ()
+            return kind.install_refusals() if self.commander() else ()
         except (OSError, RelationViolationError) as error:
             return (f'{kind.work.capitalize()} refused: the guard cannot tell whether this '
                     f'session is {order.ME} ({error}).',)
@@ -116,8 +116,8 @@ class TacticalCommand(GuardedCommand):
         return any(ordered(shape) for shape in cls.shapes)
 
     @classmethod
-    def refusal(cls) -> str:
-        return InstallDeadline.read(order.COMMS.root).refusal(cls.work, order.ME)
+    def install_refusals(cls) -> tuple[str, ...]:
+        return InstallDeadline.read(order.COMMS.root).refusals(cls.work, order.ME)
 
 
 @dataclass(frozen=True)

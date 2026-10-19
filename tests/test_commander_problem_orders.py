@@ -1356,7 +1356,7 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
                                                           command, kind):
     """lead's registered process runs in Claude session s1. With no install planned, tactical work
     run in s1 is refused with the instruction to plan one; once the install is planned for worker,
-    it is refused with the order to send worker. The same command from another session, and an
+    it is refused with the order to send worker, and once it is planned for lead it runs. The same command from another session, and an
     order whose body names the command, pass. Once lead's process is gone no session can be
     classified, so every session is refused with the read error."""
     import io, os, subprocess
@@ -1387,6 +1387,8 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
         assert 'order send --to worker' in refused['permissionDecisionReason']
         assert guarded(command, 's2') == ''
         assert guarded(f'agent-comms-commander order send --to worker --body "run {command}"', 's1') == ''
+        PlannedInstallDeadline(RecordedEventTime(2000.0), 'lead').plan(comms.root)
+        assert guarded(command, 's1') == ''
     finally:
         process.kill()
         process.wait()
