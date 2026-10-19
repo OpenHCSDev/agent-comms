@@ -604,7 +604,8 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
         failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
         if served_by == "installed":
             report = upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
-            assert report["round_trip"] == f"comms_channels read alike through {runtimes['installed']}"
+            assert json.loads(report["round_trip"]) == {
+                "round_trip": f"comms_channels read alike through {runtimes['installed']}"}
             assert not list(failed)
         else:
             with pytest.raises(UpgradeRefused, match=f"runs {runtimes['other']}, not the installed"):

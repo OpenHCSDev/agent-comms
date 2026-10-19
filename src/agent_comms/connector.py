@@ -671,7 +671,8 @@ class RoundTripVerb(ConnectorVerb):
     port: int = option("--port", default=PORT, help="The service's loopback port")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        call = ToolsCallMessage(jsonrpc="2.0", id=0, params=ToolCall(CommsChannelsTool.declared_name))
+        read = ToolCall(CommsChannelsTool.declared_name)
+        call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
         try:
             running = ServiceProcess.listening(self.port).executable
             with ctx.admitted("upgrade round trip") as token:
@@ -690,7 +691,7 @@ class RoundTripVerb(ConnectorVerb):
             return f"The connector round trip was refused: {reply.content[0].text}"
         with client_wire(self.root) as comms:
             if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
-                return f"The connector service on port {self.port} reads another bus than {self.root}"
+                return f"The service on port {self.port} reads another bus than {self.root}"
         print(json.dumps({"round_trip": f"{call.params.name} read alike through {running}"}))
         return 0
 
