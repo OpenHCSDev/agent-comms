@@ -73,6 +73,10 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def edit_calls(self, call_id: str, at: float, thread: str, problem: str) -> tuple[EditCall, ...]:
         return ()
 
+    def test_runs(self) -> tuple[str, ...]:
+        """The test commands this call runs; only a shell command runs any."""
+        return ()
+
     def reads(self) -> str:
         """What the call names after its label: nothing unless the tool says."""
         return ''

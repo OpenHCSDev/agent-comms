@@ -9,15 +9,19 @@ from __future__ import annotations
 
 import calendar
 import json
+import math
 import re
 import subprocess
 import sqlite3
 import time
 import asyncio
 from abc import abstractmethod
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
+from itertools import pairwise
+from operator import itemgetter
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 
 from .change_report import FileLine
@@ -33,10 +37,14 @@ from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
+from .standing_rules import StandingRule
 from .storage_rules import StorageRule
+from .transcript_events import TranscriptEvent
+from .turn_digests import TurnDigestRead, TurnsSince
 from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .goal_management import Goals
 
 
@@ -269,6 +277,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """An open pull request nobody has touched for five minutes."""
         return False
 
+    def moved(self, ordered: float) -> float:
+        """When the work last moved; merged or unread work never stands still."""
+        return math.inf
+
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
@@ -306,6 +318,9 @@ class Moving(Stalling):
     def stall_at(self, ordered: float) -> float:
         return self.at + 900
 
+    def moved(self, ordered: float) -> float:
+        return self.at
+
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
@@ -316,6 +331,9 @@ class NoCommitProgress(Stalling, OrderProgress):
     def stall_at(self, ordered: float) -> float:
         """No first commit within 10 minutes of the order."""
         return ordered + 600
+
+    def moved(self, ordered: float) -> float:
+        return ordered
 
 
 @dataclass(frozen=True)
@@ -1731,3 +1749,125 @@ class TodoStore(TypedStore):
             generation,
         )
         return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))
+
+
+@dataclass(frozen=True)
+class OrderSpin:
+    """What a held order's unit did since its order, or since its last strike there, read from
+    Core's records: its work's progress, its own turns and its reports to the commander."""
+
+    todo: Todo
+    since: float
+    moved: float
+    events: tuple[TranscriptEvent, ...]
+    reports: tuple[float, ...]
+    now: float
+
+    @classmethod
+    def read(cls, comms: Comms, todo: Todo, pulls: PullRequests) -> OrderSpin:
+        unit = todo.held().owner
+        ordered = todo.order.at.recorded_at("An order")
+        since = max((ordered, *(strike.at.recorded_at("A strike") for strike in todo.live_strikes(unit))))
+        turns = TurnDigestRead(comms.root, comms.registry.require(unit), TurnsSince(since)).read().turns
+        reports = comms.bus.dm_history_page(unit, todo.creator).messages
+        return cls(
+            todo, since, OrderProgress.read(todo, comms.registry.storage_rule, pulls).moved(ordered),
+            tuple(event for turn in reversed(turns) for event in turn.events),
+            tuple(report.timestamp for report in reports
+                  if report.sender == unit and report.timestamp >= since),
+            time.time())
+
+    @property
+    def unit(self) -> str:
+        return self.todo.held().owner
+
+
+class SpinBehaviour(DeclaredFamily, affix="Spin"):
+    """One way a unit holding an order looks busy while its work does not move."""
+
+    text: ClassVar[str]
+
+    @classmethod
+    @abstractmethod
+    def began(cls, work: OrderSpin) -> float:
+        """When this behaviour began on the order; infinity while the work moves."""
+
+
+class QuietSpin(SpinBehaviour):
+    quiet: ClassVar[int] = 600
+    text = f"made no new commit for {quiet // 60} minutes"
+
+    @classmethod
+    def began(cls, work: OrderSpin) -> float:
+        began = max(work.moved, work.since) + cls.quiet
+        return began if began < work.now else math.inf
+
+
+class RerunSpin(SpinBehaviour):
+    reruns: ClassVar[int] = 2
+    text = f"reran the same test more than {reruns} times with no edit between the runs"
+
+    @classmethod
+    def began(cls, work: OrderSpin) -> float:
+        runs: Counter[str] = Counter()
+        for event in work.events:
+            if event.edit_calls(work.unit, work.todo.id, work.since):
+                runs.clear()
+            for command in event.test_runs(work.since):
+                runs[command] += 1
+                if runs[command] > cls.reruns + 1:
+                    return max(event.dated, default=work.now)
+        return math.inf
+
+
+class ReportSpin(SpinBehaviour):
+    text = "reported progress again with no new commit since its previous report"
+
+    @classmethod
+    def began(cls, work: OrderSpin) -> float:
+        return next((report for previous, report in pairwise(work.reports) if work.moved < previous),
+                    math.inf)
+
+
+@dataclass(frozen=True)
+class WheelSpin(StandingRule):
+    """A unit holding an order looks busy while its work does not move. Core strikes it on the
+    order itself; a second fire on the same order withdraws the order so it can be reassigned."""
+
+    todo: Todo
+    behaviour: type[SpinBehaviour]
+    since: float
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        held = tuple(todo for todo in cls.todos(comms, commander) if todo.pending)
+        pulls = PullRequests(held)
+        return tuple(spin for todo in held for spin in cls.spun(OrderSpin.read(comms, todo, pulls)))
+
+    @classmethod
+    def spun(cls, work: OrderSpin) -> tuple[Self, ...]:
+        """The order's earliest spin; one fire per read, so one write per order."""
+        began, behaviour = min(((member.began(work), member)
+                                for member in SpinBehaviour.members_with(SpinBehaviour)),
+                               key=itemgetter(0))
+        return (cls(work.todo, behaviour, began),) if math.isfinite(began) else ()
+
+    def began(self) -> float:
+        return self.since
+
+    @property
+    def why(self) -> str:
+        return f"{self.todo.held().owner} {self.behaviour.text} on {self.todo.id}"
+
+    def line(self) -> str:
+        return (f"WHEEL SPIN: {self.why} -> Core strikes it; a second fire on the order"
+                " withdraws it for reassignment")
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        current = comms.goals.todos.get(self.todo.id)
+        actor = comms.registry.require(commander).incarnation
+        held = current.held()
+        operation = (WithdrawTodo(current.revision, actor, held, self.why)
+                     if current.struck_on_order(held.owner)
+                     else StrikeTodo(current.revision, actor, held, self.why))
+        comms.goals.todos.apply(current.id, operation)

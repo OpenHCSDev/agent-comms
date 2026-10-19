@@ -33,6 +33,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         """When this violation began, or None when its rule cannot say: it shows on every read."""
         return None
 
+    def broke_after(self, after: float) -> bool:
+        return (began := self.began()) is None or began >= after
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        """What Core does itself when this rule breaks; a rule that only reports does nothing."""
+
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
         return comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation)
@@ -41,7 +47,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
         """Every member's violations for one commander that began after ``after``."""
         found = (v for rule in cls.members_with(cls) for v in rule.violations(comms, commander))
-        return tuple(rule for rule in found if (began := rule.began()) is None or began >= after)
+        return tuple(rule for rule in found if rule.broke_after(after))
 
 
 @dataclass(frozen=True)

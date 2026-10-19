@@ -9,7 +9,7 @@ from typing import ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
-from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
+from .storage_rules import WriteStorageEffect, physical_path, shell_commands, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
 
 
@@ -137,6 +137,11 @@ class BashTool(CodingTool):
 
     def storage_effects(self, cwd):
         return shell_storage_effects(self.command, cwd)
+
+    def test_runs(self) -> tuple[str, ...]:
+        """The whole command is one test run when any of its shell commands runs pytest."""
+        words = {Path(word).name for command in shell_commands(self.command) for word in command}
+        return (self.command,) if "pytest" in words else ()
 
 
 class MutatingPathTool(PathTool):
