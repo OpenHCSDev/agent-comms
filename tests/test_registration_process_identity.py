@@ -8,9 +8,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.cli_bridges.shared import IncomingFrame
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.incoming_frame import IncomingFrame
 from agent_comms.messages import InfoKind, Message
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest

@@ -35,6 +35,7 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalPage, ExternalTranscript
 from agent_comms.field_codec import FieldCodec
+from agent_comms.incoming_frame import IncomingFrame
 from agent_comms.native_tools import (
     BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool)
 from agent_comms.messages import Message, MessageKind, InfoKind
@@ -810,16 +811,6 @@ class Watch(Inbox):
         super().start(bridge, tasks)
         tasks.create_task(bridge.publish_transcript())
 
-
-@dataclass(frozen=True)
-class IncomingFrame(ABC):
-    message: Message
-
-    @property
-    def text(self) -> str:
-        origin = self.message.sender_role.origin_label
-        return (f'Comms in · {self.message.sender} ({origin})\n'
-                f'{self.message.body}\nMessage ID: {self.message.message_id}')
 
 class CliBridge(ABC, Generic[BridgeOptions]):
     """Core delivery and lifetime shared by CLI-specific transports."""

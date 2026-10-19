@@ -12,6 +12,7 @@ from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, ValidationError, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
+from agent_comms.incoming_frame import IncomingFrame
 from agent_comms.field_codec import FieldCodec
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.transcript_events import (
@@ -35,7 +36,6 @@ from .shared import (
     StatusUpdate,
     TurnEnded,
     TurnStarted,
-    IncomingFrame,
     MonitorFrame,
     MonitorPart,
     MonitorProbe,

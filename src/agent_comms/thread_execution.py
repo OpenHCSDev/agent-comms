@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .child_process import ProcessState
 from .errors import RelationViolationError
+from .incoming_frame import IncomingFrame
 from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
@@ -178,8 +179,6 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def turn_start(cls, thread: Thread) -> Callable[[Message], str]:
         """The bridge watching this inbox injects each delivered message as its incoming frame."""
-        from .cli_bridges.shared import IncomingFrame
-
         return lambda message: IncomingFrame(message).text
 
     @classmethod

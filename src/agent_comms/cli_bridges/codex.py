@@ -17,7 +17,8 @@ from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
 from .history import CodexHistory, OnlineHistory
-from .shared import (Binding, EarlierPublishedPage, IncomingFrame, PublishedPage, SessionFacts,
+from agent_comms.incoming_frame import IncomingFrame
+from .shared import (Binding, EarlierPublishedPage, PublishedPage, SessionFacts,
                      ThreadOutput, TranscriptBridge, Options, TranscriptUpdate, run_bridge)
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,

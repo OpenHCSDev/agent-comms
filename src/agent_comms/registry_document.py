@@ -643,7 +643,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         return cls(
             threads=MappingProxyType(dict(document.threads)),
             statuses=MappingProxyType({  # an active status stands only while its process does
-                name: document.threads[name].execution.registered_status(document.threads[name], status)
+                name: (thread := document.threads[name]).execution.registered_status(thread, status)
                 if status.active else status for name, status in document.statuses.items()}),
             last_seen=MappingProxyType(dict(document.last_seen)),
             aliases=MappingProxyType(dict(document.aliases)),
