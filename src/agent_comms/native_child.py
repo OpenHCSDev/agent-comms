@@ -170,9 +170,11 @@ class NativeChildState(ABC):
 
     retained = False
 
-    def managed_launch(self, command, arguments, *, package, root, worktree, environment, session_file):
-        return NativePiRpcLaunch.managed(command, arguments, package=package, root=root, worktree=worktree,
-            environment=environment, session_file=session_file)
+    def managed_launch(self, command, arguments, *, package, root, directory, worktree, environment, session_file):
+        return NativePiRpcLaunch.managed(
+            command, arguments, package=package, root=root, directory=directory,
+            worktree=worktree, environment=environment, session_file=session_file,
+        )
 
     def reuse(self, key) -> PiSessionChild | None:
         return None
@@ -285,17 +287,19 @@ class RetainedNative(ChildNative):
             return self.child
         return None
 
-    def managed_launch(self, command, arguments, *, package, root, worktree, environment, session_file):
+    def managed_launch(self, command, arguments, *, package, root, directory, worktree, environment, session_file):
         if self.current and self.child.key[0].package == package:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
-                root=root, worktree=worktree, environment=environment, session_file=session_file)
+                root=root, directory=directory, worktree=worktree, environment=environment, session_file=session_file)
             if candidate is not None and (candidate, candidate.record.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
-        return super().managed_launch(command, arguments, package=package, root=root, worktree=worktree,
-            environment=environment, session_file=session_file)
+        return super().managed_launch(
+            command, arguments, package=package, root=root, directory=directory,
+            worktree=worktree, environment=environment, session_file=session_file,
+        )
 
     def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()

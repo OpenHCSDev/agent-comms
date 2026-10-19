@@ -518,6 +518,7 @@ class NativePiRpcLaunch:
         package: VerifiedNativePackage,
         worktree: Path,
         root: Path,
+        directory: Path,
         environment: LaunchRecord,
         session_file: str | None = None,
     ) -> NativePiRpcLaunch:
@@ -531,14 +532,11 @@ class NativePiRpcLaunch:
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        from .selected_session import SelectedSession, SavedSelectedSession
-        from .native_session_reopen import NativeSessionIdentity
+        from .selected_session import SelectedSession
 
         saved = Path(session_file).absolute() if session_file is not None else None
-        directory = saved.parent if saved is not None else cwd
-        session = (SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(str(saved)))
-            if saved is not None else SelectedSession(directory))
+        _durable_private_session_dir(directory)
+        session = SelectedSession.for_launch(directory, saved)
         return cls._managed(package, arguments, cwd, replace(environment, root=root, implicit_root=False), session)
 
     @classmethod
@@ -556,6 +554,7 @@ class NativePiRpcLaunch:
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
+        directory: Path,
         environment: LaunchRecord, session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
@@ -566,7 +565,7 @@ class NativePiRpcLaunch:
         """
         self._command_selection(command, self.record.runtime, self.package)
         saved = Path(session_file).absolute() if session_file is not None else None
-        if saved != self.session.path:
+        if (saved, directory) != (self.session.path, self.session.directory):
             return None
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
