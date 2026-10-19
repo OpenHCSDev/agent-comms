@@ -579,12 +579,20 @@ class Revisions:
     def __post_init__(self) -> None:
         self.trees: dict[str, Path] = {}
 
+    @staticmethod
+    def prepare(path: Path) -> None:
+        """A selected commit includes its pinned Git dependencies, not empty gitlink directories."""
+        run("git", "-C", path, "submodule", "update", "--init", "--recursive", "--checkout")
+
     def tree(self, revision: str) -> Path:
         if revision not in self.trees:
             path = self.scratch / f"tree-{revision[:12]}"
             run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
+            # This map owns allocated worktrees, including failed preparation, for cleanup.
             self.trees[revision] = path
-        return self.trees[revision]
+        path = self.trees[revision]
+        self.prepare(path)
+        return path
 
     def close(self) -> None:
         for path in self.trees.values():
