@@ -370,8 +370,6 @@ class NativeContextProof(NativeContextRecord):
             with NativeContextJournal.open_evidence(session_file) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
             if row is None:
-                evidence.observe()
-                evidence.tracked(input_id)
                 raise NativePiUnavailable("The input has no assembled-context proof")
             header, _entries = evidence.observe_input(input_id, row.session_entry_id)
             entry = evidence.tracked(input_id)
@@ -908,12 +906,12 @@ class PrivateEvidenceRead:
         from .native_transcript import reverse_records
 
         size, digest, revision = self._capture_append()
-        for start, _end, raw in reverse_records(self.path, size, stream=self.stream):
+        for _start, end, raw in reverse_records(self.path, size, stream=self.stream):
             row = self._decode_row(raw)
             if row.get('id') == session_entry_id:
                 self._commit_snapshot(size, digest, revision)
-                self.decoded_through = start
-                return
+                self.decoded_through = end
+                return row
         raise NativePiUnavailable('Recorded native input entry is absent from its source')
 
     def _commit_snapshot(self, size, digest, revision) -> None:

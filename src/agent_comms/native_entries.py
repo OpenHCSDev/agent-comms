@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from itertools import chain
 from contextlib import ExitStack, contextmanager
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal
@@ -152,6 +154,49 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         return False
 
 
+class NativeHeaderState(ABC):
+    """Acquired header lifetime, not a guess from the number of indexed inputs."""
+
+    @abstractmethod
+    def read(self, reader): ...
+
+    def decode_inputs(self, rows):
+        for row in rows:
+            entry = NativeEntry.wire_member(row).input_evidence(row)
+            if entry is not None:
+                yield entry
+
+    def start_input(self, reader, session_entry_id):
+        reader.header()
+        return (reader.source.start_at_entry(session_entry_id),)
+
+
+class UnreadNativeHeader(NativeHeaderState):
+    def decode_inputs(self, rows):
+        rows = iter(rows)
+        for first in rows:
+            yield NativeEntry.from_evidence(first)
+            break
+        yield from super().decode_inputs(rows)
+
+    def read(self, reader):
+        header = reader._accept_header((NativeEntry.from_evidence(reader.source.consume_header()),))
+        reader.entries = (header,)
+        reader.header_state = AcceptedNativeHeader()
+        return header
+
+
+class AcceptedNativeHeader(NativeHeaderState):
+    def read(self, reader):
+        reader.source.verify()
+        return reader.entries[0]
+
+
+class IndexedNativeHeader(AcceptedNativeHeader):
+    def start_input(self, reader, session_entry_id):
+        return ()  # The acquired reader already indexes each verified append.
+
+
 class NativeEvidenceRead:
     """Decoded original entries live only inside the acquired file resource.
 
@@ -207,6 +252,7 @@ class NativeEvidenceRead:
     def _forget(self) -> None:
         self.entries: tuple[NativeEntry, ...] = ()
         self.inputs: dict[str, int] = {}
+        self.header_state: NativeHeaderState = UnreadNativeHeader()
 
     def close(self):
         self.source.close()
@@ -246,16 +292,10 @@ class NativeEvidenceRead:
         from .native_pi import NativePiUnavailable
 
         try:
-            if self.entries:
-                self.source.verify()
-                return self._accept_header(self.entries)
-            header = self._accept_header((NativeEntry.from_evidence(self.source.consume_header()),))
+            return self.header_state.read(self)
         except MalformedRecord as error:
             self.close()
             raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
-        if not self.entries:
-            self.entries = (header,)
-        return header
 
     def observe_input(self, input_id, session_entry_id):
         """Full-history readers preserve their contiguous branch semantics."""
@@ -294,14 +334,14 @@ class NativeEvidenceRead:
         self.source.reverify_from_start()
         return self._observe(reverified=True)
 
-    def _observe(self, *, reverified: bool):
+    def _observe(self, *, reverified: bool, initial_rows=()):
         from .native_pi import (
             NativeEvidencePrefixChanged,
             NativePiUnavailable,
         )
 
         try:
-            appended = tuple(self.decode_rows(self.source.rows()))
+            appended = tuple(self.decode_rows(chain(initial_rows, self.source.rows())))
             self.index(appended)
             entries = self.entries + appended
             self._accept_header(entries)
@@ -321,6 +361,7 @@ class NativeEvidenceRead:
             self.close()
             raise
         self.entries = entries
+        self.header_state = IndexedNativeHeader()
         return entries[0], entries
 
     def decode_rows(self, rows):
@@ -337,20 +378,12 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
 
     def observe_input(self, input_id, session_entry_id):
         """A recorded native entry locates the first needed input, not a bus sequence."""
-        if len(self.entries) <= 1:
-            self.header()
-            self.source.start_at_entry(session_entry_id)
-        return self.observe()
+        return self._observe(
+            reverified=False, initial_rows=self.header_state.start_input(self, session_entry_id),
+        )
 
     def decode_rows(self, rows):
-        for index, row in enumerate(rows):
-            # The first physical record must remain the original session header.
-            if index == 0 and not self.entries:
-                yield NativeEntry.from_evidence(row)
-                continue
-            entry = NativeEntry.wire_member(row).input_evidence(row)
-            if entry is not None:
-                yield entry
+        yield from self.header_state.decode_inputs(rows)
 
 
 class NativeEvidenceScope(ExitStack):
