@@ -399,9 +399,6 @@ class Thread(ThreadProvenance):
         """Only the exact latest completed turn can release a dependency."""
         return not self.executing and self.observed_turn(claim_scope) == fence.renamed(self.name)
 
-    def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
-        return self.goal.accepts_observation(goal_id, minimum_revision)
-
     @property
     def is_fork(self) -> bool:
         return self.parent is not None

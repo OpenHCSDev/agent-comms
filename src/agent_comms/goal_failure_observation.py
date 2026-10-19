@@ -100,7 +100,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
             return False
         if self.turn != owner.observed_turn(claim_scope):
             return False
-        return owner.has_goal_revision(self.goal_id, self.goal_revision)
+        return owner.goal.accepts_observation(self.goal_id, self.goal_revision)
 
     @classmethod
     def references(cls):
