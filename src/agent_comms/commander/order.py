@@ -539,7 +539,7 @@ def done(pid, sha, delivered=None, screenshot=''):
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
-        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered}')
+        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered or sha}')
         return
     print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 

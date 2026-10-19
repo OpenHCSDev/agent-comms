@@ -15,6 +15,7 @@ import sqlite3
 import time
 import asyncio
 from abc import abstractmethod
+from contextlib import suppress
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -22,7 +23,7 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
 from .change_report import FileLine
-from .child_process import BoundedRun, ChildResult, ExitedOutcome
+from .child_process import BoundedRun, ChildResult, ExitedOutcome, Platform
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import (
@@ -215,6 +216,7 @@ def _clock(at: float) -> str:
 
 @dataclass(frozen=True)
 class DistanceReading:
+    commit: str
     at: float
     distance: int
 
@@ -233,7 +235,7 @@ class DistanceReadings:
             return UnreadTrend()
         first, final = last
         if final.distance >= first.distance:
-            return FlatTrend(final.distance, final.at)
+            return FlatTrend(final.distance, final.at, final.commit)
         rate = (first.distance - final.distance) / max(final.at - first.at, 1.0)
         return MovingTrend(final.distance, final.at + final.distance / rate)
 
@@ -258,10 +260,11 @@ class MovingTrend(DistanceTrend):
 
 @dataclass(frozen=True)
 class FlatTrend(DistanceTrend):
-    """The distance did not fall from the reading before ``since``."""
+    """The distance did not fall from the reading before ``since``, read at ``commit``."""
 
     distance: int
     since: float
+    commit: str
 
     @property
     def projection(self) -> str:
@@ -320,7 +323,7 @@ class ProgressSource:
             "--not", base).splitlines()))]
         points = [(base, self.since), *commits][-2:]
         return DistanceReadings(
-            tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points))
+            tuple(DistanceReading(sha, at, self.distance(base, sha)) for sha, at in points))
 
     def distance(self, base: str, sha: str) -> int:
         """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
@@ -671,6 +674,76 @@ class PlainText(OrderWords):
     refusal = "Jargon {1} hides what happened; say it plainly."
 
 
+class Evidence(DeclaredFamily, affix="Evidence"):
+    """State a strike stands on, each kind recognising its citation and checking it exists. A
+    board row, goal text or another agent's account of the work is a report of state, not state."""
+
+    CITES: ClassVar[re.Pattern]
+    form: ClassVar[str]
+
+    @classmethod
+    def cited(cls, text: str, repository: str) -> tuple[str, ...]:
+        return tuple(found.group(0) for member in cls.members_with(cls)
+                     for found in member.CITES.finditer(text) if member.exists(found, repository))
+
+    @classmethod
+    @abstractmethod
+    def exists(cls, found: re.Match[str], repository: str) -> bool: ...
+
+    @staticmethod
+    def git(repository: str, *args: str) -> int:
+        return subprocess.run(("git", "-C", repository, *args), capture_output=True,
+                              timeout=30).returncode
+
+
+class CommitEvidence(Evidence):
+    CITES = re.compile(r"(?<![\w.])[0-9a-f]{7,40}(?![\w.])")
+    form = "a commit sha"
+
+    @classmethod
+    def exists(cls, found: re.Match[str], repository: str) -> bool:
+        return not cls.git(repository, "cat-file", "-e", f"{found.group(0)}^{{commit}}")
+
+
+class DiffEvidence(Evidence):
+    CITES = re.compile(r"\b([0-9a-f]{7,40})\.\.([0-9a-f]{7,40})\b")
+    form = "a diff range A..B that changes something"
+
+    @classmethod
+    def exists(cls, found: re.Match[str], repository: str) -> bool:
+        return cls.git(repository, "diff", "--quiet", found.group(1), found.group(2)) == 1
+
+
+class TurnRecordEvidence(Evidence):
+    CITES = re.compile(r"(/\S+\.jsonl):(\d+)\b")
+    form = "a turn record /path/session.jsonl:line"
+
+    @classmethod
+    def exists(cls, found: re.Match[str], repository: str) -> bool:
+        record = Path(found.group(1))
+        return record.is_file() and len(record.read_bytes().splitlines()) >= int(found.group(2))
+
+
+class ProcessEvidence(Evidence):
+    CITES = re.compile(r"\bpid (\d+)\b")
+    form = "a running process pid N"
+
+    @classmethod
+    def exists(cls, found: re.Match[str], repository: str) -> bool:
+        with suppress(ProcessLookupError):
+            return bool(Platform.current().identity(int(found.group(1))))
+        return False
+
+
+class RuntimeEvidence(Evidence):
+    CITES = re.compile(r"(?<![\w/.~])/[^\s:`'\"“”,;()]+")
+    form = "an existing runtime path"
+
+    @classmethod
+    def exists(cls, found: re.Match[str], repository: str) -> bool:
+        return Path(found.group(0)).exists()
+
+
 class StrikeReason(PlainText):
     """What a unit did, plainly, in enough words to stand on the public record. A unit's
     wording is answered by a correction, never a strike: a reason whose every quoted span
@@ -678,6 +751,14 @@ class StrikeReason(PlainText):
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+    def require_evidence(self, repository: str) -> None:
+        """A strike stands on state the record can check, never on a report of it."""
+        if not Evidence.cited(self.text, repository):
+            raise ValueError(
+                "Cite the state the strike stands on: "
+                + ", ".join(member.form for member in Evidence.members_with(Evidence))
+                + "; a board row, goal text or another agent's account is a report, not state.")
 
     @classmethod
     def refused(cls, text: str) -> str | None:
@@ -1326,7 +1407,7 @@ class StrikeTodo(TodoOperation):
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
-        StrikeReason(self.reason)
+        StrikeReason(self.reason).require_evidence(current.order.check.directory)
         if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
             return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)

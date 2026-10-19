@@ -95,7 +95,7 @@ class WheelSpin(StandingRule, declared_name=None):
 class FlatWheelSpin(WheelSpin, DatedStandingRule):
     """Two distance readings with no fall while the unit kept working."""
 
-    since: float
+    trend: FlatTrend
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[FlatWheelSpin, ...]:
@@ -104,13 +104,13 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
         storage = comms.registry.storage_rule
         trends = ((todo, OrderProgress.read(todo, storage, pulls).distance_readings().trend)
                   for todo in held)
-        flat = ((todo, trend.since) for todo, trend in trends if isinstance(trend, FlatTrend))
-        return tuple(cls(todo, since) for todo, since in flat
+        flat = ((todo, trend) for todo, trend in trends if isinstance(trend, FlatTrend))
+        return tuple(cls(todo, trend) for todo, trend in flat
                      if TurnDigestRead(comms.root, comms.registry.require(todo.held().owner),
-                                       TurnsSince(since)).read().turns)
+                                       TurnsSince(trend.since)).read().turns)
 
     def began(self) -> float:
-        return self.since
+        return self.trend.since
 
     def line(self) -> str:
         return (f"WHEEL SPIN: {self.todo.holder} kept working on {self.todo.id} while its distance"
@@ -124,7 +124,7 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
             comms.goals.change_problem(todo.id, StrikeTodo(
                 todo.revision, comms.registry.require(commander).incarnation, held,
                 f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
-                " across two readings"), commander)
+                f" across two readings, the last at {self.trend.commit}"), commander)
         for unit in self.idle(comms, commander)[:1]:
             self.assign(comms, commander, unit)
 

@@ -63,8 +63,10 @@ def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> No
         violation = str(denied)
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
     for todo in order.held_by(thread)[:1]:
-        order.strike(thread, f'{todo.id} broke the storage rule at a tool call: {violation}; '
-                             'storage waste is banned outright', 'tool_watch at tool call',
+        order.strike(thread, todo.id,
+                     f'{todo.id} broke the storage rule at a tool call from pid '
+                     f'{registry.require(thread).process_identity.require().pid}: {violation}; '
+                     'storage waste is banned outright', 'tool_watch at tool call',
                      kind=StorageStrikeTodo)
 
 
