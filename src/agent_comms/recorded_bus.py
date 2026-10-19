@@ -44,4 +44,4 @@ class NoRecordedBus(NullMember, AbsentPath, RecordedBusIdentity):
     """A page painted while no bus existed stays current until a bus appears."""
 
     def matches(self, source: ObservedPath) -> bool:
-        return source.absent
+        return source.shows_no_bus()
