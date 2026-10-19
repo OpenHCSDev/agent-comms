@@ -572,8 +572,7 @@ def test_check_repo_resolves_once_for_send_and_correction(
         commander, commander_script, monkeypatch, tmp_path, spelling):
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={
-        'repos': (script.Repo.of(repo),)}))
+    script = script.model_copy(update={'repos': (Repo.of(repo),)})
     monkeypatch.chdir(repo)
     # A same-named directory must not override the configured repository.
     (repo / 'agent-comms').mkdir()
