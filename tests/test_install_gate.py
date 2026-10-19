@@ -172,6 +172,8 @@ class InstallGateTests(unittest.TestCase):
                 self.root,
             )
         installer.write_text(
+            "import sys, time\n"
+            "if '--help' not in sys.argv: time.sleep(2.1)\n"
             'print(\'{"rehearsal":{"steps":[],"read":{"threads":1,"who":2,"history":3},"files":{"identical":4,"rewritten":5}}}\')\n'
         )
         result = rehearse(

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import asyncio
 import json
 import os
 import shlex
@@ -284,6 +285,7 @@ class Machine:
     def capture(self, destination: Path, log: Path) -> SnapshotCopy:
         destination.mkdir(mode=0o700)
         captured = 0
+        floor = storage_floor()
         command: tuple[str, ...] = (
             "bwrap",
             "--ro-bind",
@@ -320,10 +322,7 @@ class Machine:
                     for entry in archive:
                         if not (entry.isfile() or entry.isdir()):
                             raise GateError("Snapshot contains a link or special file")
-                        if (
-                            shutil.disk_usage(destination).free
-                            < captured + 2 * entry.size + storage_floor()
-                        ):
+                        if shutil.disk_usage(destination).free < captured + 2 * entry.size + floor:
                             raise GateError(
                                 f"Insufficient room for snapshot and rehearsal at {destination}"
                             )
@@ -331,7 +330,7 @@ class Machine:
                         captured += entry.size
             except tarfile.TarError as error:
                 raise GateError(f"{self.name} snapshot stream failed; see {log}") from error
-            outcome = process.reap()
+            outcome = asyncio.run(process.wait())
             if not outcome.successful:
                 raise GateError(f"{self.name} snapshot {outcome.summary}; see {log}")
         context = FieldCodec.decode(
@@ -459,7 +458,7 @@ def rehearse(
     ):
         launch.release(process.identity)
         launch.verify()
-        outcome = process.reap()
+        outcome = asyncio.run(process.wait())
     if not outcome.successful:
         raise GateError(f"Rehearsal {outcome.summary}; see {log}")
     try:
