@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from agent_comms.presentation import NoRevision, WireRevision
+from agent_comms.revision_views import RegistrationsView, SidebarView, StoresView
 from agent_comms.ui_model.observation import (
     NotificationsRead, ReadNotifications, ReadRecordedNotifications, UnreadableNotificationsRead,
 )
@@ -22,11 +23,11 @@ def test_notification_read_states_use_the_request_revision_contract():
 def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
     unseen = NoRevision()
     known = WireRevision.empty()
-    assert unseen.stores_changed_since(known)
-    assert unseen.registrations_changed_since(known)
-    assert known.registrations_changed_since(unseen)
-    assert unseen.registrations_changed_since(unseen)
-    assert unseen.sidebar_changed_since(known)
-    assert not known.stores_changed_since(known)
-    assert not known.registrations_changed_since(known)
-    assert not known.sidebar_changed_since(known)
+    assert unseen.changed_since(StoresView(), known)
+    assert unseen.changed_since(RegistrationsView(), known)
+    assert known.changed_since(RegistrationsView(), unseen)
+    assert unseen.changed_since(RegistrationsView(), unseen)
+    assert unseen.changed_since(SidebarView(), known)
+    assert not known.changed_since(StoresView(), known)
+    assert not known.changed_since(RegistrationsView(), known)
+    assert not known.changed_since(SidebarView(), known)

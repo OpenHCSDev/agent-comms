@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
-from .catalog_store import ChannelCatalog
+from .channels import Channel
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -107,13 +107,13 @@ class WireExportScope(DeclaredFamily, affix="Scope"):
         return FieldCodec.encode(self)
 
     @abstractmethod
-    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         """Capture canonical names and a predicate without mutating read state."""
 
 
 @dataclass(frozen=True, slots=True)
 class EverythingScope(WireExportScope):
-    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         return ResolvedExportScope(self, lambda message: True)
 
 
@@ -123,7 +123,7 @@ class AuthoredSourceScope(WireExportScope):
 
     sources: tuple[MessageReference, ...]
 
-    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         return ResolvedExportScope(self, lambda message: message.reference in self.sources)
 
 
@@ -131,8 +131,8 @@ class AuthoredSourceScope(WireExportScope):
 class ChannelScope(WireExportScope):
     channel: str
 
-    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
-        channel = catalog.read().require_channel(self.channel)
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
+        channel = require_channel(self.channel)
         channel.require_routable()
         return ResolvedExportScope(self, channel.history_scope().includes)
 
@@ -150,7 +150,7 @@ class DmScope(WireExportScope):
         ):
             raise ValueError("A DM wire-export scope requires two distinct participants.")
 
-    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+    def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         first = registry.entry(self.participants[0]).entry
         second = registry.entry(self.participants[1]).entry
         canonical = DmScope((first.thread.name, second.thread.name))

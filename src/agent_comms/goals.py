@@ -325,7 +325,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def goal_text(self, goal: Goal) -> str:
         return goal.text
 
-    def progress(self, goal: Goal, todos: Sequence[Todo], goals: Goals) -> str:
+    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         return goal.progress
 
     def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
@@ -405,8 +405,11 @@ class ProblemGoalOrder(GoalOrder):
     def goal_text(self, goal: Goal) -> str:
         return self.text
 
-    def progress(self, goal: Goal, todos: Sequence[Todo], goals: Goals) -> str:
-        return goals.todos.progress(todos, goals.registry.storage_rule)
+    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+        """Each problem's order state and latest verdict, as Core records them on its Todo."""
+        return "\n".join(" · ".join((f"{todo.id}: {todo.order.line}",
+                                     *(verdict.line for verdict in todo.verdicts[-1:])))
+                         for todo in todos)
 
     def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
         return goal.progress
@@ -505,7 +508,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
     @abstractmethod
-    def wake_context(self) -> dict[str, object] | None: ...
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> object: ...
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
@@ -574,7 +577,7 @@ class NoGoal(NullMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return False
 
-    def wake_context(self) -> None:
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> None:
         return None
 
     shows_document: ClassVar[bool] = False
@@ -658,8 +661,10 @@ class Goal(RecordMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return waits.clear(self.id, wait_id=wait_id)
 
-    def wake_context(self) -> dict[str, object]:
-        return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> dict[str, object]:
+        todos = self.order.todos(goals, owner, self.id)
+        return {"text": self.order.goal_text(self), "status": self.state.declared_name,
+                "progress": self.order.progress(self, todos)}
 
     shows_document: ClassVar[bool] = True
 

@@ -133,6 +133,30 @@ class BridgeDown(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
+class BoardDisagrees(StandingRule):
+    """An open order reads as no commit despite its linked pull request having merged."""
+
+    problem: str
+    order: str
+    merge: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(
+            cls(todo.id, todo.order.id, merged.sha)
+            for todo, merged in comms.goals.todos.board_disagreements(
+                comms.registry.require(commander).incarnation, comms.registry.storage_rule
+            )
+        )
+
+    def line(self) -> str:
+        return (
+            f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
+            f"but its linked PR merged as {self.merge} -> repair the progress read this wake"
+        )
+
+
+@dataclass(frozen=True)
 class PlanIdle(StandingRule):
     """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
 

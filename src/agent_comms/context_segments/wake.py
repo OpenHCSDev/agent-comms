@@ -36,11 +36,12 @@ class SelectedWakeSegment(InstructionSegment):
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
     sent_outcomes: tuple[SentMessageOutcome, ...]
+    work_context: dict[str, object]
 
     sent_limit = 5
 
     @classmethod
-    def capture(cls, sources, owner, *, obligations=(), sent_outcomes=()):
+    def capture(cls, sources, owner, goals, *, obligations=(), sent_outcomes=()):
         relevance = WakePolicy.relevance_instruction()
         sent_outcomes = tuple(sent_outcomes)
         if len(sent_outcomes) > cls.sent_limit:
@@ -57,6 +58,7 @@ class SelectedWakeSegment(InstructionSegment):
             obligations=tuple(obligations),
             relevance=relevance,
             sent_outcomes=sent_outcomes,
+            work_context=owner.wake_context(goals),
         )
 
     def values(self):
@@ -96,7 +98,7 @@ class SelectedWakeSegment(InstructionSegment):
             separators=(",", ":"),
         )
         work_context = json.dumps(
-            owner.wake_context(),
+            self.work_context,
             ensure_ascii=True,
             separators=(",", ":"),
         )

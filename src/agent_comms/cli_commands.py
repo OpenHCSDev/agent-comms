@@ -404,7 +404,7 @@ class OneTarget(TargetSelection):
 
     def run(self, declaration, comms, arguments, *, confirmed, channel, project, snapshot, catalog):
         name, = self.targets
-        resolved = name.resolve(snapshot, catalog)
+        resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
                          for bound in declaration.bindings(comms, name, context, snapshot=snapshot,
                                                            catalog=catalog, resolved=resolved))
@@ -432,7 +432,7 @@ class TargetBatch(TargetSelection):
         planned: dict[CliCommand, tuple[int, CommandTarget, str | None]] = {}
         for name in self.targets:
             try:
-                resolved = name.resolve(snapshot, catalog)
+                resolved = name.resolve(snapshot, comms.bus.require_channel)
             except ValueError as error:
                 outcomes.append((len(planned) + len(outcomes),
                                  TargetFailed(name.name, type(error).__name__, str(error))))
@@ -458,10 +458,10 @@ class TargetBatch(TargetSelection):
             try:
                 current = comms.registry.snapshot()
                 current_catalog = (comms.channels.catalog.read()
-                                   if context or name.needs_catalog else None)
+                                   if context or name.needs_channel_state else None)
                 if bound_command not in type(bound_command).bindings(
                         comms, name, context, snapshot=current, catalog=current_catalog,
-                        resolved=name.resolve(current, current_catalog)):
+                        resolved=name.resolve(current, comms.bus.require_channel)):
                     scope = f' in {context}' if context is not None else ''
                     raise ValueError(f'The bound command for {name}{scope} changed; refresh the selection')
                 result = TargetCompleted(name.name, command, command.apply(comms))
@@ -853,8 +853,8 @@ class CliCommand(
         # the acquired namespace rather than reserving a special actor spelling.
         available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
-                   if channel or any(item.needs_catalog for item in selected) else None)
-        resolved_targets = tuple((name, name.resolve(snapshot, catalog)) for name in available_targets)
+                   if channel or any(item.needs_channel_state for item in selected) else None)
+        resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
         grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
@@ -942,7 +942,7 @@ class CliCommand(
         selection = cls.selected_targets(target)
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
-                   if channel or any(item.needs_catalog for item in selection.targets) else None)
+                   if channel or any(item.needs_channel_state for item in selection.targets) else None)
         return selection.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
@@ -1295,7 +1295,7 @@ class HistoryCliCommand(CliCommand):
         traversal = self.before.older() if self.before is not None else OlderTraversal()
         bounds = PageBounds(traversal, self.limit)
         page = ctx.views.history_page(target, bounds, viewer=self.me)
-        return target.history_result(ctx.channels.catalog.read(), tuple(reversed(page.messages)), page.has_older)
+        return target.history_result(ctx.bus.require_channel, tuple(reversed(page.messages)), page.has_older)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2091,11 +2091,12 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
         return channel.get(target, (None,)) if isinstance(channel, dict) else (channel,)
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog: CatalogDocument):
         if channel is None:
             return ()
-        if not catalog.require_channel(channel).matches(thread.tags):
-            return ()
+        with comms.bus.opened_activity() as activity:
+            if not catalog.require_channel(channel, activity).matches(thread.tags):
+                return ()
         return (cls(name=thread.name, channel=channel,
                     pinned=thread.name not in catalog.pinned_threads(channel)),)
 

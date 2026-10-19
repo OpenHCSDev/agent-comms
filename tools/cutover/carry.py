@@ -122,18 +122,30 @@ class RetainedBus:
                 f"Retained bus {self.name} still needs retired steps: {sorted(missing)}")
 
     @classmethod
-    def record(cls, checkout: Path, root: Path) -> None:
-        """Publish this bus's committed ledger after an upgrade applies a step."""
-        path = checkout / STEPS / cls.filename
-        if not path.exists():
-            return
-        buses = FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(path.read_bytes()))
+    def recorded(cls, checkout: Path, root: Path) -> str:
+        """The checkout's committed declaration with this bus's entry read from its ledger."""
+        source = git(checkout, "show", f"HEAD:{STEPS}/{cls.filename}")
+        buses = FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(source))
         updated = tuple(replace(bus, applied=CarryLedger(root).applied())
                         if Path(bus.root).expanduser().resolve() == root.resolve() else bus
                         for bus in buses)
-        if updated != buses:
-            _atomic_write_text(path, json.dumps(FieldCodec.encode(updated), indent=2) + "\n",
-                               fsync_parent=True)
+        return json.dumps(FieldCodec.encode(updated), indent=2) + "\n" if updated != buses \
+            else source.decode()
+
+    @classmethod
+    def record(cls, checkout: Path, root: Path) -> None:
+        """Publish this bus's ledger in the checkout's declaration after an upgrade."""
+        path = checkout / STEPS / cls.filename
+        if path.exists() and path.read_text() != (recorded := cls.recorded(checkout, root)):
+            _atomic_write_text(path, recorded, fsync_parent=True)
+
+    @classmethod
+    def derived(cls, checkout: Path, root: Path) -> frozenset[str]:
+        """The declaration, when its one local change is this bus's ledger: the ledger derives
+        it again, so an upgrade sets it aside instead of refusing the checkout."""
+        path = checkout / STEPS / cls.filename
+        held = path.exists() and path.read_text() == cls.recorded(checkout, root)
+        return frozenset({str(STEPS / cls.filename)} if held else ())
 
     @classmethod
     def restore(cls, checkout: Path, revision: str) -> None:

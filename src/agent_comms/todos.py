@@ -281,6 +281,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """An open pull request nobody has touched for five minutes."""
         return False
 
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        """Linked merges this progress incorrectly reports as no commit."""
+        return ()
+
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -317,6 +321,9 @@ class Moving(Stalling):
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        return tuple(MergedProgress.found(source))
+
     @property
     def line(self) -> str:
         return "no commit since the order"
@@ -740,6 +747,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         self.first_call_deadline.require_deadline()
 
     pending: ClassVar[bool]
+    line: ClassVar[str]
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
@@ -811,6 +819,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
+    line: ClassVar[str] = "Open"
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
@@ -821,6 +830,7 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Delivered"
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -840,6 +850,7 @@ class WithdrawnProblemOrder(ProblemOrder):
     why: str
     superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
     pending: ClassVar[bool] = False
+    line: ClassVar[str] = "Withdrawn"
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
@@ -1549,13 +1560,17 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
-    def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
-        """Each pending problem's progress and latest verdict, as its Goal shows them."""
+    def board_disagreements(
+        self, commander: ThreadIncarnation, storage: StorageRule,
+    ) -> Iterator[tuple[Todo, MergedProgress]]:
+        """Open orders whose progress misses a linked merge, sharing one PR read cache."""
+        todos = self.held_for_commander(commander)
         pulls = PullRequests(todos)
-        return "\n".join(
-            " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
-                        *(verdict.line for verdict in todo.verdicts[-1:])))
-            for todo in todos if todo.pending)
+        for todo in todos:
+            progress = OrderProgress.read(todo, storage, pulls)
+            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            for merged in progress.missing_merges(source):
+                yield todo, merged
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""

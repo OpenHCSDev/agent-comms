@@ -45,7 +45,6 @@ from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
-from .goal_states import ActiveGoal
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .rule_reviews import RuleReviewEntry, RuleReviews
 from .standing_rules import RulesDue, StandingRule
@@ -662,7 +661,7 @@ class CommsGoalTool(ThreadToolRequest):
         name = caller.name
         command = replace(
             self.status(progress=self.progress),
-            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
+            expect=self.status.model_precondition(self.goal_id),
             **{key: value for key, value in (
                 ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
             ) if value},

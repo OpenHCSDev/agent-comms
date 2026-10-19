@@ -150,8 +150,10 @@ def test_retirement_requires_every_retained_bus_to_have_applied_the_step(tmp_pat
     saved = json.loads(declarations.read_text())
     assert saved[0]["applied"] == ["carry_a", "carry_b"]
     assert saved[1] == buses[1]
+    assert RetainedBus.derived(repo.path, bus_root) == {f"{STEPS}/{RetainedBus.filename}"}
     RetainedBus.restore(repo.path, "HEAD")
     assert declarations.read_text() == repo.git("show", f"HEAD:{STEPS}/{RetainedBus.filename}")
+    assert not RetainedBus.derived(repo.path, bus_root)
 
 
 def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):
@@ -544,6 +546,55 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
     assert "stopped by SIGTERM" in err and "aborted before the backup" in err
     assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
     assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+
+
+@pytest.mark.parametrize("registered", [True, False])
+def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp_path, monkeypatch, registered):
+    """The upgrade's last step sends through the connector Core declares and reads the message
+    back; a connector that cannot fails the upgrade through its restore."""
+    import tools.upgrade_bus as upgrade_bus
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
+
+    comms.registry.declare(comms.registry.new_thread("user", frozenset(), str(comms.root)))
+    if registered:
+        comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
+
+    class Owners(Stack):
+        python = Path(sys.executable)
+
+        def cli(self, root, *arguments):
+            return {"threads": []}
+
+        def relock(self):
+            pass
+
+        def prepare_native(self):
+            pass
+
+        def verify(self, root):
+            return {}
+
+    ran = upgrade_bus.run
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: (
+        "" if command[0] in ("git", "uv") else ran(*command, **options)))
+    monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
+    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
+    stack = Owners(REPO, tmp_path / "home")
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+
+    def upgrading():
+        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None)
+
+    failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
+    if registered:
+        assert "Upgrade round trip" in upgrading()["round_trip"]
+        assert not list(failed)
+    else:
+        with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
+            upgrading()
+        assert len(list(failed)) == 1
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
 
 
 def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):

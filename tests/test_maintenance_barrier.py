@@ -539,7 +539,7 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
     updates = [StartedItem('turn', 'item', ActivityState.WORKING, 'Replying',
-                          TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.))),
+                          TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
                AppendDraftItem('turn', 'item', ' once')]
     barrier = MaintenanceBarrier(comms.registry.store.path)
     hold = barrier.begin(MaintenanceOperator('batch-check'))
@@ -554,4 +554,4 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
         barrier.clear(hold)
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
-        assert source.current_draft().external_row().events == (AssistantTranscript('prefix once', timestamp=1.),)
+        assert source.current_draft().external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)

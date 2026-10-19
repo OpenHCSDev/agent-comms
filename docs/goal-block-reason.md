@@ -31,9 +31,9 @@ goal is waiting for.
   field existed have `block_reason=None`; presentations show
   `Blocked · reason unavailable` instead of pretending the old progress was
   the reason.
-- **Retry clears the reason.** An explicit human Retry (including the ACP
-  direct replace) resets `block_reason` to `None` when the goal becomes
-  active again.
+- **Retry clears the reason.** A Retry by the unit, its commander or the owner
+  (including the ACP direct replace) resets `block_reason` to `None` when the
+  goal becomes active again.
 
 ## Visibility
 

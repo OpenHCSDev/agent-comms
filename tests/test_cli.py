@@ -467,7 +467,7 @@ class TestSelectedTargetActions:
         assert result["outcomes"][2]["result"]["archived"] is True
         assert not comms.registry.status("alpha").visible
         assert comms.registry.status("active").active
-        assert comms.channels.catalog.read().require_channel("#team").archived
+        assert comms.bus.require_channel("#team").archived
 
     def test_confirmation_and_target_override_refuse_before_any_batch_write(self, cli, tmp_path):
         comms = self.declared(tmp_path)
@@ -534,7 +534,7 @@ class TestSelectedTargetActions:
                             channel={"alpha": ("#team",), "beta": ("#other",)}).apply(comms)
         assert result.successful and len(result.outcomes) == 3
         catalog = comms.channels.catalog.read()
-        assert catalog.require_channel("#team").pinned
+        assert comms.bus.require_channel("#team").pinned
         assert catalog.pinned_threads("#team") == {"alpha"}
         assert catalog.pinned_threads("#other") == {"beta"}
         assert {name: comms.registry.require(name).tags for name in before} == before

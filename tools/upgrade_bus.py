@@ -54,12 +54,13 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import RuntimeFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
 from agent_comms.todos import PlannedInstallDeadline
 from agent_comms.store_files import _store_lock
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
+CONNECTOR = "from agent_comms.connector import main; raise SystemExit(main())"
 HOLD_TRANSCRIPTS = """import sys
 from contextlib import closing
 from agent_comms.coordination_database import CoordinationStore
@@ -188,6 +189,14 @@ class Stack:
         history = self.cli(root, "history", "--everything", "--limit", "50")
         return {"threads": len(threads), "who": len(present), "history": len(history.get("messages", ()))}
 
+    def round_trip(self, root: Path) -> str:
+        """The connector Core declares for this bus sends one message and reads it back; it
+        needs open maintenance, so it runs last."""
+        environment = {**self.environment(), "AGENT_COMMS_ROOT": str(root)}
+        output = run(self.python, "-c", CONNECTOR, "round_trip", root, cwd=self.checkout,
+                     env=environment)
+        return output.strip().splitlines()[-1]
+
 
 @dataclass
 class Revisions:
@@ -255,7 +264,6 @@ def carry_all(
             CarryLedger(root).record(step.name)
             result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
         results.append(result.report(step.name, True))
-        RetainedBus.record(revisions.repo, root)
     return results
 
 
@@ -297,7 +305,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
             read = stack.verify(copy)
-        return {"steps": steps, "files": files, "read": read}
+            round_trip = stack.round_trip(copy)
+        return {"steps": steps, "files": files, "read": read, "round_trip": round_trip}
 
 
 @dataclass
@@ -370,7 +379,9 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
     target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
     if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]).returncode:
         raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
-    if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
+    changed = {line[3:] for line in run(
+        "git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").splitlines()}
+    if changed - RetainedBus.derived(checkout, root):
         raise UpgradeRefused("The checkout has local changes")
     applied = CarryLedger(root).applied()
     try:
@@ -421,19 +432,28 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         raise
     shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
     try:
+        RetainedBus.restore(checkout, current)
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         installed.relock()
         installed.prepare_native()
         steps = carry_all(root, pending, staged, revisions)
+        RetainedBus.record(checkout, root)
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
+        maintenance.clear(held)
+        round_trip = installed.round_trip(root)
+        PlannedInstallDeadline.after(target, checkout, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
+        if maintenance.read().phase is ReadyPhase:  # the round trip failed on the opened bus
+            maintenance.begin(MaintenanceOperator("upgrade-bus"))  # restore brings back ``held``
+            route_readers()
         # The failed bus keeps its hold until restore has swapped it out.
         backup.restore()
         transcripts.close()
         RetainedBus.restore(checkout, target)
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
+        RetainedBus.record(checkout, root)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
         run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=checkout)
@@ -443,11 +463,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
               f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
         raise
-    PlannedInstallDeadline.after(target, checkout, time.time()).plan(root)
-    maintenance.clear(held)
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
-            "backup": str(backup.path)}
+            "round_trip": round_trip, "backup": str(backup.path)}
 
 
 def start(stack: Stack, root: Path, names: list[str]) -> None:
