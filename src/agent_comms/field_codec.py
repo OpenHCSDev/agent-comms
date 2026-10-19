@@ -876,7 +876,7 @@ class FieldCodec(Sealed):
             if args[0] is str:
                 return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
             return {"type": "array", "items": {"type": "array", "prefixItems": [cls.value_schema(arg) for arg in args], "minItems": 2, "maxItems": 2}}
-        if origin is type and args and issubclass(args[0], DeclaredFamily):
+        if origin is type and args and issubclass(cast(type, args[0]), DeclaredFamily):
             return {"type": "string", "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
         if isinstance(annotation, type) and issubclass(annotation, Enum):
             values = [value for _, value in compile_decoder(annotation).editor_choices()]
@@ -1030,11 +1030,11 @@ class ValueDecoder[T](ABC):
             cls._by_annotation[annotation] = cls
 
     @classmethod
-    def from_annotation(cls, target: object, args: tuple[Any, ...]) -> ValueDecoder[Any]:
+    def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[T]:
         return cls(target)
 
     @classmethod
-    def annotation_class(cls, annotation: object) -> type[ValueDecoder[Any]]:
+    def annotation_class(cls, annotation: object) -> type[ValueDecoder[object]]:
         try:
             return cls._by_annotation[annotation]
         except KeyError:
@@ -1042,17 +1042,18 @@ class ValueDecoder[T](ABC):
 
     @classmethod
     def with_representation(
-        cls, annotation: object, target: object, args: tuple[Any, ...],
+        cls, annotation: object, target: object, args: tuple[object, ...],
         representation: type[FieldRepresentation],
-    ) -> ValueDecoder[Any]:
+    ) -> ValueDecoder[T]:
         return _RepresentedDecoder(
-            annotation, representation, cls.representation_plan(target, args, representation)
+            annotation, representation,
+            cast(ValueDecoder[object], cls.representation_plan(target, args, representation)),
         )
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[Any, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[Any]:
+        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+    ) -> ValueDecoder[T]:
         return cls.from_annotation(target, args)
 
     @classmethod
@@ -1275,16 +1276,16 @@ class _TypeDecoder(_ScalarDecoder):
     bound: type
 
     @classmethod
-    def from_annotation(cls, target: object, args: tuple[Any, ...]) -> ValueDecoder[Any]:
-        if args and issubclass(args[0], DeclaredFamily):
-            return _FamilyNameDecoder(target, args[0])
+    def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[object]:
+        if args and issubclass(cast(type, args[0]), DeclaredFamily):
+            return _FamilyNameDecoder(target, cast(type[DeclaredFamily], args[0]))
         return _member_decoder(target)
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[Any, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[Any]:
-        return cls(target, args[0])
+        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+    ) -> ValueDecoder[object]:
+        return cls(target, cast(type, args[0]))
 
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, type) and issubclass(value, self.bound)
@@ -1340,10 +1341,10 @@ class UnionDecoder[T](ValueDecoder[T]):
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[Any, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[Any]:
+        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+    ) -> ValueDecoder[T]:
         alternatives = tuple(compile_decoder(Annotated[item, representation]) for item in args)
-        return cls(target, alternatives)
+        return cls(target, cast(tuple[ValueDecoder[T], ...], alternatives))
 
     @property
     def editor_annotation(self):
@@ -1385,6 +1386,7 @@ class UnionDecoder[T](ValueDecoder[T]):
 
 @dataclass(frozen=True, slots=True)
 class _ArrayDecoder(ValueDecoder[Any]):
+    container: ClassVar[type]
     items: tuple[ValueDecoder[object], ...]
 
     @classmethod
@@ -1393,8 +1395,8 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[Any, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[Any]:
+        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+    ) -> ValueDecoder[object]:
         return _ScalarDecoder(cls.container)
 
     def accepts_value(self, value: object) -> bool:
@@ -1485,8 +1487,8 @@ class _DictDecoder(ValueDecoder[Any]):
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[Any, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[Any]:
+        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+    ) -> ValueDecoder[object]:
         return _ScalarDecoder(dict)
 
     def accepts_value(self, value: object) -> bool:
