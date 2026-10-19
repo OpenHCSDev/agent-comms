@@ -1,6 +1,7 @@
 """No-provider bounded human DM read evidence; never use global inbox ACK."""
 
 from __future__ import annotations
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.registration import Registration
 
 import os
@@ -38,8 +39,8 @@ def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: P
         "peer", worktree=str(tmp_path), through=page.newest_seq,
         expected_display_basis=page.display_basis,
     )
-    assert comms.bus.pending_count(viewer, "peer") == 45
-    assert [message.body for message in comms.bus.inbox(viewer, "peer")] == [
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 45
+    assert [message.body for message in comms.bus.inbox(viewer, CommandTarget.named("peer"))] == [
         f"old {index}" for index in range(45)
     ]
 
@@ -52,7 +53,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
     for index in range(50):
         comms.messaging.send("peer", viewer, f"old {index}").message.message_id
     comms.views.mark_user_view_read("peer", worktree=str(tmp_path))
-    assert comms.bus.pending_count(viewer, "peer") == 0
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 0
     comms.messaging.send("peer", viewer, "painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
     proof = page.display_basis
@@ -70,11 +71,11 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
         expected_display_basis=proof,
     )
     reopened = wire(tmp_path)
-    assert [message.body for message in reopened.bus.inbox(viewer, "peer")] == ["after paint"]
-    assert reopened.bus.pending_count(viewer, "peer") == 1
-    assert reopened.bus.pending_count(viewer, "other") == 1
-    assert reopened.bus.pending_count("executor", "peer") == 1
-    assert reopened.bus.pending_count("executor", "#all") == 1
+    assert [message.body for message in reopened.bus.inbox(viewer, CommandTarget.named("peer"))] == ["after paint"]
+    assert reopened.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
+    assert reopened.bus.pending_count(viewer, CommandTarget.named("other")) == 1
+    assert reopened.bus.pending_count("executor", CommandTarget.named("peer")) == 1
+    assert reopened.bus.pending_count("executor", CommandTarget.named("#all")) == 1
     # No global marker is created by this human DM read transition.
     seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     assert painted in seen and painted + 1 not in seen
@@ -98,7 +99,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     comms.registry.unregister("peer")
     comms.registry.remove("peer")
     comms.threads.rename_managed_thread("other", "peer", owner_pid=os.getpid())
-    before = comms.bus.pending_count(viewer, "peer")
+    before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     marker_path = tmp_path / "read_ledger.json"
     markers_before = marker_path.read_bytes() if marker_path.exists() else None
     assert before == 3
@@ -111,7 +112,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
         )
     markers_after = marker_path.read_bytes() if marker_path.exists() else None
     assert markers_after == markers_before
-    assert comms.bus.pending_count(viewer, "peer") == before
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == before
 
 
 def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path: Path):
@@ -137,7 +138,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
                 through=through,
                 expected_display_basis=page.display_basis,
             )
-    assert first.bus.pending_count(first.messaging.user_identity(str(first.root)).name, "peer") == 1
+    assert first.bus.pending_count(first.messaging.user_identity(str(first.root)).name, CommandTarget.named("peer")) == 1
 
 
 def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
@@ -151,7 +152,7 @@ def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
             "peer", worktree=str(tmp_path), through=page.newest_seq + 1,
             expected_display_basis=page.display_basis,
         )
-    assert comms.bus.pending_count(viewer, "peer") == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
 
 def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_path: Path):
@@ -168,7 +169,7 @@ def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_pat
             "peer", worktree=str(tmp_path), through=page.newest_seq,
             expected_display_basis=page.display_basis,
         )
-    assert comms.bus.pending_count(viewer, "peer") == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
 
 def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path):
@@ -185,7 +186,7 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
         through=page.newest_seq,
         expected_display_basis=page.display_basis,
     )
-    assert comms.bus.pending_count(viewer, "peer") == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
 
 def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
@@ -229,7 +230,7 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
         through=page.newest_seq,
         expected_display_basis=page.display_basis,
     )
-    assert parent_fd_seen and comms.bus.pending_count(viewer, "peer") == 0
+    assert parent_fd_seen and comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 0
 
     comms.messaging.send("peer", viewer, "next painted").message.message_id
     next_page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
@@ -254,6 +255,6 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
         )
     assert (tmp_path / "read_ledger.json").read_bytes() == marker_before
     monkeypatch.setattr(locked_store, "os", os)
-    assert comms.bus.pending_count(viewer, "peer") == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
     # A failure at the *final* post-replace sync remains UNKNOWN: absent a
     # separate durable marker commit witness, the row may already be visible.

@@ -7,16 +7,19 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.channel_targets import ANY_CHANNEL, ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import QuestionKind
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.presentation import CountedRead, UncountedRead
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec, NewThreadSpec
 from agent_comms.threads import Thread
@@ -83,20 +86,30 @@ class TestMessaging:
         wired.messaging.send("PR111", "fixer", "direct").message.message_id
         wired.messaging.send("PR111", "#all", "global").message.message_id
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")))
         assert wired.messaging.acknowledge("fixer", references) == 1
-        assert wired.bus.pending_count("fixer", "PR111") == 0
-        assert wired.bus.pending_count("fixer", "#all") == 1
+        assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 0
+        assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 1
         assert wired.bus.pending_count("fixer") == 1
+
+    def test_each_target_member_reads_and_counts_the_same_messages(self, wired):
+        wired.messaging.send("PR111", "fixer", "direct")
+        wired.messaging.send("PR111", "#all", "global")
+
+        expected = {ANY_CHANNEL: {"direct", "global"}, ThreadTarget("PR111"): {"direct"},
+                    ChannelTarget("#all"): {"global"}}
+        for target, bodies in expected.items():
+            assert {message.body for message in wired.bus.inbox("fixer", target)} == bodies
+            assert wired.bus.pending_count("fixer", target) == len(bodies)
 
     def test_scoped_channel_ack_does_not_clear_dm(self, wired):
         wired.messaging.send("PR111", "fixer", "direct").message.message_id
         wired.messaging.send("PR111", "#all", "global").message.message_id
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", "#all"))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("#all")))
         assert wired.messaging.acknowledge("fixer", references) == 1
-        assert wired.bus.pending_count("fixer", "#all") == 0
-        assert wired.bus.pending_count("fixer", "PR111") == 1
+        assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 0
+        assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 1
         assert wired.bus.pending_count("fixer") == 1
 
     def test_inbox_order_follows_seq(self, wired):
@@ -112,7 +125,7 @@ class TestMessaging:
 
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")))
         wired.messaging.acknowledge("fixer", references)
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"#all": 1}
@@ -270,7 +283,8 @@ class TestThreadOps:
         """list_threads, thread_detail and who/presence write one thread's record from one parent."""
         views = wired.views
         rows = {
-            "detail": views.thread_detail("fixer", include_pending=counted).encoded(),
+            "detail": views.thread_detail(
+                "fixer", CountedRead() if counted else UncountedRead()).encoded(),
             "roster": next(row for row in (views.who() if counted else views.presence())
                            if row["name"] == "fixer"),
             **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
@@ -284,7 +298,7 @@ class TestThreadOps:
 
     def test_thread_detail_fail_closed(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.views.thread_detail("ghost")
+            wired.views.thread_detail("ghost", CountedRead())
 
     def test_heartbeat_marks_running(self, wired):
         wired.owners.stop("fixer")
@@ -365,7 +379,7 @@ class TestThreadOps:
 
     def test_rename_self_preserves_routing_history_and_state(self, wired, monkeypatch):
         wired.messaging.send("fixer", "PR111", "before rename").message.message_id
-        references = tuple(message.reference for message in wired.bus.inbox("PR111", "fixer"))
+        references = tuple(message.reference for message in wired.bus.inbox("PR111", CommandTarget.named("fixer")))
         assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
         wired.agents.observe_runtime_info("PR111", AgentInfo(model="test/model"))
@@ -383,11 +397,11 @@ class TestThreadOps:
         assert wired.agents.activity_of("planner", snapshot=wired.registry.snapshot()).detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == "test/model"
         assert wired.ledger.read()["owner"] == "planner"
-        assert wired.bus.pending_count("planner", "fixer") == 0
+        assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
         wired.messaging.send("fixer", "PR111", "old alias routes").message.message_id
         wired.messaging.send("PR111", "fixer", "old process sends canonically").message.message_id
-        assert [message.body for message in wired.bus.inbox("planner", "fixer")] == [
+        assert [message.body for message in wired.bus.inbox("planner", CommandTarget.named("fixer"))] == [
             "old alias routes"
         ]
         history = list(wired.views.dm_history_page("PR111", "fixer").messages)
@@ -557,7 +571,7 @@ class TestLedgerOps:
 class TestPollAndWire:
     def test_poll_snapshot(self, wired):
         wired.messaging.send("PR111", "fixer", "hello").message.message_id
-        snap = wired.views.poll("fixer").encoded()
+        snap = wired.views.poll(NamedThreadTarget("fixer")).encoded()
         assert snap["thread"]["name"] == "fixer"
         assert len(snap["inbox"]) == 1
         assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
@@ -567,7 +581,7 @@ class TestPollAndWire:
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll().encoded()
+        snap = wired.views.poll(CallingThreadTarget()).encoded()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):

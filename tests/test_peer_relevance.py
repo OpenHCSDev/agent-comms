@@ -61,7 +61,7 @@ def test_relevance_is_the_most_derived_member_the_relations_grant(tmp_path):
         tmp_path, ("owner", {"team"}), ("mate", {"team"}), ("partner", ()), ("mentioned", ()),
         ("nobody", {"elsewhere"}),
     )
-    comms.relationships.edit("partner", RelationshipEdit.decode("add"), "owner", "Shared review")
+    comms.relationships.edit("partner", RelationshipEdit.member_named("add"), "owner", "Shared review")
     comms.goals.update_goal("owner", SetGoalAction(text="Ship it with @mentioned and @partner."))
     relevance = comms.relationships.relevance
     assert relevance("owner", "partner") is relevance("partner", "owner") is CollaboratorRelevance
@@ -74,7 +74,7 @@ def test_relevance_is_the_most_derived_member_the_relations_grant(tmp_path):
 
 def test_a_thread_reusing_a_deleted_name_inherits_no_relevance(tmp_path):
     comms = _wire(tmp_path, ("owner", ()), ("partner", ()))
-    comms.relationships.edit("owner", RelationshipEdit.decode("add"), "partner", "Old work")
+    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "partner", "Old work")
     comms.owners.stop("partner")
     comms.registry.remove("partner")
     comms.registry.declare(comms.registry.new_thread('partner', frozenset(), str(tmp_path), created_at=30000.0))
@@ -86,7 +86,7 @@ def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_coun
         tmp_path, ("owner", {"team"}), ("zz-partner", ()), ("zy-mentioned", ()),
         ("aa-stranger", ()), *((f"mate-{index:03}", {"team"}) for index in range(20)),
     )
-    comms.relationships.edit("owner", RelationshipEdit.decode("add"), "zz-partner", "Shared review")
+    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "zz-partner", "Shared review")
     comms.goals.update_goal("zz-partner", SetGoalAction(text="Review the parser."))
     comms.goals.update_goal("owner", SetGoalAction(text="Ship it with @zy-mentioned."))
     comms.goals.update_goal("mate-000", SetGoalAction(text="Unrelated work."))
@@ -120,7 +120,7 @@ def test_stopped_channelmates_do_not_fill_peer_slots_but_contacts_remain(tmp_pat
         tmp_path, ('owner', {'team'}), ('partner', ()), ('contact', ()),
         ('live-mate', {'team'}), ('stopped-mate', {'team'}),
     )
-    comms.relationships.edit('owner', RelationshipEdit.decode('add'), 'partner', 'Shared review')
+    comms.relationships.edit('owner', RelationshipEdit.member_named('add'), 'partner', 'Shared review')
     comms.goals.update_goal('owner', SetGoalAction(text='Work with @contact.'))
     for name in ('partner', 'contact', 'stopped-mate'):
         comms.owners.stop(name)
@@ -130,7 +130,7 @@ def test_stopped_channelmates_do_not_fill_peer_slots_but_contacts_remain(tmp_pat
 
 def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without_a_wake(tmp_path):
     comms = _wire(tmp_path, ("owner", {"team"}), ("partner", ()), ("mate", {"team"}))
-    comms.relationships.edit("owner", RelationshipEdit.decode("add"), "partner", "Shared review")
+    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "partner", "Shared review")
     assert _partner_activity(comms, "owner") == ()
     comms.goals.update_goal("mate", SetGoalAction(text="Unrelated work."))
     goal = comms.goals.update_goal("partner", SetGoalAction(text="Review the parser."))
@@ -166,7 +166,7 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
         return [row.seq for row in segment.sources]
 
     assert shown() == [earlier.seq, later.seq]
-    comms.relationships.edit("Alice", RelationshipEdit.decode("add"), "Bob", "Shared review")
+    comms.relationships.edit("Alice", RelationshipEdit.member_named("add"), "Bob", "Shared review")
     assert shown() == [later.seq, earlier.seq]
 
 
@@ -182,9 +182,9 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
 
     assert records("owner") == ()
     created = comms.relationships.edit(
-        "partner", RelationshipEdit.decode("add"), "owner", "First plan")
+        "partner", RelationshipEdit.member_named("add"), "owner", "First plan")
     updated = comms.relationships.edit(
-        "owner", RelationshipEdit.decode("update"), "partner", "Second plan")
+        "owner", RelationshipEdit.member_named("update"), "partner", "Second plan")
     comms.goals.update_goal("owner", SetGoalAction(text="Ship it with @mentioned."))
     collaboration, mention = records("owner")
     assert (collaboration.peer, collaboration.relevance, collaboration.author) == (

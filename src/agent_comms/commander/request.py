@@ -26,13 +26,6 @@ def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
                  for request in goal.order.open_requests(goal, COMMS.goals, thread.incarnation))
 
 
-def stalled() -> list[str]:
-    return [
-        f"REQUEST STALLED: {goal.id} {goal.text} -> order its next step or mark it done"
-        for goal, served in open_requests() if not served
-    ]
-
-
 class RequestVerb(CommanderVerb):
     """A verb of `request`."""
 

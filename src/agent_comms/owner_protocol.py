@@ -80,7 +80,6 @@ class OwnerReady(OwnerLine):
     """The subscription line that completes attachment: session metadata and its controller."""
 
     ready: dict[str, object]
-    config_options: list[dict[str, object]] = field(metadata={"wire_name": "configOptions"})
     controller_token: Annotated[str, ControllerTokenText] = field(
         metadata={"wire_name": "controllerToken"}
     )

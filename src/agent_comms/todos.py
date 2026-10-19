@@ -14,6 +14,7 @@ import sqlite3
 import time
 import asyncio
 from abc import abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -230,16 +231,15 @@ class ProgressSource:
         return [pr for pr in self.pulls.listed(self.todo.repo, state)
                 if self.branch.carries(pr) and pr.updated_at >= self.since]
 
-    def commit(self, *excluded: str) -> tuple[str, float] | None:
+    def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
         log = subprocess.run(
             ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.since)}",
              "--format=%H %ct", "HEAD", "--not", *excluded),
             capture_output=True, text=True, timeout=30)
-        if log.returncode or not log.stdout.strip():
-            return None
-        sha, at = log.stdout.split()
-        return sha, float(at)
+        for line in log.stdout.splitlines() if not log.returncode else ():
+            sha, at = line.split()
+            yield sha, float(at)
 
 
 @dataclass(frozen=True)
@@ -257,8 +257,8 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
-            found = (progress for member in members if (progress := member.found(source)))
-            return next(found, NoCommitProgress())
+            return next((progress for member in members for progress in member.found(source)),
+                        NoCommitProgress())
         except (ValueError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
@@ -267,15 +267,14 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def line(self) -> str: ...
 
     def stalled(self, ordered: float, now: float) -> bool:
-        return (since := self.stalled_since(ordered)) is not None and now > since
+        return False
 
-    def stalled_since(self, ordered: float) -> float | None:
-        """Work stalls 15 minutes after ``moved`` with no commit, push or PR change."""
-        return None if self.moved is None else self.moved + 900
+    def stalled_between(self, ordered: float, since: float, now: float) -> bool:
+        """Whether this work entered its stall after ``since`` and before ``now``."""
+        return False
 
-    @property
-    def moved(self) -> float | None:
-        return None
+    def moved_after(self, since: float) -> bool:
+        return False
 
     def untouched(self, now: float) -> bool:
         """An open pull request nobody has touched for five minutes."""
@@ -289,16 +288,42 @@ class FoundProgress(OrderProgress):
 
     @classmethod
     @abstractmethod
-    def found(cls, source: ProgressSource) -> Self | None: ...
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        """Each member of this class the source holds."""
+
+
+class Stalling:
+    """Work that stalls at a time its own class declares."""
+
+    @abstractmethod
+    def stall_at(self, ordered: float) -> float: ...
+
+    def stalled(self, ordered: float, now: float) -> bool:
+        return now > self.stall_at(ordered)
+
+    def stalled_between(self, ordered: float, since: float, now: float) -> bool:
+        return since < self.stall_at(ordered) < now
 
 
 @dataclass(frozen=True)
-class NoCommitProgress(OrderProgress):
+class Moving(Stalling):
+    """Work last moved ``at``; it stalls 15 minutes later with no commit, push or PR change."""
+    at: float = field(kw_only=True)
+
+    def stall_at(self, ordered: float) -> float:
+        return self.at + 900
+
+    def moved_after(self, since: float) -> bool:
+        return self.at > since
+
+
+@dataclass(frozen=True)
+class NoCommitProgress(Stalling, OrderProgress):
     @property
     def line(self) -> str:
         return "no commit since the order"
 
-    def stalled_since(self, ordered: float) -> float | None:
+    def stall_at(self, ordered: float) -> float:
         """No first commit within 10 minutes of the order."""
         return ordered + 600
 
@@ -313,19 +338,13 @@ class UnreadProgress(OrderProgress):
 
 
 @dataclass(frozen=True)
-class CommittedProgress(FoundProgress):
+class CommittedProgress(Moving, FoundProgress):
     precedence: ClassVar[int] = 3
     sha: str
-    at: float
-
-    @property
-    def moved(self) -> float | None:
-        return self.at
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        commit = source.commit("--remotes")
-        return None if commit is None else cls(commit[0][:9], commit[1])
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(sha[:9], at=at) for sha, at in source.commits("--remotes"))
 
     @property
     def line(self) -> str:
@@ -338,9 +357,8 @@ class PushedProgress(CommittedProgress):
     precedence: ClassVar[int] = 4
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        commit = source.commit("origin/HEAD")
-        return None if commit is None else cls(commit[0][:9], commit[1])
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(sha[:9], at=at) for sha, at in source.commits("origin/HEAD"))
 
     @property
     def line(self) -> str:
@@ -348,20 +366,14 @@ class PushedProgress(CommittedProgress):
 
 
 @dataclass(frozen=True)
-class OpenPrProgress(FoundProgress):
+class OpenPrProgress(Moving, FoundProgress):
     precedence: ClassVar[int] = 2
     number: int
     head: str
-    at: float
-
-    @property
-    def moved(self) -> float | None:
-        return self.at
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        return next((cls(pr.number, pr.head[:9], pr.updated_at)
-                     for pr in source.requests("open")), None)
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(pr.number, pr.head[:9], at=pr.updated_at) for pr in source.requests("open"))
 
     @property
     def line(self) -> str:
@@ -379,9 +391,9 @@ class MergedProgress(FoundProgress):
     sha: str
 
     @classmethod
-    def found(cls, source: ProgressSource) -> Self | None:
-        return next((cls(pr.merge[:9]) for pr in source.requests("merged")
-                     if pr.merge and (pr.merged_at or 0) >= source.since), None)
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(pr.merge[:9]) for pr in source.requests("merged")
+                if pr.merge and (pr.merged_at or 0) >= source.since)
 
     @property
     def line(self) -> str:

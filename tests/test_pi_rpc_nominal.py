@@ -53,7 +53,7 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
         PiRpcChannel.decode_record(b'{"type":"audit_pause_start"}\n'), set()
     )
     assert isinstance(phase, AuditPausePhase)
-    assert TurnPhase.decode(phase.declared_name) is type(phase)
+    assert TurnPhase.member_named(phase.declared_name) is type(phase)
     assert phase.declared_name in TurnPhase.names()
     assert phase.model_progress() is phase
     stalled = phase.stalled(True)

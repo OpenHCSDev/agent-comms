@@ -8,6 +8,7 @@ import threading
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
 from agent_comms.bus_projection import AppendCheckpoint
 from agent_comms.private_path import FileRevision
@@ -36,7 +37,7 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.messaging.send("fixer", "#base", "tagged").message.message_id
     wired.messaging.send("third", "#all", "global from third").message.message_id
     assert _listed(wired) == _expected(wired)
-    references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+    references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")))
     assert wired.messaging.acknowledge("fixer", references) == 1
     assert _listed(wired) == _expected(wired)
     messages = wired.bus.inbox("PR111")
@@ -343,7 +344,7 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
     wired.messaging.send("PR111", "fixer", "old direct").message.message_id
     wired.registry.rename("PR111", "renamed")
     assert _listed(wired) == _expected(wired)
-    references = tuple(message.reference for message in wired.bus.inbox("broadcast", "PR111"))
+    references = tuple(message.reference for message in wired.bus.inbox("broadcast", CommandTarget.named("PR111")))
     wired.messaging.acknowledge("broadcast", references)
     assert _listed(wired) == _expected(wired)
 

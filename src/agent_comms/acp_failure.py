@@ -437,7 +437,7 @@ class TextErrorValue(ErrorValue, JsonShapeMember):
 
     def declared_input(self, body: ErrorValue) -> ErrorValue:
         try:
-            attempt = InputAttempt.decode(self.value)
+            attempt = InputAttempt.member_named(self.value)
         except ValueError:
             # An external public status may be unambiguous; redacted UNKNOWN
             # cannot distinguish reserved from bound input and grants nothing.

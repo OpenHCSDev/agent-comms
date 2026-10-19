@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .channel_targets import BuiltinChannel, CommandTarget
+from .channel_targets import CommandTarget
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
@@ -188,9 +188,8 @@ class DeliveryScope(MessageDisplayScope):
     def includes(self, message: Message) -> bool:
         return self.delivers(message.sender, message.target)
 
-    def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
-        selected = CommandTarget.named(BuiltinChannel.ANY.value if target is None else target)
-        return selected.display_scope(self.actor, snapshot, catalog, DMDisplayScope)
+    def selection(self, target: CommandTarget, snapshot, catalog) -> MessageDisplayScope:
+        return target.display_scope(self.actor, snapshot, catalog, DMDisplayScope)
 
     def canonical(self, name: str) -> str:
         return self.aliases.get(name, name)

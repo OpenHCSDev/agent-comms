@@ -294,6 +294,7 @@ def test_reserved_input_is_queued_only_for_its_own_owner_claim_and_text():
 
     reserved = ReservedInput("acp:x", None, "owner", 1, "owner", "original")
     bound = reserved.bind(claim_scope=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
+    bound = bound.require_moved("Reserved input stayed reserved").state
     owner = RecordedThreadIncarnation("owner", 1.0)
     assert reserved.digest == TextDigest.of("original")
     assert reserved.queued_for(owner, 1, "original")

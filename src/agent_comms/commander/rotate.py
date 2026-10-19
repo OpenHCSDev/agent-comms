@@ -2,7 +2,7 @@
 import time
 from datetime import datetime
 
-from . import judge, order, request
+from . import judge, order
 from ..tools import CommsStandingRulesTool, StandingRulesRead
 from ..todos import Todo
 from .config import CommanderConfig
@@ -23,15 +23,6 @@ def owed_orders() -> dict[str, list[Todo]]:
     return owed
 
 
-def detached(owed: dict[str, list[Todo]]) -> list[str]:
-    """Each unit holding orders whose status reads nothing now, or whose thread is gone."""
-    statuses = order.COMMS.registry.snapshot().statuses
-    away = [u for u in sorted(owed) if u not in statuses or not statuses[u].receiving]
-    unread = order.COMMS.bus.pending_counts_all(tuple(u for u in away if u in statuses))
-    return [f"DETACHED {u}: {unread.get(u, 0)} unread, orders {', '.join(t.id for t in owed[u])}"
-            " -> wake it or reassign" for u in away]
-
-
 def main(a):
     turn, since = 0, 0.0  # since: the previous wake; a rule that stays broken is said once
     while True:
@@ -47,10 +38,6 @@ def main(a):
             edits = judge.Edit.unjudged(order.COMMS, order.ME)
             waiting = sum(edit.thread == unit for edit in edits)
             print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {waiting} -> read its git state and newest turn, judge, push or hunt", flush=True)
-        for line in detached(owed):
-            print(line, flush=True)
-        for line in request.stalled():
-            print(line, flush=True)
         for line in broken_rules(since):
             print(f"  RULE {line}", flush=True)
         since = now

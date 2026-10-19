@@ -55,7 +55,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="requires"):
         comms.goals.update_goal("worker", SetGoalAction(text=" "))
     with pytest.raises(ValueError, match="Unknown"):
-        GoalAction.decode("nonsense")
+        GoalAction.member_named("nonsense")
 
 
 def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path):

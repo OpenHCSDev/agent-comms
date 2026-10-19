@@ -228,8 +228,8 @@ class JevChoice:
     def label(self, span: ContextSpan, question: QuestionVersion,
               classifier: ClassifierVersion, response: JevResponse) -> ModelLabel:
         family = question.question.answer_family
-        return ModelLabel(span, question, family.decode(self.choice),
-            classifier, tuple(AnswerProbability(family.decode(name), probability)
+        return ModelLabel(span, question, family.member_named(self.choice),
+            classifier, tuple(AnswerProbability(family.member_named(name), probability)
                 for name, probability in self.probabilities.items()), self.confidence,
             response.id, response.model)
 
