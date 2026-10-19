@@ -96,7 +96,7 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
 
     async def checked(self, check: OrderCheck) -> ChildResult:
-        return await check.run_at(self.commit, check.directory)
+        return await asyncio.to_thread(check.at, self.commit, check.directory)
 
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
@@ -226,25 +226,54 @@ class DistanceReadings:
     readings: tuple[DistanceReading, ...] = ()
 
     @property
-    def pairs(self) -> tuple[tuple[DistanceReading, DistanceReading], ...]:
-        """The two readings velocity is taken across, while distance remains."""
+    def trend(self) -> DistanceTrend:
+        """Velocity across the two readings: falling projects the finish, else it is flat."""
         last = self.readings[-2:]
-        return ((last[0], last[1]),) if len(last) == 2 and last[1].distance else ()
+        if len(last) < 2 or not last[1].distance:
+            return UnreadTrend()
+        first, final = last
+        if final.distance >= first.distance:
+            return FlatTrend(final.distance, final.at)
+        rate = (first.distance - final.distance) / max(final.at - first.at, 1.0)
+        return MovingTrend(final.distance, final.at + final.distance / rate)
+
+
+class DistanceTrend(DeclaredFamily, affix="Trend"):
+    """What the order's distance readings say about its finish."""
 
     @property
-    def flat(self) -> tuple[DistanceReading, ...]:
-        """The last reading, when the distance did not fall across the two readings."""
-        return tuple(last for first, last in self.pairs if last.distance >= first.distance)
+    @abstractmethod
+    def projection(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class MovingTrend(DistanceTrend):
+    distance: int
+    done: float
 
     @property
     def projection(self) -> str:
-        """Velocity across the two readings projects the finish."""
-        for first, last in self.pairs:
-            if last.distance >= first.distance:
-                return f"; distance {last.distance}, not falling"
-            rate = (first.distance - last.distance) / max(last.at - first.at, 1.0)
-            done = _clock(last.at + last.distance / rate)
-            return f"; distance {last.distance}, projected done {done}"
+        return f"; distance {self.distance}, projected done {_clock(self.done)}"
+
+
+@dataclass(frozen=True)
+class FlatTrend(DistanceTrend):
+    """The distance did not fall from the reading before ``since``."""
+
+    distance: int
+    since: float
+
+    @property
+    def projection(self) -> str:
+        return f"; distance {self.distance}, not falling"
+
+
+@dataclass(frozen=True)
+class UnreadTrend(DistanceTrend):
+    """Fewer than two readings, or the last one at done: nothing to project from."""
+
+    @property
+    def projection(self) -> str:
         return ""
 
 
@@ -298,7 +327,7 @@ class ProgressSource:
         ``base`` has not touched."""
         check = self.todo.order.check
         touched = self.git("diff", "--name-only", base, sha).split()
-        run = asyncio.run(check.run_at(sha, str(self.checkout)))
+        run = check.at(sha, str(self.checkout))
         return check.result.distance(run) + self.todo.order.untouched(touched)
 
 
@@ -327,7 +356,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     @property
     def line(self) -> str:
-        return self.state + self.distance_readings().projection
+        return self.state + self.distance_readings().trend.projection
 
     def distance_readings(self) -> DistanceReadings:
         """The order's distance readings; progress that read no commit has none."""

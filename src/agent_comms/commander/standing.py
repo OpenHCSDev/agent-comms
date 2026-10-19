@@ -15,7 +15,7 @@ from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingR
                               UndatedStandingRule)
 from ..goals import Goal
 from ..threads import Thread
-from ..todos import OrderProgress, PullRequests, StrikeTodo, Todo
+from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
 from . import capacity, judge
 from .config import CommanderConfig, Repo
@@ -102,8 +102,9 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
         held = tuple(todo for todo in cls.todos(comms, commander) if todo.pending)
         pulls = PullRequests(held)
         storage = comms.registry.storage_rule
-        flat = ((todo, reading.at) for todo in held
-                for reading in OrderProgress.read(todo, storage, pulls).distance_readings().flat)
+        trends = ((todo, OrderProgress.read(todo, storage, pulls).distance_readings().trend)
+                  for todo in held)
+        flat = ((todo, trend.since) for todo, trend in trends if isinstance(trend, FlatTrend))
         return tuple(cls(todo, since) for todo, since in flat
                      if TurnDigestRead(comms.root, comms.registry.require(todo.held().owner),
                                        TurnsSince(since)).read().turns)

@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import replace
 
@@ -145,7 +146,7 @@ def working(comms, name, created):
 def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
         commander, standing, tmp_path, monkeypatch):
     from agent_comms.storage_rules import StorageRule
-    from agent_comms.todos import OrderProgress, PullRequests
+    from agent_comms.todos import MovingTrend, OrderProgress, PullRequests
     from agent_comms.tool_caller import ThreadCaller
     comms, state, module = standing
     storage = StorageRule(checkout_base=tmp_path / "wt")
@@ -172,16 +173,27 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     git("fetch", "-q", "origin")
     git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
     git("switch", "-q", "-c", "fix/p1")
-    todo = create(commander, "P1", command="cat left", expected=0, deadline=time.time() + 3600)
+    runs = tmp_path / "runs"
+    check = f"echo run >> {runs}; cat left"
+    todo = create(commander, "P1", command=check, expected=0, deadline=time.time() + 3600)
 
     def progress():
         return OrderProgress.read(comms.goals.todos.get("P1"), storage, PullRequests())
 
     commit(2)
     assert "; distance 2, projected done " in progress().line
-    assert progress().distance_readings().flat == ()
+    assert isinstance(progress().distance_readings().trend, MovingTrend)
     commit(2)
     assert progress().line.endswith("; distance 2, not falling")
+    assert runs.read_text().count("run") == 3  # once per commit: base, then each branch commit
+
+    reader = ("import sys; from agent_comms.goals import CountCheckResult, OrderCheck; "
+              "check = OrderCheck(sys.argv[1], sys.argv[2], CountCheckResult(0)); "
+              "print(check.at(sys.argv[3], sys.argv[1]).stdout.decode(), end='')")
+    second = subprocess.run([sys.executable, "-c", reader, str(unit), check,
+                             git("rev-parse", "HEAD").strip()],
+                            check=True, capture_output=True, text=True)
+    assert second.stdout == "2\n" and runs.read_text().count("run") == 3
     working(comms, "worker", 2.0)
     working(comms, "spare", 9.0)
 
