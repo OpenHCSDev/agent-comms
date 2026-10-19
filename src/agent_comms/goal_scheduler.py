@@ -23,7 +23,6 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_attempts import (
-    GoalAttemptError,
     StaleAttemptError,
 )
 from .goal_presentation import GoalSnapshot

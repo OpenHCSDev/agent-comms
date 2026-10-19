@@ -45,7 +45,7 @@ from .threads import Thread
 from .thread_identity import TurnId
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
-from .turn_lease import FinishedEnding, TurnEnding, TurnLeaseFence, TurnState
+from .turn_lease import FINISHED_ENDING, TurnEnding, TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -330,7 +330,7 @@ class TurnRunner:
 
     def finish_turn(
         self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence,
-        ending: TurnEnding = FinishedEnding(),
+        ending: TurnEnding = FINISHED_ENDING,
     ) -> TurnTranscriptUpdate:
         """Release the original CAS lease and retain its waiter cleanup."""
         terminal_fence = self.comms.agents.finish_turn(lease, ending)
@@ -344,7 +344,7 @@ class TurnRunner:
         self,
         session_id: str,
         lease: TurnLeaseFence,
-        ending: TurnEnding = FinishedEnding(),
+        ending: TurnEnding = FINISHED_ENDING,
         *,
         task: asyncio.Task[Any] | None = None,
     ) -> None:

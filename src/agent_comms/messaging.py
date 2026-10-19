@@ -12,7 +12,6 @@ from .registration import Registration
 if TYPE_CHECKING:
     from .turn_lease import FailedTurn
 from .bus_publication import AgentOrigin, HumanOrigin
-from .channels import AllChannel
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .maintenance_barrier import MaintenanceBarrier
@@ -42,8 +41,6 @@ class Messaging:
     def report_failed_turn(self, name: str, turn: FailedTurn) -> None:
         owner = self.registry.require(name)
         targets = {todo.held().parent for todo in TodoStore(self.root).for_owner(owner.incarnation)}
-        if not targets:
-            targets.add(AllChannel.declared_name)
         for target in sorted(targets):
             self.send(owner.name, target, f"Turn {turn.id} failed:\n{turn.error}", AlertKind)
 

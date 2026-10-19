@@ -16,6 +16,7 @@ from .notification_progress import AcknowledgedProgress
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
+    from .messaging import Messaging
     from .bus_publication import CommittedDelivery
     from .notification_progress import AssignmentProgress
     from .presentation import MessageNotification
@@ -38,7 +39,9 @@ from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .store_files import SharedLock, _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
-from .turn_lease import FinishedEnding, NoFinishedTurn, TurnCompletion, TurnEnding, TurnLeaseFence, TurnState
+from .turn_lease import (
+    FINISHED_ENDING, NoFinishedTurn, TurnCompletion, TurnEnding, TurnLeaseFence, TurnState,
+)
 from .turn_phase import PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
@@ -110,7 +113,7 @@ class LiveRecipientActivity(RecipientActivity):
         return self.thread.turn_started_by(updated_at_ms)
 
 class AgentActivity:
-    def __init__(self, root: Path, registry: Registration, messaging):
+    def __init__(self, root: Path, registry: Registration, messaging: Messaging):
         self.registry = registry
         self.messaging = messaging
         self._wire_lock_path = root / "wire"
@@ -246,10 +249,10 @@ class AgentActivity:
         if thread.turn_lease != lease.renamed(thread.name) or thread.backend != backend:
             return False
         owner = snapshot.owner_identity(thread.name)
-        diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
-        if diagnostic is None or diagnostic.recorded_at >= lease.record.read().require_active().started_at:
-            return False
-        return self._recover_drain(thread.name, owner, diagnostic)
+        readiness = self.activity_of(thread.name, snapshot=snapshot).readiness
+        return readiness.recover_before(
+            self, thread.name, owner, lease.record.read().require_active().started_at,
+        )
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
@@ -288,7 +291,9 @@ class AgentActivity:
             )
             return effects
 
-    def finish_turn(self, lease: TurnLeaseFence, ending: TurnEnding = FinishedEnding()) -> TurnCompletion:
+    def finish_turn(
+        self, lease: TurnLeaseFence, ending: TurnEnding = FINISHED_ENDING,
+    ) -> TurnCompletion:
         """End the original record before any registry-dependent cleanup or notice."""
         effect = lease.record.end(lease, ending)
         effect.notify(self.messaging, lease.identity.incarnation.name)

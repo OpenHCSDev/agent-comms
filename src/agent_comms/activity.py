@@ -37,6 +37,7 @@ from .thread_presentation import (
 
 if TYPE_CHECKING:
     from .activity_checkpoint import ActivityCheckpoint
+    from .agent_activity import AgentActivity
     from .threads import Thread
 
 
@@ -149,6 +150,11 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
+    def recover_before(
+        self, agents: AgentActivity, name: str, owner: OwnerIdentity, started_at: float,
+    ) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
@@ -167,6 +173,12 @@ class DiagnosticDrainReadiness(DrainReadiness):
 
     def source_diagnostic(self):
         return self.diagnostic
+
+    def recover_before(
+        self, agents: AgentActivity, name: str, owner: OwnerIdentity, started_at: float,
+    ) -> bool:
+        return (self.diagnostic.recorded_at < started_at
+                and agents._recover_drain(name, owner, self.diagnostic))
 
     def presentation(self, ordinary):
         return ordinary.status.with_attention(self.diagnostic.summary).present_attention(ordinary)

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, AsyncExitStack
 from functools import partial
 from pathlib import Path
-from typing import Self, TypeVar
+from typing import ParamSpec, Self, TypeVar
 
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
@@ -26,13 +26,17 @@ from .store_files import StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
 
 Result = TypeVar("Result")
+Parameters = ParamSpec("Parameters")
 
 
 class Coordination:
     session_type = NativeCoordinationSession
 
     @staticmethod
-    async def run_worker(operation: Callable[[], Result]) -> Result:
+    async def run_worker(
+        operation: Callable[Parameters, Result],
+        *args: Parameters.args, **kwargs: Parameters.kwargs,
+    ) -> Result:
         """Wait for blocking work before its caller releases the enclosing resources.
 
         The callback owns and closes every borrowed resource it opens. This
@@ -40,7 +44,7 @@ class Coordination:
         those operations must not depend on opening a coordinator connection.
         """
         pending = asyncio.get_running_loop().run_in_executor(
-            None, StoreLock.worker_context().run, operation
+            None, StoreLock.worker_context().run, partial(operation, *args, **kwargs)
         )
         return await join_retirement(pending)
 
@@ -49,14 +53,9 @@ class Coordination:
         resources: AsyncExitStack, context: AbstractContextManager[Result],
     ) -> Result:
         """Join entry before cancellation, and pass the real exit back to its worker."""
-        async def leave(*exit_info):
-            # Forward contextlib's exit protocol unchanged; this bridge owns
-            # worker lifetime, not the meaning of an exception or a clean exit.
-            return await Coordination.run_worker(partial(context.__exit__, *exit_info))
-
         def enter() -> Result:
             value = context.__enter__()
-            resources.push_async_exit(leave)
+            resources.push_async_exit(partial(Coordination.run_worker, context.__exit__))
             return value
 
         return await Coordination.run_worker(enter)

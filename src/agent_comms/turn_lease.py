@@ -37,7 +37,7 @@ class TurnEnding(DeclaredFamily, affix="Ending"):
     @boundary_decoder
     def from_context(error: BaseException | None) -> TurnEnding:
         """Decode contextlib's external exception-or-None protocol once."""
-        return FinishedEnding() if error is None else TurnEnding.from_exception(error)
+        return FINISHED_ENDING if error is None else TurnEnding.from_exception(error)
 
     @abstractmethod
     def record(self, turn: ActiveTurn) -> EndedTurn: ...
@@ -46,6 +46,9 @@ class TurnEnding(DeclaredFamily, affix="Ending"):
 class FinishedEnding(TurnEnding):
     def record(self, turn: ActiveTurn) -> EndedTurn:
         return EndedTurn(turn)
+
+
+FINISHED_ENDING = FinishedEnding()
 
 
 @dataclass(frozen=True)
@@ -91,7 +94,9 @@ class TurnDeclaration(SubclassUnion, affix=""):
     started_at: float | None
 
     @abstractmethod
-    def leases(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> Iterator[TurnLeaseFence]: ...
+    def leases(
+        self, incarnation: ThreadIncarnation, record: StoredTurnRecord,
+    ) -> Iterator[TurnLeaseFence]: ...
 
     @abstractmethod
     def held_by(self, lease: TurnLeaseFence) -> bool: ...
@@ -187,7 +192,9 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def matches(self, turn_id: TurnId) -> bool:
         return False
 
-    def leases(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> Iterator[TurnLeaseFence]:
+    def leases(
+        self, incarnation: ThreadIncarnation, record: StoredTurnRecord,
+    ) -> Iterator[TurnLeaseFence]:
         return iter(())
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
@@ -459,7 +466,9 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
     def without_claim(self) -> None:
         self._publish_unlocked(self.read().without_claim())
 
-    def end(self, lease: TurnLeaseFence, ending: TurnEnding = FinishedEnding()) -> TurnEndingEffect:
+    def end(
+        self, lease: TurnLeaseFence, ending: TurnEnding = FINISHED_ENDING,
+    ) -> TurnEndingEffect:
         """End the exact original turn without depending on a readable registry."""
         with _store_lock(self.registry_path):
             effect = self.read().ended(lease, ending)

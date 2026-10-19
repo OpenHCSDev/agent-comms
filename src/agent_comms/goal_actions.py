@@ -17,7 +17,6 @@ from .goal_mentions import bind_goal_mentions
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
-    BlockedState,
     CompletedGoal,
     GoalState,
     OwnerPause,
