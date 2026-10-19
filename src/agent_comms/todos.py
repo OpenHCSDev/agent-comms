@@ -1005,6 +1005,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
+    def require_delivery(self, order_id: str) -> None:
+        raise ValueError("Only an open order can be delivered.")
+
     def require_checked(self, problem: str) -> None:
         """An installed claim stands on this order's recorded check result."""
         raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
@@ -1039,6 +1042,10 @@ class PendingProblemOrder(ProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         pass
+
+    def require_delivery(self, order_id: str) -> None:
+        if self.id != order_id:
+            raise ValueError("The order changed; refresh its state before delivering it.")
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         """An undelivered order waits on install once its PR merged."""
@@ -1582,16 +1589,21 @@ class RecordHuntTodo(TodoOperation):
 class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
+    order_id: str
 
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        current.state.require_open(current)
+        current.order.require_delivery(self.order_id)
         verified = self.delivery.verified(current.order.check, current.order.deletes)
         return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        current.state.require_open(current)
+        current.order.require_delivery(self.order_id)
         return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
 
 
