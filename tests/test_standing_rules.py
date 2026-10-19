@@ -37,7 +37,7 @@ def standing(commander, commander_script):
     for module in (judge, capacity):
         importlib.reload(module)
     module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
-    state = CommanderConfig.installed().state
+    state = CommanderConfig.read_root(commander[0].root).state
     return commander[0], state, module
 
 
@@ -235,6 +235,7 @@ def test_fork_now_reads_the_load_of_the_bus_it_is_asked_about(commander, standin
         create(commander, problem)
     other = Comms(tmp_path / "other-bus")
     other.registry.declare(other.registry.new_thread("lead", frozenset(), str(tmp_path), created_at=1.0))
+    CommanderConfig.read_root(comms.root).model_copy(update={"root": other.root}).write(tmp_path / 'other-home')
 
     def fork_now(bus):
         read = CommsStandingRulesTool().apply(bus, ThreadCaller("lead"))
@@ -380,8 +381,9 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)}))
+    config = CommanderConfig.read_root(comms.root).model_copy(update={"repos": (
+        Repo(checkout=checkout, github="fleet/growth"),)})
+    config.write(tmp_path / 'growth-home')
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "

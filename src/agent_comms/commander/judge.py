@@ -28,7 +28,6 @@ from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
 from ..cli_commands import option
 from .order import CommanderVerb, RuledVerb
-from .config import CommanderConfig
 
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')

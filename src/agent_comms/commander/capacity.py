@@ -13,7 +13,6 @@ import math, os, sys, time
 from dataclasses import dataclass
 
 from ..comms import Comms
-from .config import CommanderConfig
 
 PER_COMMANDER = 6
 BEAT_AGE = 10 * 60

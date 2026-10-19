@@ -55,4 +55,4 @@ def test_send_refuses_missing_run_but_mechanical_orders_are_exempt(commander_scr
         script.send('worker', '23:59', body.read_text(), **kwargs)
     assert script.todos() == ()
     script.send('worker', '23:59', body.read_text(), mechanical=True, **kwargs)
-    assert isinstance(script.COMMS.goals.todos.get('P1').order.run, MechanicalOrderRun)
+    assert isinstance(script.comms.goals.todos.get('P1').order.run, MechanicalOrderRun)

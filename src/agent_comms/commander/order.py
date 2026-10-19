@@ -19,7 +19,7 @@ and refuses to let a deadline lapse silently.
 """
 from __future__ import annotations
 
-import argparse, asyncio, json, os, re, subprocess, sys, time
+import argparse, asyncio, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
