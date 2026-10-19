@@ -764,7 +764,7 @@ class AuthorizedAct(DeclaredFamily, affix="Act"):
 
     @classmethod
     def asked(cls, text: str) -> bool:
-        return re.search(cls.ASKS + rf"(?:{'|'.join(cls.words)})\b[^?\n]*\?", text, re.I) is not None
+        return bool(re.search(cls.ASKS + rf"(?:{'|'.join(cls.words)})\b[^?\n]*\?", text, re.I))
 
 
 class SendAct(AuthorizedAct):
