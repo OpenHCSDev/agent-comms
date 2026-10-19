@@ -672,16 +672,18 @@ class AssistantMessage(PiMessage):
         return tuple(updates)
 
     @property
+    def error_notice(self) -> str:
+        return (self.error_message or "").strip() if self.stop_reason.failed else ""
+
+    @property
     def unread_reply(self) -> bool:
-        return bool(self.text.strip() or (
-            self.stop_reason.failed and self.error_message and self.error_message.strip()
-        ))
+        return bool(self.text.strip() or self.error_notice)
 
     def transcript_events(self, context):
         from .transcript_events import AssistantTranscript, NoticeTranscript
 
-        if self.stop_reason.failed and self.error_message and self.error_message.strip():
-            return [NoticeTranscript(f"[agent error] {self.error_message.strip()}", position=context.position)]
+        if notice := self.error_notice:
+            return [NoticeTranscript(f"[agent error] {notice}", position=context.position)]
         events = []
         for part in self.parts:
             for event in part.assistant_transcript(context.position):

@@ -200,7 +200,7 @@ class IncomingTranscript(TextTranscript):
 
     @property
     def position(self) -> int:
-        return self.message.position
+        return self.message.seq
 
     @property
     def text(self):
