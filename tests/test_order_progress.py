@@ -155,10 +155,10 @@ def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
     assert read(checkout, pulls) == NoCommitProgress()
 
 
-def test_a_merged_order_still_awaits_its_record(checkout):
+def test_a_merge_not_yet_installed_waits_only_on_install(checkout):
     progress = read(checkout, Listed(merged=(PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)))
-    assert progress == MergedProgress('d' * 9)
-    assert progress.line == 'merged as ddddddddd, awaiting record'
+    assert progress == MergedProgress('d' * 40)
+    assert progress.line == 'merged as ddddddddd, waiting on install'
 
 
 def test_unread_github_is_explicit(checkout):
@@ -168,7 +168,7 @@ def test_unread_github_is_explicit(checkout):
     assert progress == UnreadProgress('gh: not logged in')
 
 
-def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander_script, monkeypatch, tmp_path):
+def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
     # worker's P1 checkout, on the branch its merged PR came from.
     monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
@@ -178,9 +178,9 @@ def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander
     create(commander, 'P1', deadline=1)
     merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
-    assert "awaiting record" in deadline_lines(script)[0]
+    assert "waiting on install" in deadline_lines(script)[0]
     script.board()
-    assert '| merged as ddddddddd, awaiting record |' in (tmp_path / 'board.md').read_text()
+    assert '| merged as ddddddddd, waiting on install |' in (tmp_path / 'board.md').read_text()
 
 
 def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, commander_script, monkeypatch, tmp_path):
@@ -229,7 +229,7 @@ MOVED = time.strftime('%H:%M', time.localtime(1000.0))
     (CommittedProgress, f'committed aaaaaaaaa at {MOVED}, not pushed', 1900, None),
     (PushedProgress, f'pushed eeeeeeeee at {MOVED}, no PR', 1900, None),
     (OpenPrProgress, 'PR #7 open at bbbbbbbbb', 1900, 1300),
-    (MergedProgress, 'merged as ccccccccc, awaiting record', None, None),
+    (MergedProgress, 'merged as ccccccccc, waiting on install', None, None),
 ])
 def test_each_found_member_says_from_its_class_whether_it_stalls_and_is_untouched(
         member, line, stalls_at, untouched_at):
@@ -333,7 +333,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     assert script.install_lines(held, read, 2001.0) == [
         f'INSTALL LATE (due {due}), not the orders; waiting: P1 worker, P2 worker']
     assert script.install_lines(held[2:], read, 2001.0) == []
-    assert "awaiting record" in deadline_lines(script)[0]
+    assert "waiting on install" in deadline_lines(script)[0]
 
 
 @pytest.mark.parametrize("pid,branch,number,subject", [
@@ -368,9 +368,9 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
                         (foreign, merged) if state == "merged" else ())
     assert not storage.order_checkout("worker", pid).exists()
     work = OrderProgress.read(todo, storage, PullRequests())
-    assert work == MergedProgress("d" * 9)
+    assert work == MergedProgress("d" * 40)
     script.board()
-    assert "merged as ddddddddd, awaiting record" in (tmp_path / "board.md").read_text()
+    assert "merged as ddddddddd, waiting on install" in (tmp_path / "board.md").read_text()
     for state in (work, PushedProgress("b" * 9, at=500.0), NoCommitProgress()):
         alarms = script.deadline_lines([todo], {pid: state}, time.time() + 100)
         assert alarms[0].startswith("OVERDUE:") and state.line in alarms[0]
