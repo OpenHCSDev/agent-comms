@@ -565,6 +565,61 @@ def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
     print(f'Accepted --replaces {replacement}: {accepted.stdout.strip()}')
 
 
+@pytest.mark.parametrize('spelling', ['agent-comms', '.', 'absolute'])
+def test_check_repo_resolves_once_for_send_and_correction(
+        commander, commander_script, monkeypatch, tmp_path, spelling):
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={
+        'repos': (script.Repo.of(repo),)}))
+    monkeypatch.chdir(repo)
+    # A same-named directory must not override the configured repository.
+    (repo / 'agent-comms').mkdir()
+    (repo / 'count.txt').write_text('0\n')
+    marker = tmp_path / 'check-cwd'
+    command = f'pwd > {shlex.quote(str(marker))}; cat count.txt'
+    git = lambda *args: subprocess.run(
+        ['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@t', *args],
+        check=True, capture_output=True, text=True).stdout.strip()
+    git('add', 'count.txt')
+    git('commit', '-qm', 'base')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    directory = str(repo) if spelling == 'absolute' else spelling
+    body = order_body(repo, f'{command} -> 1')
+    Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {directory}'))
+    problem(script, body)
+    sent = comms.goals.todos.get('P1')
+    assert sent.order.check.directory == str(repo.resolve())
+    assert marker.read_text().strip() == str(repo.resolve())
+    script.correct_check('P1', f'{directory} :: {command} -> 0',
+                         'The recorded expected count was wrong; the unchanged file contains zero.')
+    corrected = comms.goals.todos.get('P1')
+    assert corrected.order.id == sent.order.id
+    assert corrected.order.check.directory == str(repo.resolve())
+    assert marker.read_text().strip() == str(repo.resolve())
+
+
+@pytest.mark.parametrize('entrypoint', ['send', 'correct'])
+def test_missing_check_repo_refuses_before_recording(
+        commander, commander_script, tmp_path, entrypoint):
+    comms, _ = commander
+    script, repo = commander_script
+    (repo / 'count.txt').write_text('0\n')
+    if entrypoint == 'correct':
+        problem(script, order_body(repo))
+    before = comms.goals.todos.for_commander(comms.registry.require('lead').incarnation)
+    missing = tmp_path / 'missing-repo'
+    with pytest.raises(SystemExit, match='is not a directory'):
+        if entrypoint == 'send':
+            body = order_body(repo)
+            Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {missing}'))
+            problem(script, body)
+        else:
+            script.correct_check('P1', f'{missing} :: printf 0 -> 0',
+                                 'The recorded check must run in the correct configured source checkout.')
+    assert comms.goals.todos.for_commander(comms.registry.require('lead').incarnation) == before
+
+
 def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
     """A miss struck with `order strike` and then sent back is one strike; the next send-back strikes again."""
     comms, _ = commander

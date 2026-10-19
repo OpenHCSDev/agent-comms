@@ -323,9 +323,18 @@ class ConversationCursor:
                                           for sequence in cursor.exceptions if sequence > through})))
 
     def add(self, sequences: tuple[int, ...]) -> ConversationCursor:
-        return type(self)(self.high_water, tuple(sorted(
-            n for n in set(self.exceptions).union(sequences) if n > self.high_water
-        )))
+        exceptions = list(self.exceptions)
+        for sequence in sequences:
+            if sequence > self.high_water:
+                index = bisect_left(exceptions, sequence)
+                if index == len(exceptions) or exceptions[index] != sequence:
+                    exceptions.insert(index, sequence)
+        high_water = self.high_water
+        prefix = 0
+        while prefix < len(exceptions) and exceptions[prefix] == high_water + 1:
+            high_water += 1
+            prefix += 1
+        return type(self)(high_water, tuple(exceptions[prefix:]))
 
     def through(self, sequence: int) -> ConversationCursor:
         sequence = max(sequence, self.high_water)
