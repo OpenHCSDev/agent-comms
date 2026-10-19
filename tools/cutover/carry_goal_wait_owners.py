@@ -24,9 +24,9 @@ def carry_rows(raw: dict, snapshot: RegistrySnapshot) -> dict[str, RecordedGoalW
     carried = {goal: FieldCodec.decode(RecordedGoalWait, row)
                for goal, row in raw.items() if "owner" in row}
     for thread in snapshot.threads.values():
-        if thread.goal.reported_id() not in pending:
+        goal = thread.goal
+        if goal is None or goal.id not in pending:
             continue
-        goal = thread.goal.require()
         row = dict(pending.pop(goal.id))
         if row.pop("owner_created_at") != thread.created_at or row["goal_id"] != goal.id:
             raise ValueError(f"Wait {goal.id} does not belong to its recorded owner")

@@ -7,12 +7,14 @@ import sqlite3
 import subprocess
 import sys
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.comms import Comms
+from agent_comms.goals import Goal
 from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
@@ -332,7 +334,10 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     root = tmp_path / "bus"
     comms = Comms(root)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    # carry_goal_wait_owners ran live in upgrade 5, when an absent goal was None; a released
+    # step is never edited, so this thread declares a goal.
+    worker = comms.registry.new_thread("worker", frozenset(), str(tmp_path))
+    comms.registry.declare(replace(worker, goal=Goal("Repair the thread list", "goal-1", 1)))
     registry = json.loads((root / "registry.json").read_text())
     registry["threads"]["worker"]["storage_roots"]["checkouts"] = [str(tmp_path), "/earlier/project"]
     store = RegistryStore(root / "registry.json")

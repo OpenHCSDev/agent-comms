@@ -177,7 +177,7 @@ class TodoRows(Carry):
         """The columns that column steps from this one onward in the chain declare."""
         checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
         names = [step.name for step in CarryChain.at(Path(checkout), "HEAD").steps]
-        columns = set()
+        columns: set[str] = set()
         for name in names[names.index(cls.name()):]:
             if (cls.module().parent / f"{name}.py").exists():
                 module = importlib.import_module(f"{cls.module().parent.name}.{name}")
@@ -188,15 +188,17 @@ class TodoRows(Carry):
 
     @classmethod
     def declared_rows(cls, db: sqlite3.Connection) -> int:
-        """Read every row through the Todo declaration; refuse a column the chain does not explain."""
+        """Read every row through the Todo declaration; refuse a column the chain
+        does not explain."""
         table, fields = Todo.declared_name, Todo._fields()
         actual = {row[1] for row in db.execute(f'PRAGMA table_info("{table}")')}
         absent = tuple(item for item in fields if item.wire_name not in actual)
         if not {item.name for item in absent} <= cls.uncarried_columns():
             raise ValueError(f"Unexpected todo columns: {sorted(actual)!r}")
-        selected = ", ".join(f'? AS "{item.wire_name}"' if item in absent else f'"{item.wire_name}"'
-                             for item in fields)
-        rows = db.execute(f'SELECT {selected} FROM "{table}"', tuple(item.encode(()) for item in absent))
+        selected = ", ".join(f'? AS "{item.wire_name}"' if item in absent
+                             else f'"{item.wire_name}"' for item in fields)
+        empty = tuple(item.encode(()) for item in absent)
+        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
         return sum(1 for _row in Todo.iterate(rows))
 
     @classmethod
@@ -365,10 +367,10 @@ class TodoColumnCarry(TodoRows):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
+        changed = 0
         with cls.todo_rows(root, apply=apply) as db:
-            if db is None:
-                return Carried(0)
-            changed = cls._carry(db, apply=apply)
+            if db is not None:
+                changed = cls._carry(db, apply=apply)
         return cls.carried(root, changed, {}, apply=apply)
 
     @classmethod
@@ -396,24 +398,7 @@ class TodoColumnCarry(TodoRows):
         columns = Todo._column_list(tuple(item.wire_name for item in kept))
         copied = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
                            for item in kept)
-        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {copied} FROM "{saved}"', (added.encode(()),))
+        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {copied} FROM "{saved}"',
+                   (added.encode(()),))
         db.execute(f'DROP TABLE "{saved}"')
-        return count
-        saved = f"{table}_before_{cls.column}"
-        indexes = tuple(db.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
-            (table,)))
-        for name, in indexes:
-            db.execute(f'DROP INDEX "{name}"')
-        db.execute(f'ALTER TABLE "{table}" RENAME TO "{saved}"')
-        Todo.create(db)
-        for item in fields:
-            if item.name in later:
-                db.execute(f'ALTER TABLE "{table}" DROP COLUMN "{item.wire_name}"')
-        columns = Todo._column_list(tuple(item.wire_name for item in kept))
-        copied = ", ".join("? AS " + f'"{item.wire_name}"' if item is added else f'"{item.wire_name}"'
-                           for item in kept)
-        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {copied} FROM "{saved}"', (added.encode(()),))
-        db.execute(f'DROP TABLE "{saved}"')
-        db.commit()
         return count
