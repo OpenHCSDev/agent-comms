@@ -14,10 +14,10 @@ from . import turn_failure as failures
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .diagnostics import FailureReason
-from .native_startup import NATIVE_STARTUP_POLICY
 
 if TYPE_CHECKING:
     from .backend import TurnSession
+    from .native_startup import NativeStartupPolicy
     from .pi_events import PiEvent, RetryAttemptEvent
 
 
@@ -184,9 +184,11 @@ class ProgressWatchdog:
     """Select a declared wait once; never grant input or replay authority."""
 
     def __init__(
-        self, model_wait: TurnWait, input_timeout: float, preflight_timeout: float
+        self, model_wait: TurnWait, input_timeout: float, preflight_timeout: float,
+        startup: NativeStartupPolicy,
     ):
         self.preflight_wait = PreflightWait(preflight_timeout)
+        self.startup = startup
         self.input_wait = InputStartWait(input_timeout)
         self.model_wait = model_wait.fresh()
         self.poll_wait = PollWait()
@@ -209,7 +211,7 @@ class ProgressWatchdog:
         self.spawn_ms = 0 if reused else round((self.clock() - self.launch_started_at) * 1000)
 
     def reading(self) -> None:
-        self.preflight_wait.budget = NATIVE_STARTUP_POLICY.readiness_timeout(
+        self.preflight_wait.budget = self.startup.readiness_timeout(
             self.session_bytes, base_seconds=self.preflight_wait.budget
         )
         self.preflight_wait.restart()
