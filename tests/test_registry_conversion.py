@@ -56,6 +56,26 @@ def test_conversion_refuses_before_publication(tmp_path, change):
     assert store.path.read_bytes() == before
 
 
+def test_conversion_keeps_the_private_guard_authoritative(tmp_path):
+    from agent_comms.comms import Comms
+
+    store, raw = old_registry(tmp_path)
+    path = store.path
+    store.convert_format()
+    Comms(tmp_path).bus.publisher.initialize_private_protocol()
+    # Recreate old bytes through the existing private writer, so the guard
+    # commits those bytes before the installer is asked to convert them.
+    with store.locked():
+        store._write_unlocked(json.dumps(raw, indent=2))
+    assert store.convert_format()
+    assert store.read().threads['worker'].goal.to_wire() is None
+    path.write_bytes(path.read_bytes() + b' ')
+    before = path.read_bytes()
+    with pytest.raises(RelationViolationError):
+        store.convert_format()
+    assert path.read_bytes() == before
+
+
 def test_current_version_still_requires_the_whole_valid_document(tmp_path):
     store, raw = old_registry(tmp_path)
     raw["version"] = store.empty().version
