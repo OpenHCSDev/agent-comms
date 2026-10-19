@@ -1,6 +1,7 @@
 """Native startup readiness is size-aware, and cancellation reaps a starting child."""
 
 import asyncio
+import json
 import os
 import sys
 
@@ -39,7 +40,11 @@ async def test_cancel_during_extended_preflight_reaps_child(
     monkeypatch.setattr(backend, "NATIVE_STARTUP_POLICY", policy)
     monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
     session = tmp_path / "session.jsonl"
-    session.write_bytes(b"xx")
+    # Core reads the saved header's identity before it launches the child.
+    session.write_text(json.dumps({
+        "type": "session", "version": 3, "id": "saved",
+        "timestamp": "2026-10-14T00:00:00.000Z", "cwd": str(tmp_path),
+    }) + "\n")
     pid_file = tmp_path / "child.pid"
     executable = tmp_path / "pi-stub"
     executable.write_text(

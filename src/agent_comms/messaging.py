@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Type
@@ -88,7 +89,7 @@ class Messaging:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
             todos.correct(owner.name, committed.message_id, body)
-        except TodoConflict as error:
+        except (TodoConflict, sqlite3.Error) as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
             correction = CorrectionComplete()

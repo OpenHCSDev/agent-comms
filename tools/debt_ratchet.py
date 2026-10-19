@@ -258,8 +258,9 @@ class SourceLines(Measure):
             if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
                 added += int(increase)
                 removed += int(decrease)
+        # Each commit's trailer budgets that commit's lines, so a range's budget is their sum.
         declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
-        return {cls.__name__: removed + max((int(value) for value in declared.split()), default=0)}, {cls.__name__: added}
+        return {cls.__name__: removed + sum(int(value) for value in declared.split())}, {cls.__name__: added}
 
 
 @dataclass(frozen=True)

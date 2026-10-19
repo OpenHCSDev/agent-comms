@@ -43,7 +43,7 @@ def test_explicit_user_conversation_does_not_read_the_callers_conversation(comms
     assert page["has_older"] is False
 
 
-def test_history_refuses_a_channel_target(comms):
+def test_history_refuses_an_unregistered_peer(comms):
     conversation(comms)
     with pytest.raises(UnregisteredThreadError):
-        invoke_tool(comms, "comms_history", {"peer": "#any"}, caller=ThreadCaller("claude-ai"))
+        invoke_tool(comms, "comms_history", {"peer": "missing"}, caller=ThreadCaller("claude-ai"))
