@@ -24,6 +24,7 @@ from typing import ClassVar
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
 from ..todos import InstallDeadline
+from .config import CommanderConfig
 from . import order
 
 Words = tuple[str, ...]
@@ -49,8 +50,8 @@ class CommanderSession:
     session: str
 
     def commander(self) -> bool:
-        process = order.COMMS.registry.require(order.ME).process_identity.require(
-            f'{order.ME} has no registered process to compare this session with')
+        process = CommanderConfig.installed().comms.registry.require(CommanderConfig.installed().commander).process_identity.require(
+            f'{CommanderConfig.installed().commander} has no registered process to compare this session with')
         environment = Path(f'/proc/{process.pid}/environ').read_bytes().split(b'\0')
         return f'CLAUDE_CODE_SESSION_ID={self.session}'.encode() in environment
 
@@ -59,7 +60,7 @@ class CommanderSession:
             return (kind.refusal(),) if self.commander() else ()
         except (OSError, RelationViolationError) as error:
             return (f'{kind.work.capitalize()} refused: the guard cannot tell whether this '
-                    f'session is {order.ME} ({error}).',)
+                    f'session is {CommanderConfig.installed().commander} ({error}).',)
 
 
 @dataclass(frozen=True)
@@ -87,7 +88,7 @@ class RawSendCommand(GuardedCommand):
         if 'send' not in words or 'agent-comms-commander' in {Path(word).name for word in words}:
             return ()
         addressed = pairs & {('--to', unit) for unit in order.units()}
-        if ('--from', order.ME) not in pairs or not addressed:
+        if ('--from', CommanderConfig.installed().commander) not in pairs or not addressed:
             return ()
         return ('Raw send to a unit. Use agent-comms-commander order send '
                 '(orders, with deadline) or order say (no work).',)
@@ -116,7 +117,7 @@ class TacticalCommand(GuardedCommand):
 
     @classmethod
     def refusal(cls) -> str:
-        return InstallDeadline.read(order.COMMS.root).refusal(cls.work, order.ME)
+        return InstallDeadline.read(CommanderConfig.installed().comms.root).refusal(cls.work, CommanderConfig.installed().commander)
 
 
 @dataclass(frozen=True)

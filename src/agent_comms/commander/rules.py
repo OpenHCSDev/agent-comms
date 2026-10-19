@@ -19,11 +19,8 @@ from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
-from .order import COMMS
 
-CONFIG = CommanderConfig.installed()
-ME = CONFIG.commander
-SKILL = str(CONFIG.skill)
+
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
 # Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
@@ -37,8 +34,8 @@ def principles() -> list[str]:
 
 
 def rules() -> list[str]:
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(SKILL).read(), re.M)]
-    for path in [path for directory in CONFIG.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
+    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(CommanderConfig.installed().skill).read(), re.M)]
+    for path in [path for directory in CommanderConfig.installed().rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
         text = open(path).read()
         if re.search(r'^\s*type: feedback', text, re.M):
             desc = re.search(r'^description: (.+)$', text, re.M)
@@ -47,11 +44,11 @@ def rules() -> list[str]:
 
 
 def record(who: str, entry: RuleReviewEntry) -> None:
-    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), COMMS)
+    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), CommanderConfig.installed().comms)
     print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
-def review(who: str = ME):
+def review(who: str):
     every = rules()
     for i, r in enumerate(every, 1):
         print(f'{i:3}. {r}')
@@ -59,23 +56,23 @@ def review(who: str = ME):
     print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:
         print(f'  - {r}')
-    drawn = random.sample(paper, DRAWN) if who != ME else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    drawn = random.sample(paper, DRAWN) if who != CommanderConfig.installed().commander else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
     pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
-    record(who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != ME else 2))
+    record(who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != CommanderConfig.installed().commander else 2))
     print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
         print(f'  {n}. {r}')
 
 
-def answer(n: int, text: str, who: str = ME):
+def answer(n: int, text: str, who: str):
     record(who, AnsweredRuleReviewEntry(n, text))
 
 
 def main(a):
-    who = ME
+    who = CommanderConfig.installed().commander
     if '--as' in a:
         i = a.index('--as'); who = a[i + 1]; del a[i:i + 2]
     try:
@@ -84,7 +81,7 @@ def main(a):
         elif a[:1] == ['answer'] and len(a) == 3 and a[1].isdigit():
             answer(int(a[1]), a[2], who)
         elif a == ['stale']:
-            print('\n'.join(due.why for due in RulesDue.violations(COMMS, who)) or 'fresh')
+            print('\n'.join(due.why for due in RulesDue.violations(CommanderConfig.installed().comms, who)) or 'fresh')
         else:
             sys.exit(__doc__)
     except ValueError as refused:  # Core owns what a review and an answer may say

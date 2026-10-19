@@ -55,7 +55,7 @@ DOCUMENTED = [
 def test_every_verb_parses_its_documented_command_line(commander_script, tool, line, fields):
     order, _ = commander_script
     module = (order if tool == "order"
-              else importlib.reload(importlib.import_module(f"agent_comms.commander.{tool}")))
+              else importlib.import_module(f"agent_comms.commander.{tool}"))
     family = getattr(module, f"{tool.capitalize()}Verb")
     verb = family.parse(shlex.split(line), "")
     assert verb.declared_name == line.split()[0]

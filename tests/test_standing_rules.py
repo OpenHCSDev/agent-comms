@@ -33,10 +33,7 @@ from test_commander_problem_orders import create, native_judge_edits
 @pytest.fixture
 def standing(commander, commander_script):
     """The commander-file members reloaded against the scratch commander config."""
-    from agent_comms.commander import capacity, judge
-    for module in (judge, capacity):
-        importlib.reload(module)
-    module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
+    module = importlib.import_module("agent_comms.commander.standing")
     state = CommanderConfig.installed().state
     return commander[0], state, module
 

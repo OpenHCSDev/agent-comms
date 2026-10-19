@@ -21,6 +21,7 @@ from cutover.carry import CarryChain
 from agent_comms.change_report import FileLine
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import BoundedRun
+from agent_comms.commander.config import CommanderConfig
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
@@ -796,8 +797,7 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     import importlib
     from agent_comms.commander import request
     comms, caller = commander
-    request = importlib.reload(request)
-    standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
+    standing = importlib.import_module('agent_comms.commander.standing')
     def stalled():
         return [rule.line() for rule in standing.RequestStalled.violations(comms, 'lead')]
     assert stalled() == [
@@ -990,9 +990,9 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     create(commander, 'P1', owner='parted')
     create(commander, 'P2', owner='watching')
     comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
-    rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
+    importlib.import_module('agent_comms.commander.rotate')
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
-        standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
+        standing = importlib.import_module('agent_comms.commander.standing')
         lines = [rule.line() for rule in standing.Detached.violations(comms, 'lead')]
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
 
@@ -1037,7 +1037,7 @@ def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, command
     comms, _ = commander
     create(commander, 'P1')
     create(commander, 'P2')
-    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    judge = importlib.import_module('agent_comms.commander.judge')
     edit = dict(id='edit-1', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P2 was the last order; this one repairs the existing owner')
@@ -1055,7 +1055,7 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
 
     comms, _ = commander
     create(commander, 'P1')
-    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    judge = importlib.import_module('agent_comms.commander.judge')
     edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
     recorded = native_judge_edits(commander, judge, edits)
@@ -1067,8 +1067,8 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
     assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
     assert not saved.strikes
-    assert importlib.reload(judge).Edit.unjudged(comms, 'lead') == []
-    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+    assert judge.Edit.unjudged(comms, 'lead') == []
+    assert not (CommanderConfig.installed().state / 'verdicts.jsonl').exists()
 
 
 @pytest.mark.parametrize('verb', ['ok', 'back'])
@@ -1077,7 +1077,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
     from pathlib import Path
 
     comms, _ = commander
-    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    judge = importlib.import_module('agent_comms.commander.judge')
     edit = dict(id='orphan-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     recorded = native_judge_edits(commander, judge, [edit])
     fields = dict(ids=('orphan-edit:0000',),
@@ -1097,7 +1097,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
 
     comms, _ = commander
     create(commander, 'P1')
-    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    judge = importlib.import_module('agent_comms.commander.judge')
     edit = dict(id='bad-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
@@ -1206,7 +1206,7 @@ VERDICT_LINES = {
 def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander, commander_script):
     """Every verdict member refuses a line missing any fact it declares, and its verdict reads back from the order."""
     comms, caller = commander
-    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    judge = importlib.import_module('agent_comms.commander.judge')
     assert set(judge.VerdictVerb.names()) == set(VERDICT_LINES)
     create(commander, 'P1')
     for name, line in VERDICT_LINES.items():

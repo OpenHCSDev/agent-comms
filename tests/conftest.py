@@ -257,7 +257,6 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture
 def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """The order script installed for lead on the commander bus, with a git checkout its orders check."""
-    import importlib
     import subprocess
     import sys
 
@@ -275,18 +274,15 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         disk=tmp_path).write(tmp_path)
     CommanderConfig.installed.cache_clear()
     from agent_comms.commander import order
-    yield importlib.reload(order), repo
+    yield order, repo
     CommanderConfig.installed.cache_clear()
 
 
 @pytest.fixture
 def tool_watch(commander_script):
     """The tool-call watcher reading the commander config commander_script installed."""
-    import importlib
-
-    from agent_comms.commander import judge, tool_watch
-    importlib.reload(judge)
-    return importlib.reload(tool_watch)
+    from agent_comms.commander import tool_watch
+    return tool_watch
 
 
 @pytest.fixture

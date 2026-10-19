@@ -6,11 +6,13 @@ hardcodes a home directory, a bus root or a unit name.
 from __future__ import annotations
 
 import subprocess
-from functools import cache
+from functools import cache, cached_property
 from importlib.resources import files
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
+
+from ..comms import Comms
 
 
 class Repo(BaseModel):
@@ -61,14 +63,32 @@ class CommanderConfig(BaseModel):
     def installed(cls) -> CommanderConfig:
         return cls.model_validate_json(cls.path().read_text())
 
+    @cached_property
+    def comms(self) -> Comms:
+        """The bus whose Todo store owns problems, orders, deadlines and strikes, opened on first use."""
+        return Comms(self.root)
+
+    @property
+    def review_catch(self) -> str:
+        """Who caught a struck miss, and at which stage, when the strike names no one else."""
+        return f'{self.commander} at review'
+
+    @property
+    def activity(self) -> Path:
+        return self.state / 'activity.log'
+
+    @property
+    def forks(self) -> Path:
+        return self.state / 'forks'
+
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
         path = self.path(home)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.write_text(self.model_dump_json(indent=1) + '\n')
-        for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
+        for directory in (self.state, self.forks, self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
-        if not (self.state / 'activity.log').exists():
-            (self.state / 'activity.log').write_text('')
+        if not self.activity.exists():
+            self.activity.write_text('')
         return path
