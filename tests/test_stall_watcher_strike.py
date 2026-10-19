@@ -160,6 +160,8 @@ async def test_three_connector_passes_allow_real_store_maintenance_between_passe
     original.registry.declare(original.registry.new_thread(
         'spare', frozenset({'comms'}), str(original.root), created_at=3.0))
     working(original, 'spare', 3.0)
+    original.registry.declare(original.registry.new_thread(
+        'claude-ai', frozenset(), str(original.root), created_at=4.0))
     copied = original.root.with_name('three-pass-copy')
     shutil.copytree(original.root, copied)
     connector = Connector(ConnectorStore.at(tmp_path / 'auth'), 'http://127.0.0.1:18766', copied)
