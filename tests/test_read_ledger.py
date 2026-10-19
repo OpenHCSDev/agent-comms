@@ -303,7 +303,7 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor()
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
     from agent_comms.coordination_errors import DMScopeChanged
-    with pytest.raises(DMScopeChanged, match="bus was replaced"):
+    with pytest.raises(DMScopeChanged, match="Display incarnation changed"):
         reopened.views.mark_page_read(page, worktree=str(tmp_path))
     fresh = reopened.views.channel_display_page("#team", viewer=NamedViewer(viewer))
     reopened.views.mark_page_read(fresh, worktree=str(tmp_path))
