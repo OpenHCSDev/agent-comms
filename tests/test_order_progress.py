@@ -78,7 +78,7 @@ def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
     pulls = Listed(open=(PullRequest(12, 'fix/p10', 'f' * 40), PullRequest(7, 'fix/p1', 'a' * 40,
                                                                               updated_at=400.0)))
     progress = read(checkout, pulls)
-    assert progress == OpenPrProgress(7, 'a' * 9, 400.0) and progress.strikes
+    assert progress == OpenPrProgress(7, 'a' * 9, at=400.0) and progress.strikes
     assert progress.line == 'PR #7 open at aaaaaaaaa'
 
 
@@ -86,7 +86,7 @@ def test_an_order_owns_the_pr_from_its_branch_whatever_either_title_says(checkou
     # #7 was renamed without its P-number; #9 is titled "P1: ..." but comes from another order's branch.
     pulls = Listed(open=(PullRequest(9, 'fix/p2', 'b' * 40, updated_at=500.0),
                          PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0)))
-    assert read(checkout, pulls) == OpenPrProgress(7, 'a' * 9, 400.0)
+    assert read(checkout, pulls) == OpenPrProgress(7, 'a' * 9, at=400.0)
 
 
 def test_a_detached_checkout_owns_no_pr(checkout):
@@ -149,9 +149,9 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
 @pytest.mark.parametrize('progress, now, stalled', [
     (NoCommitProgress(), 100 + 600, False),
     (NoCommitProgress(), 100 + 601, True),
-    (CommittedProgress('a' * 9, 1000.0), 1000 + 900, False),
-    (PushedProgress('a' * 9, 1000.0), 1000 + 901, True),
-    (OpenPrProgress(7, 'a' * 9, 1000.0), 1000 + 901, True),
+    (CommittedProgress('a' * 9, at=1000.0), 1000 + 900, False),
+    (PushedProgress('a' * 9, at=1000.0), 1000 + 901, True),
+    (OpenPrProgress(7, 'a' * 9, at=1000.0), 1000 + 901, True),
     (MergedProgress('d' * 9), 10 ** 9, False),
 ])
 def test_work_that_stops_moving_stalls(progress, now, stalled):

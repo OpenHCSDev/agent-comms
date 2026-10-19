@@ -641,12 +641,12 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
     late, stalled, passed = [], [], []
     for t in pending:
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
-        if (entered := work.stalled_since(ordered)) is not None and since < entered < now:
+        if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
         if (crossed := t.late_since(now)) is None:
             continue
         answer = reply(t.holder, ordered) if work.strikes else None
-        if since < max(crossed, work.moved or 0, float(answer.get('ts', 0)) if answer else 0):
+        if since < max(crossed, float(answer.get('ts', 0)) if answer else 0) or work.moved_after(since):
             if work.strikes:
                 due = f'due {hhmm(t.deadline)}, order {t.order.id}'
                 late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
