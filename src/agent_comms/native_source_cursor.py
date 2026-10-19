@@ -37,7 +37,7 @@ class NativeSourceCursor:
     @classmethod
     async def read_async(
         cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
-        source_reads: NativeEvidenceScope | None = None,
+        source_reads: NativeEvidenceScope,
     ):
         return await Coordination.run_read_async(
             bus.log.path.parent / "coordination.sqlite3",
@@ -55,17 +55,19 @@ class NativeSourceCursor:
         cls, bus: MessageBus, *, wire_root_id: str, owner: Thread,
         owner_claimed_generation: int, owner_generation: int,
         committed_input_id: str | None,
+        source_reads: NativeEvidenceScope,
     ):
         return await Coordination.run_async(
             bus.log.path.parent / "coordination.sqlite3",
             partial(cls._advance_owned, bus, wire_root_id, owner,
-                    owner_claimed_generation, owner_generation, committed_input_id),
+                    owner_claimed_generation, owner_generation, committed_input_id,
+                    source_reads=source_reads),
         )
 
     @classmethod
     def _advance_owned(
         cls, bus, wire_root_id, owner, claim_scope, generation, input_id, store, *,
-        source_reads: NativeEvidenceScope | None = None,
+        source_reads: NativeEvidenceScope,
     ):
         return cls(bus, store, wire_root_id=wire_root_id).advance(
             owner=owner, owner_claimed_generation=claim_scope,
@@ -76,7 +78,7 @@ class NativeSourceCursor:
     @classmethod
     async def refresh_async(
         cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
-        source_reads: NativeEvidenceScope | None = None,
+        source_reads: NativeEvidenceScope,
     ):
         return await Coordination.run_async(
             bus.log.path.parent / "coordination.sqlite3",
@@ -105,9 +107,8 @@ class NativeSourceCursor:
         owner_claimed_generation: int,
         owner_generation: int,
         committed_input_id: str | None,
-        source_reads: NativeEvidenceScope | None = None,
+        source_reads: NativeEvidenceScope,
     ) -> CurrentNativeCursor | None:
-        from .native_entries import NativeEvidenceScope
 
         committed_input_id = FieldCodec.decode(str | None, committed_input_id)
         identity = CursorOwner(
@@ -116,7 +117,7 @@ class NativeSourceCursor:
             generation=owner_generation,
             claimed_generation=owner_claimed_generation,
         )
-        with NativeEvidenceScope.borrow(source_reads) as source_reads:
+        with source_reads.borrow():
             return self._advance_proven(identity, committed_input_id, source_reads,
                 StoreLockContention(2.0) if committed_input_id is not None else None)
 
@@ -214,7 +215,7 @@ class NativeSourceCursor:
         return cursor
 
     def read(
-        self, *, owner_name: str, source_reads: NativeEvidenceScope | None = None
+        self, *, owner_name: str, source_reads: NativeEvidenceScope
     ) -> CurrentNativeCursor | None:
         with self.store.session.boundary(self.bus, blocking=False) as boundary:
             registry = boundary.registry
@@ -242,9 +243,7 @@ class NativeSourceCursor:
         sources = self._coverage(identity.lookup)
         witness = None
         if cursor is not None:
-            from .native_entries import NativeEvidenceScope
-
-            with NativeEvidenceScope.borrow(source_reads) as source_reads:
+            with source_reads.borrow():
                 coverage = self._require_source(identity, cursor, sources, source_reads)
                 witness = coverage.source_witness
         with self.store.session.boundary(self.bus, blocking=False) as boundary:

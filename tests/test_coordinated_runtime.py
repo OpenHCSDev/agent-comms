@@ -254,13 +254,18 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
     return fake, calls
 
 
-async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisions(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisions(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads) -> None:
     root, root_id, comms, initial, people = _root(tmp_path)
     assert len(initial.audience.recipients) == 2
     first, alpha_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", first)
     alpha = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package, opt_in=True
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        opt_in=True,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert alpha is not None and alpha.disposition is IgnoredAssignment
     assert len(alpha_calls) == 1
@@ -275,8 +280,11 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         ignored = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
+            recipient_lookup=RecordedThreadIncarnation(
+                "fixture", people[1].created_at
+            ).lookup,
             source_seq=initial.message.seq,
+            source_reads=source_reads,
         )
         assert len(ignored) == 1 and isinstance(ignored[0], TriageHistoricalNativeInput)
         assert ignored[0].decision is IgnoreSelectedTriage
@@ -287,7 +295,12 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", second)
     beta = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        opt_in=True,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert beta is not None and beta.disposition is CompletedAssignment
     assert tuple(acknowledgement.exact_target for acknowledgement in beta.publications) == ("#team",) and beta.publications
@@ -302,7 +315,12 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert "_agent_comms_private_v1" not in response.to_wire()
     assert (
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )
@@ -325,7 +343,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert not (root / "read_markers.json").exists()
 
 
-async def test_initial_no_wake_observer_never_enters_model_or_claim_page(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_initial_no_wake_observer_never_enters_model_or_claim_page(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, initial, _ = _root(tmp_path, mentioned=True)
     assert len(initial.audience.recipients) == 2
     assert (
@@ -340,6 +358,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(tmp_pat
             owner_name="alpha",
             native_package=native_runtime_package,
             opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )
@@ -404,7 +423,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     assert replace(notification, changed=False).sent_outcome() is None
 
 
-async def test_unavailable_sent_outcomes_propagate_before_model_start(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_unavailable_sent_outcomes_propagate_before_model_start(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     from agent_comms.native_pi import NativePiUnavailable
     from agent_comms.presentation import MessageNotification
 
@@ -419,19 +438,28 @@ async def test_unavailable_sent_outcomes_propagate_before_model_start(tmp_path: 
 
     with pytest.raises(NativePiUnavailable, match="optional sent outcome unavailable"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta",
-            native_package=native_runtime_package, opt_in=True,
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
 
     assert calls == []
 
 
-async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads) -> None:
     root, root_id, comms, initial, people = _root(tmp_path, direct=True)
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        opt_in=True,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert outcome is not None and tuple(
         acknowledgement.exact_target for acknowledgement in outcome.publications
@@ -445,8 +473,11 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         one = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
+            recipient_lookup=RecordedThreadIncarnation(
+                "fixture", people[2].created_at
+            ).lookup,
             source_seq=initial.message.seq,
+            source_reads=source_reads,
         )
         assert len(one) == 1 and isinstance(one[0].execution, FullNativeExecution)
         assert isinstance(one[0], FullHistoricalNativeInput)
@@ -454,16 +485,8 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     assert list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)[-1].target == "sender"
 
 
-
-
-
-
-
-
-
-
 @pytest.mark.parametrize("available", [True, False])
-async def test_production_awareness_caller_includes_or_omits_without_losing_original(tmp_path: Path, monkeypatch, available: bool, *, native_runtime_package) -> None:
+async def test_production_awareness_caller_includes_or_omits_without_losing_original(tmp_path: Path, monkeypatch, available: bool, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
     if available:
         assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
@@ -476,7 +499,11 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert outcome is not None and outcome.publications
     assert len(calls) == 1
@@ -494,7 +521,7 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
         )
 
 
-async def test_slow_optional_awareness_omits_without_blocking_selected_original(tmp_path: Path, monkeypatch, caplog, *, native_runtime_package) -> None:
+async def test_slow_optional_awareness_omits_without_blocking_selected_original(tmp_path: Path, monkeypatch, caplog, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -513,6 +540,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
             wire_root_id=root_id,
             owner_name="beta",
             native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     finally:
         release.set()
@@ -532,7 +560,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
         )
 
 
-async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     first_base = tmp_path / "first"
     first_base.mkdir()
     first_root, _first_id, first_comms, first_initial, people = _root(first_base, direct=True)
@@ -573,7 +601,11 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(tmp_
         monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         original = await asyncio.wait_for(
             SelectedExecution(
-                root=second_root, wire_root_id=second_id, owner_name="beta", native_package=native_runtime_package
+                root=second_root,
+                wire_root_id=second_id,
+                owner_name="beta",
+                native_package=native_runtime_package,
+                cursor_delivery=cursor_delivery,
             ).run(),
             timeout=3,
         )
@@ -586,7 +618,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(tmp_
 
 
 @pytest.mark.parametrize("kind", ["complete", "incomplete", "oversize"])
-async def test_optional_awareness_requires_complete_binding_and_resource_budget(tmp_path: Path, monkeypatch, kind: str, *, native_runtime_package) -> None:
+async def test_optional_awareness_requires_complete_binding_and_resource_budget(tmp_path: Path, monkeypatch, kind: str, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
     assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     runner, calls = _fake_model()
@@ -609,6 +641,7 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
         wire_root_id=root_id,
         owner_name="beta",
         native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert outcome is not None and outcome.publications
     assert len(calls) == 1 and initial.message.body in calls[0][1]
@@ -619,7 +652,7 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     assert ("Optional awareness omitted" in calls[0][1]) is (kind != "complete")
 
 
-async def test_selected_original_survives_auxiliary_cursor_over_100_initials(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_selected_original_survives_auxiliary_cursor_over_100_initials(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads) -> None:
     root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
     # These are committed frozen direct sources for another recipient. They
     # must not become beta's work or move beta's proven-injected cursor.
@@ -628,13 +661,19 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(tmp
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert outcome is not None and outcome.publications
     assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
     assert len(calls) == 1 and list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)[-1].body
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
+        cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+            owner_name="beta", source_reads=source_reads
+        )
         assert cursor is not None and cursor.input_id == outcome.input_id
         response = next(
             message for message in list(comms.bus.full_history_page().messages)
@@ -646,7 +685,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(tmp
         assert cursor.injected_seq == _initial.message.seq
 
 
-async def test_historical_native_input_view_keeps_exact_triage_and_full_events(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_historical_native_input_view_keeps_exact_triage_and_full_events(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads) -> None:
     root, root_id, _comms, initial, people = _root(tmp_path)
     engaged, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", engaged)
@@ -655,8 +694,11 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", people[2].created_at
+                ).lookup,
                 source_seq=initial.message.seq,
+                source_reads=source_reads,
             )
             == ()
         )  # A selected pending claim has not accepted model input.
@@ -667,11 +709,19 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", people[2].created_at
+                ).lookup,
                 source_seq=initial.message.seq,
+                source_reads=source_reads,
             )
     result = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        opt_in=True,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 2
@@ -679,8 +729,11 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
         rows = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
+            recipient_lookup=RecordedThreadIncarnation(
+                "fixture", people[2].created_at
+            ).lookup,
             source_seq=initial.message.seq,
+            source_reads=source_reads,
         )
         assert [type(row.execution) for row in rows] == [TriageNativeExecution, FullNativeExecution]
         assert len({row.input_id for row in rows}) == 2
@@ -697,8 +750,11 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", people[1].created_at
+                ).lookup,
                 source_seq=initial.message.seq,
+                source_reads=source_reads,
             )
             == ()
         )  # Alpha's triage is pending, not a proof or max-seq gap to skip.
@@ -710,12 +766,15 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", people[2].created_at
+                ).lookup,
                 source_seq=initial.message.seq,
+                source_reads=source_reads,
             )
 
 
-async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads) -> None:
     root, root_id, comms, initial, people = _root(tmp_path, direct=True)
     lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
     session_dir = root / "native-sessions" / lookup
@@ -749,6 +808,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
             native_package=native_runtime_package,
             session_file=saved,
             opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert calls == [] and not saved.exists() and moved.exists()
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -758,20 +818,25 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
         assert (
-            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+                owner_name="beta", source_reads=source_reads
+            )
             is None
         )
 
 
-async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads) -> None:
     root, root_id, _comms, initial, people = _root(tmp_path, mentioned=True)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", people[1].created_at
+                ).lookup,
                 source_seq=initial.message.seq,
+                source_reads=source_reads,
             )
             == ()
         )  # No-wake has no selected SQL claim and cannot gain a proof.
@@ -779,7 +844,12 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(t
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", failing)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -793,14 +863,17 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(t
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", people[2].created_at
+                ).lookup,
                 source_seq=initial.message.seq,
+                source_reads=source_reads,
             )
             == ()
         )
 
 
-async def test_crash_after_triage_reservation_never_reissues_model(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_crash_after_triage_reservation_never_reissues_model(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path)
     runner, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
@@ -811,6 +884,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(tmp_path: Pat
             owner_name="alpha",
             native_package=native_runtime_package,
             opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert (
         await SelectedExecution(
@@ -819,6 +893,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(tmp_path: Pat
             owner_name="alpha",
             native_package=native_runtime_package,
             opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )
@@ -836,7 +911,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(tmp_path: Pat
         assert tuple(row) == ("deferred", "isolated-session")
 
 
-async def test_forged_dto_without_private_evidence_cannot_mark_context(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_forged_dto_without_private_evidence_cannot_mark_context(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path)
 
     async def forged(_package, *, input_id, session, **_kw):
@@ -856,13 +931,14 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(tmp_path:
             owner_name="alpha",
             native_package=native_runtime_package,
             opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     rows = list(comms.views.channel_history_page("#team").messages)
     assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
     assert "input is uncertain" in rows[-1].body
 
 
-async def test_session_file_registration_during_native_triage_keeps_owner(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_session_file_registration_during_native_triage_keeps_owner(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _people = _root(tmp_path)
     runner, calls = _fake_model(decision="IGNORE")
 
@@ -875,12 +951,17 @@ async def test_session_file_registration_during_native_triage_keeps_owner(tmp_pa
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
     with pytest.raises(StaleFence, match="native session changed"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(calls) == 1
 
 
-async def test_session_file_registration_during_native_full_turn_keeps_response(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_session_file_registration_during_native_full_turn_keeps_response(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     runner, calls = _fake_model()
 
@@ -893,13 +974,18 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
     with pytest.raises(StaleFence, match="native session changed"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(calls) == 1
     assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 1
 
 
-async def test_project_change_during_native_full_turn_denies_response(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_project_change_during_native_full_turn_denies_response(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     runner, calls = _fake_model()
     other_project = tmp_path / "other-project"
@@ -916,13 +1002,18 @@ async def test_project_change_during_native_full_turn_denies_response(tmp_path: 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", change_project)
     with pytest.raises(StaleFence, match="owner stopped or changed"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(calls) == 1
     assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 1
 
 
-async def test_owner_generation_revoked_during_native_triage_fails_closed(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_owner_generation_revoked_during_native_triage_fails_closed(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, people = _root(tmp_path)
     runner, _ = _fake_model(decision="IGNORE")
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
@@ -941,6 +1032,7 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(tmp_pa
             owner_name="alpha",
             native_package=native_runtime_package,
             opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(list(comms.views.channel_history_page("#team").messages)) == 1
 
@@ -949,7 +1041,7 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(tmp_pa
     "malformed",
     ['{"decision":"IGNORE","decision":"FULL"}', '{"decision":[]}', "[]", "IGNORE"],
 )
-async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(tmp_path: Path, monkeypatch, malformed: str, *, native_runtime_package) -> None:
+async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(tmp_path: Path, monkeypatch, malformed: str, *, native_runtime_package, cursor_delivery, source_reads) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path)
     runner, calls = _fake_model()
 
@@ -959,8 +1051,12 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(tmp_path: Path
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", bad)
     failed = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha",
-        native_package=native_runtime_package, opt_in=True,
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        opt_in=True,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert failed.disposition is FailedAssignment
     assert len(calls) == 1
@@ -980,17 +1076,28 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(tmp_path: Path
         claim = store.assignments.get(failed.assignment_ids[0])
         assert type(claim.lifecycle) is FailedAssignment
         rejected = read_historical_native_inputs(
-            store, wire_root_id=root_id, recipient_lookup=claim.recipient_lookup,
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=claim.recipient_lookup,
             source_seq=claim.wire_seq,
+            source_reads=source_reads,
         )
         assert rejected[0].proves_triage_source(rejected)
         assert "decision" not in {item.name for item in fields(rejected[0])}
-    assert await SelectedExecution(root=root, wire_root_id=root_id, owner_name="alpha",
-                                   native_package=native_runtime_package).run() is None
+    assert (
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
+        ).run()
+        is None
+    )
     assert len(calls) == 1  # A rejected decision is never tried again.
 
 
-async def test_registered_owner_stopped_during_model_cannot_settle(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_registered_owner_stopped_during_model_cannot_settle(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path)
     runner, _ = _fake_model(decision="IGNORE")
     leases = []
@@ -1009,6 +1116,7 @@ async def test_registered_owner_stopped_during_model_cannot_settle(tmp_path: Pat
             owner_name="alpha",
             native_package=native_runtime_package,
             opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(list(comms.views.channel_history_page("#team").messages)) == 1
     assert not comms.registry.status("alpha").active
@@ -1018,7 +1126,7 @@ async def test_registered_owner_stopped_during_model_cannot_settle(tmp_path: Pat
     assert "acquisition" in records[-1]
 
 
-async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1031,7 +1139,12 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(tmp_path:
     monkeypatch.setattr(Registration, "lease_live_turn_with_claim", stop_before_claim)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert not calls
     assert not comms.registry.status("beta").active
@@ -1047,7 +1160,7 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(tmp_path:
 
 
 @pytest.mark.parametrize("mutation", ["stop_then_heartbeat", "other_owner_heartbeat"])
-async def test_owner_generation_denies_revival_without_blocking_another_owner(tmp_path: Path, monkeypatch, mutation: str, *, native_runtime_package) -> None:
+async def test_owner_generation_denies_revival_without_blocking_another_owner(tmp_path: Path, monkeypatch, mutation: str, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1074,12 +1187,18 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(tm
                 owner_name="beta",
                 native_package=native_runtime_package,
                 opt_in=True,
+                cursor_delivery=cursor_delivery,
             ).run()
         assert not calls
         assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 1
     else:
         result = await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
         assert len(calls) == 1
@@ -1096,7 +1215,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(tm
 
 
 @pytest.mark.parametrize("rename_during_turn", [False, True])
-async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(tmp_path: Path, monkeypatch, rename_during_turn: bool, *, native_runtime_package) -> None:
+async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(tmp_path: Path, monkeypatch, rename_during_turn: bool, *, native_runtime_package, cursor_delivery) -> None:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
@@ -1140,12 +1259,18 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(tmp_p
                 owner_name="beta",
                 native_package=native_runtime_package,
                 opt_in=True,
+                cursor_delivery=cursor_delivery,
             ).run()
         assert not comms.registry.require("delta").active_turn.executing
         assert len(list(comms.views.history_page(CommandTarget.named("gamma"), viewer="sender").messages)) == 1
     else:
         result = await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
         assert not comms.registry.require("gamma").active_turn.executing
@@ -1154,7 +1279,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(tmp_p
 
 
 @pytest.mark.parametrize("stop_stage", ["before_intent", "after_intent"])
-async def test_owner_stop_before_response_boundary_never_appends(tmp_path: Path, monkeypatch, stop_stage: str, *, native_runtime_package) -> None:
+async def test_owner_stop_before_response_boundary_never_appends(tmp_path: Path, monkeypatch, stop_stage: str, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     runner, _calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1170,7 +1295,12 @@ async def test_owner_stop_before_response_boundary_never_appends(tmp_path: Path,
     monkeypatch.setattr(coordination_response, method, stopped_before_boundary)
     with pytest.raises(StaleFence, match="stopped or changed"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -1186,7 +1316,7 @@ async def test_owner_stop_before_response_boundary_never_appends(tmp_path: Path,
         )
 
 
-async def test_registry_stop_during_response_append_linearizes_after_sql_commit(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_registry_stop_during_response_append_linearizes_after_sql_commit(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     runner, _calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1211,7 +1341,12 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     try:
         with pytest.raises(StaleFence, match="stopped or changed"):
             await SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+                root=root,
+                wire_root_id=root_id,
+                owner_name="beta",
+                native_package=native_runtime_package,
+                opt_in=True,
+                cursor_delivery=cursor_delivery,
             ).run()
     finally:
         for worker in workers:
@@ -1226,7 +1361,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
 
 @pytest.mark.parametrize("mutation", ["stop_then_heartbeat", "finish_turn"])
 @pytest.mark.parametrize("boundary", ["before_tx1", "after_tx1"])
-async def test_revoked_turn_never_prepares_or_appends_a_response(tmp_path: Path, monkeypatch, mutation: str, boundary: str, *, native_runtime_package) -> None:
+async def test_revoked_turn_never_prepares_or_appends_a_response(tmp_path: Path, monkeypatch, mutation: str, boundary: str, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1253,7 +1388,12 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(tmp_path: Path,
     )
     with pytest.raises(StaleFence, match="turn"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert len(calls) == 1
     assert comms.registry.status("beta").active
@@ -1280,7 +1420,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(tmp_path: Path,
 @pytest.mark.parametrize(
     "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
 )
-async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, monkeypatch, boundary: str, *, native_runtime_package) -> None:
+async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, monkeypatch, boundary: str, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     model, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", model)
@@ -1306,6 +1446,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
                 owner_name="beta",
                 native_package=native_runtime_package,
                 opt_in=True,
+                cursor_delivery=cursor_delivery,
             ).run()
         assert not calls
     elif boundary == "after_model":
@@ -1323,6 +1464,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
                 owner_name="beta",
                 native_package=native_runtime_package,
                 opt_in=True,
+                cursor_delivery=cursor_delivery,
             ).run()
         assert len(calls) == 1
     else:
@@ -1355,6 +1497,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
                 owner_name="beta",
                 native_package=native_runtime_package,
                 opt_in=True,
+                cursor_delivery=cursor_delivery,
             ).run()
         assert len(calls) == 1
     assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 1
@@ -1379,7 +1522,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
         )
 
 
-async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     comms.agents.begin_turn("beta", "existing-real-turn")
     original = comms.registry.require("beta").active_turn
@@ -1387,7 +1530,12 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert calls == []
     assert comms.registry.require("beta").active_turn == original
@@ -1406,23 +1554,38 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
         )
     comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
     result = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        opt_in=True,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 1
 
 
-async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     runner, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert (
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package, opt_in=True
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            opt_in=True,
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )
@@ -1457,7 +1620,7 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
             assert_native_runtime_schema(store.session._connection)
 
 
-async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch, *, native_runtime_package) -> None:
+async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     """Page saturation is not an empty inbox; scaffolding is not model authority."""
     root, root_id, comms, _initial, people = _root(tmp_path)
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
@@ -1482,7 +1645,12 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     runner, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package, opt_in=True
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        opt_in=True,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert outcome is not None and outcome.disposition is IgnoredAssignment
     # The earlier selected rows lack native proof. Under xdist pressure the
@@ -1501,17 +1669,21 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     assert not (root / "read_markers.json").exists()
 
 
-async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path, *, native_runtime_package) -> None:
+async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path, *, native_runtime_package, cursor_delivery) -> None:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id="0" * 32, owner_name="alpha", native_package=native_runtime_package
+            root=root,
+            wire_root_id="0" * 32,
+            owner_name="alpha",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert not list(root.iterdir())
 
 
-async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="FULL")
     selections = []
@@ -1522,14 +1694,18 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
 
     monkeypatch.setattr(TrackedTurnSession, "execute", capture)
     result = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result.disposition is CompletedAssignment
     assert selections == [(SelectedModel("openai-codex", "gpt-6-sol"), "high")] * 2
     assert len(calls) == 2
 
 
-async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, initial, people = _root(tmp_path)
     comms = Comms(root)
     owner = comms.registry.require("beta")
@@ -1538,7 +1714,11 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     with pytest.raises(IdentityConflict, match="no configured provider/model"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert calls == []
     assert not comms.registry.require("beta").active_turn.executing
@@ -1548,7 +1728,7 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
 
 
 @pytest.mark.parametrize("direct", [True, False])
-async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_input(tmp_path, monkeypatch, direct, *, native_runtime_package):
+async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_input(tmp_path, monkeypatch, direct, *, native_runtime_package, cursor_delivery):
     from agent_comms.native_pi import NativePiTerminalFailure
     from agent_comms.turn_failure import ModelRequestFailed
 
@@ -1570,7 +1750,11 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     monkeypatch.setattr(TrackedTurnSession, "execute", failed)
     with pytest.raises(NativePiTerminalFailure, match="usage limit"):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     notice = list(comms.views.full_history_page().messages)[-1]
     from agent_comms.messages import AlertKind
@@ -1592,7 +1776,11 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     before = len(calls)
     assert (
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )
@@ -1602,14 +1790,18 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
         accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == before + 1
 
 
 @pytest.mark.parametrize("direct", [True, False])
-async def test_transient_provider_failure_retries_two_attempts_then_completes(tmp_path, monkeypatch, direct, *, native_runtime_package):
+async def test_transient_provider_failure_retries_two_attempts_then_completes(tmp_path, monkeypatch, direct, *, native_runtime_package, cursor_delivery):
     from agent_comms.native_pi import NativePiTerminalFailure
     from agent_comms.turn_failure import ProviderRetryExhausted, ProviderTransportFailed
 
@@ -1645,7 +1837,11 @@ async def test_transient_provider_failure_retries_two_attempts_then_completes(tm
     monkeypatch.setattr("agent_comms.private_send_stage.asyncio.sleep", no_wait)
     monkeypatch.setattr(TrackedTurnSession, "execute", transient)
     result = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
 
     assert result is not None and result.disposition is CompletedAssignment
@@ -1672,7 +1868,7 @@ async def test_transient_provider_failure_retries_two_attempts_then_completes(tm
         assert [row[0] for row in native_inputs] == [1, 2, 3]
 
 
-async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     from agent_comms.goals import Goal
 
     root, root_id, comms, _initial, _people = _root(tmp_path)
@@ -1690,7 +1886,11 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == 2
@@ -1710,7 +1910,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
         assert "Answer direct requests, engage owned work, and ignore chatter" in prompt
 
 
-async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, initial, people = _root(tmp_path, direct=True)
     fake, calls = _fake_model()
     entered = asyncio.Event()
@@ -1723,7 +1923,11 @@ async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, mon
 
     monkeypatch.setattr(TrackedTurnSession, "execute", paused)
     execution = SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     )
     task = asyncio.create_task(execution.run())
     try:
@@ -1744,7 +1948,7 @@ async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, mon
         await asyncio.gather(task, return_exceptions=True)
 
 
-async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     from agent_comms.native_pi import NativePiPromptRejected
     from agent_comms.pi_commands import Prompt
     from agent_comms.pi_events import Response
@@ -1772,6 +1976,7 @@ async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_pat
             wire_root_id=root_id,
             owner_name="beta",
             native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     notice = list(comms.views.full_history_page().messages)[-1]
     assert isinstance(notice.role, NoticeRole) and "input is uncertain" in notice.body
@@ -1788,6 +1993,7 @@ async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_pat
             wire_root_id=root_id,
             owner_name="beta",
             native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
         is None
     )

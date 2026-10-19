@@ -26,9 +26,7 @@ from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
-async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending(
-    tmp_path, monkeypatch,
-):
+async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending(tmp_path, monkeypatch, *, cursor_delivery):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root)
@@ -81,8 +79,15 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
             blocker.close()
 
         release = asyncio.create_task(release_blocker())
-        async with SelectedParticipant.select(comms, store, root_id, "receiver", 0,
-                                              on_compaction=publish_compaction) as selected:
+        async with SelectedParticipant.select(
+            comms,
+            store,
+            root_id,
+            "receiver",
+            0,
+            on_compaction=publish_compaction,
+            cursor_delivery=cursor_delivery,
+        ) as selected:
             from agent_comms.agent_events import CompactionEnd, CompactionStart
             observations = (CompactionStart(), CompactionEnd(summary="Committed original summary"))
             for observation in observations:
@@ -128,7 +133,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
 
 
 @pytest.mark.asyncio
-async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
+async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_delivery):
     """One selected turn answers originals of one reply route; the rest stay
 
     pending for their own turns, oldest first. Found when the batch answer
@@ -155,7 +160,9 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
         pending_wires = (direct.seq, channel.seq)
         pending = pending_sealed_assignments(store, lookup, "receiver")
         assert tuple(row.wire_seq for row in pending) == pending_wires
-        async with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
+        async with SelectedParticipant.select(
+            comms, store, root_id, "receiver", 0, cursor_delivery=cursor_delivery
+        ) as selected:
             assert selected.batch.target == "sender"
             assert tuple(row.wire_seq for row in selected.batch.assignments) == (direct.seq,)
         # The channel original was never claimed by this turn: selection alone
@@ -164,7 +171,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
                      pending_sealed_assignments(store, lookup, "receiver")) == pending_wires
 
 @pytest.mark.asyncio
-async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_path):
+async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_path, *, cursor_delivery):
     """A failed native triage leaves no input without a recorded context.
 
     Compaction requires a recorded context for every input sent into a session;
@@ -187,7 +194,9 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
         store.participants.register(lookup, "receiver", "receiver", committed=True)
         message = publish_initial(comms, "sender", "#team", "Question")
         accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-        async with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
+        async with SelectedParticipant.select(
+            comms, store, root_id, "receiver", 0, cursor_delivery=cursor_delivery
+        ) as selected:
             stage = TriageNativeSend(selected.batch.assignments)
             token_digest = "b" * 64
             input_id = stage.reserve(store, selected.identity, token_digest)

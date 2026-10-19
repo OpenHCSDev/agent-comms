@@ -25,8 +25,7 @@ from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 
 
-
-async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, monkeypatch):
+async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, monkeypatch, *, cursor_delivery):
     """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
     import hashlib
     import os
@@ -67,9 +66,13 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     ), cwd=native.project)
     session = SavedSelectedSession(created.path.parent,
         identity=NativeSessionIdentity(created.session_id, created.session_file))
-    execution = SelectedExecution(root=native.root,
+    execution = SelectedExecution(
+        root=native.root,
         wire_root_id=private_launch.wire_root_id,
-        owner_name="launch-ownership", native_package=package)
+        owner_name="launch-ownership",
+        native_package=package,
+        cursor_delivery=cursor_delivery,
+    )
     await Coordination.run_worker(execution.validate)
     launches, children = [], []
     for stage in range(2):

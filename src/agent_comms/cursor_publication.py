@@ -10,6 +10,7 @@ import asyncio
 import sqlite3
 from dataclasses import dataclass, field
 from functools import partial
+from typing import TYPE_CHECKING
 
 from acp.schema import SessionInfoUpdate
 
@@ -34,6 +35,10 @@ from .native_entries import NativeEvidenceScope
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
 from .thread_identity import ClaimedIdentity
+from .native_runtime_input import CurrentNativeCursor
+
+if TYPE_CHECKING:
+    from .selected_participant import SelectedParticipant
 
 
 @dataclass
@@ -52,6 +57,23 @@ class CursorDelivery:
     # verified prefix position/hash; repeated observations only decode appends.
     source_reads: NativeEvidenceScope = field(default_factory=NativeEvidenceScope, repr=False)
     observation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+
+    async def advance(
+        self, participant: SelectedParticipant, input_id: str,
+    ) -> CurrentNativeCursor | None:
+        """Selected settlement borrows this recipient's serialized reader lifetime."""
+        async with self.observation_lock:
+            return await NativeSourceCursor.advance_async(
+                participant.bus, source_reads=self.source_reads,
+                wire_root_id=participant.root_id,
+                owner=participant.owner.thread,
+                owner_claimed_generation=participant.owner.claimed_generation,
+                owner_generation=participant.identity.generation,
+                committed_input_id=input_id,
+            )
+
+    def close(self) -> None:
+        self.source_reads.close()
 
     def next_revision(self) -> int:
         self.revision += 1
@@ -199,5 +221,5 @@ class CursorPublication:
     def close(self) -> None:
         """Retire every session-owned verified-prefix reader exactly once."""
         for delivery in self.deliveries.values():
-            delivery.source_reads.close()
+            delivery.close()
         self.deliveries.clear()

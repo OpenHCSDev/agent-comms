@@ -34,7 +34,6 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
 })
 
 
-
 def reader(root: Path) -> Comms:
     """A Comms over an existing wire that makes no private write."""
     return Comms(root, Publisher)
@@ -59,6 +58,21 @@ def pytest_addoption(parser):
 
     parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
                      help="Root of the native test environments stack/bin/pi-native-test-env builds")
+
+
+@pytest.fixture
+def source_reads():
+    from agent_comms.native_entries import NativeEvidenceScope
+
+    with NativeEvidenceScope() as scope:
+        yield scope
+
+
+@pytest.fixture
+def cursor_delivery(source_reads):
+    from agent_comms.cursor_publication import CursorDelivery
+
+    return CursorDelivery(source_reads=source_reads)
 
 
 @pytest.fixture(scope="session")

@@ -107,7 +107,7 @@ async def test_empty_delivery_recovery_opens_no_coordinator(tmp_path, monkeypatc
         await agent.shutdown()
 
 
-async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_path, monkeypatch):
+async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_path, monkeypatch, *, cursor_delivery):
     from agent_comms.selected_participant import SelectedParticipant
     from agent_comms.turn_input_source import SelectedOriginalInput
     from agent_comms.turn_phase import PromptAcceptancePhase
@@ -130,7 +130,9 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
     monkeypatch.setattr(DeliveredInput, "remaining_capacity", staticmethod(hold_inside_delivery))
     try:
         with Coordination(str(path)) as store:
-            async with SelectedParticipant.select(comms, store, root_id, "beta", 0) as selected:
+            async with SelectedParticipant.select(
+                comms, store, root_id, "beta", 0, cursor_delivery=cursor_delivery
+            ) as selected:
                 assert selected is not None
                 leased = selected.owner.thread
                 inbox = agent.inputs.bind_native_turn("beta", leased)

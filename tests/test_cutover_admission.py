@@ -23,7 +23,7 @@ from test_private_human_ingress import _root
 
 
 @pytest.mark.asyncio
-async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
+async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path, *, source_reads):
     comms, old_store, root_id, lookups = _root(tmp_path)
     old = comms.messaging.send_user_message("bob", "old pending input", worktree=str(tmp_path))
     accept_delivery_cohort(comms.bus, root_id, old.seq, old_store)
@@ -55,8 +55,11 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
             with pytest.raises(IdentityConflict, match="claim_scope floor"):
                 accept_delivery_cohort(reopened.bus, root_id, old.seq, store)
             coverage = SourceCoverage(
-                reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-            ).prefix()
+                reopened.bus,
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=lookups["bob"],
+            ).prefix(source_reads=source_reads)
             assert coverage.covered_seq == 0
             assert coverage.injected_source_seqs == ()
 
@@ -72,7 +75,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         assert [assignment.wire_seq for assignment in assignments] == [fresh.seq]
         coverage = SourceCoverage(
             reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix()
+        ).prefix(source_reads=source_reads)
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == fresh.seq  # Selection is not native proof.

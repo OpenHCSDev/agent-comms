@@ -72,13 +72,17 @@ def _seal(comms: Comms, root: Path, root_id: str, target: str, body: str):
     return message
 
 
-async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms = _fresh(tmp_path, 10)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
     one = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert one is not None and one.cursor_status == "proven"
     # The certificate filters 1,001 committed initials for another owner.
@@ -88,13 +92,17 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     selected = _seal(comms, root, root_id, "#team", "@alpha selected after churn")
     second = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         cursor = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
-            owner_name="alpha"
+            owner_name="alpha", source_reads=source_reads
         )
         assert cursor is not None and cursor.input_id == second.input_id
         assert cursor.injected_seq == selected.seq
@@ -102,13 +110,17 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
         assert first.seq < selected.seq
 
 
-async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms = _fresh(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
     one = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert one is not None and one.cursor_status == "proven"
     for n in range(105):
@@ -117,13 +129,17 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
         _seal(comms, root, root_id, "#team", f"@other001 unrelated {n}")
     selected = _seal(comms, root, root_id, "alpha", "last exact selected")
     second = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         cursor = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
-            owner_name="alpha"
+            owner_name="alpha", source_reads=source_reads
         )
         assert cursor is not None and cursor.input_id == second.input_id
         assert cursor.injected_seq == selected.seq
@@ -132,7 +148,7 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
 
 
 @pytest.mark.parametrize("recipients", [10, 150])
-async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, recipients: int, *, native_runtime_package):
+async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, recipients: int, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms = _fresh(tmp_path, recipients)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -141,14 +157,18 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     assert len(frozen.audience.recipients) == recipients
     start = time.perf_counter()
     turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     delivery_ms = (time.perf_counter() - start) * 1000
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     start = time.perf_counter()
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         current = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
-            owner_name="alpha"
+            owner_name="alpha", source_reads=source_reads
         )
     reconnect_ms = (time.perf_counter() - start) * 1000
     assert current is not None and current.input_id == turn.input_id
@@ -161,13 +181,17 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     )
 
 
-async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms = _fresh(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     _seal(comms, root, root_id, "alpha", "exact selected")
     turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     path = root / "private_bus_checkpoint.sqlite3"
@@ -175,7 +199,9 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
         db.execute("DELETE FROM addressed")  # Disposable corrupt sidecar only.
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RelationViolationError, match="seal changed"):
-            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+                owner_name="alpha", source_reads=source_reads
+            )
         assert (
             store.session._connection.execute(
                 f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"

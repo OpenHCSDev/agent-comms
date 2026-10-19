@@ -369,6 +369,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
+            cursor_delivery=self.cursors.delivery(session_id),
             write_authority=AcpSelectedWriteAuthority(
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),

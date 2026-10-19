@@ -20,6 +20,7 @@ from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
+from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .publisher import ParticipantPublisher
@@ -49,6 +50,7 @@ class SelectedParticipant(MroDispatch):
     batch: SelectedSourceBatch
     sent_outcomes: tuple[SentMessageOutcome, ...]
     model: SelectedModel
+    cursor_delivery: CursorDelivery
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
 
     @handles(CompactionEvent)
@@ -123,7 +125,7 @@ class SelectedParticipant(MroDispatch):
 
     @classmethod
     @asynccontextmanager
-    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
+    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, cursor_delivery: CursorDelivery, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, ParticipantPublisher)
         owner, participant, pending, sent_outcomes = await Coordination.run_async(
             store.session.path,
@@ -150,6 +152,7 @@ class SelectedParticipant(MroDispatch):
                 batch,
                 sent_outcomes,
                 model,
+                cursor_delivery,
                 on_compaction=on_compaction,
             )
             await selected.require_current()
