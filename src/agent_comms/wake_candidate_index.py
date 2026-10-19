@@ -47,7 +47,7 @@ class CheckpointState(ABC):
     def checkpoint(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
         return CandidateCheckpoint.initial(root_id, source.revision)
 
-    def read(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
+    def refreshed(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
         raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
 
     @abstractmethod
@@ -69,7 +69,7 @@ class NoCheckpoint(CheckpointState):
 class OutdatedCheckpoint(NoCheckpoint):
     """Disposable rows no longer describe this bus's captured prefix."""
 
-    def read(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
+    def refreshed(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
         index.maintain(start=self.start())
         # One bounded rebuild, not a retry loop. A later source replacement
         # remains a state; the next maintenance pass owns its next batch.
@@ -123,7 +123,7 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
     def checkpoint(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
         return self
 
-    def read(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
+    def refreshed(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
         return self
 
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
@@ -245,7 +245,7 @@ class RebuildIndex(IndexStart):
 
 
 class FirstBuild(ResumeIndex):
-    """Admit the first maintenance batch without a prior-checkpoint shortcut.
+    """Admit the first maintenance batch without consulting a prior checkpoint.
 
     The checkpoint state selects resume or rebuild. Schema failure happens
     before selection; malformed storage never permits discarding tables.
@@ -428,7 +428,7 @@ class WakeCandidateIndex(TypedStore):
 
 
     def _verified_checkpoint(self, root_id: str) -> CheckpointState:
-        return self._captured_checkpoint(root_id).read(self, root_id)
+        return self._captured_checkpoint(root_id).refreshed(self, root_id)
 
     def _captured_checkpoint(self, root_id: str) -> CheckpointState:
         """Capture the row and its source state without rebuilding under a reader."""
