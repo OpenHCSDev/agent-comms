@@ -11,9 +11,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import ClassVar, NoReturn, TYPE_CHECKING
 
-from acp import RequestError
-
 if TYPE_CHECKING:
+    from acp import RequestError
+
     from .agent_events import Done, Error
     from .input_disposition import InputDocument
     from .turn_input_source import OriginalTurnInput
@@ -198,14 +198,19 @@ class RequestFailure:
     def error_data(self):
         return {"agentCommsFailure": FieldCodec.encode(self)}
 
-    def request_error(self):
-        return RequestError.internal_error(self.error_data())
-
     @classmethod
     def from_error(cls, error: RequestError) -> RequestFailure:
         return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
             error.code, str(error)
         )
+
+
+class NativeTurnError(Exception):
+    """A resolved native failure; only the ACP boundary gives it a protocol form."""
+
+    def __init__(self, request: RequestFailure) -> None:
+        super().__init__(request.failure.detail)
+        self.request = request
 
 
 class NativeTurnOutcome(ABC):
@@ -288,10 +293,10 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         return replace(self, request=replace(self.request, notification_published=accepted is not False))
 
     def raise_fault(self, cause: Exception) -> NoReturn:
-        raise self.request.request_error() from cause
+        raise NativeTurnError(self.request) from cause
 
-    def raise_if_failed(self) -> None:
-        raise self.request.request_error()
+    def raise_if_failed(self) -> NoReturn:
+        raise NativeTurnError(self.request)
 
 
 class RequestACPFailure(ACPFailure):
