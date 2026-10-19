@@ -69,6 +69,14 @@ class CommanderConfig(CommanderRole, BaseModel):
         root = Path(root).resolve()
         return cls.read(cls.root_path(root)).model_copy(update={'root': root})
 
+    @classmethod
+    def packaged_rules_files(cls) -> tuple[Path, ...]:
+        """All packaged rule files, shared by review and session context."""
+        rules = tuple(sorted(path for path in cls.packaged_rules().iterdir() if path.is_file()))
+        if not rules:
+            raise ValueError('The packaged commander rules directory is empty.')
+        return rules
+
     def repo_directory(self, name: str) -> Path:
         """A configured repository name takes precedence over a directory spelling."""
         return next((repo.checkout for repo in self.repos

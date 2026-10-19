@@ -578,9 +578,9 @@ def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
     problem(script, str(body))
     body.write_text(body.read_text().replace('Problem: NEW', 'Problem: P1'))
     reviews = RuleReviews(comms.root)
-    reviews.write('lead', DrawnRuleReviewEntry(('Keep the current order message with its Todo.',), 0))
+    reviews.write('lead', DrawnRuleReviewEntry(('Keep the current order message with its Todo.',)))
     reviews.write('lead', AnsweredRuleReviewEntry(
-        1, 'P1 keeps the current message in its Todo and prints it when refusing replacement.'))
+        1, 'Keep the current order message with its Todo. P1'))
     command = [str(Path(sys.executable).with_name('agent-comms-commander')),
                'order', 'send', 'worker', '23:59', str(body)]
     env = {**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
