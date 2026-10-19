@@ -66,4 +66,4 @@ class RequestListVerb(RequestVerb, declared_name="list"):
 
 
 def main(a, commander):
-    RequestVerb.parse(a, __doc__).apply(commander)
+    RequestVerb.parse(a, __doc__, commander).apply()

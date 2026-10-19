@@ -104,6 +104,6 @@ class StaleVerb(RulesVerb):
 
 def main(a, commander):
     try:
-        RulesVerb.parse(a, __doc__).apply(commander)
+        RulesVerb.parse(a, __doc__, commander).apply()
     except ValueError as refused:  # Core owns what a review and an answer may say
         sys.exit(f'REFUSED: {refused}')

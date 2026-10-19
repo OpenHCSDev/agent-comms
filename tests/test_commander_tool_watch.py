@@ -54,15 +54,14 @@ def test_storage_watch_judges_only_core_units(tool_watch, commander, commander_s
     assert judged == ['worker']
 
 
-def test_storage_watch_reports_refused_call_without_judging(tool_watch, commander, commander_script, monkeypatch, capsys):
+def test_storage_watch_reports_refused_call_without_judging(tool_watch, commander, commander_script, capsys):
     comms, _ = commander
-    create(commander, 'P1')
-    judged = []
-    monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
-                        lambda self, thread, effects: judged.append(thread))
+    before = create(commander, 'P1')
+    registry_before = comms.registry.store.path.read_bytes()
     call = CodingCall.decode('refused-1', 'write', {'path': 'a.py'})
     tool_watch.enforce_storage(commander_script[0], 'worker', call)
-    assert judged == []
+    assert comms.goals.todos.get('P1') == before
+    assert comms.registry.store.path.read_bytes() == registry_before
     assert capsys.readouterr().out == ''
     assert call.digest() == 'REFUSED write: Missing required fields for WriteTool: content'
 

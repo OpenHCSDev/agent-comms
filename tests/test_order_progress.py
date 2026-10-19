@@ -313,7 +313,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
         return original(command, **arguments)
 
     monkeypatch.setattr(subprocess, "run", forge)
-    commander_order.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).apply(script)
+    commander_order.PullRequestVerb(context=script, pid=pid, title=subject, body_file=str(body_file)).apply()
     assert todo.order.pull_request_ids(bodies[0]) == (todo.order.id,)
     stamp = "1970-01-01T00:08:20Z"
     merged = PullRequest.listed(number, branch, "b" * 40, "d" * 40, stamp, stamp, bodies[0])

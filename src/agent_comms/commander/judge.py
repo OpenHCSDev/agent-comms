@@ -266,4 +266,4 @@ class BackVerb(VerdictVerb):
 
 
 def main(args, commander):
-    JudgeVerb.parse(args or ['show'], __doc__).apply(commander)
+    JudgeVerb.parse(args or ['show'], __doc__, commander).apply()

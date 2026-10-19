@@ -57,7 +57,7 @@ def test_every_verb_parses_its_documented_command_line(commander_script, tool, l
     module = (order if tool == "order"
               else importlib.reload(importlib.import_module(f"agent_comms.commander.{tool}")))
     family = getattr(module, f"{tool.capitalize()}Verb")
-    verb = family.parse(shlex.split(line), "")
+    verb = family.parse(shlex.split(line), "", commander_script[0])
     assert verb.declared_name == line.split()[0]
     assert {name: getattr(verb, name) for name in fields} == fields
 
@@ -68,7 +68,7 @@ def test_the_hunt_prompt_prints_a_command_line_the_hunt_parser_accepts(commander
     tool, verb, *usage = re.sub(r"\[[^]]*\]", "", printed).split()
     assert (tool, verb) == ("order", "hunt")
     argv = [verb, *(re.sub(r"^[A-Z:]+$", "x", token) for token in usage)]
-    parsed = order.OrderVerb.parse(argv, "")
+    parsed = order.OrderVerb.parse(argv, "", commander_script[0])
     assert type(parsed) is order.HuntVerb and parsed.sent == ""
-    ordered = order.OrderVerb.parse([*argv, "--sent", "existing-order"], "")
+    ordered = order.OrderVerb.parse([*argv, "--sent", "existing-order"], "", commander_script[0])
     assert type(ordered) is order.HuntVerb and ordered.sent == "existing-order"

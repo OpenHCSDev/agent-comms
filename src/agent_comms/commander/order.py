@@ -710,15 +710,14 @@ class Commander(CommanderConfig):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    context: Commander = field(init=False, repr=False)
+    context: Commander = field(repr=False, metadata={"wire_transient": True})
     fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
 
     @property
     def who(self) -> str:
         return self.fork or self.context.commander
 
-    def apply(self, ctx: Commander) -> None:
-        object.__setattr__(self, 'context', ctx)
+    def apply(self) -> None:
         self.gate()
         self.run()
 
@@ -743,14 +742,14 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
         return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
 
     @classmethod
-    def parse(cls, argv: list[str], description: str) -> CommanderVerb:
+    def parse(cls, argv: list[str], description: str, context: Commander) -> CommanderVerb:
         parser = argparse.ArgumentParser(prog=cls.tool(), description=description,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         verbs = parser.add_subparsers(dest='command', required=True)
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_namespace(args, context=context)
 
 
 class RuledVerb(CommanderVerb):
@@ -1031,4 +1030,4 @@ class OverdueVerb(OrderVerb):
 
 
 def main(a, commander: Commander):
-    OrderVerb.parse(a, __doc__).apply(commander)
+    OrderVerb.parse(a, __doc__, commander).apply()

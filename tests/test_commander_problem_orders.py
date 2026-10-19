@@ -682,7 +682,7 @@ def test_order_fire_releases_every_open_problem_the_unit_holds(commander, comman
     script, _ = commander_script
     create(commander, 'P1')
     create(commander, 'P2', 'printf 2', 2)
-    commander_order.FireVerb(unit='worker', why=FIRED).apply(script)
+    commander_order.FireVerb(context=script, unit='worker', why=FIRED).apply()
     assert [(t.assignment, t.released[0].reason.text) for t in map(comms.goals.todos.get, ('P1', 'P2'))] == [(None, FIRED)] * 2
     assert capsys.readouterr().out.splitlines() == [f'{pid}: released from worker: {FIRED}' for pid in ('P1', 'P2')]
     script.write_board()
@@ -823,13 +823,13 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     assert todo.goal == GoalRef('lead', lead.created_at, 'request')
     assert stalled() == []
     with pytest.raises(ValueError, match='still has open orders'):
-        request.RequestCompleteVerb(id='request', why='The owner request is finished').apply(script)
+        request.RequestCompleteVerb(context=script, id='request', why='The owner request is finished').apply()
     with pytest.raises(ValueError, match='still open'):
-        request.RequestAddVerb(text='A second owner request while the first is open').apply(script)
+        request.RequestAddVerb(context=script, text='A second owner request while the first is open').apply()
     CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert stalled() == [
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
-    request.RequestCompleteVerb(id='request', why='The owner request is finished').apply(script)
+    request.RequestCompleteVerb(context=script, id='request', why='The owner request is finished').apply()
     assert stalled() == []
 
 
@@ -1103,9 +1103,9 @@ def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, command
     edit = dict(id='edit-1', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P2 was the last order; this one repairs the existing owner')
-    judge.OkVerb(ids=(f'edit-1:{recorded[edit['id']].code()}',), msg=message,
+    judge.OkVerb(context=script, ids=(f'edit-1:{recorded[edit['id']].code()}',), msg=message,
                  why='The change repairs the existing canonical state owner',
-                 serves='Repair the existing owner', lines=('value = 2',)).apply(script)
+                 serves='Repair the existing owner', lines=('value = 2',)).apply()
     assert [v.tool_call_id for v in comms.goals.todos.get('P1').verdicts] == ['edit-1']
     assert comms.goals.todos.get('P2').verdicts == ()
 
@@ -1123,9 +1123,9 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
     recorded = native_judge_edits(commander, judge, edits)
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
-    judge.OkVerb(ids=tuple(f'{e["id"]}:{recorded[e["id"]].code()}' for e in edits),
+    judge.OkVerb(context=script, ids=tuple(f'{e["id"]}:{recorded[e["id"]].code()}' for e in edits),
                  why='The changes repair the existing canonical state owner', msg=message,
-                 serves='Repair the existing owner', lines=('value = 2',)).apply(script)
+                 serves='Repair the existing owner', lines=('value = 2',)).apply()
     saved = comms.goals.todos.get('P1')
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
     assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
@@ -1147,11 +1147,11 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
     fields = dict(ids=('orphan-edit:0000',),
                   why='The changes repair the existing canonical state owner', lines=('value = 2',),
                   msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner').message.message_id)
-    command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
-        **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+    command = judge.OkVerb(context=script, **fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
+        context=script, **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
-        command.apply(script)
+        command.apply()
     assert not (script.state / 'verdicts.jsonl').exists()
 
 
@@ -1169,11 +1169,11 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     posted = []
     monkeypatch.setattr(type(script), 'post', lambda self, to, body: posted.append((to, body)) or 'sent')
     why = 'The unit copied the same state into a second writable store'
-    judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
+    judge.BackVerb(context=script, ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
         slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
-        derive='delete-copy', by=f'{__file__}:1').apply(script)
+        derive='delete-copy', by=f'{__file__}:1').apply()
     saved = comms.goals.todos.get('P1')
     assert len(saved.verdicts) == len(saved.strikes) == 1
     assert isinstance(saved.verdicts[0], SendBackVerdict)
@@ -1284,9 +1284,8 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
         for at in [i for i, token in enumerate(argv)
                    if token.startswith('--') and (token != '--msg' or name == 'back')]:
             with pytest.raises(SystemExit):
-                judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
-        command = judge.JudgeVerb.parse(argv, '')
-        object.__setattr__(command, 'context', script)
+                judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '', script)
+        command = judge.JudgeVerb.parse(argv, '', script)
         operation = command.operation(comms.goals.todos.get('P1'), f'toolu_{name}')
         CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
         assert comms.goals.todos.get('P1').verdicts[-1] == operation
