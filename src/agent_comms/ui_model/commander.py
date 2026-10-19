@@ -3,6 +3,7 @@
 The observer prepares these models. A frontend supplies only commander identity
 and expansion interest; it never reads stores, runs checks or decides order state.
 """
+
 from __future__ import annotations
 
 import time
@@ -18,7 +19,12 @@ from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.revision_views import CommanderView
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
-    CommitMomentum, OrderProgress, ProgressPoint, StatusProgressSource, PullRequests, Todo,
+    CommitMomentum,
+    OrderProgress,
+    ProgressPoint,
+    PullRequests,
+    StatusProgressSource,
+    Todo,
 )
 from agent_comms.turn_digests import LastTurns, ThreadTurns
 from agent_comms.ui_model.observation import (
@@ -43,14 +49,16 @@ class CommanderOrder:
     todo: Todo
     progress: OrderProgress
     overdue: bool
-    commits: tuple[ProgressPoint, ...] = ()
-    observed_at: float = 0
+    commits: tuple[ProgressPoint, ...]
+    observed_at: float
 
     @property
     def line(self) -> str:
-        return (f"{'OVERDUE ' if self.overdue else ''}{self.todo.id}: "
-                f"{' '.join(self.todo.text.split())} | due {self.todo.deadline.clock()} | "
-                f"{self.todo.order.line}; {self.progress.state}")
+        return (
+            f"{'OVERDUE ' if self.overdue else ''}{self.todo.id}: "
+            f"{' '.join(self.todo.text.split())} | due {self.todo.deadline.clock()} | "
+            f"{self.todo.order.line}; {self.progress.state}"
+        )
 
 
 class CardDetail:
@@ -71,8 +79,10 @@ class OpenCardDetail(CardDetail):
 
     @property
     def text(self) -> str:
-        lines = [order.todo.order.instructions(order.todo)
-                 + "\nLatest work: " + order.progress.state for order in self.orders]
+        lines = [
+            order.todo.order.instructions(order.todo) + "\nLatest work: " + order.progress.state
+            for order in self.orders
+        ]
         lines.append("Latest checkout commits:\n" + "\n".join(self.latest_commits))
         lines.append("Recent turns (newest first):")
         return "\n\n".join(lines)
@@ -95,14 +105,18 @@ class UnitCard:
     @property
     def momentum(self) -> tuple[CommitMomentum, ...]:
         """Derived from order times and commit evidence; never a stored score."""
-        return tuple(CommitMomentum(order.todo, order.commits, order.observed_at)
-                     for order in self.orders)
+        return tuple(
+            CommitMomentum.from_commits(order.todo, order.commits, order.observed_at)
+            for order in self.orders
+        )
 
     @property
     def priority(self) -> tuple[bool, float, str]:
-        return (not any(order.overdue for order in self.orders),
-                min(order.todo.deadline.recorded_at("An order deadline") for order in self.orders),
-                self.unit.name.casefold())
+        return (
+            not any(order.overdue for order in self.orders),
+            min(order.todo.deadline.recorded_at("An order deadline") for order in self.orders),
+            self.unit.name.casefold(),
+        )
 
 
 @dataclass(frozen=True)
@@ -119,35 +133,66 @@ class CommanderAlarmSource(DeclaredFamily, affix="AlarmSource"):
 
     @classmethod
     @abstractmethod
-    def read(cls, comms: Comms, commander: ThreadIncarnation,
-             orders: tuple[CommanderOrder, ...], now: float) -> tuple[CommanderAlarm, ...]: ...
+    def read(
+        cls,
+        comms: Comms,
+        commander: ThreadIncarnation,
+        orders: tuple[CommanderOrder, ...],
+        now: float,
+    ) -> tuple[CommanderAlarm, ...]: ...
 
 
 class StalledOrderAlarmSource(CommanderAlarmSource):
     @classmethod
-    def read(cls, comms, commander, orders, now):
-        return tuple(CommanderAlarm(
-            f"STALLED {order.todo.held().owner} {order.todo.id}: {order.progress.state}")
-            for order in orders if order.todo.pending
-            and order.progress.stalled(order.todo.order.at.recorded_at("An order"), now))
+    def read(
+        cls,
+        comms: Comms,
+        commander: ThreadIncarnation,
+        orders: tuple[CommanderOrder, ...],
+        now: float,
+    ) -> tuple[CommanderAlarm, ...]:
+        return tuple(
+            CommanderAlarm(
+                f"STALLED {order.todo.held().owner} {order.todo.id}: {order.progress.state}"
+            )
+            for order in orders
+            if order.todo.pending
+            and order.progress.stalled(order.todo.order.at.recorded_at("An order"), now)
+        )
 
 
 class FailedDeliveryAlarmSource(CommanderAlarmSource):
     @classmethod
-    def read(cls, comms, commander, orders, now):
+    def read(
+        cls,
+        comms: Comms,
+        commander: ThreadIncarnation,
+        orders: tuple[CommanderOrder, ...],
+        now: float,
+    ) -> tuple[CommanderAlarm, ...]:
         presentation = comms.views.thread_presentations((commander.name,)).require(commander.name)
-        return tuple(CommanderAlarm(
-            f"RECORDED FAILED DELIVERY to {notice.recipient}: {notice.label}")
+        return tuple(
+            CommanderAlarm(f"RECORDED FAILED DELIVERY to {notice.recipient}: {notice.label}")
             for notice in presentation.sent_notifications
-            if isinstance(notice.state, FailedProgress))
+            if isinstance(notice.state, FailedProgress)
+        )
 
 
 class RefusedSendAlarmSource(CommanderAlarmSource):
     @classmethod
-    def read(cls, comms, commander, orders, now):
-        return tuple(CommanderAlarm(
-            f"REFUSED SEND #{refusal.id} {refusal.sender} -> {refusal.target}: {refusal.reason}")
-            for refusal in SendRefusal.recent(comms.root, sender=commander.name))
+    def read(
+        cls,
+        comms: Comms,
+        commander: ThreadIncarnation,
+        orders: tuple[CommanderOrder, ...],
+        now: float,
+    ) -> tuple[CommanderAlarm, ...]:
+        return tuple(
+            CommanderAlarm(
+                f"REFUSED SEND #{refusal.id} {refusal.sender} -> {refusal.target}: {refusal.reason}"
+            )
+            for refusal in SendRefusal.recent(comms.root, sender=commander.name)
+        )
 
 
 @dataclass(frozen=True)
@@ -169,31 +214,37 @@ class CommanderModel:
         for todo in todos:
             unit = todo.held().owner_identity
             source = StatusProgressSource(todo, storage.order_checkout(unit.name, todo.id), pulls)
-            grouped.setdefault(unit, []).append(CommanderOrder(
-                todo, source.progress(), todo.overdue(now), source.cadence_commits(), now))
+            grouped.setdefault(unit, []).append(
+                CommanderOrder(
+                    todo, source.progress(), todo.overdue(now), source.cadence_commits(), now
+                )
+            )
         cards = []
         for unit, orders in grouped.items():
             if comms.registry.require(unit.name).incarnation != unit:
                 raise ValueError(
-                    f"Order holder {unit.name} changed incarnation; refresh its assignment.")
+                    f"Order holder {unit.name} changed incarnation; refresh its assignment."
+                )
             current = tuple(orders)
             detail: CardDetail = CardDetail()
             if unit in request.expanded:
                 commits = []
                 for order in current:
-                    source = StatusProgressSource(order.todo, storage.order_checkout(
-                        unit.name, order.todo.id), pulls)
-                    try:
-                        commit = source.latest_commit()
-                    except ValueError as error:
-                        commit = f"unavailable: {error}"
+                    source = StatusProgressSource(
+                        order.todo, storage.order_checkout(unit.name, order.todo.id), pulls
+                    )
+                    commit = source.latest_commit()
                     commits.append(f"{order.todo.id}: {commit}")
-                detail = OpenCardDetail(current, comms.transcripts.turns(unit.name, LastTurns(3)),
-                                        tuple(commits))
+                detail = OpenCardDetail(
+                    current, comms.transcripts.turns(unit.name, LastTurns(3)), tuple(commits)
+                )
             cards.append(UnitCard(unit, current, detail))
-        orders = tuple(order for card in cards for order in card.orders)
-        alarms = tuple(alarm for source in CommanderAlarmSource.members_with(CommanderAlarmSource)
-                       for alarm in source.read(comms, commander, orders, now))
+        all_orders = tuple(order for card in cards for order in card.orders)
+        alarms = tuple(
+            alarm
+            for source in CommanderAlarmSource.members_with(CommanderAlarmSource)
+            for alarm in source.read(comms, commander, all_orders, now)
+        )
         return cls(commander, tuple(sorted(cards, key=lambda card: card.priority)), alarms)
 
 
@@ -210,6 +261,7 @@ class ObserveCommander(InterestRequest):
 @dataclass(frozen=True)
 class ReadCommanderIdentity(ReadRequest):
     """Resolve the external command spelling once, in the existing read process."""
+
     root: str
     name: str
 

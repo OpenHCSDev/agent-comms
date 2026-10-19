@@ -18,7 +18,7 @@ from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from .change_report import FileLine
@@ -276,39 +276,60 @@ class CommitMomentum:
     amount of remaining work, commit cadence cannot predict order completion.
     """
     todo: Todo
-    commits: tuple[ProgressPoint, ...]
     observed_at: float
     window: ClassVar[int] = 2
 
+    @classmethod
+    def from_commits(cls, todo: Todo, commits: tuple[ProgressPoint, ...],
+                     observed_at: float) -> CommitMomentum:
+        if len(commits) < cls.window or commits[-1].at <= commits[0].at:
+            return UnknownCommitMomentum(todo, observed_at)
+        return ForecastCommitMomentum(todo, observed_at, commits[0], commits[-1])
+
+    @property
+    @abstractmethod
+    def forecast(self) -> str: ...
+
+    @property
+    def line(self) -> str:
+        if not self.todo.pending:
+            return f"{self.todo.id}: momentum not applicable; order delivered"
+        due = self.todo.deadline.recorded_at("An order deadline") - self.observed_at
+        deadline = f"due in {due / 60:.1f}m" if due >= 0 else f"due {-due / 60:.1f}m ago"
+        return f"{self.todo.id}: {self.forecast}; {deadline}; completion unknown"
+
+
+class UnknownCommitMomentum(CommitMomentum):
+    @property
+    def forecast(self) -> str:
+        return "cadence unknown (need two increasing commit times)"
+
+
+@dataclass(frozen=True)
+class ForecastCommitMomentum(CommitMomentum):
+    first: ProgressPoint
+    last: ProgressPoint
+
     @property
     def interval(self) -> float:
-        if len(self.commits) < self.window:
-            return 0
-        return self.commits[-1].at - self.commits[0].at
+        return self.last.at - self.first.at
 
     @property
     def next_at(self) -> float:
-        return self.commits[-1].at + self.interval if self.interval > 0 else 0
+        return self.last.at + self.interval
 
     @property
     def deadline_margin(self) -> float:
         return self.todo.deadline.recorded_at("An order deadline") - self.next_at
 
     @property
-    def line(self) -> str:
-        due = self.todo.deadline.recorded_at("An order deadline") - self.observed_at
-        deadline = f"due in {due / 60:.1f}m" if due >= 0 else f"due {-due / 60:.1f}m ago"
-        if not self.todo.pending:
-            return f"{self.todo.id}: momentum not applicable; order delivered"
-        if self.interval <= 0:
-            return (f"{self.todo.id}: cadence unknown (need two increasing commit times); "
-                    f"{deadline}; completion unknown")
+    def forecast(self) -> str:
         margin = self.deadline_margin
         relation = "before" if margin >= 0 else "after"
         late = self.observed_at - self.next_at
         missed = f"; forecast missed by {late / 60:.1f}m" if late > 0 else ""
-        return (f"{self.todo.id}: {self.interval / 60:.1f}m/commit; next commit ~{_clock(self.next_at)} "
-                f"({abs(margin) / 60:.1f}m {relation} due); {deadline}{missed}; completion unknown")
+        return (f"{self.interval / 60:.1f}m/commit; next commit ~{_clock(self.next_at)} "
+                f"({abs(margin) / 60:.1f}m {relation} due){missed}")
 
 
 @dataclass(frozen=True)
@@ -388,7 +409,8 @@ class ProgressSource:
 
     def progress(self) -> OrderProgress:
         """One selection algorithm for measured tools and read-only status views."""
-        members = sorted(OrderProgress.members_with(FoundProgress), key=lambda member: member.precedence)
+        members = sorted(OrderProgress.members_with(FoundProgress),
+                         key=lambda member: member.precedence)
         return next((progress for member in members for progress in member.found(self)),
                     NoCommitProgress())
 
@@ -1147,6 +1169,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
+    def instructions(self, todo: Todo) -> str:
+        return "\n".join((f"Problem: {todo.id}: {todo.text}",
+                          *self.finding.instructions(), self.line))
+
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
 
@@ -1184,10 +1210,6 @@ class UnorderedProblemOrder(ProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         pass
-
-    def instructions(self, todo: Todo) -> str:
-        return "\n".join((f"Problem: {todo.id}: {todo.text}",
-                          *self.finding.instructions(), "No order"))
 
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
         return replace(order, finding=self.finding)

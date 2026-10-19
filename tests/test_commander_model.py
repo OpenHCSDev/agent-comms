@@ -4,7 +4,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import CommitMomentum, ProgressPoint, ProgressSource, PullRequests, StatusProgressSource
+from agent_comms.todos import CommitMomentum, ForecastCommitMomentum, UnknownCommitMomentum, ProgressPoint, ProgressSource, PullRequests, StatusProgressSource
 from agent_comms.ui_model.commander import (
     CommanderModel,
     ObserveCommander,
@@ -61,6 +61,7 @@ def test_card_derives_commit_cadence_against_deadline_without_storing_momentum(c
     card = UnitCard(comms.registry.require('worker').incarnation, (order,), CardDetail())
     momentum, = card.momentum
     assert 'momentum' not in card.__dataclass_fields__
+    assert isinstance(momentum, ForecastCommitMomentum)
     assert momentum.interval == 60
     assert momentum.next_at == 220
     assert momentum.deadline_margin == 80
@@ -76,8 +77,8 @@ def test_card_derives_commit_cadence_against_deadline_without_storing_momentum(c
     (ProgressPoint('one', 160), ProgressPoint('two', 100))])
 def test_unknown_commit_cadence_does_not_invent_forecast(commander, points):
     todo = create(commander, 'P1')
-    momentum = CommitMomentum(todo, points, 170)
-    assert momentum.next_at == 0
+    momentum = CommitMomentum.from_commits(todo, points, 170)
+    assert isinstance(momentum, UnknownCommitMomentum)
     assert 'cadence unknown' in momentum.line
     assert 'next commit ~' not in momentum.line
 

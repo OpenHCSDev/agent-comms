@@ -4,6 +4,7 @@ Run --prepare once, then run this file inside st on an isolated Xvfb display.
 No provider is started, no synthetic transcript is written, and the original
 sessions/registry are only read. Source and capture paths are recorded explicitly.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -55,32 +56,54 @@ def prepare(output: Path, units: tuple[str, ...], ordered_at: float | None) -> N
             receipts.append(f"{name}: {source} -> {copied} ({copied.stat().st_size} bytes)")
         comms.registry.declare(
             replace(original, process_identity=NoProcess(), session_file=session, goal=NoGoal()),
-            StoppedThreadStatus())
-    comms.goals.update_goal(COMMANDER, SetGoalAction(
-        text="Verify the commander page on copied real unit sessions", goal_id="page-request",
-        order=RequestGoalOrder()))
+            StoppedThreadStatus(),
+        )
+    comms.goals.update_goal(
+        COMMANDER,
+        SetGoalAction(
+            text="Verify the commander page on copied real unit sessions",
+            goal_id="page-request",
+            order=RequestGoalOrder(),
+        ),
+    )
     now = time.time()
     for index, name in enumerate(units):
-        comms.goals.update_goal(name, SetGoalAction(
-            text="Copied unit for read-only page verification"))
+        comms.goals.update_goal(
+            name, SetGoalAction(text="Copied unit for read-only page verification")
+        )
         order = PendingProblemOrder(
-            id=f"commander-page-{name}", owner=FileLine(__file__, 1),
+            id=f"commander-page-{name}",
+            owner=FileLine(__file__, 1),
             check=OrderCheck(str(output), "printf 1", CountCheckResult(1)),
             edits=("Render the canonical order owner without copying its state",),
             banned=("Do not launch a provider or change the original saved session",),
             report="Report the actual visible commander page and its expanded unit card",
-            at=RecordedEventTime(ordered_at if ordered_at is not None and not index
-                                 else now - 1200 if not index else now),
-            first_call_deadline=RecordedEventTime(now + 120), run=MechanicalOrderRun())
-        CommsTodoCreateTool(owner=name, order=CreateProblemGoalAction(
-            problem=f"P{index + 1}", order=order, request="page-request",
-            deadline=RecordedEventTime(now - 60 if not index else now + 1800), commander=COMMANDER,
-            repo="OpenHCSDev/agent-comms", text="Show the real order in the commander page",
-        )).apply(comms, ThreadCaller(COMMANDER))
+            at=RecordedEventTime(
+                ordered_at
+                if ordered_at is not None and not index
+                else now - 1200 if not index else now
+            ),
+            first_call_deadline=RecordedEventTime(now + 120),
+            run=MechanicalOrderRun(),
+        )
+        CommsTodoCreateTool(
+            owner=name,
+            order=CreateProblemGoalAction(
+                problem=f"P{index + 1}",
+                order=order,
+                request="page-request",
+                deadline=RecordedEventTime(now - 60 if not index else now + 1800),
+                commander=COMMANDER,
+                repo="OpenHCSDev/agent-comms",
+                text="Show the real order in the commander page",
+            ),
+        ).apply(comms, ThreadCaller(COMMANDER))
     try:
-        CommsSendTool(sender=COMMANDER, target="unregistered-page-target",
-            body="Verify that the commander can read an actual refused send.").apply(
-                comms, ThreadCaller(COMMANDER))
+        CommsSendTool(
+            sender=COMMANDER,
+            target="unregistered-page-target",
+            body="Verify that the commander can read an actual refused send.",
+        ).apply(comms, ThreadCaller(COMMANDER))
     except ToolRefusedError as error:
         receipts.append(f"Actual refused send: {error}")
     else:
@@ -106,11 +129,13 @@ async def journey(app, pilot, output: Path, units: tuple[str, ...], momentum: bo
             await pilot.pause(0.2)
     screen = app.screen
     await pilot.pause(1)
+
     def capture(stage: str) -> None:
         # The text is from the actual laid-out terminal strips, not the model.
         text = "\n".join(strip.text for strip in screen._compositor.render_strips())
         (output / f"{stage}.txt").write_text(text + "\n")
         subprocess.run(("import", "-window", "root", str(output / f"{stage}.png")), check=True)
+
     capture("level-0")
     card = next(row for row in screen.query(CommanderUnit) if row.unit.name == units[0])
     if momentum:
@@ -124,12 +149,17 @@ async def journey(app, pilot, output: Path, units: tuple[str, ...], momentum: bo
     assert units[0] in str(card.title)
     assert screen.rows[next(unit for unit in screen.rows if unit.name == units[1])].collapsed
     capture("level-1")
+
     def deliver():
         comms = Comms(output / "bus")
         todo = comms.goals.todos.get("P1")
-        CommsOrderDoneTool(problem=todo.id, order_id=todo.order.id,
-            delivery=OperationDelivery(), claims=(WorkingClaim(str(output / "level-0.png")),)
+        CommsOrderDoneTool(
+            problem=todo.id,
+            order_id=todo.order.id,
+            delivery=OperationDelivery(),
+            claims=(WorkingClaim(str(output / "level-0.png")),),
         ).apply(comms, ThreadCaller(COMMANDER))
+
     await app.preparation.run_thread(deliver)
     async with asyncio.timeout(90):
         while "Delivered, waiting on install" not in str(card.title):
@@ -143,7 +173,8 @@ async def journey(app, pilot, output: Path, units: tuple[str, ...], momentum: bo
     assert app.selected_session.query_one(Conversation) is conversation
     (output / "result.txt").write_text(
         "PASS: normal Toad, real scratch orders, level 0, expanded real turns, "
-        "and live delivery update without reopening.\n")
+        "and live delivery update without reopening.\n"
+    )
     app.exit()
 
 
@@ -161,8 +192,11 @@ def main() -> None:
         return
     os.environ["AGENT_COMMS_ROOT"] = str(args.output / "bus")
     from toad.app import ToadApp
+
     app = ToadApp(project_dir=str(args.output))
-    app.run(auto_pilot=lambda pilot: journey(app, pilot, args.output, tuple(args.units), args.momentum))
+    app.run(
+        auto_pilot=lambda pilot: journey(app, pilot, args.output, tuple(args.units), args.momentum)
+    )
     if app._exception:
         raise app._exception
 

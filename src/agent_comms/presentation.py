@@ -20,10 +20,10 @@ from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
+from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
-from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, projected
 from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
@@ -39,15 +39,27 @@ from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
-from .ui_model.unread import UnreadPresentation, UnobservedUnread
-from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
-                         NamedViewer)
+from .read_basis import (
+    AnonymousViewer,
+    CapturedSelection,
+    ChannelDisplayScope,
+    DisplayViewer,
+    NamedViewer,
+)
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
-from .revision_views import (STATUS_SOURCE, BusSourceView, CommanderView, ExternalTranscriptsView,
-                             NotificationsView, RegistrationsView, RevisionView,
-                             SidebarView, StoresView)
+from .revision_views import (
+    STATUS_SOURCE,
+    BusSourceView,
+    CommanderView,
+    ExternalTranscriptsView,
+    NotificationsView,
+    RegistrationsView,
+    RevisionView,
+    SidebarView,
+    StoresView,
+)
 from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadIncarnation
@@ -59,6 +71,7 @@ from .thread_presentation import (
 from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
+from .ui_model.unread import UnobservedUnread, UnreadPresentation
 from .wire_log import WireLog, WireSnapshot
 
 if TYPE_CHECKING:

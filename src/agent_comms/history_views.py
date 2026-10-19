@@ -174,6 +174,8 @@ class ThreadPresentations:
 
 
 class HistoryViews:
+    goals: Goals
+
     def __init__(
         self,
         root: Path,
