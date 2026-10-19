@@ -329,7 +329,8 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
         installed.require_uv()
     if not rehearse_only and not installed.python.exists():
         raise UpgradeRefused(f"No installed stack at {installed.python}")
-    workspace = RegistryStore.at(root).snapshot().require(installer).storage_roots.scratch
+    with RegistryStore.at(root).reading_snapshot() as snapshot:
+        workspace = snapshot.require(installer).storage_roots.scratch
     workspace.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="upgrade-bus.", dir=workspace) as scratch:
         revisions = Revisions(checkout, Path(scratch))
