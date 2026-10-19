@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -179,14 +178,11 @@ class ImportedSessionWriter:
         self.stream.write(json.dumps(encoded, ensure_ascii=False) + "\n")
         self.parent = NativeEntry.from_wire(encoded)
 
-    def import_events(self, events: Iterable[TranscriptEvent]) -> None:
-        """The source already normalized records; preserve its conversation and clock."""
-        for event in events:
-            event.import_to(lambda message, event=event: self.append_recorded(event, message))
-
-    def append_recorded(self, event: TranscriptEvent, message: ImportedMessage) -> None:
-        at = GeneratedTimestamp.decode(event.timestamp).recorded_at("Copied conversation")
-        self.append(message, datetime.fromtimestamp(at, UTC))
+    def append_recorded(self, event: TranscriptEvent) -> None:
+        def append(message: ImportedMessage) -> None:
+            at = GeneratedTimestamp.decode(event.timestamp).recorded_at("Copied conversation")
+            self.append(message, datetime.fromtimestamp(at, UTC))
+        event.import_to(append)
 
 
 class NativeHeaderState(ABC):

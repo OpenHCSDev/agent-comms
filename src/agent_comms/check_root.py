@@ -161,7 +161,8 @@ class CheckRoot:
                         max_records=self.max_records,
                         max_bytes=self.max_bytes,
                     ):
-                        writer.import_events(events)
+                        for event in events:
+                            writer.append_recorded(event)
         return session.session_file
 
     def run(self, command: Sequence[str]) -> CheckRootResult:
