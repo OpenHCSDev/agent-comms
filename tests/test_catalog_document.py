@@ -21,8 +21,8 @@ def test_update_failure_restores_whole_document_not_just_mode(tmp_path):
         with pytest.raises(OSError, match="disk full"):
             comms.channels.set_channel_any_mode("api", True)
     assert comms.channels.catalog.path.read_bytes() == before
-    assert wire(tmp_path).channels.catalog.read().resolve("#api").pinned
-    assert not comms.channels.catalog.read().resolve("#api").any_mode
+    assert wire(tmp_path).channels.catalog.read().require_channel("#api").pinned
+    assert not comms.channels.catalog.read().require_channel("#api").any_mode
 
 
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
@@ -38,7 +38,7 @@ def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
     document = wire(tmp_path).channels.catalog.read()
     assert document.tags == {f"tag-{i}" for i in range(8)}
     assert all(
-        document.resolve(f"#tag-{i}").pinned and document.resolve(f"#tag-{i}").any_mode
+        document.require_channel(f"#tag-{i}").pinned and document.require_channel(f"#tag-{i}").any_mode
         for i in range(8)
     )
 

@@ -13,6 +13,7 @@ from .thread_identity import ThreadIncarnation
 from .external_transcript import ExternalTranscript
 from .transcript_events import TurnDigest
 from .tool_result import ToolResult
+from .tool_declaration import EditCall
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -22,6 +23,11 @@ if TYPE_CHECKING:
 class ThreadTurns(ToolResult):
     thread: ThreadIncarnation
     turns: tuple[TurnDigest, ...]
+
+
+@dataclass(frozen=True)
+class UnjudgedEdits(ToolResult):
+    edits: tuple[EditCall, ...]
 
 
 class TurnBound(ABC):
@@ -84,6 +90,16 @@ class TurnDigestRead(ConversationPreparation):
     def read(self) -> ThreadTurns:
         return ThreadTurns(self.thread.incarnation,
                            self.thread.execution.prepare_conversation(self))
+
+    def unjudged(self, todo) -> tuple[EditCall, ...]:
+        """Each native call once, judged only by this order's own verdicts."""
+        judged = {verdict.tool_call_id for verdict in todo.verdicts}
+        since = todo.order.at.recorded_at("An order")
+        edits = {edit.id: edit for turn in reversed(self.read().turns)
+                 for event in turn.events
+                 for edit in event.edit_calls(self.thread.name, todo.id, since)
+                 if edit.id not in judged}
+        return tuple(reversed(edits.values()))
 
     def native(self) -> tuple[TurnDigest, ...]:
         return self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)

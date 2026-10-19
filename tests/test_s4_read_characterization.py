@@ -1,5 +1,6 @@
 """Current S4 Part B: authority lifetime and disposable-index recovery."""
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough
 from dataclasses import replace
@@ -65,17 +66,17 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     try:
         assert completed_counts(rebuilt, viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.reads.read() == document
-        assert comms.bus.pending_count("receiver", "#team") == 1
+        assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         comms.views.mark_channel_view_read(
             "#team", worktree=str(tmp_path),
             mark=ReadThrough(page.newest_seq, page.display_scope),
         )
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
-        assert comms.bus.pending_count("receiver", "#team") == 1
+        assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         assert comms.bus.reads.read().transcripts == document.transcripts
         references = tuple(message.reference for message in comms.bus.inbox("receiver"))
         comms.messaging.acknowledge("receiver", references)
-        assert comms.bus.pending_count("receiver", "#team") == 0
+        assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 0
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
     finally:
         rebuilt.close()

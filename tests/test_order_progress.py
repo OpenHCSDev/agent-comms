@@ -78,7 +78,7 @@ def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
     pulls = Listed(open=(PullRequest(12, 'fix/p10', 'f' * 40), PullRequest(7, 'fix/p1', 'a' * 40,
                                                                               updated_at=400.0)))
     progress = read(checkout, pulls)
-    assert progress == OpenPrProgress(7, 'a' * 9, 400.0) and progress.strikes
+    assert progress == OpenPrProgress(7, 'a' * 9, at=400.0) and progress.strikes
     assert progress.line == 'PR #7 open at aaaaaaaaa'
 
 
@@ -86,7 +86,7 @@ def test_an_order_owns_the_pr_from_its_branch_whatever_either_title_says(checkou
     # #7 was renamed without its P-number; #9 is titled "P1: ..." but comes from another order's branch.
     pulls = Listed(open=(PullRequest(9, 'fix/p2', 'b' * 40, updated_at=500.0),
                          PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0)))
-    assert read(checkout, pulls) == OpenPrProgress(7, 'a' * 9, 400.0)
+    assert read(checkout, pulls) == OpenPrProgress(7, 'a' * 9, at=400.0)
 
 
 def test_a_detached_checkout_owns_no_pr(checkout):
@@ -146,12 +146,65 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
     assert 'P1 order order-P1 due ' in (tmp_path / 'narrative.md').read_text()
 
 
+class HeldSource:
+    """A source holding an unpushed commit, a pushed commit, an open PR and a merged PR."""
+    since = 100.0
+
+    def commits(self, *excluded):
+        commits = {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}
+        yield commits[excluded]
+
+    def requests(self, state):
+        return {'open': [PullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0)],
+                'merged': [PullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0)]}[state]
+
+
+class EmptySource:
+    since = 100.0
+
+    def commits(self, *excluded):
+        return iter(())
+
+    def requests(self, state):
+        return []
+
+
+MOVED = time.strftime('%H:%M', time.localtime(1000.0))
+
+
+@pytest.mark.parametrize('member, line, stalls_at, untouched_at', [
+    (CommittedProgress, f'committed aaaaaaaaa at {MOVED}, not pushed', 1900, None),
+    (PushedProgress, f'pushed eeeeeeeee at {MOVED}, no PR', 1900, None),
+    (OpenPrProgress, 'PR #7 open at bbbbbbbbb', 1900, 1300),
+    (MergedProgress, 'merged as ccccccccc, record done', None, None),
+])
+def test_each_found_member_says_from_its_class_whether_it_stalls_and_is_untouched(
+        member, line, stalls_at, untouched_at):
+    (progress,) = member.found(HeldSource())
+    assert tuple(member.found(EmptySource())) == ()
+    assert progress.line == line
+    for now in (1300, 1301, 1900, 1901, 10 ** 9):
+        assert progress.stalled(100.0, now) is (stalls_at is not None and now > stalls_at)
+        assert progress.untouched(now) is (untouched_at is not None and now > untouched_at)
+
+
+@pytest.mark.parametrize('progress, line, stalls_at', [
+    (NoCommitProgress(), 'no commit since the order', 700),
+    (UnreadProgress('gh failed'), 'progress unread: gh failed', None),
+])
+def test_unfound_progress_says_from_its_class_whether_it_stalls(progress, line, stalls_at):
+    assert progress.line == line
+    for now in (700, 701, 10 ** 9):
+        assert progress.stalled(100.0, now) is (stalls_at is not None and now > stalls_at)
+        assert not progress.untouched(now)
+
+
 @pytest.mark.parametrize('progress, now, stalled', [
     (NoCommitProgress(), 100 + 600, False),
     (NoCommitProgress(), 100 + 601, True),
-    (CommittedProgress('a' * 9, 1000.0), 1000 + 900, False),
-    (PushedProgress('a' * 9, 1000.0), 1000 + 901, True),
-    (OpenPrProgress(7, 'a' * 9, 1000.0), 1000 + 901, True),
+    (CommittedProgress('a' * 9, at=1000.0), 1000 + 900, False),
+    (PushedProgress('a' * 9, at=1000.0), 1000 + 901, True),
+    (OpenPrProgress(7, 'a' * 9, at=1000.0), 1000 + 901, True),
     (MergedProgress('d' * 9), 10 ** 9, False),
 ])
 def test_work_that_stops_moving_stalls(progress, now, stalled):

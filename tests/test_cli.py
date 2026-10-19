@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli import main
 
 
@@ -362,7 +363,7 @@ class TestSelectedTargetActions:
         options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions'])
-        parsed = CliCommand.decode(options.command).from_namespace(options)
+        parsed = CliCommand.member_named(options.command).from_namespace(options)
         assert parsed == explicit
         with pytest.raises(ValueError, match='cannot be overridden'):
             action.bound[0].edited({'all': True})
@@ -466,7 +467,7 @@ class TestSelectedTargetActions:
         assert result["outcomes"][2]["result"]["archived"] is True
         assert not comms.registry.status("alpha").visible
         assert comms.registry.status("active").active
-        assert comms.channels.catalog.read().resolve("#team").archived
+        assert comms.channels.catalog.read().require_channel("#team").archived
 
     def test_confirmation_and_target_override_refuse_before_any_batch_write(self, cli, tmp_path):
         comms = self.declared(tmp_path)
@@ -533,7 +534,7 @@ class TestSelectedTargetActions:
                             channel={"alpha": ("#team",), "beta": ("#other",)}).apply(comms)
         assert result.successful and len(result.outcomes) == 3
         catalog = comms.channels.catalog.read()
-        assert catalog.resolve("#team").pinned
+        assert catalog.require_channel("#team").pinned
         assert catalog.pinned_threads("#team") == {"alpha"}
         assert catalog.pinned_threads("#other") == {"beta"}
         assert {name: comms.registry.require(name).tags for name in before} == before
@@ -603,9 +604,9 @@ class TestSelectedTargetActions:
         after = completed_snapshot(comms, str(tmp_path))
         assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0
         assert after.channel_unread['#team'] == 0
-        assert comms.bus.pending_count('beta', 'alpha') == 1
+        assert comms.bus.pending_count('beta', CommandTarget.named('alpha')) == 1
         # DeliveryScope excludes beta's own membership notice from its inbox.
-        assert comms.bus.pending_count('beta', '#team') == 1
+        assert comms.bus.pending_count('beta', CommandTarget.named('#team')) == 1
 
     def test_catalog_and_execution_keep_missing_and_single_only_targets_truthful(self, tmp_path):
         from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, ForkCliCommand, TargetEdit

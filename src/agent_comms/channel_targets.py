@@ -245,10 +245,10 @@ class ChannelTarget(NamedTarget):
         return self
 
     def pending_count(self, counts, snapshot, catalog):
-        return catalog.resolve(self.name).pending_count(counts)
+        return catalog.require_channel(self.name).pending_count(counts)
 
     def resolve(self, snapshot, catalog) -> ResolvedChannel:
-        channel = catalog.resolve(self.name)
+        channel = catalog.require_channel(self.name)
         members = tuple(ResolvedThread(thread, snapshot.status(thread.name))
                         for thread in snapshot.channel_audience()
                         if channel.matches(thread.tags))
@@ -278,27 +278,31 @@ class ChannelTarget(NamedTarget):
         return BoundedTriageWake()
 
     def require_publication(self, message, snapshot, catalog):
-        catalog().resolve(self.name).require_routable()
+        catalog().require_channel(self.name).require_routable()
 
     def initial_delivery(self, sender, message, snapshot, catalog):
-        channel = catalog.resolve(self.name)
+        channel = catalog.require_channel(self.name)
         names = [thread.name for thread in snapshot.channel_audience()
                  if thread.name != sender and channel.matches(thread.tags)]
         return self, message, names
 
     def display_scope(self, viewer, snapshot, catalog, direct_scope):
-        return catalog.resolve(self.name).history_scope()
+        return catalog.require_channel(self.name).history_scope()
 
     def conversation_key(self, sender, snapshot, channel, direct):
         return channel(target=self.name)
 
     def changed_threads(self, names, snapshot, catalog):
-        channel = catalog.resolve(self.name)
+        channel = catalog.require_channel(self.name)
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
     def mark_view_read(self, views, worktree):
         views.mark_channel_view_read(self.name, worktree=worktree)
+
+
+ANY_CHANNEL = ChannelTarget(BuiltinChannel.ANY.value)
+"""Every channel a reader receives: the target of an unscoped inbox or count."""
 
 
 @dataclass(frozen=True)

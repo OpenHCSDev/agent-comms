@@ -35,7 +35,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
-        return tuple(comms.goals.todos.for_commander(comms.registry.require(commander).incarnation))
+        return comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation)
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:

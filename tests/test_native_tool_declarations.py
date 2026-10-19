@@ -12,7 +12,8 @@ from acp.schema import ToolCallStart
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
 from agent_comms.comms import Comms
-from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
+from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
+from agent_comms.tool_declaration import ReplacementEdit
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
 
@@ -153,7 +154,7 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     assert isinstance(FieldCodec.decode(ToolRequest, {"tool": "comms_send", "from": "source",
         "to": "destination", "body": "decode-only"}), CommsSendTool)
     with pytest.raises(ValueError):
-        ToolRequest.decode("read")
+        ToolRequest.member_named("read")
 
 
 async def test_actual_native_read_tool_reaches_official_acp_with_declared_presentation(

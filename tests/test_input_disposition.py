@@ -7,8 +7,24 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.input_attempt import UnresolvedInput
+from agent_comms.errors import RelationViolationError
+from agent_comms.input_attempt import (
+    BoundUnknownInput,
+    ClearedNativeInput,
+    ClearedUnsentInput,
+    InputAlreadyCleared,
+    MissingInput,
+    MovedInput,
+    NotSentInput,
+    ReservedInput,
+    StartedInput,
+    UnchangedInput,
+    UnresolvedInput,
+)
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInputOrigin
+from agent_comms.message_reference import MessageReference
+from agent_comms.text_digest import TextDigest
 from stored_inputs import stored_inputs
 
 
@@ -122,3 +138,70 @@ def test_admitted_snapshot_retains_cut_without_blocking_writer(tmp_path):
             assert appended.result(timeout=2)
             assert set(store._document(connection, "1", ()).rows) == {"original"}
     assert set(store.unresolved(frozenset({"kid"})).rows) == {"original", "later"}
+
+
+ROOT, NATIVE, SENT = "c" * 32, "a" * 32, "sent text"
+REFERENCE = MessageReference(7, "original-id")
+RESERVED = ReservedInput("bus:7", 7, "owner", 1, "owner", "ask",
+                         origin=WireInputOrigin(ROOT, REFERENCE))
+BOUND = RESERVED._transition(BoundUnknownInput, turn_id="turn-1", native_id=NATIVE,
+                             sent_digest=TextDigest.of(SENT))
+TRANSITIONS = {
+    "bind": lambda row: row.bind(claim_scope=1, turn_id="turn-1", native_id=NATIVE, text=SENT),
+    "started": lambda row: row.started(turn_id="turn-1", native_id=NATIVE, text=SENT),
+    "finish_unbound": lambda row: row.finish_unbound(),
+    "clear_unbound": lambda row: row.clear_unbound(),
+    "clear_native": lambda row: row.clear_native(NATIVE, SENT),
+}
+STATES = {
+    "missing": MissingInput(),
+    "reserved": RESERVED,
+    "bound": BOUND,
+    "started": BOUND._transition(StartedInput),
+    "not_sent": RESERVED._transition(NotSentInput),
+    "cleared_unsent": RESERVED._transition(ClearedUnsentInput),
+    "cleared_native": BOUND._transition(ClearedNativeInput),
+}
+# The state each transition moves a state to; every pair not named leaves its state unchanged.
+MOVES = {
+    ("reserved", "bind"): BoundUnknownInput,
+    ("reserved", "finish_unbound"): NotSentInput,
+    ("reserved", "clear_unbound"): ClearedUnsentInput,
+    ("bound", "started"): StartedInput,
+    ("bound", "clear_native"): ClearedNativeInput,
+}
+REFUSED = {("cleared_unsent", "bind"), ("cleared_native", "bind")}
+UNBOUND_DELIVERIES = {"reserved", "not_sent"}
+
+
+@pytest.mark.parametrize("state", STATES)
+@pytest.mark.parametrize("transition", TRANSITIONS)
+def test_every_input_state_answers_every_transition_with_a_member(state, transition) -> None:
+    row = STATES[state]
+    if (state, transition) in REFUSED:
+        with pytest.raises(InputAlreadyCleared):
+            TRANSITIONS[transition](row)
+        return
+    result = TRANSITIONS[transition](row)
+    if (state, transition) in MOVES:
+        assert isinstance(result, MovedInput)
+        assert type(result.state) is MOVES[state, transition]
+        assert result.successors("key") == {"key": result.state}
+        assert result.require_moved("refused") is result
+    else:
+        assert result == UnchangedInput(row)
+        assert result.successors("key") == {}
+        with pytest.raises(RelationViolationError, match="refused"):
+            result.require_moved("refused")
+
+
+@pytest.mark.parametrize("state", STATES)
+def test_every_input_state_answers_unbound_delivery_with_a_member(state) -> None:
+    delivery = STATES[state].unbound_delivery(ROOT)
+    if state in UNBOUND_DELIVERIES:
+        assert delivery == DeliveredInput(REFERENCE)
+        assert delivery.references() == (REFERENCE,)
+        assert STATES[state].unbound_delivery("d" * 32).references() == ()
+    else:
+        assert isinstance(delivery, UndeliveredInput)
+        assert delivery.references() == ()

@@ -247,7 +247,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
     control = gate
     first = control.begin(FieldCodec.decode(MaintenanceOperatorField, "operator-one"))
-    assert first.phase == MaintenancePhase.decode("draining") and first.generation == 1
+    assert first.phase == MaintenancePhase.member_named("draining") and first.generation == 1
     assert MaintenanceBarrier(comms.registry.store.path).read() == first
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.agents.begin_turn("owner", "after")
@@ -259,17 +259,17 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
         )
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.owners.start("owner")
-    second = control.advance(first, MaintenancePhase.decode("paused"))
+    second = control.advance(first, MaintenancePhase.member_named("paused"))
     assert second.generation == 2
     with pytest.raises(RelationViolationError, match="generation/operator"):
-        control.advance(first, MaintenancePhase.decode("paused"))
+        control.advance(first, MaintenancePhase.member_named("paused"))
     with pytest.raises(ValueError, match="valid expected successor"):
-        control.advance(second, MaintenancePhase.decode("ready"))
+        control.advance(second, MaintenancePhase.member_named("ready"))
     with pytest.raises(RelationViolationError, match="Maintenance"):
         Registration(comms.registry.store.path).lease_local_turn("owner", "cold")
     assert control.advance(
-        second, MaintenancePhase.decode("installing")
-    ).phase == MaintenancePhase.decode("installing")
+        second, MaintenancePhase.member_named("installing")
+    ).phase == MaintenancePhase.member_named("installing")
 
 
 @pytest.mark.parametrize("generation", [True, 1.0, "1", -1, 0, 1, 2])
@@ -284,9 +284,9 @@ def test_state_generation_requires_exact_matching_positive_int(
     state["generation"] = generation
     gate.state_path.write_text(json.dumps(state))
     if type(generation) is int and generation == 1:
-        assert gate.read().phase == MaintenancePhase.decode("ready")
+        assert gate.read().phase == MaintenancePhase.member_named("ready")
         with gate.allow_input() as hold:
-            assert hold.phase == MaintenancePhase.decode("ready")
+            assert hold.phase == MaintenancePhase.member_named("ready")
     else:
         with pytest.raises(RelationViolationError, match="Maintenance witness"):
             gate.read()
@@ -369,7 +369,7 @@ def test_unknown_parent_fsync_does_not_reopen_claim(
         with pytest.raises(RelationViolationError, match="Maintenance"):
             gate.read()
     else:
-        assert gate.read().phase == MaintenancePhase.decode(
+        assert gate.read().phase == MaintenancePhase.member_named(
             "draining"
         )  # Visible state is not an ACK.
 

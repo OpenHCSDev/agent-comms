@@ -83,7 +83,7 @@ async def main():
         for source in sources:
             from agent_comms.catalog_store import ChannelCatalog
             catalog=ChannelCatalog.at(source.root).read()
-            assert '#comms' in catalog.views(source.provenance.threads)
+            assert '#comms' in catalog.views()
         cli=subprocess.run([str(Path(sys.executable).with_name('agent-comms')),
             '--root',str(comms.root),'history','--channel','#comms'],
             capture_output=True,text=True,timeout=20)

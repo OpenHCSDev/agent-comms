@@ -1921,7 +1921,7 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
     confirmed: bool = option('--confirmed', default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return CliCommand.decode(self.operation).execute_target(
+        return CliCommand.member_named(self.operation).execute_target(
             ctx, CommandTarget.arguments(self.target, self.project), self.arguments,
             confirmed=self.confirmed, channel=self.channel, project=self.project)
 
@@ -2091,7 +2091,7 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
     help = 'Execute a declared operation using its original CLI field parsers'
 
     def apply(self, ctx: Comms) -> CliResult:
-        return TargetEdit(CliCommand.decode(self.operation),
+        return TargetEdit(CliCommand.member_named(self.operation),
                           CommandTarget.arguments(self.target, self.project), self.arguments,
                           self.confirmed, self.channel, self.project).apply(ctx)
 
@@ -2137,7 +2137,7 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         if channel is None:
             return ()
-        if not catalog.resolve(channel).matches(thread.tags):
+        if not catalog.require_channel(channel).matches(thread.tags):
             return ()
         return (cls(name=thread.name, channel=channel,
                     pinned=thread.name not in catalog.pinned_threads(channel)),)

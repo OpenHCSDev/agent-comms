@@ -112,8 +112,8 @@ class Registration:
     def _prepare_declaration(document, channels, thread: Thread, status: ThreadStatus):
         """Derive one declaration after checking its complete namespace."""
         change = document.prepare_declaration(thread, status)
-        for tag in change.thread.tags - channels.all_tags(document.threads):
-            channels.require_available_tag_name(tag, document.threads)
+        for tag in change.thread.tags - channels.tags:
+            channels.require_available_tag_name(tag)
         return change
 
     def require_declaration_available(
@@ -130,7 +130,7 @@ class Registration:
         with catalog.editing() as channels:
             change = self._prepare_declaration(edit.document, channels, thread, status)
             change = self._commit_registration(edit, change)
-            channels.remember_tags(change.thread.tags, change.thread.created_at)
+            channels.remember_tags(change.thread.tags)
         return change.thread
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
