@@ -15,6 +15,7 @@ from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, Inactiv
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .registry_document import RosterVisibility
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,9 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
+
+    def registered(self, thread: Thread) -> ThreadStatus:
+        return self
 
     def require_visible(self) -> None:
         if not self.visible:
@@ -88,11 +92,14 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
                                   status=InactiveThreadPresentationStatus())
 
 
-class ActiveThreadPresence:
+class ActiveThreadPresence(ThreadStatus, declared_name=None):
     """Shared semantics of running and idle owners; not a second state family."""
 
     active = True
     visible = True
+
+    def registered(self, thread: Thread) -> ThreadStatus:
+        return thread.execution.registered_status(thread, self)
 
     def require_active(self) -> None:
         pass
@@ -124,7 +131,7 @@ class ActiveThreadPresence:
         return activity.ordinary_presentation(title)
 
 
-class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
+class RunningThreadStatus(ActiveThreadPresence):
     running = True
     receiving = True
 
@@ -135,7 +142,7 @@ class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
         pass
 
 
-class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):
+class IdleThreadStatus(ActiveThreadPresence):
     receiving = True
 
 

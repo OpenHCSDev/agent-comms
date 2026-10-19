@@ -63,11 +63,7 @@ class RegistryPresence(RegistryNames[Thread]):
     def status(self, name: str) -> ThreadStatus:
         canonical = self.canonical_name(name)
         try:
-            status = self.statuses[canonical]
-            if status.active:
-                thread = self.require(canonical)
-                return thread.execution.registered_status(thread, status)
-            return status
+            return self.statuses[canonical].registered(self.require(canonical))
         except KeyError as error:
             raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
