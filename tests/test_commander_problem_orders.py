@@ -183,7 +183,8 @@ def test_done_declares_no_wrong_measure_and_the_board_shows_the_recorded_check_r
     reported = {f.name for f in fields(CommsOrderDoneTool)} - {f.name for f in fields(ThreadToolRequest)}
     assert reported == {'problem', 'delivery', 'claims'}
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
-    assert comms.goals.todos.get('P1').order.printed == '1'
+    delivery = comms.goals.todos.get('P1').order.delivery
+    assert delivery.printed == '1' and FieldCodec.decode(OrderDelivery, FieldCodec.encode(delivery)) == delivery
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
     assert progress == "P1: Delivered, waiting on install · Check printed '1'"
@@ -371,7 +372,7 @@ def test_a_done_record_from_before_the_split_reads_its_one_commit_as_both():
     old = {'kind': 'commit', 'commit': 'd012d23b4', 'at': FieldCodec.encode(RecordedEventTime(1000))}
     recorded = FieldCodec.decode(OrderDelivery, old)
     assert type(recorded) is RecordedCommitDelivery and recorded.delivered == recorded.commit == 'd012d23b4'
-    assert FieldCodec.encode(recorded) == old
+    assert FieldCodec.encode(recorded) == old and recorded.check_line == 'no print recorded'
 
 
 def test_delivery_time_has_its_own_named_requirement():

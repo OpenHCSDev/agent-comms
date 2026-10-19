@@ -45,10 +45,16 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+    checked_kind: ClassVar[type[OrderDelivery]]
 
     @property
     def work(self) -> str:
         return "delivered work"
+
+    @property
+    def check_line(self) -> str:
+        """A delivery saved before Core recorded the Check's print says so."""
+        return "no print recorded"
 
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
@@ -62,14 +68,15 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
         check.result.require(result)
         return result.stdout.decode(errors="replace").strip()
 
-    async def verified(self, check: OrderCheck,
-                       deletes: OrderDeletion) -> tuple[OrderDelivery, str]:
+    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source;
-        with the delivery comes what the order's check printed, never what a report says."""
+        the checked member records what the order's check printed, never what a report says."""
         printed = await self.passed(check)
         for each in deletes.checks:
             await self.passed(each)
-        return replace(self, at=await self.delivery_time(check)), printed
+        carried = {item.name: getattr(self, item.name) for item in fields(self)}
+        return self.checked_kind(
+            **carried | {"at": await self.delivery_time(check), "printed": printed})
 
     @abstractmethod
     async def require_source(self, check): ...
@@ -139,6 +146,16 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CheckedCommitDelivery(CommitDelivery, declared_name="checked_commit"):
+    """A commit delivery Core verified, with what the order's Check printed on it."""
+    printed: str
+
+    @property
+    def check_line(self) -> str:
+        return f"Check printed {self.printed!r}"
+
+
+@dataclass(frozen=True, kw_only=True)
 class OperationDelivery(OrderDelivery):
     async def require_source(self, check):
         pass
@@ -148,6 +165,20 @@ class OperationDelivery(OrderDelivery):
 
     async def delivery_time(self, check):
         return EventTime.capture(time.time())
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedOperationDelivery(OperationDelivery, declared_name="checked_operation"):
+    """An operation delivery Core verified, with what the order's Check printed."""
+    printed: str
+
+    @property
+    def check_line(self) -> str:
+        return f"Check printed {self.printed!r}"
+
+
+CommitDelivery.checked_kind = CheckedCommitDelivery
+OperationDelivery.checked_kind = CheckedOperationDelivery
 
 
 @dataclass(frozen=True)
@@ -964,9 +995,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
             *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
             "Banned: " + "; ".join(self.banned), "Report: " + self.report))
 
-    def delivered(self, delivery, printed):
+    def delivered(self, delivery):
         delivery.at.require_delivery()
-        return self.copy_as(DeliveredProblemOrder, delivery=delivery, printed=printed)
+        return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         if correction.previous != self.check:
@@ -1024,18 +1055,17 @@ class PendingProblemOrder(ProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
-    printed: str = ""  # what the order's Check printed when Core verified the delivery
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Delivered, waiting on install"
 
     def progress_line(self) -> str:
-        return f"{self.line} · Check printed {self.printed!r}"
+        return f"{self.line} · {self.delivery.check_line}"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
         raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
-    def delivered(self, delivery, printed):
+    def delivered(self, delivery):
         if delivery != self.delivery:
             raise ValueError("The order already records a different delivery.")
         return self
@@ -1550,19 +1580,17 @@ class RecordHuntTodo(TodoOperation):
 class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
-    printed: str = ""
 
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         verified = self.delivery.verified(current.order.check, current.order.deletes)
-        delivery, printed = asyncio.run(verified)
-        return replace(self, delivery=delivery, printed=printed)
+        return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(current, order=current.order.delivered(self.delivery, self.printed), revision=current.revision + 1)
+        return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
