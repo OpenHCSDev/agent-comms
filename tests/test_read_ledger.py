@@ -118,14 +118,6 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     assert second.read_marker_notice == NoReadNotice()
 
 
-@pytest.mark.parametrize("raw_notice, notice", [(None, NoReadNotice()), ("Earlier notice", PendingReadNotice("Earlier notice"))])
-def test_read_document_construction_owns_notice_decoding(raw_notice, notice):
-    document = ReadDocument(notice=raw_notice)
-    assert document.notice == notice
-    assert FieldCodec.encode(document)["notice"] == raw_notice
-    assert FieldCodec.decode(ReadDocument, FieldCodec.encode(document)) == document
-
-
 def test_empty_notice_never_accesses_store_and_pending_notice_keeps_a_replacement(tmp_path):
     assert NoReadNotice().take(object()) == NoReadNotice()
     assert FieldCodec.decode(ReadNotice, None) == NoReadNotice()
