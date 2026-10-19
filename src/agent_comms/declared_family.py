@@ -98,7 +98,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]
-    __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
+    __registry__: ClassVar[dict[str | None, type[DeclaredFamily]]]
 
     def __init_subclass__(
         cls,
@@ -119,7 +119,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
 
     @classmethod
-    def member_named(cls, name: str) -> type[Self]:
+    def member_named(cls, name: str | None) -> type[Self]:
         cls._member_declarations()
         try:
             member = cls.__registry__[name]

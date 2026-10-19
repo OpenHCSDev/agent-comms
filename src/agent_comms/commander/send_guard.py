@@ -14,12 +14,13 @@ from __future__ import annotations
 import inspect
 import json
 import shlex
-import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
 from typing import ClassVar
+
+from agent_comms_hooks import ClaudeBashHook
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
@@ -56,7 +57,7 @@ class CommanderSession:
 
     def refusals(self, kind: type[TacticalCommand]) -> tuple[str, ...]:
         try:
-            return (kind.refusal(),) if self.commander() else ()
+            return kind.install_refusals() if self.commander() else ()
         except (OSError, RelationViolationError) as error:
             return (f'{kind.work.capitalize()} refused: the guard cannot tell whether this '
                     f'session is {order.ME} ({error}).',)
@@ -115,8 +116,8 @@ class TacticalCommand(GuardedCommand):
         return any(ordered(shape) for shape in cls.shapes)
 
     @classmethod
-    def refusal(cls) -> str:
-        return InstallDeadline.read(order.COMMS.root).refusal(cls.work, order.ME)
+    def install_refusals(cls) -> tuple[str, ...]:
+        return InstallDeadline.read(order.COMMS.root).refusals(cls.work, order.ME)
 
 
 @dataclass(frozen=True)
@@ -148,10 +149,9 @@ class CarryCommand(TacticalCommand):
 
 
 def main(a: list[str]) -> None:
-    hook = json.load(sys.stdin)
-    reasons = GuardedCommand.refusals(hook.get('tool_input', {}).get('command', ''),
-                                      CommanderSession(hook.get('session_id', '')))
+    hook = ClaudeBashHook.read()
+    reasons = GuardedCommand.refusals(hook.tool_input.command, CommanderSession(hook.session_id))
     if reasons:
         print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": "deny",
+            "hookEventName": hook.hook_event_name, "permissionDecision": "deny",
             "permissionDecisionReason": ' '.join(reasons)}}))

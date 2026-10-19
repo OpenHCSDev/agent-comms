@@ -1,10 +1,8 @@
-"""The watch claim of one CLI conversation, readable without importing agent_comms.
+"""The watch claim of one CLI conversation, and the hook that reports a lapsed one.
 
 A bridge watch holds an exclusive flock on its claim for its whole life and
 writes there the command that started it. The kernel drops the lock when the
 process dies, so a claim with a record and no holder is a watch that lapsed.
-Claude Code runs ``agent-comms-watch-guard`` on every prompt and tool result;
-importing agent_comms takes a second, so this module is stdlib-only.
 """
 
 from __future__ import annotations
@@ -13,11 +11,12 @@ import fcntl
 import hashlib
 import json
 import shlex
-import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
 
 @dataclass(frozen=True)
@@ -94,21 +93,19 @@ class LapsedWatch(WatchState):
         print(json.dumps({"hookSpecificOutput": context}))
 
 
-@dataclass(frozen=True)
-class ClaudeHook:
-    session_id: str
-    hook_event_name: str
+class WatchGuard(ClaudeHookProgram):
+    """Tells the session, on each prompt and tool result, that its bridge watch lapsed."""
+
+    events = ("UserPromptSubmit", "PostToolUse")
 
     @classmethod
-    def read(cls) -> ClaudeHook:
-        hook = json.load(sys.stdin)
-        return cls(**{declared.name: hook[declared.name] for declared in fields(cls)})
+    def command(cls) -> str:
+        return cls.console_script(f"{main.__module__}:{main.__name__}")
 
 
 def main() -> None:
-    """Claude Code hook: warn the session whose bridge watch lapsed."""
-    try:
-        hook = ClaudeHook.read()
-        WatchClaim(hook.session_id).state().report(hook.hook_event_name)
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        print(f"agent-comms-watch-guard: {type(error).__name__}: {error}")
+    """Claude Code hook: warn the session whose bridge watch lapsed.
+
+    A failure exits nonzero, which Claude Code reports without blocking the session."""
+    hook = ClaudeHook.read()
+    WatchClaim(hook.session_id).state().report(hook.hook_event_name)

@@ -36,7 +36,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tools import (
     BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool)
 from agent_comms.messages import Message, MessageKind, InfoKind
-from agent_comms_watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from agent_comms.send_result import SendResult
 from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime

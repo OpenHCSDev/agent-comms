@@ -176,6 +176,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
     def __post_init__(self) -> None:
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
 
+    @classmethod
+    def at(cls, root: Path) -> RegistryStore:
+        """The registry of the bus at ``root``."""
+        return cls(root / "registry.json")
+
     record_type = RegistryDocument
 
     def empty(self) -> RegistryDocument:
@@ -248,6 +253,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
     @property
     def guard_path(self) -> Path:
         return self.path.parent / ".registry-owner-guard"
+
+    @property
+    def written(self) -> tuple[Path, Path]:
+        """The files every write replaces together, as ``revision_unlocked`` reads them."""
+        return self.path, self.guard_path
 
     def revision_unlocked(self) -> tuple[FileRevision | None, FileRevision | None]:
         """The registry file and its owner guard, which every write replaces together."""
