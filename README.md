@@ -82,11 +82,17 @@ stamp. Rebuild after changing the checked-out commit to refresh the build identi
 
 ```bash
 pip install -e ".[dev]"
-pytest
+stack/bin/pi-native-test-env --python "$(command -v python)"   # prints the gate line
+PYTHONPATH=src python -m pytest --native-cache ~/.cache/agent-comms/native
 black src tests
 ruff check src tests
 mypy src
 ```
+
+Tests take the native artifact of the checkout's own pin from the environment
+`stack/bin/pi-native-test-env` builds or reuses under `--cache DIR` (default
+`~/.cache/agent-comms/native`, `StorageRule.native_cache`), one per pin digest, and
+never from the installed package; without it, pytest stops naming that command.
 
 Pytest uses separate `pytest-xdist` worker processes (automatic CPU detection,
 capped at eight) with work stealing and combined coverage. Use `pytest -n 0`
