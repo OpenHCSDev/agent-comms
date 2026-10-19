@@ -105,7 +105,7 @@ class CommanderRule(PatternSource):
 
 
 @dataclass(frozen=True)
-class ProblemOrder(PatternSource):
+class ProblemFix(PatternSource):
     problem: str
     commit: str
 
@@ -169,7 +169,7 @@ class PlanIdlePattern(BehaviourPattern):
         " order held by a unit serves it."
     )
     checks = (RuleCheck(PlanIdle),)
-    sources = (ProblemOrder("P83", "34ba68c81"),)
+    sources = (ProblemFix("P83", "34ba68c81"),)
 
 
 class BoardDisagreesPattern(BehaviourPattern):
@@ -177,7 +177,7 @@ class BoardDisagreesPattern(BehaviourPattern):
         "An open order's progress reads no commit while a pull request linked to it has merged."
     )
     checks = (RuleCheck(BoardDisagrees),)
-    sources = (ProblemOrder("P170", "c9c0c04db"), PostmortemFailure(7))
+    sources = (ProblemFix("P170", "c9c0c04db"), PostmortemFailure(7))
 
 
 class TacticalCommandPattern(BehaviourPattern):
@@ -186,7 +186,7 @@ class TacticalCommandPattern(BehaviourPattern):
         " command instead of ordering a unit to."
     )
     checks = (ToolRefusal("agent_comms.commander.send_guard", "TacticalCommand"),)
-    sources = (ProblemOrder("P171", "cba7b09c3"),)
+    sources = (ProblemFix("P171", "cba7b09c3"),)
 
 
 class PlainTextPattern(BehaviourPattern):
@@ -216,7 +216,7 @@ class RepeatedStrikePattern(BehaviourPattern):
         ToolRefusal("agent_comms.todos", "StrikeTodo.repeats"),
         VerbRefusal("agent_comms.commander.order", "send"),
     )
-    sources = (ProblemOrder("P184", "7af14a520"),)
+    sources = (ProblemFix("P184", "7af14a520"),)
 
 
 class StrikeInErrorPattern(BehaviourPattern):
@@ -228,7 +228,7 @@ class StrikeInErrorPattern(BehaviourPattern):
         VerbRefusal("agent_comms.commander.order", "unstrike"),
         ToolRefusal("agent_comms.todos", "VoidStrikeTodo.apply"),
     )
-    sources = (ProblemOrder("P47", "15d435152"),)
+    sources = (ProblemFix("P47", "15d435152"),)
 
 
 class UncountedCheckPattern(BehaviourPattern):
@@ -241,7 +241,7 @@ class UncountedCheckPattern(BehaviourPattern):
         VerbRefusal("agent_comms.goals", "NoIntegerPrinted"),
         VerbRefusal("agent_comms.commander.order", "correct_check"),
     )
-    sources = (ProblemOrder("P114", "d889df612"), PostmortemFailure(4), PostmortemFailure(7))
+    sources = (ProblemFix("P114", "d889df612"), PostmortemFailure(4), PostmortemFailure(7))
 
 
 class StrikeOnNamedProblemPattern(BehaviourPattern):
@@ -253,7 +253,7 @@ class StrikeOnNamedProblemPattern(BehaviourPattern):
         VerbRefusal("agent_comms.commander.order", "strike"),
         VerbRefusal("agent_comms.commander.order", "hunt"),
     )
-    sources = (ProblemOrder("P194", "b26843727"), CommanderRule("Strikes, then fire."))
+    sources = (ProblemFix("P194", "b26843727"), CommanderRule("Strikes, then fire."))
 
 
 if __name__ == "__main__":
