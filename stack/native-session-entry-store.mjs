@@ -1,5 +1,6 @@
 /** Native session history storage. JSONL is authority; SQLite contains rebuildable selectors only. */
-import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -12,6 +13,14 @@ function revision(stat) {
 
 /** One entry's selectors, never its message body or summary. */
 export class EntryMetadata {
+    static initialSettings = Object.freeze({model: null, thinkingLevel: 'off'});
+    inheritSettings(parent) {
+        if (!this.contextSettings && parent) this.contextSettings = {
+            model: this.model ?? parent.model,
+            thinkingLevel: this.thinkingLevel ?? parent.thinkingLevel,
+        };
+        return this;
+    }
     constructor(entry, sequence, offset = 0, length = 0) {
         this.id = entry.id;
         this.parentId = entry.parentId;
@@ -78,7 +87,21 @@ export class EntryStore {
         if (first) for (const meta of this.chronologicalMetadata(first.id))
             if (selected.has(meta.id)) yield meta;
     }
-    append(entry) { throw new Error('EntryStore.append must be implemented'); }
+    append(entry) {
+        this.validate(entry);
+        const coordinates = this.appendCoordinates(entry);
+        const parent = entry.parentId === null ? undefined : this.settingsMetadata(entry.parentId);
+        if (entry.parentId !== null && !parent) throw new Error('Invalid native append ancestry');
+        this.storeAppended(entry, this.metadataFor(entry, ...coordinates, parent));
+    }
+    appendCoordinates(entry) { throw new Error('EntryStore.appendCoordinates must be implemented'); }
+    storeAppended(entry, metadata) { throw new Error('EntryStore.storeAppended must be implemented'); }
+    knownMetadata(id) { return this.metadata(id); }
+    settingsMetadata(id) { return this.metadata(id); }
+    metadataFor(entry, sequence, offset = 0, length = 0, parent = this.knownMetadata(entry.parentId)) {
+        return new EntryMetadata(entry, sequence, offset, length).inheritSettings(
+            entry.parentId === null ? EntryMetadata.initialSettings : parent?.contextSettings);
+    }
     committedAppend(entry, file) { throw new Error('EntryStore.committedAppend must be implemented'); }
     storedAt(file) { throw new Error('EntryStore.storedAt must be implemented'); }
     close() { throw new Error('EntryStore.close must be implemented'); }
@@ -160,13 +183,8 @@ export class EntryStore {
         return meta ? this.get(meta.id) : undefined;
     }
     contextSettings(leafId = this.lastId) {
-        let model = null, thinkingLevel = null;
-        for (const meta of this.ancestors(leafId)) {
-            model ??= meta.model;
-            thinkingLevel ??= meta.thinkingLevel;
-            if (model && thinkingLevel !== null) break;
-        }
-        return { model, thinkingLevel: thinkingLevel ?? 'off' };
+        this.assertCurrent();
+        return this.settingsMetadata(leafId)?.contextSettings ?? EntryMetadata.initialSettings;
     }
     *contextMetadata(leafId = this.lastId) {
         this.assertCurrent();
@@ -275,14 +293,16 @@ export class MemoryEntryStore extends EntryStore {
         for (let i = start; i < this.#entries.length; i++)
             yield this.#metadata.get(this.#entries[i].id);
     }
-    append(entry) {
-        this.validate(entry);
-        if (this.#metadata.has(entry.id) || entry.parentId !== null && !this.has(entry.parentId))
-            throw new Error('Invalid native entry identity or ancestry');
-        this.#metadata.set(entry.id, new EntryMetadata(entry, this.#entries.length + 1));
+    appendCoordinates(entry) {
+        if (this.#metadata.has(entry.id)) throw new Error('Invalid native entry identity');
+        return [this.#entries.length + 1, 0, 0];
+    }
+    storeAppended(entry, metadata) {
+        this.#metadata.set(entry.id, metadata);
         this.#entries.push(entry);
     }
-    committedAppend(entry, file) {
+    committedAppend(entry, file, write) {
+        if (write) file = write();
         if (file) return this.storedAt(file);
         this.append(entry); return this;
     }
@@ -315,22 +335,30 @@ export class DiskEntryStore extends EntryStore {
         super();
         this.file = resolve(file);
         mkdirSync(indexDirectory, { recursive: true, mode: 0o700 });
-        const directory = mkdtempSync(join(indexDirectory, 'open-'));
-        const index = join(directory, 'entries.sqlite');
+        const directory = join(indexDirectory, createHash('sha256').update(this.file).digest('hex'));
+        mkdirSync(directory, {recursive: true, mode: 0o700});
+        const info = lstatSync(directory);
+        if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o077))
+            throw new Error('Native metadata index directory is not private');
+        const index = join(directory, 'entries-v2.sqlite');
+        try { closeSync(openSync(index, 'ax', 0o600)); }
+        catch (error) { if (error.code !== 'EEXIST') throw error; }
+        const indexInfo = lstatSync(index);
+        if (!indexInfo.isFile() || indexInfo.nlink !== 1 || indexInfo.uid !== process.getuid() || (indexInfo.mode & 0o077))
+            throw new Error('Native metadata index file is not private');
         try {
             this.#fd = openSync(this.file, 'r');
             this.#db = new DatabaseSync(index);
-            this.#db.exec('PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA mmap_size=0; PRAGMA locking_mode=EXCLUSIVE;');
-            this.#db.exec(`CREATE TABLE entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
+            this.#db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA mmap_size=0; PRAGMA busy_timeout=10000;');
+            this.#db.exec(`CREATE TABLE IF NOT EXISTS source(revision TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
                 input_id TEXT, selectors TEXT NOT NULL);
-                CREATE INDEX entry_input ON entries(input_id);
-                CREATE INDEX entry_parent ON entries(parent,sequence);
-                CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence DESC);`);
-            // SQLite has initialized and owns an exclusive open inode. Derived pages
-            // live on persistent disk, but no pathname survives reader exit or SIGKILL.
-            unlinkSync(index);
-            rmSync(directory, {recursive:true});
+                CREATE INDEX IF NOT EXISTS entry_input ON entries(input_id);
+                CREATE INDEX IF NOT EXISTS entry_parent ON entries(parent,sequence);
+                CREATE INDEX IF NOT EXISTS entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence DESC);
+                CREATE INDEX IF NOT EXISTS entry_pending_context ON entries(parent)
+                    WHERE json_type(selectors,'$.contextSettings') IS NULL;`);
             this.#metadata = this.#db.prepare('SELECT selectors FROM entries WHERE id=?');
             this.#input = this.#db.prepare('SELECT selectors FROM entries WHERE input_id=? ORDER BY sequence DESC LIMIT 1');
             this.#label = this.#db.prepare("SELECT selectors FROM entries WHERE json_extract(selectors,'$.label.targetId')=? ORDER BY sequence DESC LIMIT 1");
@@ -342,11 +370,51 @@ export class DiskEntryStore extends EntryStore {
             ) WHERE position=1`);
             this.#children = this.#db.prepare('SELECT id FROM entries WHERE parent IS ? ORDER BY sequence');
             this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?)');
-            this.refresh();
+            this.#writeIndex(() => this.refresh());
         } catch (error) {
             this.close();
-            rmSync(directory, { recursive: true, force: true });
             throw error;
+        }
+    }
+    #writeIndex(action) {
+        const owns = !this.#db.isTransaction;
+        if (owns) this.#db.exec('BEGIN IMMEDIATE');
+        try {
+            if (owns && this.#revision) {
+                if (this.#db.prepare('SELECT revision FROM source').get()?.revision !== this.#revision)
+                    throw new Error('Native metadata index revision changed');
+            }
+            const result = action();
+            if (owns) this.#db.exec('COMMIT');
+            return result;
+        } catch (error) {
+            if (owns) this.#db.exec('ROLLBACK');
+            throw error;
+        }
+    }
+    knownMetadata(id) { return id === null ? undefined : EntryMetadata.fromIndex(this.#metadata.get(id)); }
+    settingsMetadata(id) {
+        let meta = this.metadata(id);
+        if (!meta || meta.contextSettings) return meta;
+        return this.#writeIndex(() => {
+            while (!meta.contextSettings && this.#readPrevious()) meta = this.knownMetadata(id);
+            meta = this.knownMetadata(id);
+            if (!meta.contextSettings) throw new Error('Native settings ancestry is unresolved');
+            return meta;
+        });
+    }
+    #resolveSettings(meta, inherited) {
+        const pending = [[meta, inherited]];
+        const save = this.#db.prepare('UPDATE entries SET selectors=? WHERE id=?');
+        while (pending.length) {
+            const [current, parentSettings] = pending.pop();
+            if (current.contextSettings) continue;
+            const parent = parentSettings ?? (current.parentId === null ? EntryMetadata.initialSettings : this.knownMetadata(current.parentId)?.contextSettings);
+            if (!parent) continue;
+            current.inheritSettings(parent);
+            save.run(JSON.stringify(current), current.id);
+            for (const row of this.#db.prepare("SELECT selectors FROM entries WHERE parent=? AND json_type(selectors,'$.contextSettings') IS NULL").iterate(current.id))
+                pending.push([EntryMetadata.fromIndex(row), current.contextSettings]);
         }
     }
     get header() { this.assertUsable(); return this.#header; }
@@ -485,11 +553,20 @@ export class DiskEntryStore extends EntryStore {
     #index(entry, offset, length) {
         this.validate(entry);
         // Byte offsets supply ordering; no lifetime row counter is needed.
-        const meta = new EntryMetadata(entry, offset, offset, length);
-        const parent = entry.parentId === null ? undefined : EntryMetadata.fromIndex(this.#metadata.get(entry.parentId));
+        const existing = this.knownMetadata(entry.id);
+        if (existing) {
+            if (existing.offset !== offset || existing.length !== length) throw new Error('Duplicate native entry identity');
+            return existing;
+        }
+        const meta = this.metadataFor(entry, offset, offset, length);
+        const parent = this.knownMetadata(entry.parentId);
         if (parent && parent.sequence >= meta.sequence) throw new Error('Invalid native entry ancestry');
         this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, offset, length, meta.inputId, JSON.stringify(meta));
-        return meta;
+        if (meta.contextSettings) {
+            for (const row of this.#db.prepare("SELECT selectors FROM entries WHERE parent=? AND json_type(selectors,'$.contextSettings') IS NULL").all(meta.id))
+                this.#resolveSettings(EntryMetadata.fromIndex(row), meta.contextSettings);
+        } else this.#resolveSettings(meta);
+        return this.knownMetadata(meta.id);
     }
     #readHeader() {
         const buffer = Buffer.allocUnsafe(4096), parts = [];
@@ -511,12 +588,12 @@ export class DiskEntryStore extends EntryStore {
         }
         throw new Error('Incomplete native session header newline');
     }
-    *#backwardLines() {
+    *#backwardLines(ceiling = this.#extent) {
         const buffer = Buffer.allocUnsafe(64 * 1024);
         const newline = Buffer.allocUnsafe(1);
         if (!this.#extent || readSync(this.#fd, newline, 0, 1, this.#extent - 1) !== 1 || newline[0] !== 10)
             throw new Error('Incomplete native session newline');
-        let position = this.#extent - 1, parts = [], size = 0;
+        let position = ceiling - 1, parts = [], size = 0;
         while (position > this.#headerEnd) {
             const start = Math.max(this.#headerEnd, position - buffer.length);
             const count = position - start;
@@ -538,9 +615,23 @@ export class DiskEntryStore extends EntryStore {
         if (size) yield {raw: Buffer.concat(parts, size), offset: this.#headerEnd};
     }
     #readPrevious() {
+        return this.#writeIndex(() => {
+            this.assertCurrent();
+            return this.#readIndexedPrevious();
+        });
+    }
+    #readIndexedPrevious() {
         try {
+            if (!this.#lines) return undefined;
             const next = this.#lines.next();
-            if (next.done) return undefined;
+            if (next.done) {
+                this.#lines = undefined;
+                for (const row of this.#db.prepare(`SELECT e.selectors FROM entries e
+                    WHERE json_type(e.selectors,'$.contextSettings') IS NULL
+                    AND NOT EXISTS (SELECT 1 FROM entries p WHERE p.id=e.parent)`).all())
+                    this.#resolveSettings(EntryMetadata.fromIndex(row), EntryMetadata.initialSettings);
+                return undefined;
+            }
             const {raw, offset} = next.value;
             const meta = this.#index(this.#decode(raw), offset, raw.length);
             this.#last ??= meta.id;
@@ -558,17 +649,22 @@ export class DiskEntryStore extends EntryStore {
         if (this.#revision) throw new Error('Unrecognized native revision; open a fresh store');
         this.#extent = Number(before.size);
         this.#revision = revision(before);
+        if (this.#db.prepare('SELECT revision FROM source').get()?.revision !== this.#revision) {
+            this.#db.exec('DELETE FROM entries; DELETE FROM source;');
+            this.#db.prepare('INSERT INTO source VALUES(?)').run(this.#revision);
+        }
         this.#readHeader();
-        this.#lines = this.#backwardLines();
-        const latest = this.#readPrevious();
+        const oldest = this.#db.prepare('SELECT offset FROM entries ORDER BY sequence LIMIT 1').get();
+        this.#last = this.#db.prepare('SELECT id FROM entries ORDER BY sequence DESC LIMIT 1').get()?.id ?? null;
+        this.#lines = this.#backwardLines(oldest?.offset ?? this.#extent);
+        const latest = this.#last ? this.knownMetadata(this.#last) : this.#readPrevious();
         if (latest) for (const meta of this.ancestors(latest.id)) {
             if (meta.type === 'compaction') break;
         }
         this.assertCurrent();
     }
     /** Extend only after SessionManager's existing writer fence appended these exact bytes. */
-    append(entry) {
-        this.validate(entry);
+    appendCoordinates(entry) {
         const before = this.#extent;
         const current = fstatSync(this.#fd, { bigint: true });
         const encoded = Buffer.from(JSON.stringify(entry) + '\n');
@@ -578,13 +674,23 @@ export class DiskEntryStore extends EntryStore {
         const saved = Buffer.allocUnsafe(encoded.length);
         if (readSync(this.#fd, saved, 0, saved.length, before) !== saved.length || !saved.equals(encoded))
             throw new Error('Native appended entry differs');
-        if (entry.parentId !== null && !this.metadata(entry.parentId))
-            throw new Error('Invalid native append ancestry');
-        this.#last = this.#index(entry, before, encoded.length - 1).id;
         this.#extent = Number(current.size);
         this.#revision = revision(current);
+        return [before, before, encoded.length - 1];
     }
-    committedAppend(entry) { this.append(entry); return this; }
+    storeAppended(entry, meta) {
+        if (this.knownMetadata(meta.id)) throw new Error('Duplicate native entry identity');
+        this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, meta.offset, meta.length, meta.inputId, JSON.stringify(meta));
+        this.#last = meta.id;
+    }
+    committedAppend(entry, file, write) {
+        return this.#writeIndex(() => {
+            if (write) write();
+            this.append(entry);
+            this.#db.prepare('UPDATE source SET revision=?').run(this.#revision);
+            return this;
+        });
+    }
     storedAt(file) {
         if (resolve(file) !== this.file) throw new Error('Native storage identity differs');
         this.assertCurrent(); return this;

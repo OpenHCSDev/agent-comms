@@ -2428,3 +2428,20 @@
      }
      // =========================================================================
      // Branching
+--- a/dist/core/session-manager.js
++++ b/dist/core/session-manager.js
+@@ -549,9 +549,11 @@
+             // process advanced the file, even for non-compaction writes.
+             if (this.persist && pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
+                 throw new Error("Native session writer changed; no replay");
+-            try { this._persist(entry); }
+-            catch { throw new Error("Native session write outcome unknown; no replay"); }
+-            this.entryStore = this.entryStore.committedAppend(entry, this.flushed ? this.sessionFile : undefined);
++            this.entryStore = this.entryStore.committedAppend(entry, undefined, () => {
++                try { this._persist(entry); }
++                catch { throw new Error("Native session write outcome unknown; no replay"); }
++                return this.flushed ? this.sessionFile : undefined;
++            });
+             this.leafId = entry.id;
+             this._pr48LoadedRevision = this.persist ? pr48DiskRevision(this.sessionFile) : null;
+         });

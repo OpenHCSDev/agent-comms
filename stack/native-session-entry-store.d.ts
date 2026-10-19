@@ -14,6 +14,9 @@ export declare class UnavailableStore extends StoreAvailability {
 }
 
 export declare class EntryMetadata {
+    static initialSettings: {model: EntryMetadata['model']; thinkingLevel: string};
+    contextSettings?: {model: EntryMetadata['model']; thinkingLevel: string};
+    inheritSettings(parent?: {model: EntryMetadata['model']; thinkingLevel: string}): EntryMetadata;
     constructor(entry: SessionEntry, sequence: number, offset?: number, length?: number);
     id: string;
     parentId: string | null;
@@ -42,8 +45,13 @@ export declare abstract class EntryStore {
     abstract metadataEntries(): IterableIterator<EntryMetadata>;
     abstract chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
     branchMetadata(leafId?: string | null, firstId?: string | null): IterableIterator<EntryMetadata>;
-    abstract append(entry: SessionEntry): void;
-    abstract committedAppend(entry: SessionEntry, file?: string): EntryStore;
+    append(entry: SessionEntry): void;
+    abstract appendCoordinates(entry: SessionEntry): [number, number, number];
+    abstract storeAppended(entry: SessionEntry, metadata: EntryMetadata): void;
+    knownMetadata(id: string | null): EntryMetadata | undefined;
+    settingsMetadata(id: string | null): EntryMetadata | undefined;
+    metadataFor(entry: SessionEntry, sequence: number, offset?: number, length?: number, parent?: EntryMetadata): EntryMetadata;
+    abstract committedAppend(entry: SessionEntry, file?: string, write?: () => string | undefined): EntryStore;
     abstract storedAt(file: string): EntryStore;
     abstract close(): void;
     assertCurrent(): void;
@@ -82,8 +90,9 @@ export declare class MemoryEntryStore extends EntryStore {
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
     chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
-    append(entry: SessionEntry): void;
-    committedAppend(entry: SessionEntry, file?: string): EntryStore;
+    appendCoordinates(entry: SessionEntry): [number, number, number];
+    storeAppended(entry: SessionEntry, metadata: EntryMetadata): void;
+    committedAppend(entry: SessionEntry, file?: string, write?: () => string | undefined): EntryStore;
     storedAt(file: string): DiskEntryStore;
     close(): void;
 }
@@ -97,8 +106,9 @@ export declare class DiskEntryStore extends EntryStore {
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
     chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
-    append(entry: SessionEntry): void;
-    committedAppend(entry: SessionEntry, file?: string): EntryStore;
+    appendCoordinates(entry: SessionEntry): [number, number, number];
+    storeAppended(entry: SessionEntry, metadata: EntryMetadata): void;
+    committedAppend(entry: SessionEntry, file?: string, write?: () => string | undefined): EntryStore;
     storedAt(file: string): EntryStore;
     close(): void;
 }
