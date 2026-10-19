@@ -90,6 +90,41 @@ def test_unrecognized_phase_is_a_typed_observation_not_a_send_decision():
     assert failure.input_state is None
 
 
+def test_native_1006_decodes_code_without_parsing_error_prose():
+    from agent_comms.turn_failure import (
+        ModelRequestFailed, ProviderTransportFailed, RetryableProviderFailure,
+    )
+
+    record = observed()
+    record["message"]["diagnostics"][0]["error"].update(
+        code=1006, message="Opaque native close"
+    )
+    record["message"]["errorMessage"] = "Unrelated prose with no close code"
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    diagnostic, = event.message.diagnostics
+    assert diagnostic.error.code == 1006
+    failure = ModelRequestFailed.from_diagnostics(
+        event.message.error_message, event.message.diagnostics
+    )
+    assert isinstance(failure, ProviderTransportFailed)
+    assert isinstance(failure, RetryableProviderFailure)
+
+
+def test_native_close_without_code_fails_at_rpc_boundary():
+    record = observed()
+    del record["message"]["diagnostics"][0]["error"]["code"]
+    with pytest.raises(ValueError, match="Missing required fields.*code"):
+        PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+
+
+def test_error_prose_does_not_invent_a_close_diagnostic():
+    record = observed()
+    del record["message"]["diagnostics"]
+    record["message"]["errorMessage"] = "WebSocket closed 1006"
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    assert event.message.diagnostics == ()
+
+
 def test_native_1012_with_empty_thinking_reaches_provider_feedback():
     """The observed comms428 terminal must survive RPC and ACP publication."""
     record = observed()
