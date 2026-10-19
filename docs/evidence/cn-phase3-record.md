@@ -29,7 +29,8 @@ records a `DeliveryMerge`: main, another PR target, or linked but unmerged sourc
 `DeliveredProblemOrder.line` derives its text from that delivery. `WorkBranches` still owns the
 open-PR/open-issue branch-link rule. `PullRequests.listed` now owns exact order-reference matching;
 `ProgressSource` no longer repeats that identity decision. PR lookup still uses the immutable order reference, now decoded
-through named query records including the target branch. No verdict, strike, delivery or branch store
+through named query records including the target branch. The old scalar `PullRequest.listed`
+decoder is deleted; typed query rows are no longer decoded a second time. No verdict, strike, delivery or branch store
 was added. The integration is the observation at completion, not a later claim of installation.
 
 Before/after AST evidence used refactor-audit's `Package.load` with Python 3.14: 382 Core production
@@ -63,7 +64,7 @@ acceptance, preserving the concise receipt below. The proof does not own other a
 
 ## Actual CLI proof
 
-Original response bodies: `docs/evidence/cn-phase3-record-results.jsonl` (12 actual responses,
+Original response bodies: `docs/evidence/cn-phase3-record-results.jsonl` (14 actual responses,
 normalized only for whitespace). Driver: `tools/proofs/cn_phase3_record.py`. The driver initializes
 real Core stores and calls `python -m agent_comms.cli tool --from ...`. It uses no fake Comms,
 fixture events or model replies. Judgment names a real edit from this unit's native session,
@@ -93,7 +94,10 @@ Delivered commit 2874a87ada914add901c7f318ea46c3c88aa555a is not merged and has 
 
 P4 remained pending at revision 1. The check can still leave its normal Git check note even when
 completion is refused. These are source-CLI checks of the candidate, not an installed runtime claim.
-Nothing was merged, published as a runtime, restarted or installed.
+No PR was merged, and nothing was published as a runtime, restarted or installed. Latest main
+was merged normally into this branch at 256efcc8b. The two codec checks and CLI entrypoint passed
+again there; a fresh P5 order then completed as unmerged through the actual CLI. The post-merge
+Core AST pass parsed 384 modules with zero omissions.
 
 ## Local checks and precise blockers
 

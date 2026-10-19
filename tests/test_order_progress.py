@@ -361,8 +361,8 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     monkeypatch.setattr(subprocess, "run", forge)
     script.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).run()
     assert todo.order.pull_request_ids(bodies[0]) == (todo.order.id,)
-    stamp = "1970-01-01T00:08:20Z"
-    merged = PullRequest.listed(number, branch, "b" * 40, "d" * 40, stamp, stamp, bodies[0])
+    merged = PullRequest(number, branch, "b" * 40, "d" * 40,
+        merged_at=500, updated_at=500, orders=todo.order.pull_request_ids(bodies[0]))
     foreign = replace(merged, number=number + 1, merge="f" * 40, orders=("another-order",))
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order:
                         (foreign, merged) if state == "merged" else ())

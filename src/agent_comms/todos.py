@@ -32,7 +32,6 @@ from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
-    boundary_decoder,
 )
 from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
@@ -300,15 +299,6 @@ class PullRequest:
     orders: tuple[str, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
 
-    @classmethod
-    @boundary_decoder
-    def listed(cls, number: int, branch: str, head: str, merge: str, merged: str,
-               updated: str, body: str, base: str = WorkBranches.main) -> Self:
-        """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
-        return cls(int(number), branch, head, merge or None,
-                   _github_time(merged) if merged else None, _github_time(updated),
-                   ProblemOrder.pull_request_ids(body), base=base)
-
 
 def _github_time(text: str) -> float:
     return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
@@ -333,9 +323,10 @@ class ListedPullRequest:
     base: str
 
     def parsed(self) -> PullRequest:
-        return PullRequest.listed(
-            self.number, self.branch, self.head, self.merge.oid if self.merge else "",
-            self.merged or "", self.updated, self.body, self.base)
+        return PullRequest(
+            self.number, self.branch, self.head, self.merge.oid if self.merge else None,
+            _github_time(self.merged) if self.merged else None, _github_time(self.updated),
+            ProblemOrder.pull_request_ids(self.body), base=self.base)
 
 
 class PullRequests:
