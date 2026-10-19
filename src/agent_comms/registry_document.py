@@ -505,9 +505,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+        name = self.require(name).name
         if self.status(name).active:
             self.owners.advance(name)
         thread = self.threads[name]
@@ -516,9 +514,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.threads[name] = thread.without_turn()
 
     def archive(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+        name = self.require(name).name
         if self.status(name).active:
             self.owners.advance(name)
         self.set_status(name, ArchivedThreadStatus())
@@ -557,17 +553,13 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return {original.name: self.remove(original.name) for original in originals}
 
     def begin_delete(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+        name = self.require(name).name
         self.set_status(name, self.status(name).for_deletion())
         self.advance_claim(name)
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+        name = self.require(name).name
         detached = tuple(
             sorted(child.name for child in self.threads.values() if child.parent == name)
         )
@@ -583,9 +575,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return detached
 
     def heartbeat(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+        name = self.require(name).name
         previous = self.status(name)
         resumed = previous.after_heartbeat(name)
         if previous.changes_owner(resumed):
