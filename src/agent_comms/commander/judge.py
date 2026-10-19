@@ -119,7 +119,11 @@ def roast(commander, audience, thread, lines, text, fix, slop):
 
 def alarm(commander):
     while True:
-        late = [edit for edit in Edit.unjudged(commander.comms, commander.commander) if time.time() - edit.at > 300]
+        late = [
+            edit
+            for edit in Edit.unjudged(commander.comms, commander.commander)
+            if time.time() - edit.at > 300
+        ]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
@@ -175,8 +179,14 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def run(self, ctx: Commander) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        orders = {todo.id: todo for todo in ctx.held_orders() if not self.msg or todo.sent_in(self.msg)}
-        edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if edit.problem in orders}
+        orders = {
+            todo.id: todo for todo in ctx.held_orders() if not self.msg or todo.sent_in(self.msg)
+        }
+        edits = {
+            edit.id: edit
+            for edit in Edit.unjudged(ctx.comms, ctx.commander)
+            if edit.problem in orders
+        }
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
@@ -193,7 +203,9 @@ class VerdictVerb(JudgeVerb, RuledVerb):
             self.operation(ctx, todo, i).prepare(ctx.comms.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
-            result = ctx.call(CommsVerdictTool(id=todo.id, operation=self.operation(ctx, current[todo.id], i)))
+            result = ctx.call(
+                CommsVerdictTool(id=todo.id, operation=self.operation(ctx, current[todo.id], i))
+            )
             current[todo.id] = result.todo
         left = len(Edit.unjudged(ctx.comms, ctx.commander))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
@@ -232,8 +244,14 @@ class SupersededVerb(VerdictVerb):
     by: str = option("--by", help="the replacing order's message")
 
     def operation(self, ctx: Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
-        return SupersededVerdict(todo.revision, ctx.comms.registry.require(ctx.commander).incarnation,
-                                 todo.held(), edit_id, replacement=self.by, reason=self.why)
+        return SupersededVerdict(
+            todo.revision,
+            ctx.comms.registry.require(ctx.commander).incarnation,
+            todo.held(),
+            edit_id,
+            replacement=self.by,
+            reason=self.why,
+        )
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
@@ -276,9 +294,11 @@ class BackVerb(VerdictVerb):
         for todo in todos:
             audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
             roast(ctx, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
-            line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.commander} at review): '
-                    f'{todo.strikes[-1].reason}')
+            line = (
+                f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
+                f"(strike {todo.strike_count} on {todo.id}; caught by {ctx.commander} at review): "
+                f"{todo.strikes[-1].reason}"
+            )
             ctx.on_record(line, 'Send-back', audience)
 
 

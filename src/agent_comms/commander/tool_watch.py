@@ -26,7 +26,9 @@ def enforce_storage(commander: Commander, thread: str, call: CodingCall) -> None
     if thread not in commander.units() or thread not in registry:
         return
     try:
-        registry.decide_storage(thread, call.storage_effects(Path(registry.require(thread).worktree)))
+        registry.decide_storage(
+            thread, call.storage_effects(Path(registry.require(thread).worktree))
+        )
     except SelectedToolDenied as violation:
         print(f'VIOLATION storage {thread}: {violation}', flush=True)
         for todo in commander.held_by(thread)[:1]:
@@ -77,7 +79,9 @@ def main(a, commander):
     while True:
         if time.time() - last_names > 60:
             names.update(thread_names(registry)); last_names = time.time()
-        for path in set(glob.glob(f'{commander.comms.root}/native-sessions/*/*.jsonl')) | set(names):
+        for path in set(glob.glob(f"{commander.comms.root}/native-sessions/*/*.jsonl")) | set(
+            names
+        ):
             try:
                 st = os.stat(path)
             except FileNotFoundError:

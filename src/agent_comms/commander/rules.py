@@ -42,8 +42,15 @@ def principles() -> list[str]:
 
 
 def rules(commander: CommanderContext) -> list[str]:
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', CommanderConfig.packaged_skill().read_text(), re.M)]
-    for path in [path for directory in commander.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
+    found = [
+        m.group(1).strip()
+        for m in re.finditer(
+            r"^\s*- \*\*(.+?)\*\*", CommanderConfig.packaged_skill().read_text(), re.M
+        )
+    ]
+    for path in [
+        path for directory in commander.rules for path in sorted(glob.glob(f"{directory}/*.md"))
+    ]:
         text = open(path).read()
         if re.search(r'^\s*type: feedback', text, re.M):
             desc = re.search(r'^description: (.+)$', text, re.M)
@@ -65,12 +72,20 @@ def review(commander: CommanderContext, who: str) -> None:
     print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:
         print(f'  - {r}')
-    drawn = random.sample(paper, DRAWN) if who != commander.commander else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    drawn = (
+        random.sample(paper, DRAWN)
+        if who != commander.commander
+        else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    )
     pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
-    record(commander, who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != commander.commander else 2))
+    record(
+        commander,
+        who,
+        DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != commander.commander else 2),
+    )
     print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
         print(f'  {n}. {r}')
@@ -105,7 +120,9 @@ class StaleVerb(RulesVerb):
     help = "show whether the acting commander's rule review is due"
 
     def run(self, ctx: Commander) -> None:
-        print('\n'.join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx))) or 'fresh')
+        print(
+            "\n".join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx))) or "fresh"
+        )
 
 
 def main(a: list[str], commander: Commander) -> None:

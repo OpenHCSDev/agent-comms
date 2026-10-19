@@ -28,7 +28,11 @@ BEAT_AGE = 10 * 60
 
 def live_forks(forks: Path) -> list[str]:
     os.makedirs(forks, exist_ok=True)
-    return [n[:-5] for n in os.listdir(forks) if n.endswith('.beat') and time.time() - os.path.getmtime(f'{forks}/{n}') < BEAT_AGE]
+    return [
+        n[:-5]
+        for n in os.listdir(forks)
+        if n.endswith(".beat") and time.time() - os.path.getmtime(f"{forks}/{n}") < BEAT_AGE
+    ]
 
 
 def beat(forks: Path, name: str) -> None:

@@ -45,7 +45,8 @@ class ChangedAssignee(TransferReason):
             ()
             if len(self.reason.split()) >= 8
             else (
-                "--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner",
+                "--reassign needs the concrete failure that forces replacement (8+ words), "
+                "told to the old and new owner",
             )
         )
 

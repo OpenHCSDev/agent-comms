@@ -160,7 +160,9 @@ class ForkNow(UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[ForkNow, ...]:
-        load = capacity.Load.of(comms, commander, CommanderConfig.read_root(comms.root).state / 'forks')
+        load = capacity.Load.of(
+            comms, commander, CommanderConfig.read_root(comms.root).state / "forks"
+        )
         return (cls(load),) * load.short
 
     def line(self) -> str:
@@ -226,7 +228,12 @@ class MergeGrowth(DatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
-        return tuple(growth for repo in CommanderConfig.read_root(comms.root).repos for growth in cls.merges(repo) if growth.over)
+        return tuple(
+            growth
+            for repo in CommanderConfig.read_root(comms.root).repos
+            for growth in cls.merges(repo)
+            if growth.over
+        )
 
     @property
     def over(self) -> bool:
