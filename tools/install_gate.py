@@ -599,6 +599,10 @@ class MachineResult(DeclaredFamily, affix="MachineResult"):
     @abstractmethod
     def successful(self) -> bool: ...
 
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class PassedMachineResult(MachineResult):
@@ -624,8 +628,16 @@ class FailedMachineResult(MachineResult):
     def successful(self) -> bool:
         return False
 
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return (self.error,)
+
 
 class GateResult(DeclaredFamily, affix="GateResult"):
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return (self.description,)
+
     @property
     @abstractmethod
     def successful(self) -> bool: ...
@@ -655,6 +667,11 @@ class MachinesGateResult(GateResult):
     machines: dict[str, MachineResult]
 
     @property
+    def failures(self) -> tuple[str, ...]:
+        return tuple(f"{name}: {reason}" for name, result in self.machines.items()
+                     for reason in result.failures)
+
+    @property
     def successful(self) -> bool:
         return len(self.machines) == 2 and all(
             result.successful for result in self.machines.values()
@@ -679,6 +696,10 @@ class UnfinishedGateResult(MachinesGateResult):
 @dataclass(frozen=True)
 class InterruptedGateResult(MachinesGateResult):
     error: str
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return (self.error, *super().failures)
 
     @property
     def successful(self) -> bool:

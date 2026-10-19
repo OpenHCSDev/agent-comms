@@ -12,14 +12,26 @@ import re
 import shlex
 import subprocess
 import sys
+import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 
-from install_gate import REPO, ExternalRecord, GateError, RepositoryAnswer, Target, affected, run
+from debt_ratchet import compare
+from install_gate import (
+    REPO,
+    ExternalRecord,
+    GateError,
+    RepositoryAnswer,
+    RunSummary,
+    Target,
+    affected,
+    run,
+)
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.todos import ReviewedHeadVerdict
 
 WORKFLOW = ".github/workflows/debt-ratchet.yml"
 
@@ -27,11 +39,10 @@ WORKFLOW = ".github/workflows/debt-ratchet.yml"
 @dataclass(frozen=True)
 class ApprovedHead(ExternalRecord):
     state: Literal["success"]
-    context: ClassVar[str] = "agent-comms/review"
 
     @classmethod
     def require(cls, host: Host, head: str) -> None:
-        query = f'.statuses | map(select(.context == "{cls.context}")) | first'
+        query = f'.statuses | map(select(.context == "{ReviewedHeadVerdict.context}")) | first'
         answer = run("gh", "api", f"repos/{host.repository}/commits/{head}/status", "--jq", query)
         FieldCodec.decode(cls, FieldCodec.parse(answer))
 
@@ -55,10 +66,15 @@ class QueuedPullRequest(ExternalRecord):
     def for_head(cls, host: Host, head: str) -> Self:
         links = FieldCodec.decode(
             tuple[PullRequestNumber, ...],
-            FieldCodec.parse(run(
-                "gh", "api", f"repos/{host.repository}/commits/{head}/pulls", "--jq",
-                f'[.[] | select(.head.sha == "{head}" and .state == "open") | {{number: .number}}]',
-            )),
+            FieldCodec.parse(
+                run(
+                    "gh",
+                    "api",
+                    f"repos/{host.repository}/commits/{head}/pulls",
+                    "--jq",
+                    f'[.[] | select(.head.sha == "{head}" and .state == "open") | {{number: .number}}]',
+                )
+            ),
         )
         fields = ",".join(key for _, key in FieldCodec.record_fields(cls))
         candidates = tuple(
@@ -101,7 +117,8 @@ class WorkflowDispatchRunEvent(RunEvent, declared_name="workflow_dispatch"):
             Administrator,
             FieldCodec.parse(
                 run(
-                    "gh", "api",
+                    "gh",
+                    "api",
                     f"repos/{host.repository}/collaborators/{workflow.actor.login}/permission",
                 )
             ),
@@ -169,7 +186,13 @@ class Host:
         return run("git", "rev-parse", f"{head}^{{commit}}", cwd=self.repo)
 
     def command(self, *arguments: str | Path | int) -> None:
-        subprocess.run(tuple(map(str, arguments)), cwd=self.repo, check=True)
+        subprocess.run(
+            tuple(map(str, arguments)),
+            cwd=self.repo,
+            check=True,
+            stdout=sys.stderr,
+            stderr=sys.stderr,
+        )
 
 
 @dataclass(frozen=True)
@@ -193,10 +216,22 @@ class RatchetQueueCheck(QueueCheck, declared_name=None):
     root: ClassVar[str]
 
     def check(self, host: Host, target: Target) -> None:
-        host.command(
-            sys.executable, "-X", "faulthandler", host.repo / "tools/debt_ratchet.py",
-            "--root", self.root, "--base", target.base, "--head", target.head,
-        )
+        result = compare(host.repo, target.base, target.head, self.root)
+        if result.failed:
+            for metric, increase in result.delta.items():
+                if increase > 0:
+                    _, _, path = metric.partition(":")
+                    for line in result.introduced_lines.get(metric, [1]):
+                        annotation(
+                            path.partition("::")[0] or "tools/debt_ratchet.py",
+                            line,
+                            f"{metric}: +{increase}",
+                        )
+            for metric, lines in result.introduced_lines.items():
+                _, _, path = metric.partition(":")
+                for line in lines:
+                    annotation(path, line, f"Introduced {metric}")
+            raise GateError(f"{self.root} debt ratchet rejected {target.head}")
 
 
 class SrcQueueCheck(RatchetQueueCheck):
@@ -215,11 +250,36 @@ class InstallQueueCheck(QueueCheck):
             raise GateError(
                 "Private-copy allocation is not authorized: worker cap 3 GB, desktop bus 26 GiB"
             )
-        host.command(
-            sys.executable, "-X", "faulthandler", host.repo / "tools/install_gate.py",
-            "--repo", host.repo, "--revision", target.head, "--base", target.base,
-            "--scratch", host.scratch,
+        command = tuple(
+            map(
+                str,
+                (
+                    sys.executable,
+                    "-X",
+                    "faulthandler",
+                    host.repo / "tools/install_gate.py",
+                    "--repo",
+                    host.repo,
+                    "--revision",
+                    target.head,
+                    "--base",
+                    target.base,
+                    "--scratch",
+                    host.scratch,
+                ),
+            )
         )
+        completed = subprocess.run(
+            command,
+            cwd=host.repo,
+            stdout=subprocess.PIPE,
+            stderr=sys.stderr,
+            text=True,
+            check=False,
+        )
+        summary = FieldCodec.decode(RunSummary, FieldCodec.parse(completed.stdout))
+        if completed.returncode or not summary.result.successful:
+            raise GateError("; ".join(summary.result.failures) or summary.result.description)
 
 
 class EnqueueQueueCheck(QueueCheck):
@@ -227,28 +287,47 @@ class EnqueueQueueCheck(QueueCheck):
         ApprovedHead.require(host, target.head)
         pr = QueuedPullRequest.for_head(host, target.head)
         host.command(
-            "gh", "pr", "merge", pr.number, "--repo", host.repository,
-            "--auto", "--merge", "--match-head-commit", pr.head,
+            "gh",
+            "pr",
+            "merge",
+            pr.number,
+            "--repo",
+            host.repository,
+            "--auto",
+            "--merge",
+            "--match-head-commit",
+            pr.head,
         )
 
 
 @dataclass(frozen=True)
 class DispatchQueueCheck(QueueCheck):
     head: str
+    context: str
 
     @classmethod
     def from_tokens(cls, tokens: list[str]) -> Self:
-        identifier, _, head = tokens
-        return cls(int(identifier), head)
+        identifier, _, head, context = tokens
+        return cls(int(identifier), head, context)
 
     def execute(self, host: Host) -> None:
         StatusWorkflowRun.require(host, self.run_id)
+        if self.context != ReviewedHeadVerdict.context:
+            return
         head = host.fetch(self.head)
         ApprovedHead.require(host, head)
         pr = QueuedPullRequest.for_head(host, head)
         host.command(
-            "gh", "workflow", "run", WORKFLOW, "--repo", host.repository,
-            "--ref", pr.branch, "-f", "enter_queue=true",
+            "gh",
+            "workflow",
+            "run",
+            WORKFLOW,
+            "--repo",
+            host.repository,
+            "--ref",
+            pr.branch,
+            "-f",
+            "enter_queue=true",
         )
 
 
@@ -257,6 +336,14 @@ class HostArguments(argparse.Namespace):
     repo: Path
     scratch: Path
     private_copies_authorized: bool
+
+
+def annotation(path: str, line: int, reason: str) -> None:
+    def escape(value: str) -> str:
+        return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+    attribute = escape(path).replace(",", "%2C").replace(":", "%3A")
+    print(f"::error file={attribute},line={line}::{escape(reason)}", flush=True)
 
 
 def main() -> int:
@@ -274,7 +361,16 @@ def main() -> int:
         RepositoryAnswer,
         FieldCodec.parse(run("gh", "repo", "view", "--json", "nameWithOwner", cwd=args.repo)),
     )
-    check.execute(Host(args.repo, repository.name, args.scratch, args.private_copies_authorized))
+    try:
+        check.execute(
+            Host(args.repo, repository.name, args.scratch, args.private_copies_authorized)
+        )
+    except (GateError, subprocess.CalledProcessError, MalformedRecord) as error:
+        frames = traceback.extract_tb(error.__traceback__)
+        location = frames[-1]
+        path = Path(location.filename).relative_to(args.repo)
+        annotation(str(path), location.lineno or 1, str(error))
+        return 1
     return 0
 
 

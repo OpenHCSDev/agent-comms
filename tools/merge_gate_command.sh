@@ -9,14 +9,14 @@ mkdir -p "$state/host-logs"
 log=$(mktemp "$state/host-logs/check-XXXXXXXX.log")
 exec </dev/null
 # The host owns these logs; the runner namespace cannot see them.
-if env -i HOME=/home/ts USER=ts PATH=/usr/bin:/bin LANG=C.UTF-8 \
+if env -i HOME="${HOME:?host home required}" USER="$(id -un)" PATH=/usr/bin:/bin LANG=C.UTF-8 \
   PYTHONDONTWRITEBYTECODE=1 TMPDIR="$state" \
-  PYTHONPATH="$repo/src:$repo/tools:/home/ts/wt/pi-install-gate--P2/scripts" \
-  timeout 300 "$python" -X faulthandler "$(dirname "$0")/merge_queue.py" \
+  PYTHONPATH="$repo/src:$repo/tools:$repo/src/agent_comms/skills/refactor-audit/scripts" \
+  "$python" -X faulthandler "$(dirname "$0")/merge_queue.py" \
   --repo "$repo" --scratch "$state" -- "${SSH_ORIGINAL_COMMAND:?missing request}" \
-  >"$log" 2>&1; then
+  2>"$log"; then
   printf 'check passed\n'
 else
-  printf 'check failed; private diagnostics retained on ts-gaming\n'
+  printf 'gate failed; detailed child logs remain private on the host\n'
   exit 1
 fi

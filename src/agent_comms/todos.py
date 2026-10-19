@@ -2037,6 +2037,7 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
 @dataclass(frozen=True)
 class ReviewedHeadVerdict(QuotedVerdict):
     """The connector reviewer accepts this immutable commit, never an inferred checkout head."""
+    context: ClassVar[str] = "agent-comms/review"
     head: str
 
     def __post_init__(self) -> None:
@@ -2054,7 +2055,7 @@ class ReviewedHeadVerdict(QuotedVerdict):
         recorded = self.prepare(goals, current).record(goals, problem)
         posted = subprocess.run(
             ("gh", "api", "--method", "POST", f"repos/{recorded.repo}/statuses/{self.head}",
-             "-f", "state=success", "-f", "context=agent-comms/review",
+             "-f", "state=success", "-f", f"context={self.context}",
              "-f", f"description=Accepted by {reviewer.name} on {problem}"),
             capture_output=True, text=True, timeout=60,
         )

@@ -15,12 +15,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: merge-queue-${{ github.event.merge_group.head_sha || github.event.sha || github.sha }}
+  group: merge-queue-${{ github.event.sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
   dispatch-reviewed:
-    if: github.event_name == 'status' && github.event.context == vars.AGENT_COMMS_REVIEW_CONTEXT && github.event.state == 'success'
+    if: github.event_name == 'status' && github.event.state == 'success'
     runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
     timeout-minutes: 5
     steps:
@@ -28,10 +28,13 @@ jobs:
         env:
           RUN_ID: ${{ github.run_id }}
           REVIEWED_HEAD: ${{ github.event.sha }}
+          REVIEW_CONTEXT: ${{ github.event.context }}
         run: |
           set -euo pipefail
+          request=$(python3 -c 'import shlex, sys; print(shlex.join(sys.argv[1:]))' \
+            "$RUN_ID" dispatch "$REVIEWED_HEAD" "$REVIEW_CONTEXT")
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID dispatch $REVIEWED_HEAD"
+            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$request"
 
   ratchet:
     if: github.event_name != 'status'
