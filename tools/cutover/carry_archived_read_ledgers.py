@@ -10,7 +10,7 @@ from .carry_p495_read_ledger import PreviousConversation
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.read_basis import ConversationCursor, ReadCursor
-from agent_comms.read_ledger import ReadDocument, ReadLedger
+from agent_comms.read_ledger import ReadDocument, ReadLedger, ReadNotice
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnationRecord
 
@@ -46,7 +46,7 @@ class ArchivedReads:
                 raise ValueError("Duplicate archived conversation")
             cursors[key] = ConversationCursor(exceptions=positions)
         return ReadDocument({owner: ReadCursor(cursors) for owner, cursors in readers.items()},
-                            self.bus_identity, self.transcripts, self.notice)
+                            self.bus_identity, self.transcripts, FieldCodec.decode(ReadNotice, self.notice))
 
 
 class ArchivedReadLedgers(Carry):

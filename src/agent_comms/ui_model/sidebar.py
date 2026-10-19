@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
+
+from agent_comms.read_ledger import NoReadNotice, ReadNotice
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
@@ -101,8 +103,8 @@ class SidebarObservation(ABC):
     def channel_order(self) -> type[ChannelSort]:
         return NameChannelSort
 
-    def read_marker_notice(self) -> str:
-        return ""
+    def read_marker_notice(self) -> ReadNotice:
+        return NoReadNotice()
 
     def channel_unread(self, target: str) -> UnreadPresentation:
         return UnobservedUnread()
@@ -146,8 +148,8 @@ class ObservedSidebar(SidebarObservation):
     def channel_order(self) -> type[ChannelSort]:
         return self.snapshot.channel_order
 
-    def read_marker_notice(self) -> str:
-        return self.snapshot.read_marker_notice or ""
+    def read_marker_notice(self) -> ReadNotice:
+        return self.snapshot.read_marker_notice
 
     def channel_unread(self, target: str) -> UnreadPresentation:
         return UnreadPresentation.for_channel(self.snapshot, target)
