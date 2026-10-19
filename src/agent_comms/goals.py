@@ -319,15 +319,15 @@ class OrderCheck:
                                     timeout=self.timeout)
 
     def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
-        """Read an explicit run's receipt; absent evidence never starts the check."""
+        """Read the check run result without starting the check."""
         return tuple(checked.result for checked in CheckedCommit.stored(repository, sha)
                      if checked.command == self.command)[:1]
 
     def at(self, revision: str, repository: str) -> ChildResult:
-        """The check on ``revision``: a recorded result, or an explicit run in a detached checkout."""
+        """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
         sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
-        for result in self.recorded(sha, repository):
-            return result
+        for recorded in self.recorded(sha, repository):
+            return recorded
         with tempfile.TemporaryDirectory(prefix="order-check-") as scratch:
             tree = str(Path(scratch) / "tree")
             CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)

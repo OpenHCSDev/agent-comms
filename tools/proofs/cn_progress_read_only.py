@@ -11,6 +11,7 @@ from agent_comms.tools import CommsTodoListTool, CommsTodoTool, TodoList
 from tools.proofs.cn_phase3_record import CHECKOUT, ROOT, cli, create_order
 
 MARKER = ROOT / 'explicit-check-count'
+MARKER_CONTENT = b'x'
 
 
 def prepare():
@@ -45,9 +46,9 @@ def verify():
         sha = CheckedCommit.git(str(checkout), 'rev-parse', 'HEAD').strip()
         assert not todo.order.check.recorded(sha, str(checkout))
         todo.order.check.at(sha, str(checkout))  # Deliberately explicit, never a board read.
-        assert MARKER.read_text() == 'x'
+        assert MARKER.read_bytes() == MARKER_CONTENT
         assert len(board().readings) == 1
-        assert MARKER.read_text() == 'x'
+        assert MARKER.read_bytes() == MARKER_CONTENT
         for receipt in CheckedCommit.stored(str(checkout), sha):
             if receipt.command == todo.order.check.command:
                 print(FieldCodec.encode(receipt), flush=True)
@@ -60,6 +61,8 @@ def verify():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('step', choices=('prepare', 'verify'))
+    steps = parser.add_subparsers(required=True)
+    steps.add_parser(prepare.__name__).set_defaults(action=prepare)
+    steps.add_parser(verify.__name__).set_defaults(action=verify)
     args = parser.parse_args()
-    prepare() if args.step == 'prepare' else verify()
+    args.action()

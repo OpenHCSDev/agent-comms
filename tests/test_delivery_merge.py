@@ -2,7 +2,8 @@
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import (
     BranchDeliveryMerge, CheckedCommitDelivery, DeliveryMerge, ListedPullRequest,
-    MainDeliveryMerge, OrderDelivery, UnmergedDeliveryMerge,
+    MainDeliveryMerge, MergedListedPullRequest, MergedPullRequest, OrderDelivery,
+    UnmergedDeliveryMerge, UnmergedListedPullRequest, UnmergedPullRequest,
 )
 
 
@@ -18,14 +19,27 @@ def test_delivery_integration_members_keep_their_data_through_the_only_codec():
 
 
 def test_named_forge_row_preserves_the_actual_nonmain_merge_target():
-    row = FieldCodec.decode(ListedPullRequest, FieldCodec.parse('''{
+    row = FieldCodec.decode(MergedListedPullRequest, FieldCodec.parse('''{
         "number": 42, "branch": "fix/order", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "merge": {"oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
         "merged": "2026-10-19T12:00:00Z", "updated": "2026-10-19T12:00:01Z",
         "body": "Agent-Comms-Order: proof-order", "base": "release"
     }'''))
     request = row.parsed()
+    assert isinstance(request, MergedPullRequest)
     assert request.base == 'release'
     assert request.merge == 'b' * 40
     assert request.merged_at < request.updated_at
     assert request.orders == ('proof-order',)
+    assert FieldCodec.decode(ListedPullRequest, FieldCodec.encode(row)) == row
+
+
+def test_unmerged_query_row_has_no_merge_fields():
+    row = FieldCodec.decode(UnmergedListedPullRequest, FieldCodec.parse('''{
+        "number": 43, "branch": "fix/order", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "updated": "2026-10-19T12:00:01Z", "body": "Agent-Comms-Order: proof-order", "base": "main"
+    }'''))
+    request = row.parsed()
+    assert isinstance(request, UnmergedPullRequest)
+    assert tuple(request.merged_commits_since(0)) == ()
+    assert FieldCodec.decode(ListedPullRequest, FieldCodec.encode(row)) == row

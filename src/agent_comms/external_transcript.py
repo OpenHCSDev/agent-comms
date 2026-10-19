@@ -488,7 +488,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             return reader.turns(bound)
 
     @contextmanager
-    def reading(self):
+    def reading(self) -> Iterator[StoreRead]:
         """Keep item and draft queries within the same SQL snapshot."""
         with self.snapshot() as connection:
             yield StoreRead(self, connection)

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 
+from agent_comms import cli as comms_cli
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -27,14 +28,14 @@ from agent_comms.todos import (AcceptedVerdict, CommitDelivery, MechanicalOrderR
 from agent_comms.progress_claims import MergedClaim
 
 CHECKOUT = Path(__file__).resolve().parents[2]
-ROOT = CHECKOUT / ".proof-record-plane"
-RECEIPT = CHECKOUT / "docs/evidence/cn-phase3-record-results.jsonl"
+ROOT = Path.home() / '.cache' / 'agent-scratch' / 'pi-cn-phase3' / 'record-plane'
+RECEIPT = ROOT.parent / 'cn-phase3-record-results.jsonl'
 
 
 def cli(caller, tool):
     arguments = FieldCodec.encode(tool)
     del arguments[tool.family_discriminator]
-    command = [sys.executable, "-m", "agent_comms.cli", "--root", str(ROOT), "tool",
+    command = [sys.executable, "-m", comms_cli.__name__, "--root", str(ROOT), "tool",
                "--from", caller, "--tool", tool.declared_name,
                "--arguments", json.dumps(arguments)]
     result = subprocess.run(command, capture_output=True, text=True, timeout=180,
@@ -128,17 +129,18 @@ def deliver(problem: str, delivered: str, checked: str | None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("step", choices=("setup", "order", "record", "deliver"))
-    parser.add_argument("--session", type=Path)
-    parser.add_argument("--problem")
-    parser.add_argument("--delivered")
-    parser.add_argument("--checked")
+    steps = parser.add_subparsers(required=True)
+    steps.add_parser(setup.__name__).set_defaults(action=lambda _: setup())
+    order_parser = steps.add_parser(create_order.__name__)
+    order_parser.add_argument('--problem', default='P1')
+    order_parser.set_defaults(action=lambda args: create_order(args.problem))
+    record_parser = steps.add_parser(record.__name__)
+    record_parser.add_argument('--session', required=True, type=Path)
+    record_parser.set_defaults(action=lambda args: record(args.session))
+    delivery_parser = steps.add_parser(deliver.__name__)
+    delivery_parser.add_argument('--problem', required=True)
+    delivery_parser.add_argument('--delivered', required=True)
+    delivery_parser.add_argument('--checked')
+    delivery_parser.set_defaults(action=lambda args: deliver(args.problem, args.delivered, args.checked))
     args = parser.parse_args()
-    if args.step == "setup":
-        setup()
-    elif args.step == "order":
-        create_order()
-    elif args.step == "deliver":
-        deliver(args.problem, args.delivered, args.checked)
-    else:
-        record(args.session)
+    args.action(args)

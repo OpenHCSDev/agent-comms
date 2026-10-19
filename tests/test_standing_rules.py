@@ -23,7 +23,8 @@ from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
-    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, StrikeReason, Todo, UnreadProgress)
+    MergedPullRequest, NoCommitProgress, OpenPrProgress, OrderProgress, PullRequests, StrikeReason,
+    Todo, UnmergedPullRequest, UnreadProgress)
 from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
@@ -55,11 +56,11 @@ def test_board_self_check_uses_order_progress_and_its_linked_merge(
         commander, standing, monkeypatch, reported, alarms):
     comms, caller = commander
     owned, pending, foreign = (create(commander, pid) for pid in ("P77", "P109", "P117"))
-    merged = PullRequest(1581, "docs/module-layers", "b" * 40, "d" * 40,
+    merged = MergedPullRequest(1581, "docs/module-layers", "b" * 40, merge="d" * 40,
         merged_at=500, updated_at=500, orders=(owned.order.id,))
-    opened = PullRequest(1624, "ratchet/none-absence", "c" * 40,
+    opened = UnmergedPullRequest(1624, "ratchet/none-absence", "c" * 40,
         updated_at=500, orders=(pending.order.id,))
-    other = PullRequest(1629, "ratchet/decoder-marker", "e" * 40, "f" * 40,
+    other = MergedPullRequest(1629, "ratchet/decoder-marker", "e" * 40, merge="f" * 40,
         merged_at=500, updated_at=500, orders=("another-order",))
 
     def forge(self, repo, state, order):
