@@ -1263,12 +1263,6 @@ class TestAgentTurn:
             wired = wire(root)
             agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
             monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-
-            class FakeClient:
-                async def session_update(self, **kwargs):
-                    pass
-
-            agent.sessions.client = FakeClient()
             await agent.new_session(cwd=base, mcp_servers=[])
             name = next(iter(agent.sessions.bindings))
             goal = wired.goals.update_goal(name, SetGoalAction(text="No replay after crash"))
@@ -1879,7 +1873,6 @@ class TestLiveConfigSync:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await asyncio.wait_for(menu_received.wait(), 1)
-        await agent.sessions.config.publish_configuration("proj")
         await agent.turns.goals.sync_goal_execution("proj", "proj")
         info = [update for update in sent if isinstance(update, SessionInfoUpdate)]
         assert len(info) == 1
@@ -1922,7 +1915,6 @@ class TestLiveConfigSync:
         try:
             await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
             await asyncio.wait_for(menu_received.wait(), 1)
-            await agent.sessions.config.publish_configuration("proj")
             await assert_snapshot_update()
             goal = wired.goals.update_goal("proj", SetGoalAction(text="Handle assigned work"))
             await assert_snapshot_update()
