@@ -15,6 +15,33 @@ from agent_comms.messages import (
 )
 
 
+def test_compiled_plan_resolves_a_thousand_records_once(monkeypatch):
+    import agent_comms.field_codec as codec
+
+    @dataclass(frozen=True)
+    class Entry:
+        count: int
+        tags: tuple[str, ...]
+
+    annotation = list[Entry]
+    records = [Entry(i, ("alpha", "beta")) for i in range(1000)]
+    expected = [{"count": i, "tags": ["alpha", "beta"]} for i in range(1000)]
+    plan = codec.compile_decoder(annotation)
+    before = FieldCodec._record_plan.cache_info().misses
+    assert FieldCodec.encode(records, annotation) == expected
+    assert FieldCodec._record_plan.cache_info().misses == before + 1
+    assert codec.compile_decoder(annotation) is plan
+
+    def unexpected(*args):
+        raise AssertionError("The value path parsed an annotation")
+
+    monkeypatch.setattr(FieldCodec, "_representation", staticmethod(unexpected))
+    monkeypatch.setattr(codec, "get_args", unexpected)
+    monkeypatch.setattr(codec, "get_origin", unexpected)
+    assert FieldCodec.encode(records, annotation) == expected
+    assert FieldCodec._record_plan.cache_info().misses == before + 1
+
+
 def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
     from pydantic import JsonValue
 
@@ -344,10 +371,13 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
         pass
 
     for target, value in ((int, True), (bool, 1), (str, DerivedStr("text")),
-                          (int, DerivedInt(4)), (DerivedInt, 4),
+                          (int, DerivedInt(4)),
                           (float, True), (float, math.inf), (float, math.nan), (int, None)):
         with pytest.raises(ValueError):
             FieldCodec.decode(target, value)
+    # An unsupported declaration is a programming error, not malformed data.
+    with pytest.raises(TypeError, match="Unsupported JSON type"):
+        FieldCodec.decode(DerivedInt, 4)
     assert FieldCodec.decode(int | None, None) is None
     assert FieldCodec.decode(Literal[True, 1], True) is True
     assert type(FieldCodec.decode(Literal[True, 1], 1)) is int

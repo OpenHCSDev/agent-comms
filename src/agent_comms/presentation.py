@@ -39,6 +39,7 @@ from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
+from .ui_model.unread import UnreadPresentation, UnobservedUnread
 from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
                          NamedViewer)
 from .read_ledger import ReadLedger
@@ -672,10 +673,6 @@ class ThreadView(ThreadRecord):
         return self.activity.timestamp
 
     @projected(view="presence")
-    def session_name(self) -> str | None:
-        return self.runtime.session_name
-
-    @projected(view="presence")
     def context_used(self) -> PiCount:
         return self.runtime.context_used
 
@@ -694,7 +691,7 @@ class CoordinationSnapshot:
     references: DisplayReferences
     channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: type[ChannelSort] = NameChannelSort
-    thread_unread: Mapping[str, int] = field(default_factory=dict)
+    thread_unread: Mapping[str, UnreadPresentation] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
     read_marker_notice: str | None = None
 
@@ -718,6 +715,7 @@ class CoordinationSnapshot:
             )),
             threads=threads,
             unread=unread, last_sent=sent, channel_unread=channel_unread,
+            thread_unread={name: UnobservedUnread() for name in threads},
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, read_marker_notice=read_marker_notice,
         )

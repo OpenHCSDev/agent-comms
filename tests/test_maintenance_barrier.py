@@ -65,7 +65,7 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     with Coordination(comms.root / 'coordination.sqlite3') as store:
         pending = next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name)
         assert pending.wire_seq == post.seq
-    assert not beta.active_turn.executing
+    assert not beta.turn_state.active.executing
 
     # The local queue follows the same typed gate; its origin is retained.
     agent.inputs.state('beta').pending_turns = [queued]
@@ -114,7 +114,7 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
     beta = comms.registry.require('beta')
     with Coordination(comms.root / 'coordination.sqlite3') as store:
         assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
-    assert not beta.active_turn.executing
+    assert not beta.turn_state.active.executing
     if abort:
         assert gate.clear(hold).phase is ReadyPhase
     else:
@@ -341,7 +341,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
         with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
-    assert not comms.registry.require("owner").active_turn.executing
+    assert not comms.registry.require("owner").turn_state.active.executing
 
 
 @pytest.mark.parametrize("fault_at", ["before-state", "after-state"])
@@ -385,7 +385,7 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
         comms.owners.start("owner")
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.registry.register(comms.registry.require("renamed"), new_owner=True)
-    assert comms.registry.require("renamed").pid == os.getpid()
+    assert comms.registry.require("renamed").same_local_process(owner.require_process())
 
 
 def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> None:
@@ -408,7 +408,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     current = comms.registry.require("owner")
     # A claim linearized before the pause is visible for explicit drain; a
     # claim after pause is denied. Neither is silently retried or erased.
-    assert current.active_turn.executing == (result == "claimed")
+    assert current.turn_state.active.executing == (result == "claimed")
     assert comms.owners.maintenance.read() == hold
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn("owner", "never-after-pause")
@@ -554,4 +554,4 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
         barrier.clear(hold)
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
-        assert source.current_draft().external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+        assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)

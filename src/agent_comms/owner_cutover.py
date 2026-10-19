@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
@@ -45,6 +46,10 @@ class OwnerCutover(ABC):
 
         if lifecycle.maintenance.current_unlocked().turn_pending:
             raise OwnerMaintenancePendingRefusal()
+
+    def stopped_resources(self, lifecycle: OwnerLifecycle):
+        """Acquire installation resources after readers exit, before the wire lock."""
+        return nullcontext()
 
     @abstractmethod
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:

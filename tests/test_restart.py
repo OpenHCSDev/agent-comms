@@ -22,7 +22,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(session)))
     comms.agents.observe_runtime_info("worker", ContextUsageObservation(context_used=PiCount.from_wire(23)))
     comms.agents.observe_runtime_info(
-        "worker", AgentInfo(model="test/model", session_name="preserved", context_size=PiCount.from_wire(100))
+        "worker", AgentInfo(model="test/model", context_size=PiCount.from_wire(100))
     )
     comms.ledger.merge({"saved": {"worker": ["work remains", 23]}}, "worker")
     metadata = comms.agents.runtime_info.path.read_bytes()

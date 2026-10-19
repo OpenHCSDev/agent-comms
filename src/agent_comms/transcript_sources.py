@@ -342,14 +342,14 @@ class TranscriptSource:
                     event for original in reversed(pending) for event in original.events))
                 pending.clear()
 
-    def current_draft(self, root: Path, thread: str) -> TranscriptDraft:
+    def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
         from .external_transcript import DraftRow
-        with self.draft_snapshot(root, thread) as connection:
-            return DraftRow.one(connection, thread=thread) or NoDraft()
+        with self.draft_snapshot(root, incarnation) as connection:
+            return DraftRow.one(connection, thread=incarnation.require_recorded().lookup) or NoDraft()
 
-    def draft_snapshot(self, root: Path, thread: str):
+    def draft_snapshot(self, root: Path, incarnation: ThreadIncarnation):
         from .external_transcript import ExternalTranscript
-        return ExternalTranscript(root, thread).snapshot()
+        return ExternalTranscript(root, incarnation).snapshot()
 
     def publication_revision(self, root, recipient):
         return PublishedReplyRevision(0, 0)

@@ -615,7 +615,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
             [
                 '{"type":"response","command":"get_state","success":true,"data":'
                 '{"model":{"provider":"openrouter","id":"z-ai/glm","contextWindow":1000},'
-                '"sessionName":"work","sessionFile":"/tmp/pi-session.jsonl"}}',
+                '"sessionFile":"/tmp/pi-session.jsonl"}}',
                 '{"type":"message_update","usage":{"totalTokens":125},'
                 '"assistantMessageEvent":{"type":"text_delta","delta":"ok"}}',
                 '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',
@@ -1134,10 +1134,10 @@ from pi_stub_protocol import send, answer_state, next_prompt, read_state, reques
 import json, sys
 
 initial = {{"sessionId": "first", "sessionFile": "/tmp/first.jsonl",
-           "sessionName": "A", "model": {{"provider": "test", "id": "A", "contextWindow": 1000}},
+           "model": {{"provider": "test", "id": "A", "contextWindow": 1000}},
            "nativeInputProofCapability": "pi-native-input-v1-live-only"}}
 changed = {{"sessionId": "second", "sessionFile": "/tmp/second.jsonl",
-           "sessionName": "B", "model": {{"provider": "test", "id": "B", "contextWindow": 9000}}}}
+           "model": {{"provider": "test", "id": "B", "contextWindow": 9000}}}}
 
 answer_state(initial)
 prompt = next_prompt()
@@ -2973,7 +2973,7 @@ class TestPrRpcParsing:
             [
                 '{"type":"response","command":"get_state","success":true,"data":'
                 '{"model":{"provider":"openrouter","id":"z-ai/glm","contextWindow":1000},'
-                '"sessionName":"work","sessionFile":"/tmp/pi-session.jsonl"}}',
+                '"sessionFile":"/tmp/pi-session.jsonl"}}',
                 '{"type":"message_update","usage":{"totalTokens":125},'
                 '"assistantMessageEvent":{"type":"text_delta","delta":"ok"}}',
                 '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',

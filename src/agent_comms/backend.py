@@ -517,7 +517,6 @@ class NativeSession(MroDispatch, ABC):
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
         self.model_name: str | None = None
-        self.session_name: str | None = None
         self.active_session_file = self.launch.session.session_file
         self.settlement_count = 0
         self.watchdog.reading()

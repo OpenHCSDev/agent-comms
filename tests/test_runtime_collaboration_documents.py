@@ -75,7 +75,6 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, t
         "old": {
             "thread": "old",
             "model": "configured/model",
-            "session_name": "saved",
             "context_used": 123,
             "context_size": 1000,
             "ts": 456.25,
