@@ -311,7 +311,7 @@ class CarryChain:
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
-        retired_steps = frozenset(name for name in retired if cls.deleted(repo, revision, name))
+        retired_steps = frozenset(name for name in retired if Step.holds_carry(cls.source(repo, revision, name)[1]))
         for bus in RetainedBus.at(repo, revision):
             bus.require_applied(retired_steps)
         retired_columns = frozenset(
