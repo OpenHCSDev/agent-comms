@@ -814,20 +814,20 @@ class WireLog(StoreLockOwner):
         with self.certified_read() as source:
             return source.keyed_receipt(intent)
 
-    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...]:
+    def _prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...]:
         """Read registered index candidates before taking any source locks."""
         return tuple((index, index.prepare()) for index in self._append_indexes)
 
     @contextmanager
     def opened_wire_snapshot(
         self, *,
-        prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...] = (),
         opening: SnapshotOpening = SequencedSnapshotOpening(),
     ):
-        """Keep one owned descriptor/cut; acquisition follows its source contract."""
+        """Capture registered indexes before opening their original source cut."""
+        prepared = self._prepare_append_indexes()
         with ExitStack() as resources:
             with opening.capture(self, resources) as opened:
-                opened.capture_append_indexes(prepared_indexes)
+                opened.capture_append_indexes(prepared)
                 yield opened
 
     def _open_snapshot_unlocked(self, resources: ExitStack, metadata: WireMetadata, through: int) -> WireSnapshot:

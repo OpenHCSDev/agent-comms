@@ -76,9 +76,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
     @contextmanager
     def opened_activity(self) -> Iterator[ActivityClocks]:
         """Own a fresh bus cut for callers without an existing snapshot."""
-        with self.log.opened_wire_snapshot(
-            opening=CurrentSnapshotOpening(), prepared_indexes=self.log.prepare_append_indexes(),
-        ) as source:
+        with self.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             yield self.activity_index.snapshot(source)
 
     def require_channel(self, target: str):
@@ -100,12 +98,9 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         descriptor. Presentation and delivery borrow that same source instead
         of reconstructing it from independently sampled path revisions.
         """
-        prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
             with self.locked(mode=SharedLock()):
-                source = stack.enter_context(self.log.opened_wire_snapshot(
-                    prepared_indexes=prepared,
-                ))
+                source = stack.enter_context(self.log.opened_wire_snapshot())
                 with CapturedSelection.reading(
                     self._registry, self._channels, self.reads, viewer,
                     self.activity_index.snapshot(source),
