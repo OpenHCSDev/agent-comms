@@ -19,6 +19,7 @@ from pathlib import Path
 from typing_extensions import TypeAliasType
 from uuid import uuid4
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     Any,
     ClassVar,
@@ -36,6 +37,9 @@ from typing import (
 
 from .declared_family import DeclaredFamily
 from .sealed import Sealed
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 T = TypeVar("T")
 
@@ -811,16 +815,16 @@ class FieldCodec(Sealed):
             )
 
     @classmethod
-    def require_fields(cls, record: object) -> None:
-        """A record built in code holds each field to the rule its declared type states on the wire."""
-        for name, annotation in cls.field_types(type(record)):
+    def require_fields(cls, record: DataclassInstance) -> None:
+        """A record built in code holds each field to the rule its declared type states."""
+        for name, annotation in cls.field_types(record.__class__):
             value = getattr(record, name)
             if cls.decode(annotation, cls.encode(value)) != value:
                 raise MalformedRecord(f"{type(record).__name__}.{name} is not its declared type")
 
     @staticmethod
     @cache
-    def field_types(target: type) -> tuple[tuple[str, object], ...]:
+    def field_types(target: type[DataclassInstance]) -> tuple[tuple[str, type[object]], ...]:
         hints = get_type_hints(target, include_extras=True)
         return tuple((item.name, hints[item.name]) for item in fields(target) if item.init)
 

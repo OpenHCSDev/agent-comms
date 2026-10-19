@@ -200,9 +200,11 @@ class ClaimTransition:
     incarnation: Annotated[str, BoundedText]
     seq: Annotated[int, EnvelopeSequence]
     message_id: Annotated[str, BoundedText]
-    claims: tuple[Annotated[str, ResourcePathText], ...] = field(default=(), metadata={"wire_required": True})
+    claims: tuple[Annotated[str, ResourcePathText], ...] = field(
+        default=(), metadata={"wire_required": True})
     releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
-    generation: Annotated[str, Id128Text] | None = field(default=None, metadata={"wire_required": True})
+    generation: Annotated[str, Id128Text] | None = field(
+        default=None, metadata={"wire_required": True})
     claim_scope: WakeClaim | None = field(
         default=None, metadata={"wire_name": 'admission', "wire_omit_default": True, "wire_nonnull": True}
     )
@@ -214,7 +216,7 @@ class ClaimTransition:
         if len(set(self.resources)) != len(self.resources):
             raise ClaimTransitionError("Duplicate or overlapping resources are not supported.")
         if bool(self.claims) == (self.generation is None):
-            raise ClaimTransitionError("A claim mints one generation; a release-only envelope mints none.")
+            raise ClaimTransitionError("A claim mints a generation; a release-only one cannot.")
         if self.claim_scope is not None and (not self.claims or self.releases):
             raise ClaimTransitionError("Wake claim_scope requires a claim-only transition.")
 
@@ -285,7 +287,8 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
-        if any(value.resource != key or value.seq > self.last_seq for key, value in self._claims.items()):
+        if any(value.resource != key or value.seq > self.last_seq
+               for key, value in self._claims.items()):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))
 
