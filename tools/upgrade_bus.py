@@ -47,10 +47,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
-from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
+from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -236,15 +237,25 @@ def carry_all(
 
 
 def copy_bus(root: Path, copy: Path) -> None:
-    """Copy under the bus's wire lock so no writer tears the copy; sockets are skipped."""
-    def sockets(directory: str, names: list[str]) -> set[str]:
-        return {name for name in names
-                if stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
+    """Hold the wire; SQLite owns each committed database copy and its companions."""
+    def transient(directory: str, names: list[str]) -> set[str]:
+        omitted = set()
+        # A database sorts before its companions. Never stat/copy a transient
+        # WAL or SHM name after discovering the database that owns it.
+        for name in sorted(names):
+            if name in omitted:
+                continue
+            path = Path(directory) / name
+            if stat.S_ISSOCK(path.lstat().st_mode):
+                omitted.add(name)
+            elif path.is_file() and not path.is_symlink() and CoordinationStore.is_database(path):
+                omitted.update(companion.name for companion in CoordinationStore.files(path)[1:])
+        return omitted
 
     from agent_comms.store_files import _store_lock
 
     with _store_lock(root / "wire"):
-        shutil.copytree(root, copy, symlinks=True, ignore=sockets)
+        shutil.copytree(root, copy, symlinks=True, ignore=transient, copy_function=StoreBackup.copy_file)
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:

@@ -149,6 +149,19 @@ class StoreBackup(Backup):
         return (CoordinationStore.digest(path) if CoordinationStore.is_database(path)
                 else hashlib.sha256(path.read_bytes()).hexdigest())
 
+    @staticmethod
+    def copy_file(source: str | Path, target: str | Path) -> Path:
+        """Copy one store through its SQLite snapshot, never through live WAL bytes."""
+        source, target = Path(source), Path(target)
+        if CoordinationStore.is_database(source):
+            with closing(CoordinationStore.read_snapshot(source)) as reader:
+                with closing(sqlite3.connect(target)) as writer:
+                    reader.backup(writer)
+            shutil.copymode(source, target)
+        else:
+            shutil.copy2(source, target)
+        return target
+
     def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
         contents = {}
         for source in files:
@@ -157,12 +170,7 @@ class StoreBackup(Backup):
             name = str(source.relative_to(self.root))
             target = self.data_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            if CoordinationStore.is_database(source):
-                with closing(CoordinationStore.read_snapshot(source)) as reader:
-                    with closing(sqlite3.connect(target)) as writer:
-                        reader.backup(writer)
-            else:
-                shutil.copy2(source, target)
+            self.copy_file(source, target)
             with target.open('rb') as ready:
                 os.fsync(ready.fileno())
             contents[name] = self.digest(target)
