@@ -46,7 +46,7 @@ from pathlib import Path
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cutover.carry import CarryChain, CarryLedger, Step
+from cutover.carry import CarryChain, CarryLedger, RetainedBus, Step
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
@@ -207,7 +207,11 @@ def before_stop(
 def carry_all(
     root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
 ) -> list[dict]:
-    return [carry(step, root, stack, revisions, "--apply") for step in pending]
+    results = []
+    for step in pending:
+        results.append(carry(step, root, stack, revisions, "--apply"))
+        RetainedBus.record(revisions.repo, root)
+    return results
 
 
 def copy_bus(root: Path, copy: Path) -> None:

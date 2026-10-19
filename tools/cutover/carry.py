@@ -106,7 +106,7 @@ class RetainedBus:
         files = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
         if cls.filename not in files:
             return ()
-        return FieldCodec.decode(tuple[cls, ...], FieldCodec.parse(
+        return FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(
             git(repo, "show", f"{revision}:{STEPS}/{cls.filename}")))
 
     def require_applied(self, retired: frozenset[str]) -> None:
@@ -118,11 +118,14 @@ class RetainedBus:
     def record(cls, checkout: Path, root: Path) -> None:
         """Publish this bus's committed ledger after an upgrade applies a step."""
         path = checkout / STEPS / cls.filename
-        buses = FieldCodec.decode(tuple[cls, ...], FieldCodec.parse(path.read_bytes()))
+        if not path.exists():
+            return
+        buses = FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(path.read_bytes()))
         updated = tuple(replace(bus, applied=CarryLedger(root).applied())
                         if Path(bus.root).expanduser().resolve() == root.resolve() else bus
                         for bus in buses)
-        path.write_text(json.dumps(FieldCodec.encode(updated), indent=2) + "\n")
+        if updated != buses:
+            path.write_text(json.dumps(FieldCodec.encode(updated), indent=2) + "\n")
 
 
 class Carry(ABC):
