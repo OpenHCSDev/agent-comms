@@ -136,6 +136,15 @@ class RetainedBus:
                                fsync_parent=True)
 
 
+    @classmethod
+    def restore(cls, checkout: Path, revision: str) -> None:
+        """Restore the committed declaration before rolling its checkout back."""
+        path = checkout / STEPS / cls.filename
+        if path.exists():
+            source = git(checkout, "show", f"{revision}:{STEPS}/{cls.filename}").decode()
+            _atomic_write_text(path, source, fsync_parent=True)
+
+
 class Carry(ABC):
     after: ClassVar[str | None]
 

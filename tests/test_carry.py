@@ -149,6 +149,8 @@ def test_retirement_requires_every_retained_bus_to_have_applied_the_step(tmp_pat
     saved = json.loads(declarations.read_text())
     assert saved[0]["applied"] == ["carry_a", "carry_b"]
     assert saved[1] == buses[1]
+    RetainedBus.restore(repo.path, "HEAD")
+    assert declarations.read_text() == repo.git("show", f"HEAD:{STEPS}/{RetainedBus.filename}")
 
 
 def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):
