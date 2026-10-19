@@ -39,13 +39,12 @@ from .goal_actions import (
     GoalPrecondition,
     ModelInvocable,
     OrderGoalAction,
-    SetGoalAction, TransitionGoalAction,
+    SetGoalAction,
 )
 from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
-from .goal_states import ActiveGoal
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .rule_reviews import RuleReviewEntry, RuleReviews
 from .standing_rules import RulesDue, StandingRule
@@ -653,7 +652,7 @@ class CommsGoalTool(ThreadToolRequest):
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
     goal_id: str = tool_field("Goal identity provided in the turn context")
-    status: type[TransitionGoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
+    status: type[GoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
     progress: str = tool_field("Progress summary; blocked requires a nonempty explicit reason")
     wait_for: tuple[str, ...] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None
@@ -667,7 +666,7 @@ class CommsGoalTool(ThreadToolRequest):
         name = caller.name
         command = replace(
             self.status(progress=self.progress),
-            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
+            expect=self.status.model_precondition(self.goal_id),
             **{key: value for key, value in (
                 ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
             ) if value},

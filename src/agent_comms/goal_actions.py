@@ -99,6 +99,11 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
     @classmethod
+    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+        """What the unit's own goal tool expects before this action: its active goal."""
+        return GoalPrecondition(goal_id=goal_id, expected_state=ActiveGoal())
+
+    @classmethod
     async def submit_control(
         cls,
         observe: Callable[[], Awaitable[GoalSnapshot]],
@@ -159,8 +164,17 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
 
 
 @dataclass(frozen=True, kw_only=True)
-class TransitionGoalAction(GoalAction[Goal]):
+class ReportsProgress:
+    """The progress a goal action reports; an action that names none keeps the goal's."""
+
     progress: str | None = None
+
+    def reported_progress(self, goal: Goal) -> str:
+        return goal.progress if self.progress is None else self.progress
+
+
+@dataclass(frozen=True, kw_only=True)
+class TransitionGoalAction(ReportsProgress, GoalAction[Goal]):
 
     @abstractmethod
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState: ...
@@ -174,7 +188,7 @@ class TransitionGoalAction(GoalAction[Goal]):
             goal,
             state=state,
             revision=goal.revision + 1,
-            progress=goal.progress if self.progress is None else self.progress,
+            progress=self.reported_progress(goal),
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
         )
         self.before_goal_publish(changed, ctx)
@@ -565,8 +579,13 @@ def required_block_reason(reason: str | None) -> str:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryGoalAction(GoalAction[Goal], OwnerInvocable):
-    """Explicit owner retry; existing store grants still fence every attempt."""
+class RetryGoalAction(ReportsProgress, GoalAction[Goal], ModelInvocable, OwnerInvocable, RuntimeInvocable):
+    """Retry a blocked goal: the unit itself, its commander or the owner; authorize_retry fences
+    every attempt against the unresolved one."""
+
+    @classmethod
+    def model_precondition(cls, goal_id: str) -> GoalPrecondition:
+        return GoalPrecondition(goal_id=goal_id)
 
     @classmethod
     async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
@@ -579,11 +598,10 @@ class RetryGoalAction(GoalAction[Goal], OwnerInvocable):
         )
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        if self.expect.expected_owner is None:
-            raise ValueError("Retry requires the executing owner's private goal authority.")
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
-        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)
+        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1,
+                       progress=self.reported_progress(goal))
