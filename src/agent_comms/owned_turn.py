@@ -415,8 +415,7 @@ class OwnedTurn:
         """Settle and report once, retaining the exception that actually failed the turn."""
         await Coordination.run_worker(self.settle_unbound)
         outcome = await self.progress.report_failure(failure)
-        outcome.raise_if_failed(RequestError.internal_error, cause=cause)
-        raise cause
+        outcome.raise_fault(cause, RequestError.internal_error)
 
     async def run_native(self) -> None:
         try:
