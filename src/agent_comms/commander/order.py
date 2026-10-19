@@ -536,7 +536,7 @@ def done(pid, sha, delivered=None, screenshot=''):
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
     claim = WorkingClaim(screenshot) if operation else MergedClaim(delivered)
-    call(CommsOrderDoneTool(problem=pid, delivery=delivery, claims=(claim,)))
+    call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():

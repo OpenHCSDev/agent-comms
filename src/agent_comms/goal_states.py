@@ -93,9 +93,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
 
-    def after_order_delivery(self, pending: bool) -> GoalState:
-        return self
-
     def transition_refusal(self) -> str:
         return "This goal cannot make that transition."
 
@@ -139,9 +136,6 @@ class OpenGoal(BlockingOnFailure, GoalState):
 @dataclass(frozen=True)
 class ActiveGoal(OpenGoal, FromOpenGoal):
     active = True
-
-    def after_order_delivery(self, pending):
-        return self if pending else CompletedGoal()
 
     def require_active(self) -> None:
         pass
