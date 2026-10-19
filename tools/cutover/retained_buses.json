@@ -15,7 +15,18 @@
       "carry_turn_records",
       "carry_route_index",
       "carry_wake_index",
-      "carry_todo_releases"
+      "carry_todo_releases",
+      "carry_todo_messages",
+      "carry_todo_corrections",
+      "carry_problem_goals",
+      "carry_todo_verdicts",
+      "carry_todo_open_indexes",
+      "carry_catalog_tags",
+      "carry_earlier_projects",
+      "carry_p495_read_ledger",
+      "carry_archived_read_ledgers",
+      "carry_goal_wait_targets",
+      "carry_problem_goal_prose"
     ]
   },
   {
