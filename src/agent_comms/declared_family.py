@@ -42,8 +42,6 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         if is_root:
             # slots dataclasses recreate the root without its class-header keywords.
             namespace["_family_affix"] = affix if affix is not None else namespace.get("_family_affix", "")
-            discovery_package = discovery_package if discovery_package is not None else namespace.get("_family_discovery_package")
-            namespace["_family_discovery_package"] = discovery_package
             namespace["__registry__"] = (
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )

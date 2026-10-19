@@ -10,10 +10,14 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from .channel_targets import Channel, ChannelTarget, Tag
+from .channel_targets import ChannelTarget, Tag
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
+from .display_order import CreatedThreadSort, ThreadSort
+from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .messages import MembershipChange
-from .history_result import EverythingHistoryPageResult
+from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .tool_result import ToolResult
 
@@ -40,6 +44,96 @@ class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
 
     def __missing__(self, tag: str) -> tuple[Thread, ...]:
         return ()
+
+
+@dataclass(frozen=True, slots=True)
+class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
+    """A captured channel presentation with behavior supplied by its declaration."""
+
+    name: str
+    tags: frozenset[str] = frozenset()
+    order: type[ThreadSort] = CreatedThreadSort
+    created_at: float = 0
+    pinned: bool = False
+    parent: str | None = None
+    archived: bool = False
+    any_mode: bool = False
+    history_result_type = ChannelHistoryPageResult
+
+    def __post_init__(self) -> None:
+        name = ChannelTarget.normalize_name(self.name)
+        object.__setattr__(self, "name", name)
+        if self.parent is not None:
+            object.__setattr__(self, "parent", ChannelTarget.normalize_name(self.parent))
+        if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
+            raise ValueError("Channel ordering must be a declared ThreadSort.")
+        if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
+            raise ValueError("Channel presentation flags must be boolean.")
+        if self.any_mode and not self.exact:
+            raise ValueError("Only exact tag channels can include member activity.")
+        if self.parent is not None:
+            ChannelTarget(self.parent).validate()
+        if self.parent == name:
+            raise RelationViolationError("A channel cannot be its own parent.")
+        self.validate_declaration()
+
+    @abstractmethod
+    def validate_declaration(self) -> None: ...
+
+    @abstractmethod
+    def matches(self, tags: frozenset[str]) -> bool: ...
+
+    @abstractmethod
+    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]: ...
+
+    @property
+    @abstractmethod
+    def exact(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def read_only(self) -> bool: ...
+
+    @abstractmethod
+    def can_set_archived(self, archived: bool) -> bool: ...
+
+    @classmethod
+    def require_routable(cls) -> None:
+        pass
+
+    @classmethod
+    def exact_stored_target(cls) -> bool:
+        return True
+
+    @abstractmethod
+    def history_scope(self) -> ChannelDisplayScope: ...
+
+    def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+        return self.history_scope()
+
+    @abstractmethod
+    def require_metadata(self) -> None: ...
+
+    @abstractmethod
+    def require_parent(self) -> None: ...
+
+    @abstractmethod
+    def can_restore_preferences(self, existing: bool) -> bool: ...
+
+    @abstractmethod
+    def sort_key(self, ordering, view) -> tuple: ...
+
+    @abstractmethod
+    def delete_view_bindings(self, command) -> tuple: ...
+
+    @abstractmethod
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
+
+    def pending_count(self, counts: dict[str, int]) -> int:
+        return sum(self.history_scope().target_values(counts))
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode(self)
 
 
 class Channels(dict[str, Channel]):
@@ -140,8 +234,19 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_
         return not self.pinned, BuiltinChannelView.names().index(self.name), 0, 0, self.name
 
 
-class AnyChannel(BuiltinChannelView, declared_name="#any"):
-    routable = False
+class NonRoutableChannel:
+    """Views refuse sends and never identify an immutable addressed target."""
+
+    @classmethod
+    def require_routable(cls) -> None:
+        raise RelationViolationError("The selected view is a projection, not a routable target.")
+
+    @classmethod
+    def exact_stored_target(cls) -> bool:
+        return False
+
+
+class AnyChannel(NonRoutableChannel, BuiltinChannelView, declared_name="#any"):
     history_result_type = EverythingHistoryPageResult
 
     @classmethod
@@ -164,9 +269,8 @@ ANY_CHANNEL = ChannelTarget(AnyChannel.declared_name)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
+class SavedViewChannel(NonRoutableChannel, PredicateChannel, GroupedChannel, Channel):
     view: SavedView
-    routable = False
 
     def validate_declaration(self) -> None:
         if self.name != f"#{self.view.name}" or self.tags != self.view.predicate.tags:
