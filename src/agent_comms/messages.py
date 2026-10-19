@@ -11,21 +11,27 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type
 
+from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
-from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, FieldRepresentation, InlineRecord, MalformedRecord, NullMember, projected
+from .field_codec import (
+    FieldCodec,
+    FieldRepresentation,
+    InlineRecord,
+    MalformedRecord,
+    NullMember,
+    projected,
+)
 from .mentions import ThreadMention
 from .message_reference import MessageReference
-from .response_policy import InformationalPolicy, ResponseEligibility
-from .thread_identity import AgentThreadRole, ThreadRole
-from .task_sources import Decision, TaskAttachment, NoTaskAttachment
-from .wake_policy import BoundedTriageWake, PassiveWake
-from .ui_model.message_category import MessageCategory, InboundCategory, OtherCategory
-
 from .page_traversal import LiveCursor, PageCursor
+from .response_policy import InformationalPolicy, ResponseEligibility
+from .task_sources import Decision, NoTaskAttachment, TaskAttachment
+from .thread_identity import AgentThreadRole, ThreadRole
+from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
+from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -182,15 +188,15 @@ class MessageRoleName(FieldRepresentation):
     """Command input names a sendable role; persisted messages keep their inline wire form."""
 
     @classmethod
-    def encode(cls, value: MessageRole) -> str:
-        return FieldCodec.encode(type(value), type[MessageRole])
+    def encode(cls, value: object) -> object:
+        return FieldCodec.encode(type(value))
 
     @classmethod
     def decode(cls, value: object) -> MessageRole:
-        return FieldCodec.decode(type[MessageRole], value)()
+        return MessageRole.member_named(FieldCodec.decode(str, value))()
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type[MessageRole])
 
 
