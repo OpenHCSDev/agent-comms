@@ -135,6 +135,9 @@ def carry(rts: Path, root: Path, apply: bool) -> int:
     for unit, orders in deadlines.items():
         for old in orders:
             for pid in old.facts:
+                if pid in active:
+                    missing('RTS names more than one active order for this problem', pid)
+                    continue
                 active.add(pid)
                 current = existing.get(pid)
                 if current is None:
@@ -147,8 +150,10 @@ def carry(rts: Path, root: Path, apply: bool) -> int:
                 if current.order.at.recorded_at('An order') != old.at:
                     missing('order send times disagree', pid)
                     continue
-                prepared[pid] = replace(current, deadline=old.deadline(),
-                                        revision=current.revision + 1)
+                due = old.deadline()
+                if current.deadline != due:
+                    prepared[pid] = replace(current, deadline=due,
+                                            revision=current.revision + 1)
 
     for pid, old in problems.items():
         current = existing.get(pid)
