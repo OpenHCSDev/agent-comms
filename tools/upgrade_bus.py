@@ -315,6 +315,7 @@ def copy_bus(root: Path, copy: Path) -> None:
                 closing(sqlite3.connect(copy / store.relative_to(root))) as target,
             ):
                 source.backup(target)
+            shutil.copymode(store, copy / store.relative_to(root))
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
