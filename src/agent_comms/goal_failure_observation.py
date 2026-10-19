@@ -99,7 +99,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
         if self.worktree != owner.worktree:
             return False
         observed = owner.observed_turn(claim_scope)
-        if observed is None or not self.turn.matches(observed):
+        if observed is None or self.turn != observed:
             return False
         return owner.has_goal_revision(self.goal_id, self.goal_revision)
 
@@ -139,7 +139,7 @@ class FailedTurnObservation:
         )
         if owner.goal != goal or reservation.goal_id != goal.id:
             return None
-        if not lease.matches(evidence.turn):
+        if lease != evidence.turn:
             return None
         if current_owner is None:
             return None

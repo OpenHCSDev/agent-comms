@@ -6,7 +6,9 @@ Local checks passed: real-wire set/edit/replace/clear and retirement; both permi
 
 P556 is merged through main and its archived-format probe completes. The full checker exits1 with no introduced findings; positive deltas are listed in the PR, not waived.
 
-Remaining: full-version normal-launcher goal set/change/retire and fresh no-goal DM. Codex received private-build request 32278, but has not supplied the full-version runtime path. Older private UI results cover only the partial pair. Driver is `/home/ts/.cache/agent-scratch/core-pi-durable/p520/goal-ui-complete.py RUNTIME_PATH`; never reuse its output directory after an attempt. It preserves uncertain input and stops the copied owner before auth removal.
+Update 20:05 EDT: Codex supplied the full-version private runtime T000114Z (Core30313, Toade029). The normal-launcher UI journey passed: set active rev1, update blocked rev2/progress, physically Clear, confirm NoGoal plus terminal CancelledGeneration, then one fresh no-goal DM replied with its exact token. Four screenshots reviewed. Final screenshot has sidebar Ready but centre Finishing turn; consistent final-idle paint was not established. Copied owner stopped0 before auth deletion, copied auth absent, original hash unchanged, new input COMPLETED/not replayed. Evidence is `goal-ui-complete/{result.json,input.json,checks.txt,commands.jsonl,plain/*.png}` under the existing P520 scratch path. No default switch. Do not rerun the used driver/output directory.
+
+The actual UI gap is closed at the strength above. The commander's source-size/debt-check merge hold remains separate; nothing is claimed merged or installed.
 
 Evidence is under `/home/ts/.cache/agent-scratch/core-pi-durable/p520/`: operations-complete-smoke.log, operations-clear-cases.log, operations-final-debt.log, operations-final-ast.json and operations-pr-body.md.
 

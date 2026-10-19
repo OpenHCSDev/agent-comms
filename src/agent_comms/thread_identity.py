@@ -362,8 +362,10 @@ class TurnFence:
         return (self.identity.generation > 0 and self.claimed_generation > 0
                 and self.claimed_generation == claim_scope)
 
-    def matches(self, other: TurnFence) -> bool:
-        """Lease and finished observations may describe the same exact turn."""
+    def __eq__(self, other: object) -> bool:
+        """Lease and finished observations share the same turn identity."""
+        if not isinstance(other, TurnFence):
+            return NotImplemented
         return (
             self.identity == other.identity
             and self.turn_id == other.turn_id

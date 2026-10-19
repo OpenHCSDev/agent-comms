@@ -229,7 +229,7 @@ class TurnState:
         return turn_id is None or self.active.observed_id(self.finished_turn_id) == turn_id
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class TurnLeaseFence(TurnFence):
     """Exact local begin-turn lease and its original record."""
 
