@@ -38,7 +38,7 @@ from .registry_provenance import RegistryProvenance
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
 from .revision_views import BusSourceView
-from .wire_log import SavedPrefixOpening, WireLog
+from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
 if TYPE_CHECKING:
@@ -436,10 +436,6 @@ class HistoryArchive(RootFile):
                     # the incomplete archive through the ordinary read barrier.
                     install_private_bus_checkpoint(archived, _bus_locked=True)
                     guard.commit_initial()
-                    # The private stage writer supplies the source; published archives only read it.
-                    with archived.opened_wire_snapshot(opening=SavedPrefixOpening()) as opened:
-                        with archived.page_index_type(archived.path) as index:
-                            index.sync(opened)
                 source = HistorySource(
                     str(stage.resolve()),
                     str(source_root),

@@ -38,7 +38,7 @@ from .goals import (
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .threads import Thread
-from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
+from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -386,15 +386,6 @@ class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         ctx.goals.todos.apply(self.problem, self.operation)
         return replace(self.revised(goal, ctx), revision=goal.revision + 1)
-
-
-@dataclass(frozen=True, kw_only=True)
-class DeliveredOrderGoalAction(HeldOrderGoalAction):
-    operation: DeliverTodo
-
-    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
-        return replace(goal, state=goal.state.after_order_delivery(pending))
 
 
 @dataclass(frozen=True, kw_only=True)
