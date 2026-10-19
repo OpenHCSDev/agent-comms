@@ -503,11 +503,9 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     timestamp: int | None = None
 
     @classmethod
-    def from_error_message(cls, message: object) -> tuple[ProviderTransportFailureDiagnostic, ...]:
+    def from_error_message(cls, message: str) -> tuple[ProviderTransportFailureDiagnostic, ...]:
         """Decode transient close codes emitted by the native WebSocket provider."""
-        if isinstance(message, str) and (
-            match := re.fullmatch(r"WebSocket closed (1006|1011|1012|1013)(?:: .*)?", message)
-        ):
+        if match := re.fullmatch(r"WebSocket closed (1006|1011|1012|1013)(?:: .*)?", message):
             return (cls(ProviderDiagnosticError(message, code=int(match[1])),
                         ProviderTransportDetails(configured_transport="websocket")),)
         return ()
@@ -535,10 +533,9 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @classmethod
     def normalize_wire(cls, value):
         data = super().normalize_wire(value)
-        if data.get("diagnostics", []) == []:
-            data["diagnostics"] = FieldCodec.encode(
-                ProviderTransportFailureDiagnostic.from_error_message(data.get("errorMessage"))
-            )
+        data["diagnostics"] = data.get("diagnostics", []) + FieldCodec.encode(
+            ProviderTransportFailureDiagnostic.from_error_message(data.get("errorMessage") or "")
+        )
         return data
 
     def annotation_disclosure(self):
