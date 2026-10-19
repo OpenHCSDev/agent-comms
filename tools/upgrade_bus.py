@@ -23,7 +23,6 @@ keeps maintenance held and preserves the bus, checkout and backup for forward
 repair. It never resets live main or replaces a possibly changed bus. Nothing
 is sent and no input is replayed: owners start by the normal start path.
 """
-
 from __future__ import annotations
 
 import argparse
@@ -31,7 +30,6 @@ import json
 import os
 import shutil
 import signal
-import sqlite3
 import stat
 import subprocess
 import sys
@@ -39,7 +37,7 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import closing, contextmanager, suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -51,7 +49,6 @@ from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarr
 from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -68,13 +65,10 @@ ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) -> str:
     print("+", " ".join(map(str, command)), file=sys.stderr, flush=True)
-    completed = subprocess.run(
-        [str(part) for part in command], cwd=cwd, env=env, capture_output=True, text=True
-    )
+    completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
+                               capture_output=True, text=True)
     if completed.returncode:
-        raise UpgradeRefused(
-            f"{command[0]} failed: {completed.stderr.strip() or completed.stdout.strip()}"
-        )
+        raise UpgradeRefused(f"{command[0]} failed: {completed.stderr.strip() or completed.stdout.strip()}")
     return completed.stdout
 
 
@@ -114,23 +108,14 @@ class Stack:
 
     def relock(self) -> None:
         """OpenHCSDev packages track their mains; the lock only records this resolution."""
-        run(
-            self.uv,
-            "lock",
-            "--project",
-            "stack",
-            "--upgrade",
-            "--python",
-            "3.14",
-            cwd=self.checkout,
-        )
+        run(self.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
+            cwd=self.checkout)
         self.sync()
         self.imports()
 
     def sync(self) -> None:
-        run(
-            self.uv, "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=self.checkout
-        )
+        run(self.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
+            cwd=self.checkout)
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
@@ -140,39 +125,24 @@ class Stack:
 
     def environment(self, *paths: Path) -> dict:
         """``paths`` first; then this checkout's ``src``. ``home`` holds the route its clients read."""
-        return {
-            **os.environ,
-            "HOME": str(self.home),
-            "PYTHONPATH": os.pathsep.join(map(str, (*paths, self.checkout / "src"))),
-        }
+        return {**os.environ, "HOME": str(self.home),
+                "PYTHONPATH": os.pathsep.join(map(str, (*paths, self.checkout / "src")))}
 
     def cli(self, root: Path, *arguments: str) -> dict:
         """One JSON CLI result for this bus alone, never the route's, waiting while the
         route index is still being built."""
         for _ in range(240):
             completed = subprocess.run(
-                [
-                    str(self.python),
-                    "-c",
-                    "from agent_comms.cli import main; main()",
-                    "--root",
-                    str(root),
-                    *arguments,
-                ],
-                cwd=self.checkout,
-                env=self.environment(),
-                capture_output=True,
-                text=True,
-            )
+                [str(self.python), "-c", "from agent_comms.cli import main; main()", "--root", str(root),
+                 *arguments], cwd=self.checkout, env=self.environment(), capture_output=True,
+                text=True)
             if "Route index covers" not in completed.stdout:
                 break
             time.sleep(5)
         result = json.loads(completed.stdout or "{}")
         if completed.returncode or "error" in result:
-            raise UpgradeRefused(
-                f"agent-comms {' '.join(arguments)}: "
-                f"{completed.stdout.strip() or completed.stderr.strip()}"
-            )
+            raise UpgradeRefused(f"agent-comms {' '.join(arguments)}: "
+                                 f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
     def owners(self, root: Path, command: str, names: list[str]) -> None:
@@ -184,11 +154,8 @@ class Stack:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
         history = self.cli(root, "history", "--limit", "50")  # #any: every channel
-        return {
-            "threads": len(threads),
-            "who": len(present["who"]),
-            "history": len(history[EverythingHistoryPageResult.messages_key]),
-        }
+        return {"threads": len(threads), "who": len(present["who"]),
+                "history": len(history[EverythingHistoryPageResult.messages_key])}
 
 
 @dataclass
@@ -216,9 +183,7 @@ class Revisions:
 
     def close(self) -> None:
         for path in self.trees.values():
-            subprocess.run(
-                ["git", "-C", str(self.repo), "worktree", "remove", "--force", str(path)]
-            )
+            subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(path)])
 
 
 def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> Carried:
@@ -228,8 +193,7 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
         if "--before-stop" in flags:
             return TodoColumnCarry.before_stop(root, apply=True)
         return TodoColumnCarry.carry_step(
-            root, step, CarryChain.at(revisions.repo, step.revision), apply=True
-        )
+            root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
     worker = (
@@ -238,17 +202,8 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
         "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
     )
     operation = "before_stop" if "--before-stop" in flags else "carry"
-    output = run(
-        stack.python,
-        "-c",
-        worker,
-        f"cutover.{step.name}",
-        step.declaration,
-        operation,
-        root,
-        cwd=tree,
-        env=environment,
-    )
+    output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
+                 operation, root, cwd=tree, env=environment)
     return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
 
 
@@ -257,10 +212,8 @@ def before_stop(
 ) -> list[dict]:
     """What the running installation needs before its own stop command reads the bus."""
     with _store_lock(root / "wire"):
-        return [
-            carry(step, root, stack, revisions, "--before-stop", "--apply").report(step.name, True)
-            for step in pending
-        ]
+        return [carry(step, root, stack, revisions, "--before-stop", "--apply").report(
+            step.name, True) for step in pending]
 
 
 def carry_all(
@@ -270,10 +223,8 @@ def carry_all(
     for step in pending:
         with _store_lock(root / "wire"):
             result = CarryLedger(root).apply(
-                CarryChain.at(revisions.repo, step.revision),
-                step.name,
-                lambda: carry(step, root, stack, revisions, "--apply"),
-            )
+                CarryChain.at(revisions.repo, step.revision), step.name,
+                lambda: carry(step, root, stack, revisions, "--apply"))
         results.append(result.report(step.name, True))
     return results
 
@@ -283,39 +234,15 @@ def copy_bus(root: Path, copy: Path) -> None:
     # The maintenance files describe the live root; a copy is a new root and starts open.
     held = set(MaintenanceBarrier(root / "registry.json").witness_paths)
 
-    stores: list[Path] = []
-
     def skipped(directory: str, names: list[str]) -> set[str]:
-        # SQLite stores are copied whole by SQLite below; a file copy races their
-        # writers, who may checkpoint and remove a companion mid-copy.
-        found = [
-            Path(directory, name)
-            for name in names
-            if Path(directory, name).is_file()
-            and not Path(directory, name).is_symlink()
-            and CoordinationStore.is_database(Path(directory, name))
-        ]
-        stores.extend(found)
-        store_files = {file.name for store in found for file in CoordinationStore.files(store)}
-        return {
-            name
-            for name in names
-            if name in store_files
-            or Path(directory, name) in held
-            or stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)
-        }
+        return {name for name in names
+                if Path(directory, name) in held
+                or stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
 
     from agent_comms.store_files import _store_lock
 
     with _store_lock(root / "wire"):
         shutil.copytree(root, copy, symlinks=True, ignore=skipped)
-        for store in stores:
-            with (
-                closing(CoordinationStore.read_snapshot(store)) as source,
-                closing(sqlite3.connect(copy / store.relative_to(root))) as target,
-            ):
-                source.backup(target)
-            shutil.copymode(store, copy / store.relative_to(root))
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
@@ -342,11 +269,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
         stack.prepare_native()
         # Hold the copy before reading it, exactly as the live run holds the bus.
-        os.environ[HOLDER_NONCE] = (
-            MaintenanceBarrier(copy / "registry.json")
-            .begin(MaintenanceOperator("upgrade-bus"))
-            .nonce
-        )
+        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copy / "registry.json").begin(
+            MaintenanceOperator("upgrade-bus")).nonce
         with transcripts_held(copy):
             before = bus_files(copy)
         stopping = before_stop(copy, pending, stack, revisions)
@@ -355,15 +279,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         return carry_and_read(copy, before, pending, stack, stack, revisions, stopping)
 
 
-def carry_and_read(
-    root: Path,
-    before: dict[str, str],
-    pending: tuple[Step, ...],
-    staged: Stack,
-    reader: Stack,
-    revisions: Revisions,
-    stopping: list[dict],
-) -> dict:
+def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
+                   reader: Stack, revisions: Revisions, stopping: list[dict]) -> dict:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
@@ -375,9 +292,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     run("git", "-C", checkout, "fetch", "-q", "origin")
     target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
-    if subprocess.run(
-        ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
-    ).returncode:
+    if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]).returncode:
         raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
     if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
         raise UpgradeRefused("The checkout has local changes")
@@ -395,15 +310,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
         try:
             staged = Stack(revisions.tree(target))
             staged.relock()
-            install = Install.of(
-                checkout, root, current, target, pending, installed, staged, revisions, installer
-            )
-            report = {
-                "from": current,
-                "to": target,
-                "pending": [step.name for step in pending],
-                "rehearsal": install.rehearsal(),
-            }
+            install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
+                                 installer)
+            report = {"from": current, "to": target, "pending": [step.name for step in pending],
+                      "rehearsal": install.rehearsal()}
             if rehearse_only:
                 return report
             report["live"] = install.live()
@@ -427,23 +337,11 @@ class Install(ABC):
     installer: str
 
     @classmethod
-    def of(
-        cls,
-        checkout: Path,
-        root: Path,
-        current: str,
-        target: str,
-        pending: tuple[Step, ...],
-        installed: Stack,
-        staged: Stack,
-        revisions: Revisions,
-        installer: str,
-    ) -> Install:
+    def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
+           installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> Install:
         unchanged = current == target and staged.lock.read_bytes() == installed.lock.read_bytes()
         member = (ChangedInstall, UnchangedInstall)[unchanged]
-        return member(
-            checkout, root, current, target, pending, installed, staged, revisions, installer
-        )
+        return member(checkout, root, current, target, pending, installed, staged, revisions, installer)
 
     @abstractmethod
     def rehearsal(self) -> dict: ...
@@ -457,17 +355,8 @@ class ChangedInstall(Install):
         return rehearse(self.root, self.pending, self.staged, self.revisions)
 
     def live(self) -> dict:
-        return live(
-            self.checkout,
-            self.root,
-            self.current,
-            self.target,
-            self.pending,
-            self.installed,
-            self.staged,
-            self.revisions,
-            self.installer,
-        )
+        return live(self.checkout, self.root, self.current, self.target, self.pending,
+                    self.installed, self.staged, self.revisions, self.installer)
 
 
 class UnchangedInstall(Install):
@@ -482,24 +371,12 @@ class UnchangedInstall(Install):
         return {"unchanged": self.target}
 
 
-def live(
-    checkout: Path,
-    root: Path,
-    current: str,
-    target: str,
-    pending: tuple[Step, ...],
-    installed: Stack,
-    staged: Stack,
-    revisions: Revisions,
-    installer: str,
-) -> dict:
+def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
+         installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    running = [
-        thread["name"]
-        for thread in installed.cli(root, "threads")["threads"]
-        if thread["role"] == "agent" and thread["status"] == "running"
-    ]
+    running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
+               if thread["role"] == "agent" and thread["status"] == "running"]
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
@@ -508,20 +385,13 @@ def live(
     try:
         installed.owners(root, "stop", running)
         with transcripts_held(root):
-            backup = Backup.take(
-                root,
-                ROUTE,
-                (root,),
-                root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}",
-            )
+            backup = Backup.take(root, ROUTE, (root,),
+                root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
         maintenance.clear(held)
         installed.owners(root, "start", running)
-        print(
-            f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
-            f"maintenance cleared and {running} restarted",
-            file=sys.stderr,
-        )
+        print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
+              f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
     try:
@@ -536,19 +406,13 @@ def live(
     except BaseException as error:
         state = maintenance.read()
         state.phase.hold_for(maintenance, state, MaintenanceOperator("upgrade-bus"))
-        print(
-            f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
-            f"maintenance held, checkout and bus preserved; backup: {backup.path}",
-            file=sys.stderr,
-        )
+        print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
+              f"maintenance held, checkout and bus preserved; backup: {backup.path}",
+              file=sys.stderr)
         raise
     installed.owners(root, "start", running)
-    return {
-        "stopped_and_started": running,
-        **passed,
-        "services": services,
-        "backup": str(backup.path),
-    }
+    return {"stopped_and_started": running, **passed, "services": services,
+            "backup": str(backup.path)}
 
 
 def stopped(signum: int, frame: object) -> None:
@@ -559,33 +423,19 @@ def stopped(signum: int, frame: object) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--checkout", type=lambda value: Path(value).expanduser().resolve(), default=REPO
-    )
-    parser.add_argument(
-        "--root",
-        type=lambda value: Path(value).expanduser().resolve(),
-        default=Path.home() / ".agent-comms",
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--checkout", type=lambda value: Path(value).expanduser().resolve(), default=REPO)
+    parser.add_argument("--root", type=lambda value: Path(value).expanduser().resolve(),
+                        default=Path.home() / ".agent-comms")
     parser.add_argument("--to", default="origin/main")
-    parser.add_argument(
-        "--installer", required=True, help="The unit running this install; the plan names it"
-    )
-    parser.add_argument(
-        "--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing"
-    )
+    parser.add_argument("--installer", required=True,
+                        help="The unit running this install; the plan names it")
+    parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
     args = parser.parse_args()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, stopped)
     try:
-        print(
-            json.dumps(
-                upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse), indent=2
-            )
-        )
+        print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse), indent=2))
     except UpgradeRefused as error:
         raise SystemExit(f"upgrade-bus: {error}")
 
