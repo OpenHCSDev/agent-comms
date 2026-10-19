@@ -22,9 +22,8 @@ import base64
 import hashlib
 import html
 import json
-import os
 import secrets
-import socket
+import sys
 import time
 import urllib.request
 from abc import abstractmethod
@@ -41,7 +40,6 @@ from pydantic import JsonValue
 from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
-from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
@@ -285,7 +283,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
 
     async def answer(self, connector: Connector) -> web.Response:
         return web.json_response(
-            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector)))
+            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector), Path(sys.executable)))
         )
 
     async def result(self, connector: Connector) -> ToolsCallResult:
@@ -294,7 +292,10 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
             return ToolsCallResult.refused(
                 ValueError(f"The connector exposes no tool {self.params.name!r}.")
             )
-        reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
+        try:
+            reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
+        except UnregisteredThreadError as error:
+            return ToolsCallResult.refused(error)
         return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
 
 
@@ -324,6 +325,7 @@ class ToolsCallResult:
 class ToolsCallReply:
     id: int | str
     result: ToolsCallResult
+    interpreter: Annotated[Path, PathText]
     jsonrpc: Literal["2.0"] = "2.0"
 
 
@@ -546,44 +548,6 @@ class ServeVerb(ConnectorVerb):
         return 0
 
 
-@dataclass(frozen=True)
-class ServiceProcess:
-    """The process listening on the connector's loopback port."""
-
-    pid: int
-
-    @classmethod
-    def listening(cls, port: int) -> ServiceProcess:
-        local = f"{bytes(reversed(socket.inet_aton(LOOPBACK))).hex().upper()}:{port:04X}"
-        sockets = {
-            f"socket:[{row[9]}]"
-            for row in map(str.split, Path("/proc/net/tcp").read_text().splitlines()[1:])
-            if (row[1], row[3]) == (local, "0A")  # 0A: TCP_LISTEN
-        }
-        for descriptor in Path("/proc").glob("[0-9]*/fd/*") if sockets else ():
-            try:
-                target = os.readlink(descriptor)
-            except FileNotFoundError:
-                # A descriptor closed during the scan is not the listener.
-                continue
-            if target in sockets:
-                return cls(int(descriptor.parts[2]))
-        raise ValueError(f"No process listens on {LOOPBACK}:{port}")
-
-    @property
-    def unit(self) -> str:
-        """The systemd user unit that runs the service, named by the last part of its cgroup."""
-        unit = Path(Path(f"/proc/{self.pid}/cgroup").read_text().split("::", 1)[1].strip()).name
-        if not unit.endswith(".service"):
-            raise ValueError(f"The connector service (pid {self.pid}) runs in {unit}, not a unit")
-        return unit
-
-    @property
-    def executable(self) -> Path:
-        """The interpreter the service was started as; its venv link is not resolved."""
-        return Path(os.fsdecode(Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0")[0]))
-
-
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
     """Explicit qualification for a configured connector: its service runs the selected
@@ -597,7 +561,6 @@ class RoundTripVerb(ConnectorVerb):
     def apply(self, ctx: ConnectorStore) -> int | str:
         read = ToolCall.of(CommsChannelsTool)
         call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
-        running = ServiceProcess.listening(self.port).executable
         with ctx.granted("upgrade round trip") as token:
             request = urllib.request.Request(
                 f"http://{LOOPBACK}:{self.port}/mcp",
@@ -605,7 +568,9 @@ class RoundTripVerb(ConnectorVerb):
                 headers={"Authorization": f"Bearer {token}"},
             )
             with urllib.request.urlopen(request, timeout=60) as response:
-                reply = FieldCodec.decode(ToolsCallReply, json.load(response)).result
+                response = FieldCodec.decode(ToolsCallReply, json.load(response))
+        running = response.interpreter
+        reply = response.result
         if running != self.runtime:
             return f"The connector service runs {running}, not the installed {self.runtime}"
         if reply.is_error:
