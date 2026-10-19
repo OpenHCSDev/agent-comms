@@ -40,6 +40,7 @@ from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .goal_management import Goals
 
 
