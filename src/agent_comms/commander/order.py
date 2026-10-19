@@ -35,7 +35,7 @@ from ..change_report import FileLine
 from ..child_process import BoundedRun, CheckPrinted
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
-from ..goal_actions import CreateProblemGoalAction
+from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
@@ -289,8 +289,8 @@ class Commander(CommanderContext):
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
         for pid in [] if new else group:
-            self.call(CommsOrderTool(owner=unit, order=trace.order(
-                problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision, **common)))
+            self.call(CommsOrderTool(owner=unit, order=trace.order(OrderGoalAction(
+                problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision, **common))))
         message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
         sent = self.post(VerdictAudience((unit,)), message)
         # The message is each order's recorded link; a verdict citing it lands on that order.

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, replace
 
 from ..change_report import FileLine
 from ..goal_actions import OrderGoalAction
@@ -18,21 +17,21 @@ class AssignmentTrace(ABC):
         return TracedAssignment(FileLine.from_wire(text)) if text else UntracedAssignment()
 
     @abstractmethod
-    def order(self, **arguments: Any) -> OrderGoalAction: ...
+    def order(self, action: OrderGoalAction) -> OrderGoalAction: ...
 
 
 @dataclass(frozen=True)
 class UntracedAssignment(AssignmentTrace):
-    def order(self, **arguments: Any) -> OrderGoalAction:
-        return OrderGoalAction(**arguments)
+    def order(self, action: OrderGoalAction) -> OrderGoalAction:
+        return action
 
 
 @dataclass(frozen=True)
 class TracedAssignment(AssignmentTrace):
     where: FileLine
 
-    def order(self, **arguments: Any) -> OrderGoalAction:
-        return OrderGoalAction(traced=self.where, **arguments)
+    def order(self, action: OrderGoalAction) -> OrderGoalAction:
+        return replace(action, traced=self.where)
 
 
 class TransferReason(ABC):
