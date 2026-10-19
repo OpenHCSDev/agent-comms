@@ -73,9 +73,8 @@ class RunningProcess:
 
 @dataclass(frozen=True)
 class RetiredRuntime:
-    """The runtime a publication replaced. Its processes end once the links point at the new one,
-    Toad views included, except a registered owner still waiting for its idle reload, that
-    owner's descendants, and the publisher's own ancestors."""
+    """The runtime publication replaced: its processes, Toad views too, end after the links move,
+    except an owner waiting for its idle reload, its descendants and the publisher's ancestors."""
 
     path: Path
     grace: ClassVar[float] = 5.0
