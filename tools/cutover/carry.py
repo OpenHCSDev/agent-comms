@@ -225,7 +225,7 @@ class Step:
     def current(self, checkout: Path) -> type[Carry]:
         """Load current checkout tools, never a second Core source tree."""
         if self.revision != self.chain_revision:
-            raise RuntimeError(f'{self.name} requires its historical full upgrade')
+            raise RuntimeError(f'{self.name} requires tools/upgrade_bus.py for its historical full upgrade')
         source = checkout / STEPS / f'{self.name}.py'
         if source.read_bytes() != git(checkout, 'show', f'{self.revision}:{STEPS}/{source.name}'):
             raise RuntimeError(f'Conversion source changed since planning: {source}')

@@ -17,7 +17,8 @@ from agent_comms.external_transcript import ExternalDraftRow, ExternalEventRow, 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import TranscriptEvent
 
-from .carry import Carried, StoreCarry
+from . import carry
+from .carry import Carried
 
 
 def located(encoded, item_id):
@@ -33,7 +34,7 @@ def located(encoded, item_id):
     return FieldCodec.decode(tuple[TranscriptEvent, ...], events), changed
 
 
-class ExternalPositions(StoreCarry):
+class ExternalPositions(carry.StoreCarry):
     """Saved events take the identity their original bridge item owns."""
 
     store = ExternalTranscript
