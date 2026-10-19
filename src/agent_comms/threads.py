@@ -379,11 +379,11 @@ class Thread(ThreadProvenance):
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
-        """Check whether a task record belongs to the active or last finished turn.
+        """Check whether a task record can refer to this thread's current or preceding turn.
 
-        Starting a turn clears last_finished_turn_id. While it runs, recognize
-        the preceding turn by subtracting one from the current generation.
-        After it finishes, use the saved turn ID and generation instead.
+        Reject a different thread registration. During a turn, accept its exact
+        ID and generation or the immediately preceding generation. When idle,
+        require a matching generation and a recorded finished turn.
         Neither starting nor finishing a turn proves a subtask was completed.
         """
         if identity.incarnation != self.incarnation:

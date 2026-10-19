@@ -256,7 +256,7 @@ class CertifiedSourceRead:
 
         Compare row bytes directly to decide reuse, rather than a shared revision
         or calculated signature. Check the bus and select row locations on every
-        read. Release the database and bus locks before decoding.
+        read. Decoding uses copied bytes without needing a database or bus lock.
         """
         self.require_current()
         captured = tuple((row, row.read_bytes(self.stream)) for row in rows)
