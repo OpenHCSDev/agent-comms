@@ -8,7 +8,7 @@ from agent_comms.messages import (
     HistoricalConversationRole, HistoricalNoticeRole,
     MembershipConversationRole, MembershipNoticeRole, MembershipChange,
 )
-from agent_comms.thread_identity import AgentThreadRole, HumanThreadRole
+from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.transcript_events import IncomingTranscript
 from agent_comms.ui_model.message_category import (
     InboundCategory, OtherCategory, all_categories, AgentActivityBoundary,
@@ -24,7 +24,7 @@ from agent_comms.ui_model.message_category import (
     (MembershipConversationRole(MembershipChange.JOINED), InboundCategory),
     (MembershipNoticeRole(MembershipChange.JOINED), OtherCategory),
 ])
-@pytest.mark.parametrize("sender_role", [AgentThreadRole, HumanThreadRole])
+@pytest.mark.parametrize("sender_role", [AgentThreadRole, UserThreadRole])
 def test_role_owns_wire_filter_category(role, category, sender_role):
     message = Message(sender="alice", target="#comms", body="Visible text", type=InfoKind,
                       sender_role=sender_role, role=role)

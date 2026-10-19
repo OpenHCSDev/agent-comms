@@ -18,7 +18,7 @@ from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 from .ui_model.message_category import (
-    MessageCategory, UserCategory, AgentCategory, OutboundCategory,
+    MessageCategory, UserCategory, AgentCategory, InboundCategory, OutboundCategory,
     OtherCategory, ThinkingCategory, ToolCategory,
 )
 
@@ -75,8 +75,12 @@ class ImportedReply(ImportedMessage):
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
-    category: ClassVar[type[MessageCategory]] = OtherCategory
+    category: ClassVar[type[MessageCategory]]
     position: int | str
+
+    @property
+    @abstractmethod
+    def category(self) -> type[MessageCategory]: ...
     routing = None
     source = None
     timestamp = None
@@ -328,6 +332,8 @@ class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
 
 
 class ContextTranscript(SilentTranscript, NativeTextTranscript):
+    category = InboundCategory
+
     def imported(self) -> ImportedMessage:
         return ImportedInput(self.text)
 
