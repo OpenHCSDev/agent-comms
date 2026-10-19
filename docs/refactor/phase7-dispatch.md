@@ -78,7 +78,7 @@ same trace requirement to the released assignment history. Auto-dispatch passes
 no fabricated source trace. After two owners, missing real tracing stops that
 transfer rather than pretending the old order's source owner was newly read.
 
-## Final checkpoint
+## Earlier sanity checkpoint
 
 After edit: refactor-audit parsed 380 Core production modules and 283 Toad
 modules (ba57101e), zero parse omissions. UnownedWheelSpin has no declaration
@@ -99,10 +99,10 @@ risk: reproduce with the board self-check cases; acceptance must preserve the
 remote PR fact without a local checkout. Default eight-worker/coverage settings
 were needless overhead for that bounded run; final checks were serial.
 
-No agent launch, provider input, installation or PR merge occurred. Draft #1932
-is not a first-reply proof. Production checked full-phase briefs and the scratch
-unit/order/first-reply proof remain required. Unordered rows without a checked
-order cannot be dispatched by inventing their missing check.
+At that checkpoint no agent launch, provider input, installation or PR merge had
+occurred. The scratch native first-reply proof below supersedes that limitation.
+Production full-phase declarations are staged with pi-plan-claims. Unordered rows
+without a checked order still cannot be dispatched by inventing their check.
 
 The full ControlPlanePhase brief draft was moved into PR #1932's body at the
 owner's request. The owner explicitly authorized rotation to start the proof unit
@@ -116,3 +116,36 @@ The development checkout reuses an unchanged prepared native package by reflink
 copy at stack/.pi-native-a0f57a811b47862f (192 MiB apparent size). Its manifest
 matches main and VerifiedNativePackage.acquire accepts it. The native verifier
 correctly refused a symlink; no gate was disabled and no live package changed.
+
+## Real rotation/native proof
+
+Run: run-20261019-control2, exit 0. No fake Comms, provider, events or replies.
+`commander.rotate.broken_rules` called the real native standing-rule tool, whose
+PlanIdle enforcement created this registered unit and order:
+
+- Unit: unit-p1792433571161170326-r0
+- Model: openai-codex/gpt-6.1-sol; reserved worker PID 1206539
+- Problem: P1792433571161170326
+- Order: 0f96e2831ff1
+- First actual unit reply: ROTATION_REPLY_62821ddec7434083b6f618e65798a080
+
+Second rotation created neither another unit nor another order. The actual reply
+passed the order's Core check; its order is DeliveredProblemOrder, pending=False.
+The worker was stopped only after its native turn ended. No proof writes touched
+the live bus. Receipt, order, reply, diagnostics and original native session are
+retained in the named scratch run. The initial control1 run was refused before
+spawn for a missing prepared package and is retained separately, not replayed.
+
+Dispatcher source was bf9fae2f1; the proof runner was then committed as c723313ed.
+The native worker used the existing main-checkout editable Core (observed clean
+at 8b27e02aa) and unchanged pinned Pi a0f57a811b47862f. This is a real source-driver
+and configured installed-native process proof, not a claim that the candidate
+branch was installed or that all of phase 7 is complete.
+
+The requested full task() factories and method migration are staged in
+phase7-task-declarations.patch and sent to pi-plan-claims (owner request 1895,
+handoff 1946). That owner reports stale self-claims preventing its shared-file
+edits; no denied edit was bypassed. Its phase/claim changes must be integrated
+normally. Missing-checkout progress reads overlap the recently changed
+ProgressSource in #1935; pi-cn-phase3 has the reproducer and implementation
+handoff, so no competing ProgressSource change is made here.
