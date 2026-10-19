@@ -37,7 +37,6 @@ from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.store_files import _atomic_write_text
 from agent_comms.todos import Todo, TodoStore
 
 STEPS = Path("tools/cutover")
@@ -120,28 +119,6 @@ class RetainedBus:
         if missing:
             raise ValueError(
                 f"Retained bus {self.name} still needs retired steps: {sorted(missing)}")
-
-    @classmethod
-    def record(cls, checkout: Path, root: Path) -> None:
-        """Publish this bus's committed ledger after an upgrade applies a step."""
-        path = checkout / STEPS / cls.filename
-        if not path.exists():
-            return
-        buses = FieldCodec.decode(tuple[RetainedBus, ...], FieldCodec.parse(path.read_bytes()))
-        updated = tuple(replace(bus, applied=CarryLedger(root).applied())
-                        if Path(bus.root).expanduser().resolve() == root.resolve() else bus
-                        for bus in buses)
-        if updated != buses:
-            _atomic_write_text(path, json.dumps(FieldCodec.encode(updated), indent=2) + "\n",
-                               fsync_parent=True)
-
-    @classmethod
-    def restore(cls, checkout: Path, revision: str) -> None:
-        """Restore the committed declaration before rolling its checkout back."""
-        path = checkout / STEPS / cls.filename
-        if path.exists():
-            source = git(checkout, "show", f"{revision}:{STEPS}/{cls.filename}").decode()
-            _atomic_write_text(path, source, fsync_parent=True)
 
 
 class Carry(ABC):

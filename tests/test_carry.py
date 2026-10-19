@@ -3,6 +3,7 @@
 import importlib
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -144,14 +145,6 @@ def test_retirement_requires_every_retained_bus_to_have_applied_the_step(tmp_pat
     declarations.write_text(json.dumps(buses))
     repo.commit({"carry_b": step_source(None)})
     assert CarryChain.at(tmp_path, "HEAD").retired == {"carry_a"}
-    for name in ("carry_a", "carry_b"):
-        CarryLedger(bus_root).record(name)
-    RetainedBus.record(repo.path, bus_root)
-    saved = json.loads(declarations.read_text())
-    assert saved[0]["applied"] == ["carry_a", "carry_b"]
-    assert saved[1] == buses[1]
-    RetainedBus.restore(repo.path, "HEAD")
-    assert declarations.read_text() == repo.git("show", f"HEAD:{STEPS}/{RetainedBus.filename}")
 
 
 def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):
@@ -506,7 +499,7 @@ class Owners(Stack):
 for each in (signal.SIGTERM, signal.SIGINT):
     signal.signal(each, stopped)
 root = Path(sys.argv[1])
-live(root, root, "", "", (), Owners(root), Owners(root), None)
+live(root, root, "", "", (), Owners(root), Owners(root), None, "worker")
 """
 
 
@@ -569,12 +562,15 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
         def prepare_native(self):
             pass
 
+        def sync(self):
+            pass
+
         def verify(self, root):
             return {}
 
     ran = upgrade_bus.run
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: (
-        "" if command[0] in ("git", "uv") else ran(*command, **options)))
+        "" if command[0] == "git" else ran(*command, **options)))
     monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     stack = Owners(REPO, tmp_path / "home")
@@ -582,7 +578,7 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
     checkout.mkdir()
 
     def upgrading():
-        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None)
+        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
 
     failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
     if registered:
@@ -593,6 +589,13 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
             upgrading()
         assert len(list(failed)) == 1
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+
+
+def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
+    """The 22:20 install ran a uv from another agent's scratch; the installer names its own."""
+    stack = Stack(REPO, tmp_path)
+    with pytest.raises(UpgradeRefused, match=re.escape(str(stack.uv))):
+        stack.require_uv()
 
 
 def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):

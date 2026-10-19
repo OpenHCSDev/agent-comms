@@ -35,10 +35,12 @@ from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
+from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .goal_management import Goals
 
 
@@ -513,7 +515,10 @@ class MergedProgress(FoundProgress):
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
     """The fleet's next install: one time for the bus and the unit that runs it, set by the
     commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
-    carries it as its own deadline. Install, maintenance and carry work is the installer's."""
+    carries it as its own deadline. Install, maintenance and carry work is the installer's.
+    Each live install by ``tools/upgrade_bus.py`` plans the next one a cadence later."""
+
+    cadence: ClassVar[int] = 30 * 60
 
     @staticmethod
     def path_in(root: Path) -> Path:
@@ -535,8 +540,15 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
     def refusal(self, work: str, commander: str) -> str:
         """Why the commander does not run the installer's work itself."""
 
+    @abstractmethod
+    def overdue(self, now: float) -> tuple[str, ...]:
+        """Why an install of main is due at ``now``, read from the schedule's time alone."""
+
 
 class UnplannedInstallDeadline(InstallDeadline):
+    def overdue(self, now: float) -> tuple[str, ...]:
+        return ("no install is planned on this bus",)
+
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
@@ -550,6 +562,15 @@ class UnplannedInstallDeadline(InstallDeadline):
 class PlannedInstallDeadline(InstallDeadline):
     at: RecordedEventTime
     installer: str
+
+    @classmethod
+    def after(cls, installer: str, now: float) -> PlannedInstallDeadline:
+        """The install a live install plans: the same installer, one cadence on."""
+        return cls(RecordedEventTime(now + cls.cadence), installer)
+
+    def overdue(self, now: float) -> tuple[str, ...]:
+        due = time.strftime("%H:%M", time.localtime(self.at.at))
+        return (f"due {due}, installer {self.installer}",) * (now >= self.at.at)
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
@@ -569,6 +590,21 @@ class PlannedInstallDeadline(InstallDeadline):
         if now > self.at.at:
             return [f"INSTALL LATE (due {due}), not the orders; waiting: {', '.join(waiting)}"]
         return [f"INSTALL due {due}; waiting: {', '.join(waiting)}"]
+
+
+@dataclass(frozen=True)
+class InstallDue(UndatedStandingRule):
+    """Merged work reaches the bus on the install schedule, not at the end of an order."""
+
+    why: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(map(cls, InstallDeadline.read(comms.root).overdue(time.time())))
+
+    def line(self) -> str:
+        return (f"INSTALL DUE ({self.why}) -> the installer rehearses and installs main with "
+                "tools/upgrade_bus.py and posts the result to the commander")
 
 
 @dataclass(frozen=True)
