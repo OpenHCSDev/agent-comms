@@ -4,6 +4,7 @@ import importlib
 import json
 import os
 import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -867,8 +868,9 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
     Path(judge.EDITS).write_text(''.join(json.dumps(edit) + '\n' for edit in edits))
+    message = comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner')
     judge.OkVerb(ids=tuple(f'{e["id"]}:{judge.check_code(e)}' for e in edits),
-                 why='The changes repair the existing canonical state owner',
+                 why='The changes repair the existing canonical state owner', msg=message,
                  serves='Repair the existing owner', lines=('value = 2',)).run()
     saved = comms.goals.todos.get('P1')
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
@@ -879,17 +881,19 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
 
 
 @pytest.mark.parametrize('verb', ['ok', 'back'])
-def test_judge_refuses_an_edit_without_an_open_order(commander_script, verb):
+def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script, verb):
     import json
     from pathlib import Path
 
+    comms, _ = commander
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='orphan-edit', thread='worker', hunks=[dict(old='value = 1', new='value = 2')])
     Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
     fields = dict(ids=(f'{edit["id"]}:{judge.check_code(edit)}',),
-                  why='The changes repair the existing canonical state owner', lines=('value = 2',))
-    command = judge.OkVerb(**fields) if verb == 'ok' else judge.BackVerb(
-        **fields, slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+                  why='The changes repair the existing canonical state owner', lines=('value = 2',),
+                  msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner'))
+    command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
+        **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match='edit orphan-edit.*one open order Todo'):
         command.run()
@@ -952,6 +956,30 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     assert judged.strikes[0].reason == why
     revised = comms.registry.require('worker').goal
     assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+
+
+VERDICT_LINES = {
+    'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
+    'ok-unowned': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner' --no-owner proof",
+    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
+            " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
+}
+
+
+def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander, commander_script):
+    """Every verdict member refuses a line missing any fact it declares, and its verdict reads back from the order."""
+    comms, caller = commander
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    assert set(judge.VerdictVerb.names()) == set(VERDICT_LINES)
+    create(commander, 'P1')
+    for name, line in VERDICT_LINES.items():
+        argv = [name, *shlex.split(line)]
+        for at in [i for i, token in enumerate(argv) if token.startswith('--')]:
+            with pytest.raises(SystemExit):
+                judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
+        operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
+        CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
+        assert comms.goals.todos.get('P1').verdicts[-1] == operation
 
 
 def test_close_quotes_the_works_line(commander):
