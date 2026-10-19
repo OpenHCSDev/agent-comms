@@ -38,7 +38,7 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
         ("Bob", {"team"}, 17003.0),
         ("outsider", {"else"}, 17004.0),
     ):
-        comms.registry.register(
+        comms.registry.declare(
             comms.registry.new_thread(name, frozenset(tags), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=stamp)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -460,7 +460,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     # source API supplies a complete-prefix+bounded-page alternative.
     with (
         pytest.raises(RelationViolationError),
-        _store_lock(comms.bus.log.path, max_bus_bytes=8 * 1024 * 1024),
+        comms.bus.log.locked(max_bus_bytes=8 * 1024 * 1024),
     ):
         pass
     with monkeypatch.context() as patch:
