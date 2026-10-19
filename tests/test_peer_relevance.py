@@ -136,7 +136,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     goal = comms.goals.update_goal("partner", SetGoalAction(text="Review the parser."))
     (segment,) = _partner_activity(comms, "owner")
     (change,) = segment.changes
-    assert (change.peer, change.goal, change.state) == ("partner", goal.checkpoint, ActiveGoal)
+    assert (change.peer, change.goal, change.state) == ("partner", goal.revision_key, ActiveGoal)
     comms.goals.update_goal(
         "partner", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Done.")
     )

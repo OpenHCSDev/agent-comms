@@ -17,6 +17,10 @@ from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
+from .ui_model.message_category import (
+    MessageCategory, UserCategory, AgentCategory, InboundCategory, OutboundCategory,
+    OtherCategory, ThinkingCategory, ToolCategory,
+)
 
 if TYPE_CHECKING:
     from .importing import ImportBuffer, ImportLimits
@@ -71,7 +75,12 @@ class ImportedReply(ImportedMessage):
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
+    category: ClassVar[type[MessageCategory]]
     position: int | str
+
+    @property
+    @abstractmethod
+    def category(self) -> type[MessageCategory]: ...
     routing = None
     source = None
     timestamp = None
@@ -195,6 +204,10 @@ class WireTextTranscript(MarkdownTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class IncomingTranscript(TextTranscript):
+    @property
+    def category(self) -> type[MessageCategory]:
+        return self.message.role.category
+
     message: Message
     reader: str
     position: ClassVar[int]
@@ -228,6 +241,7 @@ class IncomingTranscript(TextTranscript):
 
 @dataclass(frozen=True)
 class UserTranscript(NativeTextTranscript):
+    category = UserCategory
     native_id: str | None = field(default=None, kw_only=True)
 
     def with_native_input(self, native_id: str | None) -> UserTranscript:
@@ -246,11 +260,19 @@ class UserTranscript(NativeTextTranscript):
 
 
 class AssistantTranscript(AgentTextTranscript):
+    @property
+    def category(self) -> type[MessageCategory]:
+        return OutboundCategory if self.routed else AgentCategory
+
     def imported(self) -> ImportedMessage:
         return ImportedReply(self.text)
 
 
 class NoticeTranscript(AgentTextTranscript):
+    @property
+    def category(self) -> type[MessageCategory]:
+        return OutboundCategory if self.routed else OtherCategory
+
     def as_context(self) -> NoticeTranscript:
         # Native failures remain visible notices, including bounded triage.
         return self
@@ -272,6 +294,8 @@ class ForkTaskTranscript(UserTranscript):
 
 class SentTranscript(OutgoingRoute, WireTextTranscript):
     """One immutable original wire row, separate from native assistant output."""
+
+    category = OutboundCategory
 
     def tool_content(self, tool_call_id):
         """Encode the Send report only at its actual ACP output boundary."""
@@ -300,18 +324,23 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
 
 class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
+    category = ThinkingCategory
+
     @property
     def starts_activity(self) -> bool:
         return bool(self.text.strip())
 
 
 class ContextTranscript(SilentTranscript, NativeTextTranscript):
+    category = InboundCategory
+
     def imported(self) -> ImportedMessage:
         return ImportedInput(self.text)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ToolTranscript(SilentTranscript, RecordedTranscript):
+    category = ToolCategory
     tool_call_id: str
     tool_name: str
 

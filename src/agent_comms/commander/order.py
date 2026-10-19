@@ -29,7 +29,8 @@ from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
+from ..child_process import CheckPrinted
+from ..goals import OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..messages import Message
 from ..plan_phases import OrderPhase, UnplannedPhase
