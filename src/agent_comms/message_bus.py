@@ -33,7 +33,7 @@ from .read_basis import (
     CapturedSelection,
 )
 from .routing import DeliveryScope
-from .store_files import SharedLock, _store_lock
+from .store_files import SharedLock, StoreLock, _store_lock
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -48,6 +48,7 @@ from .wire_watch import WatchSource, WireWatch
 
 class MessageBus[Writes: Publisher]:
     lock_rank = 0
+    lock_type = StoreLock
 
     @property
     def path(self) -> Path:

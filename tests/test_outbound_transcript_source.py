@@ -194,7 +194,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
     assert reopened.events == (replace(events[0], reader="renamed"), events[1])
-    assert list(comms.bus.history_page(ANY_CHANNEL).messages)[-1] == message
+    assert list(comms.views.history_page(ANY_CHANNEL).messages)[-1] == message
 
 
 async def test_original_target_handling_revokes_open_sender_read_without_new_message(tmp_path, monkeypatch, *, native_runtime_package):  # noqa: F811
@@ -336,7 +336,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     with pytest.raises(StaleRevision, match="page window"):
         comms.transcripts.bind_page_read(
             "beta", identity,
-            before=identity.runtime.cursor(identity.wire_frontier, 0),
+            before=identity.page_bound.at_offset(0),
         )
     comms.registry.rename("beta", "renamed")
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
