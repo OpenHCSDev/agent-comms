@@ -1,6 +1,6 @@
 import pytest
 
-from agent_comms.channel_targets import BuiltinChannel
+from agent_comms.channels import BuiltinChannelView
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.threads import Thread
@@ -10,7 +10,7 @@ def test_all_is_the_only_global_target(tmp_path):
     comms = wire(tmp_path)
     for name in ("sender", "first", "second"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    assert BuiltinChannel.lookup("broadcast") is None
+    assert BuiltinChannelView.lookup("broadcast") is None
     with pytest.raises(UnregisteredThreadError):
         comms.messaging.send("sender", "broadcast", "must not become a global message").message.message_id
     assert not list(comms.bus.full_history_page().messages)

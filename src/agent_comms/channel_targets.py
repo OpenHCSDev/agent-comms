@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -30,28 +29,16 @@ class ResolvedChannel:
     members: tuple[ResolvedThread, ...]
 
 
-class BuiltinChannel(StrEnum):
-    ANY = "#any"
-    NONE = "#none"
-    ALL = "#all"
+def exact_stored_target(name: str) -> bool:
+    from .channels import BuiltinChannelView
 
-    @classmethod
-    def lookup(cls, name: str) -> BuiltinChannel | None:
-        channel = cls._value2member_map_.get(name)
-        # Value aliases are not declared channel targets.
-        return channel if channel is not None and name == channel.value else None
-
-    @classmethod
-    def exact_stored_target(cls, name: str) -> bool:
-        channel = cls.lookup(name)
-        return channel is None or not channel.aggregate
-
-    @property
-    def aggregate(self) -> bool:
-        return self is self.ANY
-
-    def matches(self, tags: frozenset[str]) -> bool:
-        return self is not self.NONE or not tags
+    channel = BuiltinChannelView.lookup(name)
+    if channel is not None:
+        try:
+            channel.require_routable()
+        except RelationViolationError:
+            return False
+    return True
 
 
 class CommandTarget(ABC):
@@ -258,7 +245,9 @@ class ChannelTarget(NamedTarget):
         return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender=None):
-        if BuiltinChannel.lookup(self.name) is None:
+        from .channels import BuiltinChannelView
+
+        if BuiltinChannelView.lookup(self.name) is None:
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
     def response_policy(self, message):
@@ -332,5 +321,7 @@ class Tag:
 
     @staticmethod
     def validate(name: str, *, label: str = "Tags") -> None:
-        if not name or not set(name) <= _TAG_CHARS or BuiltinChannel.lookup(f"#{name}"):
+        from .channels import BuiltinChannelView
+
+        if not name or not set(name) <= _TAG_CHARS or BuiltinChannelView.lookup(f"#{name}"):
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")

@@ -6,7 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
-from .channel_targets import BuiltinChannel, ChannelTarget, Tag
+from .channel_targets import ChannelTarget, Tag
 from .channels import (
     BuiltinChannelView,
     Channel,
@@ -80,7 +80,7 @@ class CatalogDocument:
         for thread in threads.values():
             for tag in thread.tags:
                 first_seen[tag] = min(first_seen.get(tag, thread.created_at), thread.created_at)
-        result = Channels((kind.value, self.resolve(kind.value)) for kind in BuiltinChannel)
+        result = Channels((kind.target_name, self.resolve(kind.target_name)) for kind in BuiltinChannelView.declarations())
         for tag in sorted(self.tags.union(first_seen)):
             name = f"#{tag}"
             result[name] = self.resolve(name, created_at=first_seen.get(tag, 0.0))
@@ -93,7 +93,7 @@ class CatalogDocument:
         first_seen = min(
             (thread.created_at for thread in threads.values() if tag in thread.tags), default=None
         )
-        declared = tag in self.tags or tag in self.saved_views or BuiltinChannel.lookup(target) is not None
+        declared = tag in self.tags or tag in self.saved_views or BuiltinChannelView.lookup(target) is not None
         if not declared and first_seen is None:
             raise UnknownChannelError(f"Unknown channel: {target!r}")
         return self.resolve(target, created_at=first_seen or 0.0)
@@ -105,14 +105,14 @@ class CatalogDocument:
         preference = self.preferences.get(
             target, ChannelPreferences(created_at=view.created_at if view else created_at)
         )
-        if builtin := BuiltinChannel.lookup(target):
-            return preference.channel(BuiltinChannelView, target, frozenset(), builtin=builtin)
+        if builtin := BuiltinChannelView.lookup(target):
+            return preference.channel(builtin, target, frozenset())
         if view is not None:
             return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
         return preference.channel(TagChannel, target, frozenset({tag}))
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
-        return frozenset(kind.value for kind in BuiltinChannel if kind.matches(tags)) | frozenset(
+        return frozenset(kind.target_name for kind in BuiltinChannelView.declarations() if kind.matches(tags)) | frozenset(
             f"#{tag}" for tag in tags
         )
 

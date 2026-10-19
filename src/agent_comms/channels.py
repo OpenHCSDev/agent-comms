@@ -8,9 +8,9 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from .channel_targets import BuiltinChannel, ChannelTarget, Tag
+from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
@@ -18,10 +18,10 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import MembershipChange
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
-from .threads import Thread
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
+    from .threads import Thread
     from .registry_document import RosterVisibility
     from .registry_provenance import RegistryProvenance
 
@@ -88,10 +88,6 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     @property
     @abstractmethod
     def exact(self) -> bool: ...
-
-    @property
-    @abstractmethod
-    def aggregate(self) -> bool: ...
 
     @property
     @abstractmethod
@@ -175,11 +171,7 @@ class GroupedChannel:
         return True
 
     def sort_key(self, ordering, view) -> tuple:
-        return not self.pinned, len(BuiltinChannel), *ordering.sort_fields(view)
-
-    @property
-    def aggregate(self) -> bool:
-        return False
+        return not self.pinned, len(BuiltinChannelView.declarations()), *ordering.sort_fields(view)
 
 
 class MembershipChannel:
@@ -201,40 +193,49 @@ class MembershipChannel:
         return (MembershipChange.JOINED if current else MembershipChange.LEFT,)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel):
-    builtin: BuiltinChannel
+class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_name=None):
+    target_name: ClassVar[str]
+    _by_name: ClassVar[dict[str, type[BuiltinChannelView]]] = {}
+
+    def __init_subclass__(cls, *, target_name: str, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        cls.target_name = target_name
+        cls._by_name[target_name] = cls
+
+    @classmethod
+    def lookup(cls, name: str) -> type[BuiltinChannelView] | None:
+        return cls._by_name.get(name)
+
+    @classmethod
+    def declarations(cls) -> tuple[type[BuiltinChannelView], ...]:
+        return tuple(cls._by_name.values())
 
     def validate_declaration(self) -> None:
-        if self.name != self.builtin.value:
+        if self.name != self.target_name:
             raise ValueError("Built-in channel must retain its declaration identity.")
         if self.tags:
             raise ValueError("Built-in channels cannot have tag filters.")
         if self.parent is not None or self.archived:
             raise ValueError("Built-in channels cannot be grouped or archived.")
 
-    def matches(self, tags: frozenset[str]) -> bool:
-        return self.builtin.matches(tags)
+    @classmethod
+    def matches(cls, tags: frozenset[str]) -> bool:
+        return True
 
     @property
     def exact(self) -> bool:
         return False
 
-    @property
-    def aggregate(self) -> bool:
-        return self.builtin.aggregate
-
     def can_set_archived(self, archived: bool) -> bool:
         return False
 
-    def require_routable(self) -> None:
-        if self.aggregate:
-            raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
+    @classmethod
+    def require_routable(cls) -> None:
+        pass
 
-    def history_scope(self) -> ChannelDisplayScope:
-        if self.aggregate:
-            return AllChannelDisplayScope(self.name)
-        return ChannelDisplayScope(self.name, frozenset((self.name,)))
+    @classmethod
+    def history_scope(cls) -> ChannelDisplayScope:
+        return ChannelDisplayScope(cls.target_name, frozenset((cls.target_name,)))
 
     def require_metadata(self) -> None:
         raise ValueError("Built-in channels cannot be grouped or archived.")
@@ -246,7 +247,27 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel):
         return not existing
 
     def sort_key(self, ordering, view) -> tuple:
-        return not self.pinned, tuple(BuiltinChannel).index(self.builtin), 0, 0, self.name
+        return not self.pinned, tuple(self._by_name).index(self.name), 0, 0, self.name
+
+
+class AnyChannel(BuiltinChannelView, target_name="#any"):
+    @classmethod
+    def require_routable(cls) -> None:
+        raise RelationViolationError(f"View {cls.target_name!r} is a projection, not a routable target.")
+
+    @classmethod
+    def history_scope(cls) -> ChannelDisplayScope:
+        return AllChannelDisplayScope(cls.target_name)
+
+
+class NoneChannel(BuiltinChannelView, target_name="#none"):
+    @classmethod
+    def matches(cls, tags: frozenset[str]) -> bool:
+        return not tags
+
+
+class AllChannel(BuiltinChannelView, target_name="#all"):
+    pass
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

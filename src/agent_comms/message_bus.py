@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
+from .channel_targets import ChannelTarget, CommandTarget
+from .channels import AnyChannel
 from .errors import UnregisteredThreadError
 from .maintenance_barrier import MaintenanceBarrier
 from .historical_views import HistoryArchive
@@ -175,7 +176,7 @@ class MessageBus[Writes: Publisher]:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
-            selected = CommandTarget.named(BuiltinChannel.ANY.value if target is None else target)
+            selected = CommandTarget.named(AnyChannel.target_name if target is None else target)
             return selected.pending_count(counts, basis.registry, basis.catalog)
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
@@ -313,7 +314,7 @@ class MessageBus[Writes: Publisher]:
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded combined view of explicit channel and direct wire messages."""
-        scope = AllChannelDisplayScope(BuiltinChannel.ANY.value)
+        scope = AnyChannel.history_scope()
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:

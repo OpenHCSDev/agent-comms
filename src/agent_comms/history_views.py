@@ -29,9 +29,9 @@ if TYPE_CHECKING:
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
-from .channel_targets import BuiltinChannel, CommandTarget
+from .channel_targets import CommandTarget
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope
-from .channels import ChannelMemberIndex
+from .channels import AnyChannel, ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
 from .errors import UnknownChannelError, UnregisteredThreadError
@@ -241,7 +241,7 @@ class HistoryViews:
         return canonical
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        return ChannelHistory(AllChannelDisplayScope(BuiltinChannel.ANY.value)).page(
+        return ChannelHistory(AnyChannel.history_scope()).page(
             self.presentation, bounds
         )
 
