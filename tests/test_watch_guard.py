@@ -42,9 +42,9 @@ def test_only_a_lapsed_watch_warns_the_session(tmp_path, monkeypatch):
         'UserPromptSubmit': ['agent-comms-watch-guard'],
         'PostToolUse': ['agent-comms-watch-guard'],
         'PreCompact': ['agent-comms-claude-precompact'],
-        'SessionStart': ['agent-comms-claude-compacted', 'agent-comms-claude-session-started'],
+        'SessionStart': ['agent-comms-claude-session-started', 'agent-comms-claude-compacted'],
         'SessionEnd': ['agent-comms-claude-session-ended']}
     assert hooks['PreToolUse'][0]['matcher'] == 'Bash'
     assert 'matcher' not in hooks['PostToolUse'][0]
-    assert hooks['SessionStart'][0]['matcher'] == 'compact'
+    assert any(entry.get('matcher') == 'compact' for entry in hooks['SessionStart'])
 

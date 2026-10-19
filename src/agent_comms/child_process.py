@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
+from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion, boundary_decoder
 from .launch_runtime import LaunchRuntime
 from .sealed import Sealed
 
@@ -1363,6 +1363,14 @@ class StreamingChildStdio(ChildStdio):
     input_enabled: bool = True
     limit: int = 65536
     stderr: int | io.IOBase = subprocess.PIPE
+
+    @staticmethod
+    @boundary_decoder
+    def output(process: asyncio.subprocess.Process) -> asyncio.StreamReader:
+        """Decode the external subprocess result against this declared PIPE contract."""
+        if process.stdout is None:
+            raise RuntimeError("A streaming child was launched without its stdout pipe")
+        return process.stdout
 
     @property
     def options(self) -> dict:

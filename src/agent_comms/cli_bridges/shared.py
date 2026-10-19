@@ -1,4 +1,5 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
+
 from __future__ import annotations
 
 import argparse
@@ -9,16 +10,17 @@ import signal
 import sys
 import traceback
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar
-from collections.abc import Awaitable, Callable
 
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
 
+from agent_comms.agent_backend import InputId
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
@@ -40,37 +42,53 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message, MessageKind
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.registration import RegisteredInput, Registration
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
-from .monitor import SessionAttachment, MonitorService, read_monitor
+
+from .monitor import (
+    MonitorAttachment,
+    MonitorPeer,
+    MonitorService,
+    NoReader,
+    ReaderState,
+    read_monitor,
+)
 
 
 @dataclass(frozen=True)
 class Binding(TypedTable):
     root: str
-    bus: str = field(metadata={'wire_name': 'bus_thread'})
-    thread: str = field(metadata={'wire_name': 'session'})
+    bus: str = field(metadata={"wire_name": "bus_thread"})
+    thread: str = field(metadata={"wire_name": "session"})
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        group = parser.add_argument_group('Core/CLI binding (all or none)')
+        group = parser.add_argument_group("Core/CLI binding (all or none)")
         for _, key in FieldCodec.record_fields(cls):
-            group.add_argument('--' + key.replace('_', '-'))
+            group.add_argument("--" + key.replace("_", "-"))
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Binding | None:
-        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
-                  if vars(arguments)[key] is not None}
-        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else None
+        values = {
+            key: vars(arguments)[key]
+            for _, key in FieldCodec.record_fields(cls)
+            if vars(arguments)[key] is not None
+        }
+        return (
+            FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values})
+            if values
+            else None
+        )
 
     @classmethod
     @contextmanager
     def open(cls, state: Path):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with closing(CoordinationStore.writer(state / 'delivery.sqlite3')) as db:
-            db.execute('PRAGMA synchronous=FULL')
+        with closing(CoordinationStore.writer(state / "delivery.sqlite3")) as db:
+            db.execute("PRAGMA synchronous=FULL")
             for row in (cls, DeliveryRow, ObservedPart):
                 row.create(db, if_not_exists=True)
             db.commit()
@@ -80,16 +98,16 @@ class Binding(TypedTable):
     def bind(cls, db: CoordinationStore, requested: Binding | None) -> Binding:
         with db:
             if requested is not None:
-                db.execute('BEGIN IMMEDIATE')
+                db.execute("BEGIN IMMEDIATE")
             rows = cls.select(db)
             if not rows and requested is not None:
                 requested.insert(db)
                 return requested
             if len(rows) != 1:
-                raise ValueError('Supply one complete Core/CLI binding for this state directory')
+                raise ValueError("Supply one complete Core/CLI binding for this state directory")
             current = rows[0]
             if requested is not None and requested != current:
-                raise ValueError('This state directory belongs to another Core/CLI conversation')
+                raise ValueError("This state directory belongs to another Core/CLI conversation")
             return current
 
 
@@ -103,7 +121,7 @@ class Options:
     def parse(cls, description: str | None, state: Path, bridge_type: type[CliBridge]) -> Self:
         common = argparse.ArgumentParser(add_help=False)
         Binding.add_arguments(common)
-        common.add_argument('--state', type=Path, default=state)
+        common.add_argument("--state", type=Path, default=state)
         bridge_type.add_arguments(common)
         parser = argparse.ArgumentParser(description=description)
         commands = parser.add_subparsers(required=True)
@@ -114,15 +132,25 @@ class Options:
         arguments = parser.parse_args()
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
-        return cls(**{declared.name: vars(arguments)[key]
-                      for declared, key in FieldCodec.record_fields(cls)})
+        return cls(
+            **{
+                declared.name: vars(arguments)[key]
+                for declared, key in FieldCodec.record_fields(cls)
+            }
+        )
+
 
 @dataclass(frozen=True)
 class MonitorEvidence(DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
-    async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
-                      notification: MonitorPart, record: ObservedMonitor) -> None:
+    async def confirm(
+        self,
+        bridge: LineMonitorBridge,
+        delivery: DeliveryRow,
+        notification: MonitorPart,
+        record: ObservedMonitor,
+    ) -> None:
         pass
 
 
@@ -135,24 +163,43 @@ class UnrecordedMonitor(MonitorEvidence):
 class ReceivingMonitor(MonitorEvidence):
     total: int
 
-    async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
-                      notification: MonitorPart, record: ObservedMonitor) -> None:
+    async def confirm(
+        self,
+        bridge: LineMonitorBridge,
+        delivery: DeliveryRow,
+        notification: MonitorPart,
+        record: ObservedMonitor,
+    ) -> None:
         if notification.total != self.total:
             return
-        part = ObservedPart(delivery.id, notification.number, notification.sender,
-                            notification.body, record.record_id, record.timestamp)
+        part = ObservedPart(
+            delivery.id,
+            notification.number,
+            notification.sender,
+            notification.body,
+            record.record_id,
+            record.timestamp,
+        )
         with bridge.db:
             part.insert_if_absent(bridge.db)
         await bridge.part_observed(delivery.id, notification.number)
         if ObservedPart.count(bridge.db, id=delivery.id) != self.total:
             return
-        parts = ObservedPart.select(bridge.db, id=delivery.id, order_by=('number',))
+        parts = ObservedPart.select(bridge.db, id=delivery.id, order_by=("number",))
         message = delivery.message
-        if (''.join(part.body for part in parts) != message.body
-                or any(part.sender != message.sender for part in parts)):
+        if "".join(part.body for part in parts) != message.body or any(
+            part.sender != message.sender for part in parts
+        ):
             with bridge.db:
-                replace(delivery, monitor=MismatchedMonitor('Observed parts do not equal the original message')).upsert(bridge.db)
-            print(f'Monitor parts mismatch; message remains pending: {delivery.id}', file=sys.stderr, flush=True)
+                replace(
+                    delivery,
+                    monitor=MismatchedMonitor("Observed parts do not equal the original message"),
+                ).upsert(bridge.db)
+            print(
+                f"Monitor parts mismatch; message remains pending: {delivery.id}",
+                file=sys.stderr,
+                flush=True,
+            )
             return
         await replace(delivery, monitor=record).finish(bridge, DeliveredOutcome)
 
@@ -170,8 +217,8 @@ class ObservedMonitor(MonitorEvidence):
 
 @dataclass(frozen=True)
 class ObservedPart(TypedTable):
-    id: str = field(metadata={'sql': Column(primary_key=True)})
-    number: int = field(metadata={'sql': Column(primary_key=True)})
+    id: str = field(metadata={"sql": Column(primary_key=True)})
+    number: int = field(metadata={"sql": Column(primary_key=True)})
     sender: str
     body: str
     record_id: str
@@ -185,23 +232,27 @@ class DeliveryRow(TypedTable):
     @classmethod
     def schema_objects(cls, *, if_not_exists: bool = False):
         objects = super().schema_objects(if_not_exists=if_not_exists)
-        existence = 'IF NOT EXISTS ' if if_not_exists else ''
-        objects[f'{cls.declared_name}_sequence'] = (
+        existence = "IF NOT EXISTS " if if_not_exists else ""
+        objects[f"{cls.declared_name}_sequence"] = (
             f'CREATE INDEX {existence}"{cls.declared_name}_sequence" '
-            f'ON "{cls.declared_name}" ({cls.sequence_sql})')
+            f'ON "{cls.declared_name}" ({cls.sequence_sql})'
+        )
         return objects
 
     @classmethod
     def resume_after(cls, db: CoordinationStore) -> MessageReference | None:
         """The existing journal owns attempted progress, including uncertain emissions."""
-        latest = cls.read(db.execute(
-            f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
-            f'ORDER BY {cls.sequence_sql} DESC LIMIT 1'))
+        latest = cls.read(
+            db.execute(
+                f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
+                f"ORDER BY {cls.sequence_sql} DESC LIMIT 1"
+            )
+        )
         return latest[0].message.reference if latest else None
 
-    id: str = field(metadata={'sql': Column(primary_key=True)})
+    id: str = field(metadata={"sql": Column(primary_key=True)})
     payload: str
-    outcome: type[Outcome] = field(metadata={'sql': Column(index=True)})
+    outcome: type[Outcome] = field(metadata={"sql": Column(index=True)})
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     @cached_property
@@ -214,8 +265,9 @@ class DeliveryRow(TypedTable):
             replace(self, outcome=outcome).upsert(bridge.db)
         await outcome.acknowledge(bridge, self.message)
 
-BridgeOptions = TypeVar('BridgeOptions', bound=Options)
-OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
+
+BridgeOptions = TypeVar("BridgeOptions", bound=Options)
+OperationBridge = TypeVar("OperationBridge", bound="CliBridge")
 
 
 @dataclass(frozen=True)
@@ -231,13 +283,15 @@ class Operation(ABC, Generic[OperationBridge]):
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Operation:
-        return FieldCodec.decode(cls, {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)})
+        return FieldCodec.decode(
+            cls, {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)}
+        )
 
     @abstractmethod
     async def run(self, bridge: OperationBridge) -> None: ...
 
     def transcript_source(self) -> Path:
-        raise ValueError('This command does not own a live transcript subscription')
+        raise ValueError("This command does not own a live transcript subscription")
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -258,19 +312,22 @@ class Operation(ABC, Generic[OperationBridge]):
 
 @dataclass(frozen=True)
 class Send(Operation):
-    target: str = field(metadata={'wire_name': 'to'})
+    target: str = field(metadata={"wire_name": "to"})
     body: str
-    kind: type[MessageKind] = field(metadata={'wire_name': 'type'})
+    kind: type[MessageKind] = field(metadata={"wire_name": "type"})
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument('--to', required=True)
-        parser.add_argument('--body', required=True)
-        parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
+        parser.add_argument("--to", required=True)
+        parser.add_argument("--body", required=True)
+        parser.add_argument(
+            "--type", default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names()
+        )
 
     async def run(self, bridge: CliBridge) -> None:
-        result = await asyncio.to_thread(bridge.comms.messaging.send, bridge.binding.bus,
-                                         self.target, self.body, self.kind)
+        result = await asyncio.to_thread(
+            bridge.comms.messaging.send, bridge.binding.bus, self.target, self.body, self.kind
+        )
         await bridge.show_sent(result)
 
 
@@ -311,23 +368,21 @@ class Serve(Watch):
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument('--owner', type=json.loads, required=True)
-        parser.add_argument('--transcript', required=True)
+        parser.add_argument("--owner", type=json.loads, required=True)
+        parser.add_argument("--transcript", required=True)
 
     def transcript_source(self) -> Path:
         return self.transcript
 
     async def run(self, bridge: LineMonitorBridge) -> None:
         if self.transcript.stem != bridge.binding.thread:
-            raise ValueError('The live transcript belongs to another Claude session')
+            raise ValueError("The live transcript belongs to another Claude session")
         self.owner.require_ancestor_of(os.getpid())
         await bridge.registered_watch(self)
 
     def start(self, bridge: LineMonitorBridge, tasks: asyncio.TaskGroup) -> None:
         super().start(bridge, tasks)
-        current = asyncio.current_task()
-        assert current is not None
-        tasks.create_task(MonitorService(bridge, self.owner, current).run())
+        tasks.create_task(MonitorService(bridge, self.owner, bridge.stop).run())
 
 
 class Enrol(Operation):
@@ -337,30 +392,37 @@ class Enrol(Operation):
 
     async def run(self, bridge: LineMonitorBridge) -> None:
         WatchClaim(bridge.binding.thread).enrol(bridge.watch_record())
-        print('Session binding enrolled; SessionStart owns the bridge. Monitor runs watch.', flush=True)
+        print(
+            "Session binding enrolled; SessionStart owns the bridge. Monitor runs watch.",
+            flush=True,
+        )
 
 
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
     message: Message
 
-    async def turn_start(self, send: Callable[[str, tuple[bytes, ...]], Awaitable[type[Outcome]]]) -> type[Outcome]:
-        """Submit this family's input on its registered session transport."""
+    async def turn_start(
+        self, send: Callable[[InputId, tuple[bytes, ...]], Awaitable[type[Outcome]]]
+    ) -> type[Outcome]:
         return await send(self.input_id, self.payload)
 
     @property
-    def input_id(self) -> str:
-        return self.message.message_id
+    def input_id(self) -> InputId:
+        return InputId(self.message.message_id)
 
     @property
     def payload(self) -> tuple[bytes, ...]:
-        return ((self.text + '\n').encode(),)
+        return ((self.text + "\n").encode(),)
 
     @property
     def text(self) -> str:
         origin = self.message.sender_role.origin_label
-        return (f'Comms in · {self.message.sender} ({origin})\n'
-                f'{self.message.body}\nMessage ID: {self.message.message_id}')
+        return (
+            f"Comms in · {self.message.sender} ({origin})\n"
+            f"{self.message.body}\nMessage ID: {self.message.message_id}"
+        )
+
 
 class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     """Core delivery and lifetime shared by CLI-specific transports."""
@@ -379,22 +441,22 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return Comms(Path(self.binding.root))
 
     def watch_record(self) -> WatchRecord:
-        return WatchRecord(self.binding.bus, self.binding.root,
-                           (Path(sys.argv[0]).name, *sys.argv[1:]))
+        return WatchRecord(
+            self.binding.bus, self.binding.root, (Path(sys.argv[0]).name, *sys.argv[1:])
+        )
 
     async def registered_watch(self, operation: Inbox) -> None:
-        from agent_comms.registration import Registration
-        registry = await asyncio.to_thread(
-            Registration, Path(self.binding.root) / 'registry.json')
+        registry = await asyncio.to_thread(Registration, Path(self.binding.root) / "registry.json")
         with ExitStack() as endpoint:
-            self.input = await self.comms.bus.when_open(lambda: endpoint.enter_context(
-                self.registration(registry)))
+            await self.comms.bus.when_open(lambda: self.register_endpoint(registry, endpoint))
             with WatchClaim(self.binding.thread).held(self.watch_record()):
                 async with asyncio.TaskGroup() as tasks:
                     operation.start(self, tasks)
 
-    def registration(self, registry):
-        return registry.external_process(self.binding.bus, ProcessIdentity.capture(os.getpid()))
+    def register_endpoint(self, registry: Registration, endpoint: ExitStack) -> None:
+        endpoint.enter_context(
+            registry.external_process(self.binding.bus, ProcessIdentity.capture(os.getpid()))
+        )
 
     async def watch_operation(self, operation: Watch) -> None:
         await self.registered_watch(operation)
@@ -409,8 +471,14 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     def sent_text(self, result: SendResult) -> str:
         message = result.message
-        return '\n'.join((f'Comms out · {message.sender} → {message.target}',
-                          message.body, f'Message ID: {message.message_id}', *result.notices))
+        return "\n".join(
+            (
+                f"Comms out · {message.sender} → {message.target}",
+                message.body,
+                f"Message ID: {message.message_id}",
+                *result.notices,
+            )
+        )
 
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
@@ -418,54 +486,76 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def accept(self, message: Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire(), separators=(',', ':')) + '\n', outcome)
+        delivery = DeliveryRow(
+            message.message_id, json.dumps(message.to_wire(), separators=(",", ":")) + "\n", outcome
+        )
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:
-            delivery, = DeliveryRow.select(self.db, id=message.message_id)
+            (delivery,) = DeliveryRow.select(self.db, id=message.message_id)
             await delivery.outcome.acknowledge(self, message)
             return
         result = await self.deliver(message) if conversation else outcome
-        delivery, = DeliveryRow.select(self.db, id=message.message_id)
+        (delivery,) = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
-        print(f'{result.declared_name}: {message.message_id} from {message.sender}', file=sys.stderr, flush=True)
+        print(
+            f"{result.declared_name}: {message.message_id} from {message.sender}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     async def watch(self) -> None:
         await self.prepare_delivery()
-        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
+        print(
+            f"Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay",
+            file=sys.stderr,
+            flush=True,
+        )
         await self.comms.bus.when_open(self.watch_child)
 
     async def watch_child(self) -> None:
         """One child stream; the bus owns waiting and its next attempt after a hold."""
-        child = await AttachedChild.start((
-            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-            stdio=StreamingChildStdio(input_enabled=False))
+        child = await AttachedChild.start(
+            (
+                str(LaunchRuntime.running().interpreter.with_name("agent-comms")),
+                "--root",
+                self.binding.root,
+                "watch",
+                "--thread",
+                self.binding.bus,
+                "--after",
+                json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+                "--acknowledgment",
+                FieldCodec.encode(ExplicitWatchAcknowledgment),
+            ),
+            stdio=StreamingChildStdio(input_enabled=False),
+        )
         try:
             async for item in WatchLine.stream(child):
                 await item.handle(self, child)
-            await raise_child_exit(child, '')
+            await raise_child_exit(child, "")
         finally:
             await child.stop()
 
     async def run(self) -> None:
         current = asyncio.current_task()
         assert current is not None
-        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, current.cancel)
+        self.stop = current.cancel
+        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, self.stop)
         try:
             await self.options.operation.run(self)
         except* BlockingIOError:
             raise
         except* (OSError, ValueError, CoordinationError) as group:
-            failure = 'Comms bridge stopped:\n' + ''.join(
+            failure = "Comms bridge stopped:\n" + "".join(
                 traceback.TracebackException.from_exception(
-                    group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
+                    group,
+                    max_group_width=sys.maxsize,
+                    max_group_depth=sys.maxsize,
                 ).format()
             )
             print(failure, file=sys.stderr, flush=True)
-            await self.report_failure(failure + '\nNo message was retried.')
+            await self.report_failure(failure + "\nNo message was retried.")
             raise
 
 
@@ -475,7 +565,8 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
     async def publish_transcript(self) -> None:
         comms = self.comms
         output = ThreadOutput(
-            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
+            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents
+        )
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
         await comms.bus.when_open(output.transcript.end_turn)
@@ -502,18 +593,22 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
                     pending.append(queue.get_nowait())
                 await comms.bus.when_open(partial(output.publish_batch, pending))
 
+
 class MonitorFrame(TaggedWire, ABC):
     """Our line protocol inside the harness's task-notification envelope."""
+
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+        registry_dict={}, key_attribute="wire_tag", skip_if_no_key=True
+    )
+
     @abstractmethod
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
 
 class MonitorProbe(MonitorFrame):
-    wire_tag = 'probe'
-    protocol: Literal['agent-comms-monitor'] = 'agent-comms-monitor'
-    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+    wire_tag = "probe"
+    protocol: Literal["agent-comms-monitor"] = "agent-comms-monitor"
+    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ","
     session: str
     token: str
 
@@ -522,17 +617,17 @@ class MonitorProbe(MonitorFrame):
 
 
 class MonitorPart(MonitorFrame):
-    wire_tag = 'part'
+    wire_tag = "part"
     id: str
     sender: str
     number: int = Field(ge=1)
     total: int = Field(ge=1)
     body: str
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def valid_number(self):
         if self.number > self.total:
-            raise ValueError('Monitor part number exceeds total')
+            raise ValueError("Monitor part number exceeds total")
         return self
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
@@ -541,7 +636,7 @@ class MonitorPart(MonitorFrame):
 
 
 class ForeignMonitorFrame(MonitorFrame):
-    wire_tag = 'foreign'
+    wire_tag = "foreign"
     text: str
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
@@ -567,76 +662,97 @@ class TranscriptConfirmsDelivery:
     """Delivery is confirmed only by observing it in the bridge's own transcript subscription."""
 
 
+class MonitorIncomingFrame(IncomingFrame):
+    @property
+    @abstractmethod
+    def parts(self) -> tuple[str, ...]: ...
+
+
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     """Session-owned subscription and delivery journal, with replaceable readers."""
 
-    incoming_frame: ClassVar[type[IncomingFrame]]
+    incoming_frame: ClassVar[type[MonitorIncomingFrame]]
+    input_frame: ClassVar[type[IncomingFrame]]
     window_bytes: ClassVar[int]
+    input: RegisteredInput
 
     def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
         super().__init__(options, binding, db)
-        self.reader: SessionAttachment | None = None
+        self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()
 
     def watch_record(self) -> WatchRecord:
-        command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
-                   '--state', str(self.options.state.absolute()))
+        command = (
+            str(Path(sys.argv[0]).absolute()),
+            Watch.__name__.lower(),
+            "--state",
+            str(self.options.state.absolute()),
+        )
         return WatchRecord(self.binding.bus, self.binding.root, command)
 
-    def registration(self, registry):
-        return registry.external_input(self.binding.bus, ProcessIdentity.capture(os.getpid()),
-                                       self.frame, self.send_input)
+    def register_endpoint(self, registry: Registration, endpoint: ExitStack) -> None:
+        self.input = endpoint.enter_context(
+            registry.external_input(
+                self.binding.bus, ProcessIdentity.capture(os.getpid()), self.frame, self.send_input
+            )
+        )
 
     def frame(self, message: Message) -> IncomingFrame:
-        if self.reader is None:
-            raise ConnectionResetError('No attached input transport')
         return self.reader.frame(self, message)
 
-    async def send_input(self, identity: str, payloads: tuple[bytes, ...]) -> type[Outcome]:
-        if self.reader is None:
-            raise ConnectionResetError('No attached input transport')
+    async def send_input(self, identity: InputId, payloads: tuple[bytes, ...]) -> type[Outcome]:
         return await self.reader.send(self, identity, payloads)
 
     async def watch_operation(self, operation: Watch) -> None:
         await read_monitor(WatchClaim(self.binding.thread))
 
     async def accept(self, message: Message) -> None:
-        # Admission precedes DeliveryRow persistence. Detachment never creates
+        # Wait before recording an attempt. Detachment never creates
         # an attempt for a message that has not reached an attached reader.
         await self.prepare_delivery()
         await super().accept(message)
 
     async def prepare_delivery(self) -> None:
-        async with self.reader_changed:
-            await self.reader_changed.wait_for(
-                lambda: self.reader is not None and self.reader.ready.is_set()
-                and not self.reader.writer.is_closing())
+        await self.reader.prepare_delivery(self)
 
     async def confirm_probe(self, probe: MonitorProbe) -> None:
-        async with self.reader_changed:
-            if self.reader is not None and self.reader.confirm_probe(probe):
-                self.reader.ready.set()
-                self.reader_changed.notify_all()
-                print('Fresh Monitor probe observed; delivery admitted.', file=sys.stderr, flush=True)
+        await self.reader.confirm_probe(self, probe)
 
     async def part_observed(self, message_id: str, number: int) -> None:
-        if self.reader is not None:
-            await self.reader.observed(message_id, number)
+        await self.reader.part_observed(message_id, number)
 
     @staticmethod
     def encode(text: str) -> str:
         # One reversible JSON string per line; no truncation or lost line breaks.
         return json.dumps(text, ensure_ascii=False)
 
+    def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
+        return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
+
     async def deliver(self, message: Message) -> type[Outcome]:
-        if self.reader is None or not self.reader.ready.is_set():
-            raise RuntimeError('Input delivery was not admitted')
-        try:
-            return await self.input.turn_start(message)
-        except ConnectionError:
-            print(f'Input detached during {message.message_id}; attempt preserved, no replay.',
-                  file=sys.stderr, flush=True)
-            return UnconfirmedOutcome
+        return await self.input.turn_start(message)
+
+    async def deliver_to(
+        self, attachment: MonitorAttachment, identity: InputId, payloads: tuple[bytes, ...]
+    ) -> type[Outcome]:
+        with self.db:
+            DeliveryRow.update(
+                self.db,
+                where="id=?",
+                parameters=(identity.value,),
+                monitor=ReceivingMonitor(len(payloads)),
+            )
+        for number, payload in enumerate(payloads, 1):
+            if not await attachment.emit(
+                identity.value, number, payload.decode().removesuffix("\n"), self.window_bytes
+            ):
+                print(
+                    f"Monitor detached during {identity.value}; attempt retained without replay.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return UnconfirmedOutcome
+        return EmittedOutcome
 
     async def show_sent(self, result: SendResult) -> None:
         print(self.encode(self.sent_text(result)), flush=True)
@@ -654,4 +770,4 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
     except* asyncio.CancelledError:
         pass
     except* BlockingIOError:
-        sys.exit('Another watcher owns this conversation')
+        sys.exit("Another watcher owns this conversation")

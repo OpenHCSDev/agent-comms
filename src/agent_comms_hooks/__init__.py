@@ -12,13 +12,22 @@ from __future__ import annotations
 
 import json
 import pkgutil
+import shlex
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields
 from importlib import import_module
 from importlib.metadata import entry_points
 from typing import ClassVar, Self, get_type_hints
+
+
+class HookValue(ABC):
+    """A declared scalar boundary with its own decoding behavior."""
+
+    @classmethod
+    @abstractmethod
+    def decode(cls, value: object) -> HookValue: ...
 
 
 @dataclass(frozen=True)
@@ -39,6 +48,8 @@ class HookRecord:
     def field(declared: type, value: object) -> object:
         """A nested record is decoded by its own fields; a JSON scalar is kept as written."""
         if isinstance(value, Mapping) and issubclass(declared, HookRecord):
+            return declared.decode(value)
+        if issubclass(declared, HookValue):
             return declared.decode(value)
         return value
 
@@ -111,6 +122,22 @@ class ClaudeHookProgram(ABC):
     def entry(cls) -> dict[str, object]:
         """This program's entry in a Claude Code hook event's list."""
         return {"hooks": [{"type": "command", "command": cls.command()}]}
+
+
+class PythonHookCommand:
+    """One callable declaration supplies installed and source-only hook commands."""
+
+    target: ClassVar[Callable[[], None]]
+
+    @classmethod
+    def command(cls) -> str:
+        return ClaudeHookProgram.console_script(f"{cls.target.__module__}:{cls.target.__name__}")
+
+    @classmethod
+    def source_command(cls) -> str:
+        target = cls.target
+        program = f"from {target.__module__} import {target.__name__}; {target.__name__}()"
+        return shlex.join((sys.executable, "-c", program))
 
 
 class ClaudeToolHookProgram(ClaudeHookProgram):

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .agent_backend import InputId
     from .cli_bridges.shared import IncomingFrame
-    from .messages import Message
     from .cli_protocol import Outcome
+    from .messages import Message
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -20,16 +21,19 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistrySnapshot, UserThreadLookup
+from .registry_document import RegistryEntry, RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
+from .storage_rules import StorageRule
 from .store_files import SharedLock, _store_lock
 from .thread_identity import GenerationCounter, OwnerIdentity, TurnId
 from .thread_status import (
-    ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
+    ConnectedThreadStatus,
+    NoBridgeThreadStatus,
+    RunningThreadStatus,
+    ThreadStatus,
 )
 from .threads import Thread
-from .storage_rules import StorageRule
 from .turn_lease import TurnCompletion, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
@@ -74,7 +78,7 @@ class RegisteredInput:
     """An external process's input capability, retained for its registration lifetime."""
 
     frame: Callable[[Message], IncomingFrame]
-    send: Callable[[str, tuple[bytes, ...]], Awaitable[type[Outcome]]]
+    send: Callable[[InputId, tuple[bytes, ...]], Awaitable[type[Outcome]]]
 
     async def turn_start(self, message: Message) -> type[Outcome]:
         return await self.frame(message).turn_start(self.send)
@@ -108,38 +112,55 @@ class Registration:
             if thread.process_alive and thread.process_identity != process:
                 raise RelationViolationError("Another live process owns this CLI endpoint.")
             bound = replace(thread, process_identity=process)
-            self._commit_registration(edit, edit.document.prepare_registration(
-                bound, ConnectedThreadStatus(), new_owner=True))
+            self._commit_registration(
+                edit,
+                edit.document.prepare_registration(bound, ConnectedThreadStatus(), new_owner=True),
+            )
             owner = edit.document.entry(bound.name).owner_identity
         try:
             yield owner.incarnation
         finally:
             with self.store.editing() as edit:
-                entry = edit.document.entry_if_present(owner.incarnation.name)
-                if entry is not None and entry.owned_by(owner, process):
-                    self._commit_registration(edit, edit.document.prepare_registration(
-                        replace(entry.thread, process_identity=NoProcess()), NoBridgeThreadStatus(),
-                        new_owner=False))
+
+                def release(entry: RegistryEntry) -> None:
+                    self._commit_registration(
+                        edit,
+                        edit.document.prepare_registration(
+                            replace(entry.thread, process_identity=NoProcess()),
+                            NoBridgeThreadStatus(),
+                            new_owner=False,
+                        ),
+                    )
+
+                edit.document.external_endpoint(owner, process).when_owned(release)
 
     @contextmanager
-    def external_input(self, name: str, process: ProcessIdentity,
-                       frame: Callable[[Message], IncomingFrame],
-                       send: Callable[[str, tuple[bytes, ...]], Awaitable[type[Outcome]]]):
+    def external_input(
+        self,
+        name: str,
+        process: ProcessIdentity,
+        frame: Callable[[Message], IncomingFrame],
+        send: Callable[[InputId, tuple[bytes, ...]], Awaitable[type[Outcome]]],
+    ) -> Iterator[RegisteredInput]:
         """Keep the declared input behavior with the endpoint that can actually invoke it."""
         with self.external_process(name, process):
             yield RegisteredInput(frame, send)
 
     def observe_external_status(
-        self, owner: OwnerIdentity, process: ProcessIdentity, status: ThreadStatus,
+        self,
+        owner: OwnerIdentity,
+        process: ProcessIdentity,
+        status: ThreadStatus,
     ) -> None:
         """An observation changes only the bridge lease it actually witnessed."""
         with self.store.editing() as edit:
-            entry = edit.document.entry_if_present(owner.incarnation.name)
-            if entry is None or not entry.owned_by(owner, process) or not process.alive():
-                return
-            entry.thread.execution.require_external()
-            edit.document.statuses[entry.thread.name] = status.with_bridge()
-            edit.commit()
+
+            def observe(entry: RegistryEntry) -> None:
+                entry.thread.execution.require_external()
+                edit.document.statuses[entry.thread.name] = status.with_bridge()
+                edit.commit()
+
+            edit.document.external_endpoint(owner, process).when_owned(observe)
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.
@@ -148,14 +169,20 @@ class Registration:
         phase is retained from the locked document, not compared to an old view.
         Native session identity and context proof remain with their producers.
         """
-        with _store_lock(self.store.path.parent / "wire", mode=SharedLock()), self.store.editing() as edit:
+        with (
+            _store_lock(self.store.path.parent / "wire", mode=SharedLock()),
+            self.store.editing() as edit,
+        ):
             change = edit.prepare_native_source(original, session_file)
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
             # observed source must not rewrite this authorized turn's settings.
-            observed = replace(change.thread,
-                worktree=original.thread.worktree, model=original.thread.model,
-                thinking_level=original.thread.thinking_level)
+            observed = replace(
+                change.thread,
+                worktree=original.thread.worktree,
+                model=original.thread.model,
+                thinking_level=original.thread.thinking_level,
+            )
             return replace(original, thread=observed)
 
     def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
@@ -188,7 +215,9 @@ class Registration:
         return change
 
     def require_declaration_available(
-        self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS,
+        self,
+        thread: Thread,
+        status: ThreadStatus = _RUNNING_STATUS,
     ) -> None:
         """Refuse a known-invalid declaration before its producer performs side effects."""
         catalog = ChannelCatalog.at(self.store.path.parent)
@@ -204,7 +233,9 @@ class Registration:
             channels.remember_tags(change.thread.tags)
         return change.thread
 
-    def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
+    def _commit_registration(
+        self, edit: RegistryEdit, change: RegistrationChange
+    ) -> RegistrationChange:
         change.thread.role.require_maintenance_open(
             MaintenanceBarrier(self.store.path), change.claims_owner
         )
@@ -220,9 +251,17 @@ class Registration:
             history.commit(intent)
         return change
 
-    def new_thread(self, name, tags, worktree, *args, kind: type[Thread] = Thread, **values) -> Thread:
-        return kind(name, tags, worktree, *args,
-                      storage_roots=self.storage_rule.initial_roots(name), **values)
+    def new_thread(
+        self, name, tags, worktree, *args, kind: type[Thread] = Thread, **values
+    ) -> Thread:
+        return kind(
+            name,
+            tags,
+            worktree,
+            *args,
+            storage_roots=self.storage_rule.initial_roots(name),
+            **values,
+        )
 
     def decide_storage(self, name, effects):
         current = self.require(name)
@@ -247,9 +286,10 @@ class Registration:
         """Commit all original idle owner fences together, or change none."""
         with self.store.editing() as edit:
             fenced = tuple(
-                (thread, edit.document.fence_idle_owner(
-                    thread, expected_claimed_generation=generation
-                ))
+                (
+                    thread,
+                    edit.document.fence_idle_owner(thread, expected_claimed_generation=generation),
+                )
                 for thread, generation in selected
             )
             edit.commit()
@@ -401,7 +441,9 @@ class Registration:
             return document.status(name)
 
     def session_thread(
-        self, project_path: Path, preferred: str | None = None,
+        self,
+        project_path: Path,
+        preferred: str | None = None,
     ) -> ProjectThreadSelection:
         """Select an unbound project's preferred name or sole declared ACP thread.
 
@@ -416,9 +458,9 @@ class Registration:
                 for thread in located:
                     if thread.name == selected:
                         return FoundProjectThread(thread)
-            return ProjectThreadSelection.from_threads(tuple(
-                member for thread in located for member in thread.role.acp_thread(thread)
-            ))
+            return ProjectThreadSelection.from_threads(
+                tuple(member for thread in located for member in thread.role.acp_thread(thread))
+            )
 
     def user_thread(self) -> UserThreadLookup[Thread]:
         """The human answer from this stored revision, without copying its roster."""

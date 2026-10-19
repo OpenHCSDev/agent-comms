@@ -10,7 +10,7 @@ import pytest_asyncio
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
-from agent_comms.cli_bridges.monitor import AttachMonitor, EndSession, MonitorService, REPLIES, VerifySession
+from agent_comms.cli_bridges.monitor import AttachMonitor, EndSession, MonitorService, NoReader, REPLIES, VerifySession
 from agent_comms.cli_bridges.shared import Binding, DeliveryRow, MONITOR_FRAME, ObservedMonitor, Options, Serve
 from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, UnconfirmedOutcome
 from agent_comms.messages import InfoKind, Message
@@ -20,6 +20,7 @@ from agent_comms_hooks.watch import WatchClaim, WatchRecord
 @pytest_asyncio.fixture
 async def endpoint(tmp_path, monkeypatch):
     monkeypatch.setattr(WatchClaim, 'path', property(lambda self: tmp_path / 'session.lock'))
+    monkeypatch.setattr(WatchClaim, 'socket_path', property(lambda self: tmp_path.parent / 'session.sock'))
     claim = WatchClaim('session')
     owner = ProcessIdentity.capture(os.getpid())
     acknowledgments = []
@@ -33,7 +34,7 @@ async def endpoint(tmp_path, monkeypatch):
         bridge = ClaudeBridge(Options(Serve(owner, tmp_path / 'session.jsonl'), binding, tmp_path / 'state'), binding, db)
         bridge.comms = Core()
         async def run():
-            await MonitorService(bridge, owner, asyncio.current_task()).run()
+            await MonitorService(bridge, owner, asyncio.current_task().cancel).run()
         task = asyncio.create_task(run())
         async with asyncio.timeout(3):
             while not claim.socket_path.exists():
@@ -66,7 +67,7 @@ def message(body, seq=1):
 async def detached(bridge):
     async with asyncio.timeout(3):
         async with bridge.reader_changed:
-            await bridge.reader_changed.wait_for(lambda: bridge.reader is None)
+            await bridge.reader_changed.wait_for(lambda: isinstance(bridge.reader, NoReader))
 
 
 async def no_line(stream):

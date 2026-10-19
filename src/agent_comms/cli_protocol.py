@@ -5,10 +5,12 @@ import asyncio
 import builtins
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
-from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Union
+from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Self, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
+from pydantic._internal._model_construction import ModelMetaclass
+from typing_extensions import TypeForm
 
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
@@ -32,7 +34,7 @@ class WireModel(BaseModel):
     model_config = ConfigDict(strict=True)
 
 
-class RegisteredWireMeta(AutoRegisterMeta, type(WireModel)):
+class RegisteredWireMeta(AutoRegisterMeta, ModelMetaclass):
     """Compose declaration registration with external-field validation."""
 
 
@@ -45,6 +47,10 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
     wire_tag: ClassVar[str]
     header: ClassVar[builtins.type[WireHeader]] = WireHeader
 
+    @staticmethod
+    def family_registry() -> RegistryConfig:
+        return RegistryConfig(registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+
     @computed_field
     @property
     def type(self) -> str:
@@ -55,7 +61,7 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return cls.header.model_validate(value).type
 
     @classmethod
-    def declared_union(cls) -> object:
+    def declared_union(cls) -> TypeForm[Self]:
         def tag(value: object) -> str:
             if isinstance(value, cls):
                 return value.wire_tag

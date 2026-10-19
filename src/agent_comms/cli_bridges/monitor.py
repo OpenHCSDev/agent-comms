@@ -1,4 +1,5 @@
-"""One session-owned bridge endpoint; Monitor calls only borrow a reader."""
+"""Session-owned endpoint and replaceable, explicitly modeled input readers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,257 +7,371 @@ import secrets
 import socket
 import sys
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
+from uuid import UUID
 
-from metaclass_registry import RegistryConfig
-from pydantic import TypeAdapter
+from pydantic import ConfigDict, TypeAdapter, ValidationError
 
+from agent_comms.agent_backend import InputId
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, TaggedWire, WireModel
+from agent_comms.cli_protocol import (
+    DeliveredOutcome,
+    Outcome,
+    TaggedWire,
+    UnconfirmedOutcome,
+    WireModel,
+)
+from agent_comms.messages import Message
 from agent_comms_hooks.watch import WatchClaim
 
 if TYPE_CHECKING:
     from .shared import IncomingFrame, LineMonitorBridge, MonitorProbe
-    from agent_comms.messages import Message
-    from agent_comms.cli_protocol import Outcome
 
 
-@dataclass(kw_only=True)
-class SessionAttachment(ABC):
-    """One reader owns its connection and readiness; the daemon owns the session."""
-
-    writer: asyncio.StreamWriter
-    ready: asyncio.Event = field(default_factory=asyncio.Event)
-
+class PeerOutcome(ABC):
     @abstractmethod
-    def frame(self, bridge: LineMonitorBridge, message: Message) -> IncomingFrame: ...
+    def write(self, transport: asyncio.Transport, data: bytes) -> bool: ...
 
-    @abstractmethod
-    async def send(self, bridge: LineMonitorBridge, identity: str,
-                   payloads: tuple[bytes, ...]) -> type[Outcome]: ...
 
-    def confirm_probe(self, probe: MonitorProbe) -> bool:
+class ConnectedPeer(PeerOutcome):
+    def write(self, transport: asyncio.Transport, data: bytes) -> bool:
+        transport.write(data)
+        return True
+
+
+class GonePeer(PeerOutcome):
+    def write(self, transport: asyncio.Transport, data: bytes) -> bool:
         return False
 
-    async def observed(self, message_id: str, number: int) -> None:
-        pass
 
-    async def closing(self) -> None:
-        pass
+class MonitorPeer(asyncio.Protocol):
+    """Own transport loss and closing once; callers consume outcomes, not errors."""
+
+    def __init__(self, service: MonitorService):
+        self.service = service
+        self.reader = asyncio.StreamReader()
+        self.outcome: PeerOutcome = ConnectedPeer()
+        self.writable = asyncio.Event()
+        self.writable.set()
+        self.closed = asyncio.Event()
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        if not isinstance(transport, asyncio.Transport):
+            raise TypeError("Monitor requires a byte-stream transport")
+        self.transport = transport
+        self.service.clients.create_task(self.service.accept(self))
+
+    def data_received(self, data: bytes) -> None:
+        self.reader.feed_data(data)
+
+    def connection_lost(self, exc: object) -> None:
+        self.outcome = GonePeer()
+        self.reader.feed_eof()
+        self.writable.set()
+        self.closed.set()
+
+    def pause_writing(self) -> None:
+        self.writable.clear()
+
+    def resume_writing(self) -> None:
+        self.writable.set()
+
+    async def write(self, line: str) -> bool:
+        await self.writable.wait()
+        return self.outcome.write(self.transport, (line + "\n").encode())
 
     async def close(self) -> None:
-        self.writer.close()
-        await self.closing()
+        self.transport.close()
+        await self.closed.wait()
+
+
+class ReaderState:
+    """One bridge reader state, including absence and unproven attachment."""
+
+    async def prepare_delivery(self, bridge: LineMonitorBridge) -> ReadyReader:
+        async with bridge.reader_changed:
+            await bridge.reader_changed.wait_for(lambda: bridge.reader is not self)
+        return await bridge.reader.prepare_delivery(bridge)
+
+    def frame(self, bridge: LineMonitorBridge, message: Message) -> IncomingFrame:
+        raise ConnectionError("No proven input reader is attached")
+
+    async def send(
+        self, bridge: LineMonitorBridge, identity: InputId, payloads: tuple[bytes, ...]
+    ) -> type[Outcome]:
+        reader = await self.prepare_delivery(bridge)
+        return await reader.send(bridge, identity, payloads)
+
+    async def start(self, bridge: LineMonitorBridge) -> None:
+        """Already proven input transports need no Monitor challenge."""
+
+    async def receive(self) -> None:
+        raise RuntimeError("An absent reader cannot receive input acknowledgments")
+
+    async def detached(self) -> None:
+        """A missing reader has no pending input or window."""
+
+    async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
+        """A missing or already-proven reader cannot accept a new probe."""
+
+    async def part_observed(self, message_id: str, number: int) -> None:
+        """An unattached reader has no flow-control window to release."""
+
+    async def attach(
+        self, service: MonitorService, peer: MonitorPeer, request: AttachReader
+    ) -> SessionReply:
+        return SessionRefused.model_validate(dict(error="This session already has an input reader"))
+
+
+class NoReader(ReaderState):
+    async def attach(
+        self, service: MonitorService, peer: MonitorPeer, request: AttachReader
+    ) -> SessionReply:
+        async with service.bridge.reader_changed:
+            if service.bridge.reader is not self:
+                return SessionRefused.model_validate(dict(error="Another reader attached first"))
+            reader = request.open_reader(service, peer)
+            service.bridge.reader = reader
         try:
-            await self.writer.wait_closed()
-        except ConnectionError:
-            pass
+            if await peer.write(SessionReady().model_dump_json()):
+                await reader.start(service.bridge)
+                async with service.bridge.reader_changed:
+                    service.bridge.reader_changed.notify_all()
+                await reader.receive()
+            return PeerGone()
+        finally:
+            async with service.bridge.reader_changed:
+                service.bridge.reader = NoReader()
+                service.bridge.reader_changed.notify_all()
+            await reader.detached()
+            print("Input detached; bridge remains connected.", file=sys.stderr, flush=True)
 
-    async def write(self, line: str) -> None:
-        if self.writer.is_closing():
-            raise ConnectionResetError('The Monitor reader disconnected')
-        self.writer.write((line + '\n').encode())
-        await self.writer.drain()
+
+class ReadyReader(ReaderState):
+    async def prepare_delivery(self, bridge: LineMonitorBridge) -> ReadyReader:
+        return self
 
 
-@dataclass(kw_only=True)
-class MonitorAttachment(SessionAttachment):
-    """A probe and flow-control window belong to one actual Monitor reader."""
-
+@dataclass
+class MonitorAttachment:
+    peer: MonitorPeer
     probe: MonitorProbe
     pending_parts: dict[tuple[str, int], int] = field(default_factory=dict)
     window_changed: asyncio.Condition = field(default_factory=asyncio.Condition)
 
-    @classmethod
-    def opened(cls, writer: asyncio.StreamWriter, session: str) -> MonitorAttachment:
-        from .shared import MonitorProbe
-        return cls(writer=writer, probe=MonitorProbe(session=session, token=secrets.token_hex(24)))
-
-    def confirm_probe(self, probe) -> bool:
-        return probe == self.probe
-
-    def frame(self, bridge, message):
-        return bridge.incoming_frame(message)
-
-    async def send(self, bridge, identity: str, payloads: tuple[bytes, ...]):
-        from .shared import DeliveryRow, ReceivingMonitor
-        with bridge.db:
-            DeliveryRow.update(bridge.db, where='id=?', parameters=(identity,), monitor=ReceivingMonitor(len(payloads)))
-        for number, payload in enumerate(payloads, 1):
-            await self.emit(identity, number, payload.decode().removesuffix('\n'), bridge.window_bytes)
-        return EmittedOutcome
-
-    async def emit(self, message_id: str, number: int, line: str, window_bytes: int) -> None:
+    async def emit(self, message_id: str, number: int, line: str, window_bytes: int) -> bool:
+        size = len((line + "\n").encode("utf-16-le"))
         async with self.window_changed:
             await self.window_changed.wait_for(
-                lambda: self.writer.is_closing() or not self.pending_parts
-                or sum(self.pending_parts.values()) + len((line + '\n').encode('utf-16-le')) <= window_bytes)
-            self.pending_parts[message_id, number] = len((line + '\n').encode('utf-16-le'))
-            await self.write(line)
+                lambda: (
+                    self.peer.closed.is_set()
+                    or not self.pending_parts
+                    or sum(self.pending_parts.values()) + size <= window_bytes
+                )
+            )
+            self.pending_parts[message_id, number] = size
+            return await self.peer.write(line)
 
     async def observed(self, message_id: str, number: int) -> None:
         async with self.window_changed:
             self.pending_parts.pop((message_id, number), None)
             self.window_changed.notify_all()
 
-    async def closing(self) -> None:
-        async with self.window_changed:
-            self.window_changed.notify_all()
+
+@dataclass
+class UnreadyReader(ReaderState):
+    attachment: MonitorAttachment
+
+    async def start(self, bridge: LineMonitorBridge) -> None:
+        await self.attachment.peer.write(self.attachment.probe.model_dump_json())
+
+    async def receive(self) -> None:
+        await self.attachment.peer.reader.read()
+
+    async def detached(self) -> None:
+        async with self.attachment.window_changed:
+            self.attachment.window_changed.notify_all()
+
+    async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
+        if probe == self.attachment.probe:
+            async with bridge.reader_changed:
+                bridge.reader = AttachedReader(self.attachment)
+                bridge.reader_changed.notify_all()
+            print("Fresh Monitor probe observed; delivery enabled.", file=sys.stderr, flush=True)
 
 
-@dataclass(kw_only=True)
-class InputAttachment(SessionAttachment):
-    """A managed Claude stdin frontend acknowledges only real SDK user replays."""
+@dataclass
+class AttachedReader(ReadyReader, UnreadyReader):
+    def frame(self, bridge: LineMonitorBridge, message: Message) -> IncomingFrame:
+        return bridge.incoming_frame(message)
 
-    pending: dict[str, asyncio.Future] = field(default_factory=dict)
+    async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
+        """A proven attachment ignores overlapping transcript probe observations."""
 
-    def frame(self, bridge, message):
+    async def part_observed(self, message_id: str, number: int) -> None:
+        await self.attachment.observed(message_id, number)
+
+    async def send(
+        self, bridge: LineMonitorBridge, identity: InputId, payloads: tuple[bytes, ...]
+    ) -> type[Outcome]:
+        return await bridge.deliver_to(self.attachment, identity, payloads)
+
+
+class InputAcknowledgment(WireModel):
+    model_config = ConfigDict(frozen=True)
+    identity: UUID
+
+    @property
+    def input_id(self) -> InputId:
+        return InputId(str(self.identity))
+
+
+@dataclass
+class InputReader(ReadyReader):
+    peer: MonitorPeer
+    pending: dict[InputId, asyncio.Future[type[Outcome]]] = field(default_factory=dict)
+
+    def frame(self, bridge: LineMonitorBridge, message: Message) -> IncomingFrame:
         return bridge.input_frame(message)
 
-    async def send(self, bridge, identity: str, payloads: tuple[bytes, ...]):
-        receipt = asyncio.get_running_loop().create_future()
-        self.pending[identity] = receipt
+    async def send(
+        self, bridge: LineMonitorBridge, identity: InputId, payloads: tuple[bytes, ...]
+    ) -> type[Outcome]:
+        answer: asyncio.Future[type[Outcome]] = asyncio.get_running_loop().create_future()
+        self.pending[identity] = answer
         try:
             for payload in payloads:
-                await self.write(payload.decode().removesuffix('\n'))
-            await receipt
-            return DeliveredOutcome
+                if not await self.peer.write(payload.decode().removesuffix("\n")):
+                    return UnconfirmedOutcome
+            return await answer
         finally:
-            self.pending.pop(identity, None)
+            del self.pending[identity]
 
-    async def closing(self) -> None:
-        for receipt in self.pending.values():
-            if not receipt.done():
-                receipt.set_exception(ConnectionResetError('Claude input frontend disconnected'))
+    async def receive(self) -> None:
+        async for line in self.peer.reader:
+            answer = InputAcknowledgment.model_validate_json(line)
+            if answer.input_id in self.pending:
+                pending = self.pending[answer.input_id]
+                if not pending.done():
+                    pending.set_result(DeliveredOutcome)
+
+    async def detached(self) -> None:
+        for answer in self.pending.values():
+            if not answer.done():
+                answer.set_result(UnconfirmedOutcome)
 
 
-class InputReceipt(WireModel):
-    identity: str
+class SessionReply(TaggedWire):
+    __registry_config__ = TaggedWire.family_registry()
 
+    def require(self) -> None:
+        """Successful replies carry no refusal."""
 
-class SessionReply(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+    async def publish(self, peer: MonitorPeer) -> None:
+        await peer.write(self.model_dump_json())
 
-    @abstractmethod
-    def require(self) -> None: ...
+    def end_session(self, service: MonitorService) -> None:
+        """Refused requests cannot stop the service."""
+
+    async def attach(
+        self, service: MonitorService, peer: MonitorPeer, request: AttachReader
+    ) -> SessionReply:
+        return self
 
 
 class SessionReady(SessionReply):
-    wire_tag = 'ready'
+    wire_tag = "ready"
 
-    def require(self) -> None:
-        pass
+    def end_session(self, service: MonitorService) -> None:
+        asyncio.get_running_loop().call_soon(service.stop)
+
+    async def attach(
+        self, service: MonitorService, peer: MonitorPeer, request: AttachReader
+    ) -> SessionReply:
+        return await service.bridge.reader.attach(service, peer, request)
 
 
 class SessionRefused(SessionReply):
-    wire_tag = 'refused'
+    wire_tag = "refused"
     error: str
 
     def require(self) -> None:
         raise ValueError(self.error)
 
 
+class PeerGone(SessionReply):
+    wire_tag = "gone"
+
+    async def publish(self, peer: MonitorPeer) -> None:
+        """A disconnected peer receives no reply."""
+
+
 REPLIES = TypeAdapter(SessionReply.declared_union())
 
 
-class SessionRequest(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class SessionRequest(TaggedWire):
+    __registry_config__ = TaggedWire.family_registry()
 
     def exchange(self, claim: WatchClaim) -> None:
-        """Control requests never inject an input or retry an emitted event."""
+        """Control requests never inject input or retry an emitted event."""
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
             peer.settimeout(5)
             peer.connect(str(claim.socket_path))
-            peer.sendall((self.model_dump_json() + '\n').encode())
-            with peer.makefile('rb') as stream:
+            peer.sendall((self.model_dump_json() + "\n").encode())
+            with peer.makefile("rb") as stream:
                 REPLIES.validate_json(stream.readline(4096)).require()
 
     @abstractmethod
-    async def handle(self, service: MonitorService, reader: asyncio.StreamReader,
-                     writer: asyncio.StreamWriter) -> None: ...
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply: ...
 
 
-class AttachMonitor(SessionRequest):
-    wire_tag = 'attach'
+class AttachReader(SessionRequest):
+    @abstractmethod
+    def open_reader(self, service: MonitorService, peer: MonitorPeer) -> ReaderState: ...
 
-    def opened(self, service, writer):
-        return MonitorAttachment.opened(writer, service.bridge.binding.thread)
 
-    async def prepare(self, attachment):
-        await attachment.write(attachment.probe.model_dump_json())
+class AttachMonitor(AttachReader):
+    wire_tag = "attach"
 
-    async def receive(self, attachment, reader):
-        await reader.read()
+    def open_reader(self, service: MonitorService, peer: MonitorPeer) -> ReaderState:
+        return UnreadyReader(service.bridge.new_attachment(peer, secrets.token_hex(24)))
 
-    async def handle(self, service: MonitorService, reader: asyncio.StreamReader,
-                     writer: asyncio.StreamWriter) -> None:
-        bridge = service.bridge
-        attachment = self.opened(service, writer)
-        async with bridge.reader_changed:
-            if bridge.reader is not None:
-                raise ValueError('This session already has a Monitor reader')
-            bridge.reader = attachment
-        try:
-            await attachment.write(SessionReady().model_dump_json())
-            await self.prepare(attachment)
-            async with bridge.reader_changed:
-                bridge.reader_changed.notify_all()
-            print('Session reader attached.', file=sys.stderr, flush=True)
-            await self.receive(attachment, reader)  # EOF ends this attachment only.
-        finally:
-            async with bridge.reader_changed:
-                bridge.reader = None
-                bridge.reader_changed.notify_all()
-            await attachment.close()
-            print('Monitor reader detached; delivery paused, bridge remains connected.', file=sys.stderr, flush=True)
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        return await service.bridge.reader.attach(service, peer, self)
 
 
 class VerifySession(SessionRequest):
-    wire_tag = 'verify'
+    wire_tag = "verify"
     owner: ProcessIdentity
 
-    def require_owner(self, service: MonitorService) -> None:
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         if self.owner != service.owner:
-            raise ValueError('This bridge belongs to a different Claude process incarnation')
-
-    async def handle(self, service: MonitorService, reader: asyncio.StreamReader,
-                     writer: asyncio.StreamWriter) -> None:
-        self.require_owner(service)
-        writer.write((SessionReady().model_dump_json() + '\n').encode())
-        await writer.drain()
+            return SessionRefused.model_validate(
+                dict(error="This bridge belongs to a different Claude process incarnation")
+            )
+        return SessionReady()
 
 
-class AttachInput(VerifySession, AttachMonitor):
-    wire_tag = 'input'
+class AttachInput(VerifySession, AttachReader):
+    wire_tag = "input"
 
-    def opened(self, service, writer):
-        self.require_owner(service)
-        return InputAttachment(writer=writer)
+    def open_reader(self, service: MonitorService, peer: MonitorPeer) -> ReaderState:
+        return InputReader(peer)
 
-    async def prepare(self, attachment):
-        attachment.ready.set()
-
-    async def receive(self, attachment, reader):
-        async for line in reader:
-            receipt = InputReceipt.model_validate_json(line)
-            pending = attachment.pending.get(receipt.identity)
-            if pending is not None and not pending.done():
-                pending.set_result(None)
-
-    async def handle(self, service, reader, writer):
-        await AttachMonitor.handle(self, service, reader, writer)
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        verified = await super().handle(service, peer)
+        return await verified.attach(service, peer, self)
 
 
 class EndSession(VerifySession):
-    wire_tag = 'end'
+    wire_tag = "end"
 
-    async def handle(self, service: MonitorService, reader: asyncio.StreamReader,
-                     writer: asyncio.StreamWriter) -> None:
-        await super().handle(service, reader, writer)
-        service.task.cancel()
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        reply = await super().handle(service, peer)
+        reply.end_session(service)
+        return reply
 
 
 REQUESTS = TypeAdapter(SessionRequest.declared_union())
@@ -264,58 +379,55 @@ REQUESTS = TypeAdapter(SessionRequest.declared_union())
 
 @dataclass
 class MonitorService:
-    """The Claude process, not any reader, owns the registered bridge tasks."""
-
     bridge: LineMonitorBridge
     owner: ProcessIdentity
-    task: asyncio.Task
+    stop: Callable[[], None]
+    clients: asyncio.TaskGroup = field(default_factory=asyncio.TaskGroup)
 
-    async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def accept(self, peer: MonitorPeer) -> None:
         try:
-            request = REQUESTS.validate_json(await reader.readline())
-            await request.handle(self, reader, writer)
-        except (ValueError, OSError) as error:
-            if not writer.is_closing():
-                writer.write((SessionRefused(error=str(error)).model_dump_json() + '\n').encode())
-                try:
-                    await writer.drain()
-                except ConnectionError:
-                    pass
-        finally:
-            writer.close()
+            line = await peer.reader.readline()
+            reply: SessionReply
             try:
-                await writer.wait_closed()
-            except ConnectionError:
-                pass
+                request = REQUESTS.validate_json(line)
+            except ValidationError as error:
+                reply = SessionRefused.model_validate(dict(error=str(error)))
+            else:
+                reply = await request.handle(self, peer)
+            await reply.publish(peer)
+        finally:
+            await peer.close()
 
     async def run(self) -> None:
         path = WatchClaim(self.bridge.binding.thread).socket_path
-        # Caller already owns the watch claim and registered endpoint.
         path.unlink(missing_ok=True)
         try:
-            async with asyncio.TaskGroup() as clients:
-                server = await asyncio.start_unix_server(
-                    lambda reader, writer: clients.create_task(self.accept(reader, writer)), str(path))
+            async with self.clients:
+                server = await asyncio.get_running_loop().create_unix_server(
+                    lambda: MonitorPeer(self), str(path)
+                )
                 async with server:
-                    print(f'Session bridge ready for Claude PID {self.owner.pid}.', file=sys.stderr, flush=True)
+                    print(
+                        f"Session bridge ready for Claude PID {self.owner.pid}.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     try:
                         await self.owner.wait_exited()
                     finally:
-                        self.task.cancel()
+                        self.stop()
         finally:
             path.unlink(missing_ok=True)
 
 
 async def read_monitor(claim: WatchClaim) -> None:
-    """This is the complete lifetime of a Monitor tool's command: read only."""
     with claim.reader_held():
         reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))
         try:
-            writer.write((AttachMonitor().model_dump_json() + '\n').encode())
+            writer.write((AttachMonitor().model_dump_json() + "\n").encode())
             await writer.drain()
             REPLIES.validate_json(await reader.readline()).require()
             async for line in reader:
-                # Exactly one stdout line becomes one real Monitor event. No spool.
                 sys.stdout.write(line.decode())
                 sys.stdout.flush()
         finally:

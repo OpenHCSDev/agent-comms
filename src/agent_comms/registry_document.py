@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import Field, dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -90,6 +91,40 @@ class RegistryPresence(RegistryNames[Thread]):
     def channel_audience(self) -> Iterator[Thread]:
         """A channel reaches the default roster: stopped owners receive, archived do not."""
         return self.visible_threads(DEFAULT_ROSTER)
+
+
+class ExternalEndpoint(ABC):
+    @abstractmethod
+    def when_owned(self, update: Callable[[RegistryEntry], None]) -> None: ...
+
+
+@dataclass(frozen=True)
+class RejectedEndpoint(ExternalEndpoint):
+    name: str
+    reason: ClassVar[str]
+
+    def when_owned(self, update: Callable[[RegistryEntry], None]) -> None:
+        logging.getLogger(__name__).warning('Bridge observation for %s: %s', self.name, self.reason)
+
+
+class AbsentEndpoint(RejectedEndpoint):
+    reason = 'entry absent'
+
+
+class ForeignEndpoint(RejectedEndpoint):
+    reason = 'foreign owner or process incarnation'
+
+
+class DeadEndpoint(RejectedEndpoint):
+    reason = 'owner process dead'
+
+
+@dataclass(frozen=True)
+class OwnedEndpoint(ExternalEndpoint):
+    entry: RegistryEntry
+
+    def when_owned(self, update: Callable[[RegistryEntry], None]) -> None:
+        update(self.entry)
 
 
 class UserThreadLookup[Value](ABC):
@@ -223,8 +258,8 @@ class WholeDocumentValue(ThreadSlice[int]):
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence):
-    version: Literal[1] = field(
-        default=1, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
+    version: Literal[2] = field(
+        default=2, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
     threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
     statuses: dict[str, ThreadStatus] = field(
         default_factory=dict, metadata={"thread_slice": OwnRow})
@@ -287,6 +322,17 @@ class RegistryDocument(RegistryPresence):
 
     def entry_if_present(self, name: str) -> RegistryEntry | None:
         return self.entry(name) if self.canonical_name(name) in self.threads else None
+
+    def external_endpoint(self, owner: OwnerIdentity, process: ProcessIdentity) -> ExternalEndpoint:
+        name = owner.incarnation.name
+        if self.canonical_name(name) not in self.threads:
+            return AbsentEndpoint(name)
+        entry = self.entry(name)
+        if not entry.owned_by(owner, process):
+            return ForeignEndpoint(name)
+        if not process.alive():
+            return DeadEndpoint(name)
+        return OwnedEndpoint(entry)
 
     @classmethod
     def entry_from_wire(cls, raw: dict, name: str) -> RegistryEntry:
