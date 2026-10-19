@@ -1052,6 +1052,10 @@ class OrderVerdict(TodoOperation, declared_name=None):
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
 
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
+
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
@@ -1065,6 +1069,7 @@ class OrderVerdict(TodoOperation, declared_name=None):
 class AcceptedVerdict(OrderVerdict):
     """The tool call carries out the order clause it quotes."""
     quote: str
+    line = "Accepted"
 
     def judged(self, current: Todo) -> Todo:
         quoted = " ".join(self.quote.split())
@@ -1078,6 +1083,10 @@ class AcceptedVerdict(OrderVerdict):
 class SendBackVerdict(OrderVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
+
+    @property
+    def line(self) -> str:
+        return f"Sent back: {self.reason.text}"
 
     def judged(self, current: Todo) -> Todo:
         strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,

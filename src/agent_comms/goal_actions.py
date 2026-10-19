@@ -364,11 +364,10 @@ class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredOrderGoalAction(HeldOrderGoalAction):
     operation: DeliverTodo
-    progress: str = ""
 
     def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
-        return replace(goal, state=goal.state.after_order_delivery(pending), progress=self.progress)
+        return replace(goal, state=goal.state.after_order_delivery(pending))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -376,7 +375,7 @@ class SentBackOrderGoalAction(HeldOrderGoalAction):
     operation: SendBackVerdict
 
     def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        return replace(goal, progress=f"Sent back on {self.problem}: {self.operation.reason.text}")
+        return goal
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -384,6 +383,8 @@ class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Ru
     block_reason: str | None = None
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        if ctx.model_report:
+            goal.order.require_model_block()
         return BlockedGoal(
             required_block_reason(
                 self.block_reason if self.block_reason is not None else self.progress
@@ -474,7 +475,8 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
             return self.create(ctx)
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
-        return replace(goal, order=ProblemGoalOrder(), revision=goal.revision + 1)
+        return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
+                       revision=goal.revision + 1)
 
     def request_ref(self, ctx: GoalActionContext) -> GoalRef:
         """Refuse invalid orders before reserving their Todo."""
@@ -488,7 +490,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def create(self, ctx: GoalActionContext) -> Goal:
         request = self.request_ref(ctx)
-        fresh = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder())
+        fresh = SetGoalAction(text=ProblemGoalOrder.text, order=ProblemGoalOrder())
         self.reserve(ctx, fresh.goal_id, request)
         return fresh.create(ctx)
 
