@@ -685,10 +685,11 @@ class AssistantMessage(PiMessage):
         return bool(self.text.strip() or self.error_notice)
 
     def transcript_events(self, context):
-        from .transcript_events import AssistantTranscript, NoticeTranscript
+        from .transcript_events import AgentErrorTranscript, AssistantTranscript
 
         if notice := self.error_notice:
-            return [NoticeTranscript(f"[agent error] {notice}", position=context.position)]
+            return [AgentErrorTranscript(f"[agent error] {notice}", position=context.position,
+                                         model=f"{self.provider}/{self.model}")]
         events = []
         for part in self.parts:
             for event in part.assistant_transcript(context.position):

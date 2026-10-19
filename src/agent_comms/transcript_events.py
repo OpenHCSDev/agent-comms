@@ -102,6 +102,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         return ()
 
+    def errors_on(self, model: str) -> tuple[str, ...]:
+        """The provider errors this event records for ``model``; only an agent error has any."""
+        return ()
+
     @property
     def dated(self) -> tuple[float, ...]:
         return () if self.timestamp is None else (self.timestamp,)
@@ -254,6 +258,16 @@ class NoticeTranscript(AgentTextTranscript):
     def as_context(self) -> NoticeTranscript:
         # Native failures remain visible notices, including bounded triage.
         return self
+
+
+@dataclass(frozen=True)
+class AgentErrorTranscript(NoticeTranscript):
+    """A model request that ended in its provider's error, with the provider/model it asked."""
+
+    model: str = field(kw_only=True)
+
+    def errors_on(self, model: str) -> tuple[str, ...]:
+        return (self.text,) if model == self.model else ()
 
 
 @dataclass(frozen=True)
@@ -419,3 +433,7 @@ class TurnDigest:
         """The turn's last dated event precedes ``at``; an undated turn is never before."""
         dated = [event for event in self.events if event.dated]
         return bool(dated) and dated[-1].before(at)
+
+    def ended_in_errors_on(self, model: str) -> tuple[str, ...]:
+        """The provider errors the turn ended in while it asked ``model``."""
+        return tuple(error for event in self.events[-1:] for error in event.errors_on(model))

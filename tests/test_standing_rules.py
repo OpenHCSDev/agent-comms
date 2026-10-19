@@ -395,3 +395,32 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "
         "-> justify or send back the owner with a deletion order"]
+
+
+def test_dead_provider_moves_a_unit_whose_last_turn_hit_the_usage_limit(
+        commander, standing, monkeypatch):
+    from datetime import UTC, datetime
+
+    from agent_comms.tool_caller import ThreadCaller
+    comms, _, module = standing
+    models = ("spent/model", "spare/model")
+    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update=dict(models=models)))
+    for name, reason, created in (("limited", "error", 5.0), ("healthy", "stop", 6.0)):
+        working(comms, name, created)
+        comms.registry.register(replace(comms.registry.require(name), model="spent/model"))
+        failure = {"errorMessage": "Codex error: The usage limit has been reached"}
+        answer = dict(role="assistant", provider="spent", model="model", stopReason=reason,
+                      content=[], usage=dict(totalTokens=1), timestamp=time.time() * 1000,
+                      **(failure if reason == "error" else {}))
+        with (comms.root / f"{name}-session.jsonl").open("a") as rows:
+            rows.write(json.dumps(dict(type="message", id=f"{name}-answer",
+                                       parentId=f"{name}-input",
+                                       timestamp=datetime.now(UTC).isoformat(),
+                                       message=answer)) + "\n")
+
+    read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
+    assert ("DEAD PROVIDER: limited hit the usage limit of spent/model"
+            " -> Core moved it to spare/model") in read.broken
+    assert comms.registry.require("limited").model == "spare/model"
+    assert comms.registry.require("healthy").model == "spent/model"
+    assert lines(comms, module.DeadProvider) == []

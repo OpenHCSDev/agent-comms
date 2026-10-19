@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from ..acp_failure import ProviderQuotaFailure
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingRule,
@@ -16,7 +17,9 @@ from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingR
 from ..goals import Goal
 from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
-from ..turn_digests import TurnDigestRead, TurnsSince
+from ..restart_queue import enqueue as enqueue_restart
+from ..launch_runtime import LaunchRuntime
+from ..turn_digests import LastTurns, TurnDigestRead, TurnsSince
 from . import capacity, judge
 from .config import CommanderConfig, Repo
 
@@ -240,3 +243,44 @@ class MergeGrowth(DatedStandingRule):
             f"GROWTH {self.repo} {self.sha[:9]} src +{a}/-{d} (net {a - d:+}) tests +{ta}/-{td}: "
             f"{self.subject[:90]} -> justify or send back the owner with a deletion order"
         )
+
+
+@dataclass(frozen=True)
+class DeadProvider(UndatedStandingRule):
+    """A unit whose latest turn ended on its provider's usage limit serves no turns while it
+    stays on that model; Core moves it to the next working model the commander declares,
+    restarts its live owner and tells it."""
+
+    unit: Thread
+    model: str
+
+    @staticmethod
+    def exhausted(comms: Comms, unit: Thread, model: str) -> bool:
+        turns = TurnDigestRead(comms.root, unit, LastTurns(1)).read().turns
+        return any(ProviderQuotaFailure.matches(None, error)
+                   for turn in turns for error in turn.ended_in_errors_on(model))
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[DeadProvider, ...]:
+        dead = [(unit, unit.model) for unit in comms.registry.all_threads().values()
+                if unit.model and unit.name not in CONFIG.parked | {commander}
+                and cls.exhausted(comms, unit, unit.model)]
+        working = [model for model in CONFIG.models if model not in {spent for _, spent in dead}]
+        return tuple(cls(unit, cls.following(spent, working)) for unit, spent in dead if working)
+
+    @staticmethod
+    def following(model: str, working: list[str]) -> str:
+        """The first working model declared after ``model``, wrapping to the start."""
+        at = CONFIG.models.index(model) if model in CONFIG.models else -1
+        return min(working, key=lambda each: (CONFIG.models.index(each) <= at,
+                                              CONFIG.models.index(each)))
+
+    def line(self) -> str:
+        return (f"DEAD PROVIDER: {self.unit.name} hit the usage limit of {self.unit.model}"
+                f" -> Core moved it to {self.model}")
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        comms.threads.set_thread_configuration(self.unit, model=self.model)
+        if self.unit.restart_candidates(comms.registry.status(self.unit.name)):
+            enqueue_restart(comms, self.unit.name, launch_runtime=LaunchRuntime.running())
+        comms.messaging.send(commander, self.unit.name, self.line())

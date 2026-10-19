@@ -47,6 +47,8 @@ class CommanderConfig(BaseModel):
     scratch: Path
     disk: Path
     parked: frozenset[str] = frozenset()
+    # The provider/model choices, in order, a unit moves to when its provider stops serving turns.
+    models: tuple[str, ...] = ()
 
     @staticmethod
     def path(home: Path | None = None) -> Path:
