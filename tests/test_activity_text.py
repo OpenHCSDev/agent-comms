@@ -82,7 +82,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
     native = comms.registry.declare(comms.registry.new_thread('native-clock', frozenset({'clock'}), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     cli = comms.registry.declare(comms.registry.new_thread('cli-clock', frozenset({'clock'}), str(comms.root), execution=ExternalThreadExecution))
     comms.channels.set_channel_sort("#clock", LastActivityThreadSort)
-    output = ThreadOutput(ExternalTranscript(comms.root, cli.incarnation.lookup), comms.agents, cli.name)
+    output = ThreadOutput(ExternalTranscript(comms.root, cli.incarnation), comms.agents)
     request = ObserveSidebar(str(comms.root), True, False)
 
     def observed():
@@ -120,7 +120,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
 
 def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     thread = comms.registry.declare(comms.registry.new_thread('cli-worker', frozenset(), str(comms.root), execution=ExternalThreadExecution, process_identity=ProcessIdentity.capture(os.getpid())))
-    output = ThreadOutput(ExternalTranscript(comms.root, thread.incarnation.lookup), comms.agents, thread.name)
+    output = ThreadOutput(ExternalTranscript(comms.root, thread.incarnation), comms.agents)
     output.status(ActivityState.WORKING, "  tool:\n\t" + "x" * Activity.detail_limit)
     activity = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
     assert activity.detail.startswith("tool: x")

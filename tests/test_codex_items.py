@@ -10,7 +10,7 @@ def _output(tmp_path):
 
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    return ThreadOutput(comms.transcripts.external('cli'), comms.agents, 'cli')
+    return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
 
 
 def test_items_page_decodes_every_declared_user_input():
