@@ -53,7 +53,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
@@ -230,15 +230,19 @@ def carry_all(
 
 
 def copy_bus(root: Path, copy: Path) -> None:
-    """Copy under the bus's wire lock so no writer tears the copy; sockets are skipped."""
-    def sockets(directory: str, names: list[str]) -> set[str]:
+    """Copy under the bus's wire lock so no writer tears the copy; sockets and maintenance files are skipped."""
+    # The maintenance files describe the live root; a copy is a new root and starts open.
+    held = set(MaintenanceBarrier(root / "registry.json").witness_paths)
+
+    def skipped(directory: str, names: list[str]) -> set[str]:
         return {name for name in names
-                if stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
+                if Path(directory, name) in held
+                or stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
 
     from agent_comms.store_files import _store_lock
 
     with _store_lock(root / "wire"):
-        shutil.copytree(root, copy, symlinks=True, ignore=sockets)
+        shutil.copytree(root, copy, symlinks=True, ignore=skipped)
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
@@ -261,6 +265,9 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         copy_bus(root, copy)
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
         stack.prepare_native()
+        # Hold the copy before reading it, exactly as the live run holds the bus.
+        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copy / "registry.json").begin(
+            MaintenanceOperator("upgrade-bus")).nonce
         with transcripts_held(copy):
             before = bus_files(copy)
         stopping = before_stop(copy, pending, stack, revisions)
@@ -370,6 +377,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
+    os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     lock = installed.lock
     try:
         installed.owners(root, "stop", running)
