@@ -380,6 +380,8 @@ export class DiskEntryStore extends EntryStore {
         this.validate(entry);
         // Byte offsets supply ordering; no lifetime row counter is needed.
         const meta = new EntryMetadata(entry, offset, offset, length);
+        const parent = entry.parentId === null ? undefined : EntryMetadata.fromIndex(this.#metadata.get(entry.parentId));
+        if (parent && parent.sequence >= meta.sequence) throw new Error('Invalid native entry ancestry');
         this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, offset, length, meta.inputId, JSON.stringify(meta));
         return meta;
     }
