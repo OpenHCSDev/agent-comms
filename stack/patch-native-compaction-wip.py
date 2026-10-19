@@ -16,7 +16,12 @@ import sys
 from pathlib import Path
 
 INSTRUCTION = Path(__file__).resolve().parents[1] / "src/agent_comms/instructions/coordination.md"
-WORK_IN_PROGRESS_MARKERS = tuple(re.findall(r"^`([A-Za-z]+):`", INSTRUCTION.read_text(), re.M))
+WORK_IN_PROGRESS_MARKERS = re.search(
+    r"^`([A-Za-z]+):`[^\n]*\n"
+    r"`([A-Za-z]+):`[^\n]*\n"
+    r"`([A-Za-z]+):`[^\n]*(?=\n|$)",
+    INSTRUCTION.read_text(), re.M,
+).groups()
 
 # The declared triple as one line pattern; the same source text is valid as a
 # Python regular expression and as the body of a JavaScript regex literal.
