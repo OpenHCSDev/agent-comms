@@ -166,8 +166,10 @@ class NativeChildState(ABC):
     retained = False
 
     def managed_launch(self, command, arguments, *, package, root, directory, worktree, environment, session_file):
-        return NativePiRpcLaunch.managed(command, arguments, package=package, root=root, directory=directory,
-            worktree=worktree, environment=environment, session_file=session_file)
+        return NativePiRpcLaunch.managed(
+            command, arguments, package=package, root=root, directory=directory,
+            worktree=worktree, environment=environment, session_file=session_file,
+        )
 
     def reuse(self, key) -> PiSessionChild | None:
         return None
@@ -289,8 +291,10 @@ class RetainedNative(ChildNative):
                 original, authentication
             ):
                 return original
-        return super().managed_launch(command, arguments, package=package, root=root, directory=directory,
-            worktree=worktree, environment=environment, session_file=session_file)
+        return super().managed_launch(
+            command, arguments, package=package, root=root, directory=directory,
+            worktree=worktree, environment=environment, session_file=session_file,
+        )
 
     def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()
