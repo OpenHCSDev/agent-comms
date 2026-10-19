@@ -234,7 +234,7 @@ def test_delivered_order_is_not_transferred(commander, tmp_path):
     git('init', '-q', '-b', 'main')
     git('commit', '-q', '--allow-empty', '-m', 'Delivered fix')
     commit = git('rev-parse', 'HEAD')
-    git('update-ref', 'refs/remotes/origin/main', commit)
+    git('update-ref', 'refs/remotes/origin/fix', commit)
     marker = comms.root / 'check-calls'
     create(commander, 'P1', f"printf x >> '{marker}'; printf 1")
     create(commander, 'P2')
@@ -288,7 +288,6 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     with pytest.raises(ValueError, match='no origin branch'):
         CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=CommitDelivery(commit=merge, delivered_commit=delivered), claims=working(comms)).apply(comms, caller)
     git('update-ref', 'refs/remotes/origin/work', delivered)
-    git('update-ref', 'refs/remotes/origin/main', merge)
     script.done('P1', delivered, seen=working(comms)[0].screenshot)
     met = comms.goals.todos.get('P1')
     assert (met.order.delivery.commit, met.order.delivery.delivered, met.order.delivery.at) == (
@@ -1297,7 +1296,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
         todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
-    assert progress.splitlines() == ['P1: Delivered: operation checked, waiting on install', f'P2: Open · Sent back: {why}']
+    assert progress.splitlines() == ['P1: Delivered, waiting on install', f'P2: Open · Sent back: {why}']
     assert (worker.goal.text, worker.goal.progress) == (ProblemGoalOrder.text, '')
     with pytest.raises(ValueError, match='block the problem.s Todo, or standby with wait_for'):
         comms.goals.update_goal('worker', BlockedGoalAction(block_reason='Waiting on lead.'), actor=ModelInvocable)
