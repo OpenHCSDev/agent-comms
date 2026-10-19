@@ -37,7 +37,7 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.tool_calls import ToolCall
+from agent_comms.tool_calls import DecodedToolCall, ToolCall
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
@@ -662,8 +662,9 @@ class FileChange(WireModel):
     diff: str
     kind: PatchChange.declared_union()
 
-    def call(self, call_id: str) -> ToolCall:
-        return ToolCall(call_id, 'edit', {'path': self.path}).recorded(FilePatchTool(path=self.path))
+    def call(self, call_id: str) -> DecodedToolCall:
+        return ToolCall(call_id, 'edit', {'path': self.path}).recorded(
+            FilePatchTool(path=self.path))
 
     def events(self, call_id: str, ok: bool, timestamp: float) -> tuple[TranscriptEvent, ...]:
         call = self.call(call_id)

@@ -9,7 +9,7 @@ from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
     CompletedItem,
     HiddenItem,
