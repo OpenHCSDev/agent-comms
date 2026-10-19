@@ -41,7 +41,7 @@ class Comms:
             projection=projection,
         )
         self.messaging = Messaging(self.root, self.registry, self.bus)
-        self.agents = AgentActivity(self.root, self.registry)
+        self.agents = AgentActivity(self.root, self.registry, self.messaging)
         self.ledger = CollaborationLedger.at(self.root, self.registry)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)

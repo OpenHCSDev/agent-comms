@@ -43,7 +43,7 @@ from .pi_payloads import StateData
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
-from .turn_lease import TurnLeaseFence, TurnState
+from .turn_lease import FinishedEnding, TurnEnding, TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -320,17 +320,17 @@ class TurnRunner:
         this operation; no delivered result is needed to retire that lease.
         """
         owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
-        resources.push_async_callback(
-            self.settle_turn, session_id, owner.turn_lease,
-            task=task,
-        )
+        resources.push_async_exit(partial(
+            self.settle_turn, session_id, owner.turn_lease, task=task,
+        ))
         return owner
 
     def finish_turn(
         self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence,
+        ending: TurnEnding = FinishedEnding(),
     ) -> TurnTranscriptUpdate:
         """Release the original CAS lease and retain its waiter cleanup."""
-        terminal_fence = self.comms.agents.finish_turn(lease)
+        terminal_fence = self.comms.agents.finish_turn(lease, ending)
         resources.push_async_callback(
             Coordination.run_worker,
             partial(self.comms.goals.release_waits_after_terminal_turn, terminal_fence),
@@ -341,6 +341,7 @@ class TurnRunner:
         self,
         session_id: str,
         lease: TurnLeaseFence,
+        exc_type=None, error: BaseException | None = None, traceback=None,
         *,
         task: asyncio.Task[Any] | None = None,
     ) -> None:
@@ -353,7 +354,7 @@ class TurnRunner:
             self.turn_tasks.pop(session_id, None)
         async with AsyncExitStack() as resources:
             update = await Coordination.run_worker(partial(
-                self.finish_turn, resources, session_id, lease,
+                self.finish_turn, resources, session_id, lease, TurnEnding.from_exception(error),
             ))
             await self.effects._emit_event(session_id, update)
 

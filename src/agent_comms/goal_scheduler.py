@@ -48,7 +48,6 @@ class GoalScheduler:
     def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
-        self.pending_goal_origins: dict[str, str] = {}
         self.goal_snapshots: dict[str, GoalSnapshot] = {}
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
@@ -93,18 +92,10 @@ class GoalScheduler:
                 return next(iter(scheduled), None)
             except StaleAttemptError:
                 return
-            except GoalAttemptError as error:
-                diagnostic = error.diagnostic()
-        self.comms.goals.block_goal_after_failed_turn(
-            thread.name, started_goal=thread.goal, expected_worktree=thread.worktree,
-            diagnostic=diagnostic,
-        )
 
     def _prepare_declared_goal(self, goal: Goal, thread: Thread,
                                snapshot: RegistrySnapshot) -> tuple[ScheduledTurn, ...]:
         if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
-            return ()
-        if self.pending_goal_origins.get(thread.name) == goal.id:
             return ()
         store = self.comms.goals.open_goal_store()
         generation = store.require_generation(goal.id)
@@ -183,8 +174,6 @@ class GoalScheduler:
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
-        if self.pending_goal_origins.get(name) == goal_id:
-            raise ValueError("Wait for the goal origin turn to finish.")
         resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,
             RetryGoalAction(

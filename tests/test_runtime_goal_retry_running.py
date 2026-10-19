@@ -198,7 +198,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         await proxy.close()
 
 
-@pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
+@pytest.mark.parametrize("fence", ["claimed", "reserved", "owner"])
 async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backend, fence):
     native = native_backend
     await native.author_history()
@@ -212,7 +212,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backe
             reservation = store.reserve(goal.id, 1)
             if fence != "reserved":
                 store.claim_launch(reservation)
-            if fence in {"owner", "origin"}:
+            if fence == "owner":
                 reservation.fail(store, "Known failed attempt")
             blocked = comms.goals.update_goal(
                 session,
@@ -227,13 +227,11 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backe
             if fence == "owner":
                 # Loss is an original registry operation, not an invented PID.
                 comms.registry.unregister(session)
-            elif fence == "origin":
-                owner.turns.goals.pending_goal_origins[session] = goal.id
             try:
                 # The original socket claim_scope rejects a stopped owner before
                 # request dispatch. Other fences reach the live request owner.
                 failure = ConnectionError if fence == "owner" else RuntimeError
-                expected = {"owner": "stopped or unavailable", "origin": "origin turn"}.get(fence, "unresolved")
+                expected = "stopped or unavailable" if fence == "owner" else "unresolved"
                 with pytest.raises(failure, match=expected):
                     await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
                 assert comms.registry.require(session).goal == blocked

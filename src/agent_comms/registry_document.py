@@ -592,9 +592,10 @@ class RegistryDocument(RegistryPresence):
             return False, NoFinishedTurn()
         if TurnIdentity(current.incarnation, current.turn_generation) != canonical_lease.identity:
             return False, NoFinishedTurn()
-        turn = record.read().require_active()
-        if not turn.may_release(canonical_lease):
+        witnesses = tuple(record.read().release_witnesses(canonical_lease))
+        if not witnesses:
             return False, NoFinishedTurn()
+        turn, = witnesses
         attested = canonical_lease.can_attest(self.claims.generations[name])
         attested = attested and turn.claimed_generation is not None and self.statuses[name].active
         keeps_resume = turn.phase.keeps_project_resume

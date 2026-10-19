@@ -272,7 +272,12 @@ class SelectedParticipant(MroDispatch):
             current.require_registry(comms.registry)
             current.require_active_turn()
             yield current
-        finally:
+        except BaseException as error:
+            from .turn_lease import TurnEnding
+
+            comms.agents.finish_turn(lease, TurnEnding.from_exception(error))
+            raise
+        else:
             comms.agents.finish_turn(lease)
 
     @staticmethod

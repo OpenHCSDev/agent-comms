@@ -38,7 +38,7 @@ from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .store_files import SharedLock, _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
-from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
+from .turn_lease import FinishedEnding, NoFinishedTurn, TurnCompletion, TurnEnding, TurnLeaseFence, TurnState
 from .turn_phase import PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
@@ -110,8 +110,9 @@ class LiveRecipientActivity(RecipientActivity):
         return self.thread.turn_started_by(updated_at_ms)
 
 class AgentActivity:
-    def __init__(self, root: Path, registry: Registration):
+    def __init__(self, root: Path, registry: Registration, messaging):
         self.registry = registry
+        self.messaging = messaging
         self._wire_lock_path = root / "wire"
         self.activity = ActivityLog(ActivityLog.path_in(root))
         self.runtime_info = RuntimeInfoStore.at(root)
@@ -287,8 +288,10 @@ class AgentActivity:
             )
             return effects
 
-    def finish_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
-        """Persist this lease's terminal identity before publishing idle activity."""
+    def finish_turn(self, lease: TurnLeaseFence, ending: TurnEnding = FinishedEnding()) -> TurnCompletion:
+        """End the original record before any registry-dependent cleanup or notice."""
+        effect = lease.record.end(lease, ending)
+        effect.notify(self.messaging, lease.identity.incarnation.name)
         with _store_lock(self._wire_lock_path):
             released, fence = self.registry.release_turn(lease)
             if not released:

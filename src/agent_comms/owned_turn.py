@@ -63,10 +63,6 @@ class OwnedTurn:
         return self.registry_owner.thread
 
     @property
-    def turn_lease(self):
-        return self.registry_owner.turn_lease
-
-    @property
     def backend(self):
         return self.runner.backend_for(self.session_id, self.thread)
 
@@ -111,6 +107,7 @@ class OwnedTurn:
         self.original_goal_id = original_goal_id
         self.accepted_input_id = accepted_input_id
         self.dependency_wait_id = dependency_wait_id
+        self.lease_cleanup = AsyncExitStack()
 
     def authorize(self):
         self.original_display = (
@@ -141,12 +138,11 @@ class OwnedTurn:
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
-        self.lease_cleanup = AsyncExitStack()
-        resources.push_async_callback(self.lease_cleanup.aclose)
         self.registry_owner = self.runner.acquire_turn(
             self.lease_cleanup, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
+        self.turn_lease = self.registry_owner.turn_lease
         active_goal = self.thread.goal.active()
         prepared_goal = any(self._prepare_goal_permit(goal, permits) for goal in active_goal)
         if self.autonomous_goal and not prepared_goal:
@@ -191,7 +187,7 @@ class OwnedTurn:
         return True
 
     def _prepare_goal_permit(self, goal: Goal, permits: ExitStack) -> bool:
-        if self.original_owner_input:
+        if not self.autonomous_goal:
             return True
         self.goal_permit = TurnGoalAccount.reserve(
             owner=self.thread, goal=goal, comms=self.runner.comms, autonomous=self.autonomous_goal,
@@ -305,7 +301,6 @@ class OwnedTurn:
                 turn=TurnId(self.turn_id),
                 lease=self.turn_lease,
                 permit=self.goal_permit,
-                pending_origins=self.runner.goals.pending_goal_origins,
                 claims=origin_claims,
             ),
             sync_goals=self.runner.goals.sync_goal_execution,
@@ -400,7 +395,7 @@ class OwnedTurn:
 
     async def run(self) -> None:
         async with AsyncExitStack() as resources:
-            async with AsyncExitStack() as permit_cleanup:
+            async with AsyncExitStack() as permit_cleanup, self.lease_cleanup:
                 if not await self.acquire(resources, permit_cleanup):
                     return
                 await self.run_native()

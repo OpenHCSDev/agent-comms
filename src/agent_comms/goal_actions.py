@@ -223,22 +223,9 @@ class ActiveGoalAction(
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         thread = ctx.thread
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
-        if generation.lifecycle.failed and generation.attempt_id:
-            # A status-only Resume cannot authorize an uncertain attempt.
-            refusal = required_block_reason(
-                "The interrupted goal attempt is unresolved. Inspect it, then use "
-                "Retry to authorize a new attempt. Your messages can still be sent."
-            )
-            blocked = replace(
-                goal,
-                state=BlockedGoal(refusal),
-                progress=goal.progress,
-                revision=goal.revision + 1,
-            )
-            ctx.goals.registry.register(
-                replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
-            )
-            raise ValueError(refusal)
+        if generation.lifecycle.failed:
+            generation.lifecycle.authorize_retry(
+                ctx.goals.open_goal_store(), generation, uuid4().hex)
         elif not generation.lifecycle.allows_resume(thread.turn_record.read().executing):
             raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
@@ -629,9 +616,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         return ActiveGoal()
 
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
-        """A blocked goal leaves its state machine only through the attempt ledger's retry."""
-        if not isinstance(goal.state, BlockedState):
-            raise ValueError("The blocked goal changed; refresh its state.")
+        """A new attempt is authorized by its ledger, not a second goal-state hold."""
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)

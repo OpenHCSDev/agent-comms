@@ -14,7 +14,6 @@ from acp import RequestError
 
 from . import agent_events as events
 from .diagnostics import terminal_failure_reason
-from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import (
     GoalAttemptError, GoalAttemptStore, GoalTurnPermit, LaunchPermit, NoLaunchPermit,
     StaleAttemptError,
@@ -69,23 +68,6 @@ class OriginGoalSettlement(VerifiedGoalSettlement):
         return f"origin-completed:{self.goal.revision}"
 
 
-@dataclass(frozen=True)
-class FailedGoalOrigin(MroDispatch):
-    comms: Comms
-    thread_name: str
-    goal: Goal
-
-    @handles(ActiveGoal, CompletedGoal)
-    def block(self, state) -> None:
-        self.comms.goals.update_goal(
-            self.thread_name,
-            BlockedGoalAction(
-                expect=GoalPrecondition(goal_id=self.goal.id, expected_goal=self.goal),
-                progress="Goal origin turn did not finish successfully.",
-            ),
-        )
-
-
 @dataclass(kw_only=True)
 class TurnGoalAccount:
     comms: Comms
@@ -93,7 +75,6 @@ class TurnGoalAccount:
     turn: TurnId
     lease: TurnLeaseFence
     permit: GoalTurnPermit
-    pending_origins: dict[str, str]
     claims: ExitStack
     originated: dict[str, GoalTurnPermit] = field(default_factory=dict, init=False)
     unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
@@ -165,7 +146,6 @@ class TurnGoalAccount:
         for response_id, usage in self.unattributed_usage:
             permit.record_provider_usage(store, response_id, usage)
         self.unattributed_usage.clear()
-        self.pending_origins[self.thread_name] = permit.reservation.goal_id
 
     def block_active_goal(self, diagnostic: str) -> None:
         current = self.comms.registry.require(self.thread_name).continuation_goal(self.owner)
@@ -174,17 +154,13 @@ class TurnGoalAccount:
         )
 
     def done(self, event: events.Done) -> None:
-        if not event.ok:
-            self.permit.block(self, "Backend turn failed; inspect local diagnostics before resuming.")
-        elif self.productive_tool is None and not str(event.text or "").strip():
+        if event.ok and self.productive_tool is None and not str(event.text or "").strip():
             self.permit.block(self,
                 "Backend reported success without assistant output "
                 "or tool activity; inspect the session before resuming."
             )
 
     def settle_launched(self, permit: LaunchPermit, terminal: events.Done | None) -> None:
-        if terminal is None:
-            self.block_active_goal("Backend turn ended without a result; inspect local diagnostics.")
         store = self.comms.goals.open_goal_store()
         captured = self.owner.goal.require().require_id(permit.reservation.goal_id)
         current = captured.continued_by(self.comms.registry.require(self.thread_name).goal)
@@ -212,10 +188,6 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        current.block_after_failed_turn(
-            self.comms.goals, self.thread_name, self.owner.worktree,
-            "Goal turn ended without verified terminal progress.",
-        )
 
     def finish(self, terminal: events.Done | None) -> None:
         """Settle all original grants once from the actual producer terminal event."""
@@ -227,7 +199,3 @@ class TurnGoalAccount:
                 permit.settle_goal(OriginGoalSettlement, store, current, self.turn)
             if not permit.has_verified_progress(store):
                 permit.fail_origin(store, goal_id)
-                for goal in current:
-                    FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(goal.state)
-            if self.pending_origins.get(self.thread_name) == goal_id:
-                self.pending_origins.pop(self.thread_name, None)

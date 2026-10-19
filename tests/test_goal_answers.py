@@ -40,7 +40,7 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
             )
             account = TurnGoalAccount(
                 comms=comms, owner=owner.thread, turn=turn, lease=lease,
-                permit=permit, pending_origins={}, claims=claims,
+                permit=permit, claims=claims,
             )
             if not original_goal:
                 goal = comms.goals.update_goal("worker", SetGoalAction(text="Work created in turn"))
@@ -52,7 +52,6 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
             account.finish(terminal)
             assert comms.registry.require("worker").goal == NoGoal()
             assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle.terminal
-            assert not account.pending_origins
     finally:
         comms.agents.finish_turn(lease)
 

@@ -62,7 +62,7 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
+async def test_failed_origin_claim_retires_unlaunched_origin_without_a_goal_hold(
     owner_turn, monkeypatch
 ):
     execution, progress = owner_turn
@@ -78,11 +78,7 @@ async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
         progress.goals.tool_ended(events.ToolEnd("goal", "comms_set_goal", True, "created"))
     progress.goals.finish(None)
     assert store.snapshot(goal.id).lifecycle == CancelledGeneration()
-    assert (
-        runner.comms.registry.require(execution.thread_name).goal.state.reason
-        == "Goal origin turn did not finish successfully."
-    )
-    assert execution.thread_name not in runner.goals.pending_goal_origins
+    assert runner.comms.registry.require(execution.thread_name).goal.state == ActiveGoal()
 
 
 @pytest.mark.asyncio

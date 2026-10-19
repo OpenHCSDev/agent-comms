@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ObservedActivity
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion
 from .locked_store import JsonDocument
@@ -22,6 +24,59 @@ if TYPE_CHECKING:
     from .child_process import ProcessState
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+
+
+class TurnEnding(DeclaredFamily, affix="Ending"):
+    """Decode the context-manager exit at its boundary, not at every consumer."""
+    @staticmethod
+    def from_exception(error: BaseException | None) -> TurnEnding:
+        if error is None:
+            return FinishedEnding()
+        return FailedEnding(''.join(traceback.format_exception(error)))
+
+    @abstractmethod
+    def record(self, turn: ActiveTurn) -> EndedTurn: ...
+
+
+class FinishedEnding(TurnEnding):
+    def record(self, turn: ActiveTurn) -> EndedTurn:
+        return EndedTurn(turn)
+
+
+@dataclass(frozen=True)
+class FailedEnding(TurnEnding):
+    error: str
+
+    def record(self, turn: ActiveTurn) -> FailedTurn:
+        return FailedTurn(turn, self.error)
+
+
+class TurnEndingEffect(ABC):
+    @abstractmethod
+    def write(self, record: StoredTurnRecord) -> None: ...
+
+    @abstractmethod
+    def notify(self, messaging, name: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class NewTurnEnding(TurnEndingEffect):
+    terminal: EndedTurn
+
+    def write(self, record: StoredTurnRecord) -> None:
+        record._publish_unlocked(self.terminal)
+
+    def notify(self, messaging, name: str) -> None:
+        self.terminal.notify_failure(messaging, name)
+
+
+class UnchangedTurnEnding(TurnEndingEffect):
+    """A stale or repeated end has no write and never repeats its notification."""
+    def write(self, record: StoredTurnRecord) -> None:
+        pass
+
+    def notify(self, messaging, name: str) -> None:
+        pass
 
 
 class TurnDeclaration(SubclassUnion, affix=""):
@@ -76,7 +131,13 @@ class TurnDeclaration(SubclassUnion, affix=""):
     def matches(self, turn_id: TurnId) -> bool: ...
 
     @abstractmethod
-    def failed(self, lease: TurnLeaseFence, error: str) -> TurnDeclaration: ...
+    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect: ...
+
+    @abstractmethod
+    def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]: ...
+
+    def notify_failure(self, messaging, name: str) -> None:
+        pass
 
 
 class IdleTurn(TurnDeclaration, declared_name=None):
@@ -126,8 +187,12 @@ class IdleTurn(TurnDeclaration, declared_name=None):
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return False
 
-    def failed(self, lease: TurnLeaseFence, error: str) -> IdleTurn:
-        return self
+    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect:
+        return UnchangedTurnEnding()
+
+    def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]:
+        return iter(())
+
 
 
 @dataclass(frozen=True)
@@ -136,14 +201,29 @@ class NoTurn(NullMember, IdleTurn):
 
 
 @dataclass(frozen=True)
-class FailedTurn(RecordMember, IdleTurn):
-    """The original turn witness and its error, with no executable authority."""
+class EndedTurn(RecordMember, IdleTurn):
+    """An exact ended turn retains evidence, never executable authority."""
     turn: ActiveTurn
-    error: str
 
     @property
     def id(self) -> str:
         return self.turn.id
+
+    def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]:
+        return self.turn.release_witnesses(lease)
+
+
+@dataclass(frozen=True)
+class FailedTurn(EndedTurn):
+    error: str
+
+    def notify_failure(self, messaging, name: str) -> None:
+        from .channels import AllChannel
+        from .messages import AlertKind
+
+        owner = messaging.registry.require(name)
+        messaging.send(owner.name, owner.parent or AllChannel.declared_name,
+            f"Turn {self.id} failed:\n{self.error}", type=AlertKind)
 
 
 @dataclass(frozen=True)
@@ -193,8 +273,14 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     def without_claim(self) -> ActiveTurn:
         return replace(self, claimed_generation=None)
 
-    def failed(self, lease: TurnLeaseFence, error: str) -> TurnDeclaration:
-        return FailedTurn(self, error) if self.may_release(lease) else self
+    def ended(self, lease: TurnLeaseFence, ending: TurnEnding) -> TurnEndingEffect:
+        if not self.may_release(lease):
+            return UnchangedTurnEnding()
+        return NewTurnEnding(ending.record(self))
+
+    def release_witnesses(self, lease: TurnLeaseFence) -> Iterator[ActiveTurn]:
+        if self.may_release(lease):
+            yield self
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return self.id == lease.turn_id and self.current(
@@ -369,14 +455,12 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
     def without_claim(self) -> None:
         self._publish_unlocked(self.read().without_claim())
 
-    def fail(self, lease: TurnLeaseFence, error: str) -> TurnDeclaration:
+    def end(self, lease: TurnLeaseFence, ending: TurnEnding = FinishedEnding()) -> TurnEndingEffect:
         """End the exact original turn without depending on a readable registry."""
         with _store_lock(self.registry_path):
-            before = self.read()
-            after = before.failed(lease, error)
-            if after != before:
-                self._publish_unlocked(after)
-            return after
+            effect = self.read().ended(lease, ending)
+            effect.write(self)
+        return effect
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
