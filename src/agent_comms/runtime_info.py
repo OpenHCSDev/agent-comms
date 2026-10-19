@@ -33,10 +33,6 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     context_used: PiCount
     context_size: PiCount
 
-    @property
-    def context_percent(self) -> float | None:
-        return self.context_reading().context_percent
-
 
 @dataclass(frozen=True, slots=True)
 class UnobservedRuntimeInfo(RuntimeInfo):

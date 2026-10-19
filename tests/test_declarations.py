@@ -11,6 +11,7 @@ import pytest
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
@@ -61,19 +62,19 @@ class TestAgentRuntimeInfo:
         info = AgentRuntimeInfo(
             thread="a", model="provider/model", context_used=PiCount.from_wire(25), context_size=PiCount.from_wire(100), timestamp=1.0
         )
-        assert info.context_percent == 25
+        assert info.context_reading() == ContextUsage(25, 100)
         store = RuntimeInfoStore(tmp_path / "runtime.json")
         store.observe("a", 1.0, AgentInfo(model="provider/model", context_size=PiCount.from_wire(100)))
         store.observe("a", 1.0, ContextUsageObservation(context_used=PiCount.from_wire(25)))
         assert store.read()["a"] == info
 
     def test_unknown_context_stays_unknown(self):
-        assert AgentRuntimeInfo(thread="a", context_size=PiCount.from_wire(100), timestamp=1.0).context_percent is None
+        assert AgentRuntimeInfo(thread="a", context_size=PiCount.from_wire(100), timestamp=1.0).context_reading() == UnmeasuredContext()
 
     def test_nonpositive_context_is_unreported(self):
         info = AgentRuntimeInfo(thread="a", context_used=PiCount.from_wire(-1), timestamp=1.0)
         assert info.context_used == PiCount.from_wire(None)
-        assert info.context_percent is None
+        assert info.context_reading() == UnmeasuredContext()
 
 
 class TestGoalRevision:

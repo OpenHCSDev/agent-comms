@@ -705,9 +705,6 @@ class ThreadView(ThreadRecord):
     def context_size(self) -> PiCount:
         return self.runtime.context_size
 
-    @projected(view="presence")
-    def context_percent(self) -> float | None:
-        return self.runtime.context_percent
 
 
 @dataclass(frozen=True, slots=True)

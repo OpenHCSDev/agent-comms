@@ -233,7 +233,7 @@ class TestThreadOps:
         )
         row = next(row for row in wired.views.who() if row["name"] == "fixer")
         assert row["model"] == "configured/model"
-        assert row["context_percent"] == 25
+        assert (row["context_used"], row["context_size"]) == (25, 100)
         assert wired.agents.agent_info_of("fixer").context_used == PiCount.from_wire(25)
 
     def test_configuration_names_the_resolved_model(self, wired):

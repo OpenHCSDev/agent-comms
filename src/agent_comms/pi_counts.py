@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
-from .field_codec import FieldCodec, FieldRepresentation, WireValue
+from .field_codec import FieldCodec, FieldRepresentation, NullMember, WireValue, boundary_decoder
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
@@ -22,6 +22,7 @@ class PiCountWire(FieldRepresentation):
     minimum: ClassVar[int] = 1
 
     @classmethod
+    @boundary_decoder
     def decode(cls, value: object) -> PiCount:
         if value is None:
             return UnreportedCount()
@@ -34,7 +35,7 @@ class PiCountWire(FieldRepresentation):
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(int | None)
+        return {"anyOf": [FieldCodec.value_schema(int), UnreportedCount.schema()]}
 
 
 class NonnegativeCountWire(PiCountWire):
@@ -91,9 +92,8 @@ class PiCount(WireValue):
 
 
 @dataclass(frozen=True)
-class UnreportedCount(PiCount):
-    def to_wire(self) -> None:
-        return None
+class UnreportedCount(NullMember, PiCount):
+    pass
 
 
 @dataclass(frozen=True)

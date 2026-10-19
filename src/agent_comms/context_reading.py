@@ -10,10 +10,6 @@ from .declared_family import DeclaredFamily
 
 
 class ContextReading(DeclaredFamily):
-    @property
-    def context_percent(self) -> float | None:
-        return None
-
     async def publish_usage(self, client: Client, session_id: str) -> None:
         pass
 
