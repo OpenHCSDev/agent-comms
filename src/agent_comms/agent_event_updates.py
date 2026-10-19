@@ -10,20 +10,20 @@ from acp.schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     ContentToolCallContent,
-    SessionInfoUpdate,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    UsageUpdate,
 )
 
 from . import agent_events as events
 from .acp_extension import (
     CompactionChangedUpdate,
-    GoalChangedUpdate,
     McpClientAcknowledgementUpdate,
     PromptCancelledUpdate,
     encode_updates,
 )
+from .context_reading import ContextUsage, UnmeasuredContext
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
@@ -50,13 +50,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.GoalChanged)
     async def goal_changed(self, event: events.GoalChanged) -> None:
-        await self.client.session_update(
-            session_id=self.session_id,
-            update=SessionInfoUpdate(
-                session_update="session_info_update",
-                field_meta=encode_updates(GoalChangedUpdate.from_snapshot(event.snapshot)),
-            ),
-        )
+        await self.agent.sessions.publish_metadata(self.session_id)
 
     @handles(events.Chunk, events.Notice)
     async def text(self, event: events.Chunk | events.Notice) -> None:
@@ -145,8 +139,18 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.ContextInfo)
     async def on_context_info(self, event: events.ContextInfo) -> None:
-        await event.context_size.reading(event.context_used).publish_usage(
-            self.client, self.session_id)
+        await self.dispatch(event.context_size.reading(event.context_used))
+
+    @handles(ContextUsage)
+    async def on_context_usage(self, usage: ContextUsage) -> None:
+        await self.client.session_update(
+            session_id=self.session_id,
+            update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),
+        )
+
+    @handles(UnmeasuredContext)
+    async def on_unmeasured_context(self, _reading: UnmeasuredContext) -> None:
+        await self.agent.sessions.publish_metadata(self.session_id)
 
     @handles(events.CompactionEvent)
     async def on_compaction(
