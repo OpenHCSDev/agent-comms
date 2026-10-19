@@ -69,6 +69,4 @@ class CommanderConfig(BaseModel):
         for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
-        if not (self.state / 'activity.log').exists():
-            (self.state / 'activity.log').write_text('')
         return path
