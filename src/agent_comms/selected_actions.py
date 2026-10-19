@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import Id128Text
-from .native_tool_call import NativeToolMode, ContextOnlyToolMode
+from .native_tool_call import NativeToolMode
+from .native_tool_transport import ToolTransport
 from .turn_context import InstructionFile
 
 if TYPE_CHECKING:
@@ -26,8 +27,8 @@ class SelectedAction(ABC):
     @abstractmethod
     def instruction_files(self) -> tuple[InstructionFile, ...]: ...
 
-    def mode(self, owner: CodingToolOwner) -> NativeToolMode:
-        return ContextOnlyToolMode()
+    @abstractmethod
+    def mode(self, owner: CodingToolOwner) -> NativeToolMode: ...
 
     def apply(self, owner: CodingToolOwner) -> None:
         return None
@@ -49,7 +50,21 @@ class SelectedAction(ABC):
         return PlannedSelectedWrite(authority, plan, assignment, thread)
 
 
-class NoSelectedTools(SelectedAction):
+class NoSelectedTools(SelectedAction, NativeToolMode):
+    """This action explicitly declares no model tools; it still opens an endpoint."""
+
+    def mode(self, owner):
+        return self
+
+    def launch_arguments(self, package):
+        return ("--no-tools",)
+
+    async def open_transport(self, turn, ownership):
+        return await ToolTransport.open(turn, ownership)
+
+    def or_else(self, factory):
+        return factory()
+
     @property
     def instruction_files(self):
         return (InstructionFile.read("selected-no-tools.md"),)
@@ -71,9 +86,14 @@ class BatchSelectedAction(SelectedAction):
             )
         )
 
+    def __post_init__(self):
+        if not self.originals:
+            raise ValueError("A selected batch requires an original action")
+
     def mode(self, owner):
-        mode = ContextOnlyToolMode()
-        for assignment, action in self.originals:
+        assignment, action = self.originals[0]
+        mode = action.mode(owner.for_original(assignment, action.operation_id()))
+        for assignment, action in self.originals[1:]:
             mode = mode.or_else(
                 lambda: action.mode(owner.for_original(assignment, action.operation_id()))
             )

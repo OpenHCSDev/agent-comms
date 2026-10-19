@@ -13,10 +13,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field, replace
 from pathlib import Path
-from typing import Never, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .owned_send import OwnedSend
+from typing import Never
 
 from agent_comms.coordinator import Coordination
 
@@ -33,8 +30,8 @@ from .envelope_claim_transitions import (
 from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
 from .native_arguments import NativeArguments
 from .native_tools import NativeExecutableTool
+from .native_tool_transport import ToolTransport
 from .selected_tool_broker import (
-    ToolTransport,
     consume_selected_slot,
     record_selected_terminal,
     verify_sent_full_input,

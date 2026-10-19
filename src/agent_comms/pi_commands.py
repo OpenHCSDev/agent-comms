@@ -150,9 +150,7 @@ class Prompt(PiCommand):
     context_contributions: tuple[InputContributionCoordinates, ...] = field(
         default=(), metadata={"wire_omit_default": True, "wire_name": "contextContributions"}
     )
-    owner_tools: OwnerToolConnection | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "ownerTools"}
-    )
+    owner_tools: OwnerToolConnection = field(metadata={"wire_name": "ownerTools"})
     streaming_behavior: Literal[None, "steer", "followUp"] = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )

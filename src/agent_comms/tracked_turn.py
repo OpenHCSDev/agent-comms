@@ -305,7 +305,7 @@ class TrackedTurnSession(TurnSession):
             ))
         turn = cls(
             launch,
-            commands.Prompt(
+            partial(commands.Prompt,
                 id="native-prompt",
                 input_id=input_id,
                 message=prompt,

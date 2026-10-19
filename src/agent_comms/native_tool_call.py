@@ -17,8 +17,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 
 if TYPE_CHECKING:
-    from .pi_events import ToolExecutionEnd, ToolExecutionStart
-    from .selected_tool_broker import ToolTransport
+    from .native_tool_transport import ToolTransport
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -277,21 +276,9 @@ class NativeToolMode(ABC):
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         """Return the native tool selection and reviewed extension."""
 
+    @abstractmethod
     async def open_transport(self, turn, ownership) -> ToolTransport:
-        """Every turn opens a real endpoint, including context-only turns."""
-        from .selected_tool_broker import ToolTransport
-
-        return await ToolTransport.open(turn, ownership)
+        """Open the transport implementing this declared permission."""
 
     def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
         return self
-
-
-class ContextOnlyToolMode(NativeToolMode):
-    """Explicit context-only permission; transport still belongs to every turn."""
-
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        return ("--no-tools",)
-
-    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
-        return factory()
