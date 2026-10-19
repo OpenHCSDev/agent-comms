@@ -101,7 +101,7 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     append(source, content='Arrived after the displayed cut')
     comms.views.mark_thread_view_read('worker', worktree=str(tmp_path), through=shown)
     assert completed_snapshot(wire(comms.root), str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
-    assert completed_snapshot(comms, str(tmp_path / 'other-project')).thread_unread['worker'] == ReplyUnread(2)
+    assert completed_snapshot(comms, str(tmp_path / 'other-project')).thread_unread['worker'] == ReplyUnread(1)
     comms.messaging.send('worker', '#ci', 'Channel reply')
     comms.views.mark_user_view_read('#ci', worktree=str(tmp_path))
     comms.messaging.acknowledge('worker', tuple(m.reference for m in comms.bus.inbox('worker')))
@@ -133,12 +133,13 @@ def test_read_uses_the_captured_read_document(tmp_path):
     comms, source = setup_thread(tmp_path)
     append(source)
     state = comms.views.transcript_reads
-    assert completed_counts(state, str(tmp_path)).counts == {'worker': ReplyUnread(1)}
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(1)}
     document = state.reads.read()
     shown = comms.transcripts.transcript_checkpoint('worker')
     comms.views.mark_thread_view_read('worker', worktree=str(tmp_path), through=shown)
-    assert state.counts(str(tmp_path), document=document, visibility=DEFAULT_ROSTER).counts == {'worker': ReplyUnread(1)}
-    assert completed_counts(state, str(tmp_path)).counts == {'worker': ReplyUnread(0)}
+    assert state.counts(viewer, document=document, visibility=DEFAULT_ROSTER).counts == {'worker': ReplyUnread(1)}
+    assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(0)}
 
 
 def test_completed_source_publishes_while_another_source_is_still_pending(tmp_path):
