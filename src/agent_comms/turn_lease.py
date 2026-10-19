@@ -336,6 +336,12 @@ class ActiveTurn(RecordMember, TurnDeclaration):
             self.claimed_generation is None
             and replace(self, claimed_generation=lease.claimed_generation).held_by(lease))
 
+    def fence(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence:
+        if self.claimed_generation is None or self.turn_generation is None:
+            raise RelationViolationError("An authorized original turn is required")
+        return TurnLeaseFence(TurnIdentity(incarnation, self.turn_generation), self.id,
+                              self.claimed_generation, record=record)
+
     def observed_id(self, finished: str | None) -> str:
         return self.id
 
@@ -481,10 +487,7 @@ class StoredTurnRecord(JsonDocument[TurnDeclaration], StoredTurnReference, decla
     ) -> TurnLeaseFence:
         active = self.read().require_active()
         active.validate_owner(process, generation)
-        if active.claimed_generation is None or active.turn_generation is None:
-            raise RelationViolationError("An authorized original turn is required")
-        return TurnLeaseFence(TurnIdentity(incarnation, active.turn_generation), active.id,
-                              active.claimed_generation, record=self)
+        return active.fence(incarnation, self)
 
     def without_claim(self) -> None:
         self._publish_unlocked(self.read().without_claim())
