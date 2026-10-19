@@ -72,8 +72,8 @@ def main() -> None:
         origin=dict(kind="human"),
     )
     with (root / "source.jsonl").open("w") as stream:
-        for kind in ("user", "assistant"):
-            content = [dict(type="text", text=f"Scratch {kind}")]
+        for kind, text in (("user", "Scratch input"), ("assistant", "Scratch reply")):
+            content = [dict(type="text", text=text)]
             event.update(type=kind, uuid=kind, message=dict(role=kind, content=content))
             print(json.dumps(event), file=stream)
     comms.registry.register(declaration(root, "sentinel"), StoppedThreadStatus())
