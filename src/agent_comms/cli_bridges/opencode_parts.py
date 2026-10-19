@@ -216,8 +216,12 @@ class RunningTool(PendingTool):
         return RecordedEventTime(self.time.start / 1000)
 
 
+class EndedPartTime(PartTime):
+    end: int | float = Field(...)
+
+
 class EndedTool(ToolState, ABC):
-    time: PartTime
+    time: EndedPartTime
     ok: ClassVar[bool]
     finished = True
 
@@ -226,8 +230,11 @@ class EndedTool(ToolState, ABC):
     def result(self) -> str: ...
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
-        events = self.call(part).finished(self.result, self.ok, part.id, self.time.start / 1000)
-        return (CompletedItem(message.id, part.id, events),)
+        call = self.call(part)
+        return (CompletedItem(message.id, part.id, (
+            call.started(part.id, self.time.start / 1000),
+            call.ended(self.result, self.ok, part.id, self.time.end / 1000),
+        )),)
 
 
 class CompletedTool(EndedTool):

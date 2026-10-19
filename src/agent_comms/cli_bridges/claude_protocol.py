@@ -169,11 +169,13 @@ class Live(ClaudeReaderPhase):
 
 @dataclass
 class ClaudeToolDraft(ToolDraft):
-    """One decoded start owns the prefix and its original source clock."""
+    """One decoded tool start, preserved until its separately timed result arrives."""
 
     call: ToolCall
 
-    def completed(self, record: TimedRecord, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
+    def completed(
+        self, record: TimedRecord, text: str, ok: bool,
+    ) -> tuple[TranscriptEvent, ...]:
         return (*self.events, self.call.ended(text, ok, record.position, record.timestamp))
 
 
@@ -242,7 +244,9 @@ class ClaudeSession:
         self.tools[tool.call.id] = tool
         return self.turn.started(tool, self.phase)
 
-    def tool_result(self, tool_id: str, text: str, ok: bool, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
+    def tool_result(
+        self, tool_id: str, text: str, ok: bool, record: TimedRecord,
+    ) -> tuple[RuntimeUpdate, ...]:
         try:
             tool = self.tools.pop(tool_id)
         except KeyError:
@@ -567,7 +571,9 @@ class ToolResult(UserBlock, ContentBlocks):
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record)
+        return session.tool_result(
+            self.tool_use_id, '\n'.join(part.result_text() for part in self.content),
+            not self.is_error, record)
 
 
 class UserMessage(ContentBlocks):
