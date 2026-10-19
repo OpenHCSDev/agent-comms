@@ -94,7 +94,7 @@ def test_idle_units_lists_active_units_without_an_order(commander, standing):
 def test_fork_now_and_unjudged_follow_the_unjudged_edits(standing):
     comms, state, module = standing
     assert lines(comms, module.ForkNow) == lines(comms, module.Unjudged) == []
-    (state / "edits.jsonl").write_text("".join(json.dumps({"id": f"e{n}"}) + "\n" for n in range(70)))
+    (state / "edits.jsonl").write_text("".join(json.dumps({"id": f"e{n}", "at": 1.0, "thread": "worker", "path": "a.py", "hunks": []}) + "\n" for n in range(70)))
     assert lines(comms, module.Unjudged) == ["UNJUDGED 70 edits -> judge or fork a judge slice"]
     [fork] = lines(comms, module.ForkNow)
     assert fork.startswith("FORK NOW: load 7 (0 open orders, 0 overdue, 70 unjudged edits) needs 1")

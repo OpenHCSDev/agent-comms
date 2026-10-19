@@ -48,7 +48,7 @@ class Unjudged(ReasonedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = len(judge.unjudged())
+        total = len(judge.Edit.unjudged())
         return str(total) if total > cls.limit else None
 
 

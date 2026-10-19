@@ -20,7 +20,7 @@ def load() -> tuple[float, str]:
     from . import judge, order
     owed = [t for t in order.held_orders() if t.pending]
     overdue = sum(t.late_since(time.time()) is not None for t in owed)
-    unjudged = len(judge.unjudged())
+    unjudged = len(judge.Edit.unjudged())
     return len(owed) + 2 * overdue + unjudged / 10, f'{len(owed)} open orders, {overdue} overdue, {unjudged} unjudged edits'
 
 
