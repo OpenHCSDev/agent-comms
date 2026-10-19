@@ -279,19 +279,36 @@ class Goals:
             sources = snapshot.idle_after(fence)
             if not sources:
                 return ()
-            source, = sources
+            (source,) = sources
             canonical = source.name
             released: list[str] = []
-            for wait in self.waits.targeting(source.incarnation.require_recorded(), source.turn_generation):
+            for wait in self.waits.targeting(
+                source.incarnation.require_recorded(), source.turn_generation
+            ):
                 for owner in snapshot.threads_for(wait.owner):
-                    if any(self._release_finished_wait(
-                        goal, owner, snapshot, canonical, wait.goal_id, wait,
-                    ) for goal in owner.goal.active()):
+                    if any(
+                        self._release_finished_wait(
+                            goal,
+                            owner,
+                            snapshot,
+                            canonical,
+                            wait.goal_id,
+                            wait,
+                        )
+                        for goal in owner.goal.active()
+                    ):
                         released.append(owner.name)
             return tuple(released)
 
-    def _release_finished_wait(self, goal: Goal, owner: Thread, snapshot: RegistrySnapshot,
-                               canonical: str, goal_id: str, wait: RecordedGoalWait) -> bool:
+    def _release_finished_wait(
+        self,
+        goal: Goal,
+        owner: Thread,
+        snapshot: RegistrySnapshot,
+        canonical: str,
+        goal_id: str,
+        wait: RecordedGoalWait,
+    ) -> bool:
         if goal.id != goal_id or not wait.current_for(goal, owner.incarnation.require_recorded()):
             return False
         if any(self.agents.is_working(target.incarnation, snapshot) for target in wait.targets):

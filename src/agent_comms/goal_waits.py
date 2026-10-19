@@ -256,9 +256,13 @@ class GoalInputReview:
             else:
                 eligible.append(UnresolvedInput.of(row))
         return StandbyReview(
-            self.goal_id, tuple(target.incarnation.name for target in self.targets),
-            tuple(item.input_id for item in eligible), tuple(eligible), tuple(reviewed),
-            tuple(excluded))
+            self.goal_id,
+            tuple(target.incarnation.name for target in self.targets),
+            tuple(item.input_id for item in eligible),
+            tuple(eligible),
+            tuple(reviewed),
+            tuple(excluded),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,8 +292,12 @@ class GoalWaits(ThreadOwnedState, TypedStore):
 
     def read(self) -> dict[str, RecordedGoalWait]:
         with self.snapshot() as db:
-            return {row.goal_id: row.wait for row in StoredGoalWaitRow.read(
-                db.execute(f"SELECT * FROM {StoredGoalWaitRow.declared_name}"))}
+            return {
+                row.goal_id: row.wait
+                for row in StoredGoalWaitRow.read(
+                    db.execute(f"SELECT * FROM {StoredGoalWaitRow.declared_name}")
+                )
+            }
 
     def record(self, wait: RecordedGoalWait) -> None:
         self.record_many((wait,))
@@ -299,25 +307,40 @@ class GoalWaits(ThreadOwnedState, TypedStore):
             for wait in waits:
                 StoredGoalWaitRow(wait.goal_id, wait).upsert(db)
                 GoalWaitTargetRow.delete(db, goal_id=wait.goal_id)
-                for position, (target, generation) in enumerate(zip(
-                    wait.targets, wait.target_turn_generations, strict=True,
-                )):
-                    GoalWaitTargetRow(wait.goal_id, position, target.incarnation.lookup, generation).insert(db)
+                for position, (target, generation) in enumerate(
+                    zip(
+                        wait.targets,
+                        wait.target_turn_generations,
+                        strict=True,
+                    )
+                ):
+                    GoalWaitTargetRow(
+                        wait.goal_id, position, target.incarnation.lookup, generation
+                    ).insert(db)
 
-    def targeting(self, target: RecordedThreadIncarnation, generation: int) -> tuple[RecordedGoalWait, ...]:
+    def targeting(
+        self, target: RecordedThreadIncarnation, generation: int
+    ) -> tuple[RecordedGoalWait, ...]:
         with self.snapshot() as db:
-            return tuple(row.wait for row in StoredGoalWaitRow.read(db.execute(
-                f"SELECT * FROM {StoredGoalWaitRow.declared_name} WHERE goal_id IN "
-                f"(SELECT goal_id FROM {GoalWaitTargetRow.declared_name} "
-                "WHERE target_lookup=? AND generation>0 AND generation<=?)",
-                (target.lookup, generation),
-            )))
+            return tuple(
+                row.wait
+                for row in StoredGoalWaitRow.read(
+                    db.execute(
+                        f"SELECT * FROM {StoredGoalWaitRow.declared_name} WHERE goal_id IN "
+                        f"(SELECT goal_id FROM {GoalWaitTargetRow.declared_name} "
+                        "WHERE target_lookup=? AND generation>0 AND generation<=?)",
+                        (target.lookup, generation),
+                    )
+                )
+            )
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """A wait belongs to its owner's goal, which ends with the declaration."""
         owners = {thread.incarnation.require_recorded().lookup for thread in threads}
         with self.writing() as db:
-            for row in StoredGoalWaitRow.read(db.execute(f"SELECT * FROM {StoredGoalWaitRow.declared_name}")):
+            for row in StoredGoalWaitRow.read(
+                db.execute(f"SELECT * FROM {StoredGoalWaitRow.declared_name}")
+            ):
                 if row.wait.owner.lookup in owners:
                     StoredGoalWaitRow.delete(db, goal_id=row.goal_id)
 
@@ -325,7 +348,7 @@ class GoalWaits(ThreadOwnedState, TypedStore):
         if not self.path.exists():
             return False
         condition = "goal_id=?"
-        parameters = (goal_id,)
+        parameters: tuple[str, ...] = (goal_id,)
         if wait_id is not None:
             condition += " AND json_extract(wait, '$.wait_id')=?"
             parameters += (wait_id,)
@@ -341,7 +364,10 @@ class GoalWaits(ThreadOwnedState, TypedStore):
 
     @classmethod
     def execution(
-        cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
+        cls,
+        goal: GoalDeclaration,
+        rows: dict[str, RecordedGoalWait],
+        snapshot: RegistrySnapshot,
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""
