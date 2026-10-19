@@ -1,15 +1,21 @@
 """Actual process birth is the registration/claim_scope authority, never PID alone."""
 
 import os
+import subprocess
+import sys
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.cli_bridges.shared import IncomingFrame
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.messages import InfoKind, Message
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
+from agent_comms.thread_execution import ExternalThreadExecution, ThreadExecution
+from agent_comms.thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
 from agent_comms.threads import Thread
 
 
@@ -91,3 +97,26 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.active_turn == leased.active_turn
     comms.registry.release_turn(current.turn_lease)
+
+
+class UnstartedThreadExecution(ThreadExecution, declared_name=None):
+    """An inbox no delivered message can wake."""
+
+
+def test_external_turn_start_is_declared_at_registration_and_a_dead_bridge_reads_no_bridge(tmp_path):
+    comms = wire(tmp_path)
+    child = subprocess.Popen((sys.executable, "-c", "import time; time.sleep(60)"))
+    try:
+        bridge = ProcessIdentity.capture(child.pid)
+        cli = comms.registry.declare(comms.registry.new_thread(
+            "cli", frozenset(), str(tmp_path), execution=ExternalThreadExecution, process_identity=bridge))
+        assert comms.registry.snapshot().status("cli") == ConnectedThreadStatus()
+        message = Message(sender="lead", target="cli", body="wake up", type=InfoKind)
+        assert cli.execution.turn_start(cli)(message) == IncomingFrame(message).text
+    finally:
+        child.kill()
+        child.wait()
+    assert comms.registry.snapshot().status("cli") == NoBridgeThreadStatus()
+    with pytest.raises(RelationViolationError, match="'silent' declares no turn start"):
+        comms.registry.declare(comms.registry.new_thread(
+            "silent", frozenset(), str(tmp_path), execution=UnstartedThreadExecution))
