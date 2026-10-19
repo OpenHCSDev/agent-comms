@@ -768,7 +768,8 @@ class CommsVerdictTool(CommsTodoTool):
                    "order, or the reviewer's accepted verdict on its PR head: an accepted verdict "
                    "quotes 4+ words of the order; a send-back strikes the holder and revises its "
                    "Goal in the same write.")
-    operation: OrderVerdict = tool_field("Verdict on a judged tool call ID or, from the reviewer, on a PR head")
+    operation: OrderVerdict = tool_field(
+        "Verdict on a judged tool call ID, or the reviewer's on a PR head")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         todo = caller.judged(comms, self.id, self.operation)
