@@ -126,7 +126,8 @@ class StorageRule:
 
     def memory(self) -> MemoryUse:
         """Available memory, the largest idle pytest temp dirs and the largest test processes."""
-        meminfo = dict(line.split(':', 1) for line in (self.proc / 'meminfo').read_text().splitlines())
+        lines = (self.proc / 'meminfo').read_text().splitlines()
+        meminfo = dict(line.split(':', 1) for line in lines)
         idle = time.time() - self.idle_minutes * 60
         dirs = (MemoryHolder(str(path), self.tree_gib(path))
                 for path in self.temp_root.glob('pytest-of-*/*')
@@ -139,7 +140,14 @@ class StorageRule:
 
     @staticmethod
     def tree_gib(path: Path) -> float:
-        return sum(item.lstat().st_size for item in path.rglob('*')) / 2**30
+        return sum(map(StorageRule.held_bytes, path.rglob('*'))) / 2**30
+
+    @staticmethod
+    def held_bytes(item: Path) -> int:
+        try:
+            return item.lstat().st_size
+        except FileNotFoundError:
+            return 0  # removed while read (old temp dirs are pruned), so it holds nothing
 
     def test_processes(self) -> Iterator[MemoryHolder]:
         """Each live pytest process by resident size; one that exits while read is not listed."""

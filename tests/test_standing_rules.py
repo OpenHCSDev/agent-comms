@@ -15,8 +15,9 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
-from agent_comms.standing_rules import BoardDisagrees, BridgeDown, DiskLow, HuntDue, PlanIdle, RulesDue, StandingRule
-from agent_comms.storage_rules import UnitStorage
+from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, HuntDue, MemoryLow, PlanIdle,
+    RulesDue, StandingRule)
+from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, MergedProgress, NoCommitProgress, OpenPrProgress,
@@ -215,6 +216,30 @@ def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_pa
     assert "cleanup due under" in cleanup.line() and "floor" not in cleanup.line()
     floor, = broken(DiskLow, cleanup_gib=free + 100, floor_gib=free + 50)
     assert floor.line().endswith("floor nothing allocates) -> put a cleanup owner on it now")
+
+
+def test_memory_low_fires_under_the_threshold_naming_idle_temp_dirs(commander, tmp_path):
+    """Available memory under the StorageRule's threshold names the pytest temp dirs on the temp root
+    idle over its minutes, largest first, and puts a cleanup owner on it; over the threshold, nothing."""
+    comms, _ = commander
+    idle, busy = (tmp_path / "tmp" / "pytest-of-t" / name for name in ("pytest-1", "pytest-2"))
+    for path in (idle, busy):
+        path.mkdir(parents=True)
+        (path / "held").write_bytes(b"x" * 2**20)
+    old = time.time() - 31 * 60
+    os.utime(idle, (old, old))
+
+    def broken(memory_gib):
+        (comms.root / "storage.json").write_text(json.dumps(
+            {"temp_root": str(tmp_path / "tmp"), "memory_gib": memory_gib}))
+        return MemoryLow.violations(Comms(comms.root), "lead")
+
+    assert broken(0) == ()
+    low, = broken(10_000)
+    assert low.memory.idle_dirs == (MemoryHolder(str(idle), 2**20 / 2**30),)
+    assert f"temp dirs idle over 30 min: {idle} 0.0 GiB;" in low.line() and str(busy) not in low.line()
+    assert low.line().startswith("MEMORY LOW: ") and "cleanup due under 10000 GiB" in low.line()
+    assert low.line().endswith(" -> put a cleanup owner on it now")
 
 
 def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monkeypatch, tmp_path):
