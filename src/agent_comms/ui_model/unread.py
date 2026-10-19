@@ -65,6 +65,8 @@ class ReplyUnread(UnreadPresentation):
 
     @property
     def label(self) -> str:
+        if self.lower_bound and not self.count:
+            return ""
         suffix = "+" if self.lower_bound else ""
         return f"({self.count}{suffix})"
 
