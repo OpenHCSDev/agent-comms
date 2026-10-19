@@ -277,8 +277,14 @@ class DraftRow(TypedTable, TranscriptDraft):
                 self.create(connection, if_not_exists=True)
                 replace(self, events=events).upsert(connection)
 
+    def publish_text(self, root: Path, text: str, timestamp: float) -> None:
+        from .transcript_events import AssistantTranscript
+        self.publish(root, (AssistantTranscript(text, timestamp=timestamp, position=self.item_id),))
+
     def end_turn(self, root: Path) -> None:
         from .coordination_database import CoordinationStore
+        if not (root / 'coordination.sqlite3').exists():
+            return
         with closing(CoordinationStore.writer(root / 'coordination.sqlite3')) as connection:
             with connection:
                 if self.present(connection):

@@ -283,7 +283,7 @@ class TranscriptDraft:
     def end_turn(self, root: Path) -> None:
         """An absent draft needs no write."""
 
-    def publish(self, root: Path, events: tuple[TranscriptEvent, ...]) -> None:
+    def publish_text(self, root: Path, text: str, timestamp: float) -> None:
         """Unassigned transcripts cannot publish an assigned draft."""
 
     def external_row(self):

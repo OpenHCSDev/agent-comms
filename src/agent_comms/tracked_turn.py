@@ -22,7 +22,6 @@ from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
 from .external_transcript import DraftRow
 from .transcript_sources import NoDraft
-from .transcript_events import AssistantTranscript
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
@@ -533,9 +532,8 @@ class TrackedTurnSession(TurnSession):
         self.text_parts.append(delta.delta)
         now = time.monotonic()
         if now - self.draft_written_at >= .1:
-            events = (AssistantTranscript(''.join(self.text_parts[self.draft_start:]),
-                                         timestamp=self.draft_timestamp),)
-            await Coordination.run_worker(partial(self.draft.publish, self.startup.root, events))
+            await Coordination.run_worker(partial(self.draft.publish_text, self.startup.root,
+                ''.join(self.text_parts[self.draft_start:]), self.draft_timestamp))
             self.draft_written_at = now
 
     @handles(pi.MessageEnd)
