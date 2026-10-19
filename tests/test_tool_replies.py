@@ -10,6 +10,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.plan_phases import RecordPlanePhase
+from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (AcceptedVerdict, MechanicalOrderRun, OperationDelivery, PendingProblemOrder,
     StrikeTodo)
@@ -99,7 +100,7 @@ def scenario(comms: Comms, project, monkeypatch):
     (comms.root / "installed-evidence").write_text("Verified installed path")
     yield CommsProblemCloseTool, {
         "problem": "P1", "works": "The installed application now keeps the order across returns.",
-        "artifact": str(comms.root / "installed-evidence")}, lead
+        "working": FieldCodec.encode(WorkingClaim(comms.root / "installed-evidence"))}, lead
     yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
         problem="P2", order=replace(order, id="order-P2"), request="request", deadline=RecordedEventTime(4000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P2"))}, lead
