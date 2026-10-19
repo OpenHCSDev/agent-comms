@@ -37,6 +37,7 @@ from .recorded_bus import RecordedBusIdentity
 from .registry_provenance import RegistryProvenance
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
+from .revision_views import BusSourceView
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
@@ -78,7 +79,7 @@ class ConversationRevision:
 
     def display_changed_since(self, earlier: ConversationRevision) -> bool:
         return (self.selection != earlier.selection
-                or self.stores.bus_source_changed_since(earlier.stores))
+                or self.stores.changed_since(BusSourceView(), earlier.stores))
 
 
 class ConversationHistoryView:

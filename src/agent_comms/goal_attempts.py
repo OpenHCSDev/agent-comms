@@ -19,7 +19,7 @@ import secrets
 import sqlite3
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import ExitStack, closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -30,6 +30,8 @@ from uuid import uuid4
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
+from .pi_counts import PiCount, UnreportedCount
+from .pi_payloads import PiUsage
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -491,7 +493,7 @@ class GoalTurnPermit(ABC):
 
     @abstractmethod
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool: ...
+                   usage: PiUsage) -> bool: ...
 
     @abstractmethod
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
@@ -504,7 +506,7 @@ class NoLaunchPermit(GoalTurnPermit):
         return False
 
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool:
+                   usage: PiUsage) -> bool:
         return False
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
@@ -534,7 +536,7 @@ class LaunchPermit(GoalTurnPermit):
         )).phase.verified_progress
 
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool:
+                   usage: PiUsage) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
         self.record_provider_usage(goals.open_goal_store(), response, usage)
@@ -630,29 +632,12 @@ class LaunchPermit(GoalTurnPermit):
         )
 
     def record_provider_usage(
-        self, store: GoalAttemptStore, response_id: str, usage: Mapping[str, object]
+        self, store: GoalAttemptStore, response_id: str, usage: PiUsage
     ) -> None:
         """Attribute one provider response to its claimed goal attempt exactly once."""
         if not response_id:
             raise ValueError("Provider response ID is required.")
-        for usage_field in ("input", "output", "totalTokens"):
-            value = usage.get(usage_field, 0)
-            if type(value) is not int or value < 0:
-                raise ValueError(f"Provider usage {usage_field} must be a nonnegative integer.")
-        cost = usage.get("cost", {})
-        if not isinstance(cost, Mapping):
-            raise ValueError("Provider cost must be an object.")
-        cost_total = cost.get("total", 0)
-        if (
-            type(cost_total) not in {int, float}
-            or not Decimal(str(cost_total)).is_finite()
-            or cost_total < 0
-        ):
-            raise ValueError("Provider cost total must be a nonnegative number.")
-        try:
-            raw = json.dumps(usage, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        except ValueError as error:  # json.dumps refuses a non-finite number
-            raise MalformedRecord("Provider usage must be JSON serializable.") from error
+        raw = json.dumps(usage.to_wire(), sort_keys=True, separators=(",", ":"), allow_nan=False)
         reservation = self.reservation
 
         def write(conn: sqlite3.Connection) -> str:
@@ -678,9 +663,9 @@ class LaunchPermit(GoalTurnPermit):
 @dataclass(frozen=True, slots=True)
 class ProviderUsageTotal:
     responses: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    total_tokens: int = 0
+    input_tokens: PiCount = UnreportedCount()
+    output_tokens: PiCount = UnreportedCount()
+    total_tokens: PiCount = UnreportedCount()
     cost_total: Decimal = Decimal(0)
 
     @classmethod
@@ -695,13 +680,13 @@ class ProviderUsageTotal:
             )
         totals = cls()
         for row in rows:
-            usage = json.loads(row.usage_json)
+            usage = PiUsage.from_wire(json.loads(row.usage_json))
             totals = cls(
                 responses=totals.responses + 1,
-                input_tokens=totals.input_tokens + usage.get("input", 0),
-                output_tokens=totals.output_tokens + usage.get("output", 0),
-                total_tokens=totals.total_tokens + usage.get("totalTokens", 0),
-                cost_total=totals.cost_total + Decimal(str(usage.get("cost", {}).get("total", 0))),
+                input_tokens=totals.input_tokens.plus(usage.input),
+                output_tokens=totals.output_tokens.plus(usage.output),
+                total_tokens=totals.total_tokens.plus(usage.total_tokens),
+                cost_total=totals.cost_total + usage.charged(),
             )
         return totals
 
