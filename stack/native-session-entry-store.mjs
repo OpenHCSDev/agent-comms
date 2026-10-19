@@ -268,6 +268,7 @@ export class DiskEntryStore extends EntryStore {
     #metadata;
     #input;
     #label;
+    #children;
     #insert;
     #lines;
     #headerEnd;
@@ -285,6 +286,7 @@ export class DiskEntryStore extends EntryStore {
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
                 input_id TEXT, selectors TEXT NOT NULL);
                 CREATE INDEX entry_input ON entries(input_id);
+                CREATE INDEX entry_parent ON entries(parent,sequence);
                 CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence);`);
             // SQLite has initialized and owns an exclusive open inode. Derived pages
             // live on persistent disk, but no pathname survives reader exit or SIGKILL.
@@ -293,6 +295,7 @@ export class DiskEntryStore extends EntryStore {
             this.#metadata = this.#db.prepare('SELECT selectors FROM entries WHERE id=?');
             this.#input = this.#db.prepare('SELECT selectors FROM entries WHERE input_id=? ORDER BY sequence DESC LIMIT 1');
             this.#label = this.#db.prepare("SELECT selectors FROM entries WHERE json_extract(selectors,'$.label.targetId')=? ORDER BY sequence DESC LIMIT 1");
+            this.#children = this.#db.prepare('SELECT id FROM entries WHERE parent IS ? ORDER BY sequence');
             this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?)');
             this.refresh();
         } catch (error) {
@@ -339,6 +342,16 @@ export class DiskEntryStore extends EntryStore {
             if (firstId === null) while (this.#readPrevious()) {}
             for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE sequence >= ? ORDER BY sequence').iterate(start))
                 yield EntryMetadata.fromIndex(row);
+        } finally { this.assertCurrent(); }
+    }
+    *children(parentId) {
+        this.assertCurrent();
+        try {
+            // A child follows its parent in the journal. Reading through that
+            // parent indexes every possible child; roots require the full index.
+            if (parentId === null) while (this.#readPrevious()) {}
+            else this.metadata(parentId);
+            for (const row of this.#children.iterate(parentId)) yield this.get(row.id);
         } finally { this.assertCurrent(); }
     }
     trackedInputMetadata(inputId) { return this.#find(this.#input, inputId); }
