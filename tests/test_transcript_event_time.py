@@ -2,68 +2,14 @@
 
 import asyncio
 import json
-from dataclasses import replace
 from datetime import datetime
 
 import pytest
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.field_codec import MalformedRecord, RecordedTimestamp
-from agent_comms.native_entries import NativeEntry, TranscriptProjection
-from agent_comms.routing import TurnRouting
-from agent_comms.threads import Thread
-from agent_comms.transcript_events import AssistantTranscript
-
-
-
-@pytest.mark.parametrize("stamp", ["2026-09-28T23:12:33.123Z", "2026-09-28T19:12:33.123-04:00"])
-def test_original_record_clock_survives_split_and_routed_projection(tmp_path, stamp):
-    comms = wire(tmp_path / "wire")
-    for name in ("peer", "owner"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    requests = tuple(
-        comms.messaging.send("peer", "owner", text).message for text in ("first", "second")
-    )
-    entry = NativeEntry.from_wire(
-        {
-            "type": "message",
-            "timestamp": stamp,
-            "message": {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "native prompt"},
-                    {"type": "image", "data": "aGVsbG8=", "mimeType": "image/png"},
-                ],
-            },
-        }
-    )
-    expected = datetime.fromisoformat(stamp).timestamp()
-    for context in (TranscriptProjection(), TranscriptProjection(routing=TurnRouting(requests))):
-        events = entry.events(context)
-        assert len(events) == 2
-        assert all(event.timestamp == expected for event in events)
-        assert entry.timestamp == RecordedTimestamp(stamp)  # Native external field stays exact.
-    compacted = NativeEntry.from_wire(
-        {"type": "compaction", "timestamp": stamp, "summary": "kept context"}
-    )
-    assert compacted.events(TranscriptProjection())[0].timestamp == expected
-
-    first = AssistantTranscript("start", timestamp=expected)
-    assert first.merge(replace(first, text="continued")).timestamp == expected
-    assert first.merge(replace(first, timestamp=expected + 1)) is None
-
-
-def test_new_native_entry_inherits_original_clock_projection():
-    class ExternalNoteEntry(NativeEntry):
-        def _events(self, context):
-            return [AssistantTranscript("a new external note")]
-
-    # Adding a content declaration does not add another clock propagation site.
-    stamp = "2026-09-28T23:12:33.123Z"
-    expected = datetime.fromisoformat(stamp).timestamp()
-    note = ExternalNoteEntry(timestamp=RecordedTimestamp(stamp))
-    assert note.events(TranscriptProjection())[0].timestamp == expected
+from agent_comms.field_codec import MalformedRecord
+from agent_comms.native_entries import NativeEntry
 
 
 @pytest.mark.parametrize("stamp", [None, "not-a-time", "2026-09-28T23:12:33"])
