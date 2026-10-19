@@ -335,6 +335,55 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
                                     f'delivered {clock(2035)} as {delivered}')
 
 
+def test_each_delivery_declares_the_strikes_it_carries(commander):
+    """A commit delivered after the deadline strikes its holder once; one on time strikes nobody,
+    and an operation strikes nobody, whenever it is recorded."""
+    comms, _ = commander
+    create(commander, 'P1', deadline=2000)
+    todo = comms.goals.todos.get('P1')
+    lead = comms.registry.require('lead').incarnation
+
+    def strikes(delivery, at):
+        return replace(delivery, at=RecordedEventTime(at)).strikes(todo, todo.order.id, lead)
+
+    commit = CommitDelivery(commit='a' * 40, delivered_commit='b' * 40)
+    (late,) = strikes(commit, 2035)
+    assert (late.previous, late.actor, late.expected_revision) == (todo.held(), lead, todo.revision)
+    assert late.reason.startswith('P1 order order-P1 late by 35 s') and 'b' * 40 in late.reason
+    assert strikes(commit, 2000) == ()
+    assert strikes(OperationDelivery(), 9000) == ()
+
+
+def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander):
+    """Core strikes a late delivered commit in the revision that records it; no script is needed."""
+    comms, caller = commander
+
+    def git(*args, at=1000):
+        return subprocess.check_output(
+            ('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t', *args),
+            env={**os.environ, 'GIT_COMMITTER_DATE': f'@{at} +0000'},
+            stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'on time', at=1990)
+    on_time = git('rev-parse', 'HEAD')
+    git('commit', '-q', '--allow-empty', '-m', 'late', at=2035)
+    late = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', late)
+
+    def done(problem, commit):
+        create(commander, problem, deadline=2000)
+        CommsOrderDoneTool(problem=problem, order_id=comms.goals.todos.get(problem).order.id,
+                           delivery=CommitDelivery(commit=commit, delivered_commit=commit),
+                           claims=working(comms)).apply(comms, caller)
+        return comms.goals.todos.get(problem)
+
+    assert done('P1', on_time).strikes == ()
+    delivered = done('P2', late)
+    (strike,) = delivered.strikes
+    assert not delivered.pending and strike.previous.owner == 'worker'
+    assert strike.reason.startswith('P2 order order-P2 late by 35 s') and late in strike.reason
+
+
 def test_a_main_merge_is_never_the_delivered_commit(commander):
     """P44 recorded the commander's main merge as the delivery, 72 minutes after the unit's own push."""
     comms, caller = commander
@@ -971,8 +1020,8 @@ def test_column_carries_run_before_order_validation(commander):
         list(Todo.stream(db))
     repo = Path(__file__).parents[1]
     names = [step.name for step in CarryChain.at(repo, 'HEAD').steps]
-    members = {'carry_todo_messages': ('TodoMessages', 3),
-               'carry_todo_corrections': ('TodoCorrections', 0),
+    members = {'carry_todo_corrections': ('TodoCorrections', 0),
+               'carry_todo_messages': ('TodoMessages', 3),
                'carry_order_run': ('OrderRuns', 0),
                'carry_todo_open_indexes': ('TodoOpenIndexes', 0)}
     assert [name for name in names if name in members] == list(members)

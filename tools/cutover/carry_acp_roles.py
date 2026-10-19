@@ -11,7 +11,6 @@ from .carry import Carried, Carry
 
 
 class AcpRoles(Carry):
-    after = "carry_starting_activity"
 
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:

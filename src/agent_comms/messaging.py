@@ -22,7 +22,7 @@ from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
-from .todos import TodoStore
+from .todos import TodoConflict, TodoStore
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
@@ -88,7 +88,7 @@ class Messaging:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
             todos.correct(owner.name, committed.message_id, body)
-        except Exception as error:
+        except TodoConflict as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
             correction = CorrectionComplete()
@@ -105,11 +105,11 @@ class Messaging:
         with self.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 
-    def initialize_private_initial_protocol(self) -> str:
-        """Initialize the private protocol on a fresh owner-only root."""
+    def initialize_private_initial_protocol(self, *, history: Sequence[Message] = ()) -> str:
+        """Initialize a fresh root; selected public history grants no delivery."""
         publisher: InitialWrites = self.bus.publisher
         with _store_lock(self._wire_lock_path):
-            return publisher.initialize_private_protocol()
+            return publisher.initialize_private_protocol(history=history)
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""
@@ -197,5 +197,6 @@ class Messaging:
         return basis.message_count
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
-        with _store_lock(self._wire_lock_path):
-            self.bus.mark_delivered_through(self.registry.require(name).name, sequence)
+        # The bus owns capture under its read lock and the ledger validates that
+        # source. Nesting an exclusive wire hold deadlocks its snapshot reader.
+        self.bus.mark_delivered_through(self.registry.require(name).name, sequence)

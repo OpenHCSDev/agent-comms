@@ -61,7 +61,6 @@ def carry(root: Path, *, apply: bool) -> int:
 class ExternalPages(Carry):
     """External item rows gain the continuation to their earlier page."""
 
-    after = 'carry_route_package'
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

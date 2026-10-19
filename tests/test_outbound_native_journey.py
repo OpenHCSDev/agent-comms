@@ -1,4 +1,5 @@
 """Retained actual Pi -> comms_send CLI -> original source -> ACP cold replay."""
+from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -99,7 +100,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
                 )
             except acp.RequestError as failure:
                 raise AssertionError(f"Actual ACP error data: {failure.data!r}") from failure
-            wire = list(comms.bus.full_history_page().messages)
+            wire = read_history(comms)
             originals = [
                 message for message in wire if message.body == "Original outbound ownership handoff"
             ]

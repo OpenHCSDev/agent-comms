@@ -151,7 +151,7 @@ raise SystemExit(main(sys.argv[2:]))
 
 
 PROBE = ("from cutover.carry import Carried, Carry\n\n\n"
-         "class Probe(Carry):\n    after = None\n\n"
+         "class Probe(Carry):\n"
          "    @classmethod\n    def carry(cls, root, *, apply):\n"
          "        (root / 'carried').write_text('carried')\n        return Carried(1, {}, ('carried',))\n\n\n"
          "if __name__ == '__main__':\n    Probe.main()\n")
