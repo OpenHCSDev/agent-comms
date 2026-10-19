@@ -57,11 +57,15 @@ class DirectorCaller(ThreadCaller):
     """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
     request when that thread holds owner requests."""
 
-    def require_directive(self, comms: Comms, body: str) -> None:
-        """A directive passes DirectiveText and needs this caller's rules review, drawn,
-        answered and under 20 minutes old."""
+    def require_directive(self, comms: Comms, target: str, body: str) -> None:
+        """A directive passes DirectiveText, and its TO_USER families when the target is the
+        human user, and needs this caller's rules review, drawn, answered and under 20 minutes
+        old."""
+        readers = (comms.registry.require(target),) if target in comms.registry else ()
+        also = tuple(family for thread in readers for families in thread.role.human(DirectiveText.TO_USER)
+                     for family in families)
         due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
-        if refused := (*DirectiveText.refused(body), *due):
+        if refused := (*DirectiveText.refused(body, *also), *due):
             raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
 
     def sent(self, comms: Comms, message: Message) -> None:

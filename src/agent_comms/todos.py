@@ -753,16 +753,65 @@ class DefectText(BluntText):
         return super().found(cls.SLOP.sub(' ', text)) if named else ['no defect named']
 
 
+class AuthorizedAct(DeclaredFamily, affix="Act"):
+    """An act claude-ai is authorized to take without asking: a question to the user asking
+    whether to take it costs his attention and stalls the fleet. Product meaning and costly or
+    irreversible acts are not members, so questions about them still reach him."""
+
+    ASKS: ClassVar[str] = (r"\b(?:do you want me to|want me to|should i|shall i|may i|can i"
+                           r"|ok(?:ay)? (?:for me )?to|permission to)\s+")
+    words: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def asked(cls, text: str) -> bool:
+        return re.search(cls.ASKS + rf"(?:{'|'.join(cls.words)})\b[^?\n]*\?", text, re.I) is not None
+
+
+class SendAct(AuthorizedAct):
+    words = ("send", "post", "forward", "relay")
+
+
+class EnforceAct(AuthorizedAct):
+    words = ("enforce",)
+
+
+class StrikeAct(AuthorizedAct):
+    words = ("strike",)
+
+
+class ReassignAct(AuthorizedAct):
+    words = ("reassign", "move")
+
+
+class FixAct(AuthorizedAct):
+    words = ("fix", "repair", "patch")
+
+
+class PermissionText(OrderWords):
+    """A message to the user never asks whether to take an act claude-ai is authorized for."""
+
+    refusal = "authorized; act: {1} is yours to do, so do it and report."
+
+    @classmethod
+    def found(cls, text: str) -> list[str]:
+        spoken = cls.CITED.sub(' ', text)
+        return [act.declared_name for act in AuthorizedAct.members_with(AuthorizedAct)
+                if act.asked(spoken)]
+
+
 class DirectiveText:
     """What the commander and the owner's voice send units: order send, order say and the
-    connector's send refuse a text failing any of these."""
+    connector's send refuse a text failing any of these. The owner's voice writing to the user
+    also passes TO_USER."""
 
     OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
         FairText, HierarchyText, PlainText, OrderText, DefectText)
+    TO_USER: ClassVar[tuple[type[OrderWords], ...]] = (PermissionText,)
 
     @classmethod
-    def refused(cls, text: str) -> tuple[str, ...]:
-        return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+    def refused(cls, text: str, *also: type[OrderWords]) -> tuple[str, ...]:
+        return tuple(refused for family in (*cls.OUTGOING, *also)
+                     if (refused := family.refused(text)))
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
