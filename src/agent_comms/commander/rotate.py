@@ -25,7 +25,7 @@ def owed_orders() -> dict[str, list[Todo]]:
 
 
 class RotateLoop(Loop, name="rotate"):
-    def run(self):
+    def run(self) -> None:
         turn, since = 0, 0.0  # a rule that stays broken is said once
         while True:
             now = time.time()

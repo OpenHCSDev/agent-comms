@@ -17,11 +17,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
+from agent_comms_hooks import ClaudeHook, ClaudeHookProgram, HookRecord
 
 
 @dataclass(frozen=True)
-class WatchRecord:
+class WatchRecord(HookRecord):
     bus: str
     root: str
     command: Sequence[str]
@@ -59,7 +59,7 @@ class WatchClaim:
             text = lock.read()
         if not text:
             return UnclaimedWatch()
-        return LapsedWatch(self, self.record_type(**json.loads(text)))
+        return LapsedWatch(self, self.record_type.decode(json.loads(text)))
 
 
 class WatchState:
@@ -127,7 +127,7 @@ class LoopsClaim(WatchClaim):
     def report(self, event: str) -> bool:
         if not self.path.exists():
             return False
-        record = LoopsRecord(**json.loads(self.path.read_text()))
+        record = LoopsRecord.decode(json.loads(self.path.read_text()))
         missing = [name for name in record.loops
                    if not LoopClaim(self.thread, name).state().running]
         if missing:

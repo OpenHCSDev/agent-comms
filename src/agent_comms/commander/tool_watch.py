@@ -65,7 +65,7 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
 
 
 class ToolWatchLoop(Loop, name="tool-watch"):
-    def run(self):
+    def run(self) -> None:
         registry = order.COMMS.registry
         names, offsets = thread_names(registry), {}
         turns = collections.defaultdict(list)

@@ -611,7 +611,7 @@ def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: f
 
 
 class OverdueLoop(Loop, name="overdue"):
-    def run(self):
+    def run(self) -> None:
         since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
         installs: list[str] = []
         while True:
