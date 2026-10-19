@@ -185,8 +185,24 @@ class Machine:
         return context
 
 
-def prepare_home(home: Path, bus: Path, context: dict) -> None:
+def prepare_home(home: Path, bus: Path, context: dict) -> Path:
     home.mkdir(mode=0o700, exist_ok=True)
+    # Preserve the bus's position within its original home, not just an
+    # explicit route file. This keeps default-root writer checks meaningful.
+    original, source_home = Path(context["root"]), Path(context["home"])
+    if original.is_relative_to(source_home):
+        relative = original.relative_to(source_home)
+        if relative == Path(".") or ".." in relative.parts:
+            raise ValueError("Bus must be a safe subdirectory of the source home")
+        selected = home / relative
+        from agent_comms.storage_rules import StorageRule
+        size = sum(path.stat().st_size for path in bus.rglob("*") if path.is_file())
+        floor = StorageRule.load(Path.home() / ".agent-comms").floor_gib * 2**30
+        if shutil.disk_usage(home).free < 2 * size + floor:
+            raise RuntimeError("Insufficient room to preserve the bus's home-relative position")
+        selected.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        shutil.move(bus, selected)
+        bus = selected
     # Preserve each machine's route selection, rebinding only its bus path.
     path = home / ".local/state/agent-comms/active-route.json"
     path.unlink(missing_ok=True)
@@ -213,6 +229,7 @@ def prepare_home(home: Path, bus: Path, context: dict) -> None:
     cache = Path(run("npm", "config", "get", "cache"))
     if not (home / ".npm").exists() and cache.is_dir():
         shutil.copytree(cache, home / ".npm", symlinks=True)
+    return bus
 
 
 @contextmanager
@@ -234,15 +251,19 @@ def rehearse(target: Path, previous: Path, head: str, bus: Path, home: Path,
     for name in ("AGENT_COMMS_PROJECT_SOCKET", "AGENT_COMMS_PROJECT_REQUEST",
                  "PI_SESSION_ID", "PI_SESSION_FILE"):
         environment.pop(name, None)
+    uv = Path.home() / ".local/state/agent-comms/upgrade-bus/uv"
+    uv_cache = Path(run(uv, "cache", "dir"))
+    uv_cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     environment.update(HOME=str(home), TMPDIR=str(work), PYTHONDONTWRITEBYTECODE="1",
                        XDG_CACHE_HOME=str(home / ".cache"), XDG_CONFIG_HOME=str(home / ".config"),
-                       XDG_STATE_HOME=str(home / ".local/state"), UV_CACHE_DIR=str(home / ".cache/uv"),
+                       XDG_STATE_HOME=str(home / ".local/state"), UV_CACHE_DIR=str(uv_cache),
                        npm_config_cache=str(home / ".npm"))
     common = Path(run("git", "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=target))
     sandbox = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--die-with-parent"]
-    for directory in dict.fromkeys((work, home, bus.parent, common)):
+    for directory in dict.fromkeys((work, home, bus.parent, common, uv_cache)):
         sandbox.extend(("--bind", str(directory), str(directory)))
-    # The installer may write only its private build/copies and Git metadata.
+    # The installer may write only private builds/copies, Git metadata and
+    # uv's existing shared package cache (not installed runtime packages).
     # Absolute paths retained inside sessions cannot mutate the original bus.
     # The target owns its CLI; never import/reimplement its rehearsal behavior.
     help_text = run(*sandbox, python, target / INSTALLER, "--help", cwd=target, env=environment)
@@ -367,9 +388,13 @@ def main() -> int:
                                 context = machine.capture(directory / "snapshot", log)
                                 bus = directory / "snapshot/bus"
                                 home = work / "home"
-                                prepare_home(home, bus, context)
-                                report["machines"][machine.name] = rehearse(
-                                    target, previous, head, bus, home, args.python, log, work)
+                                bus = prepare_home(home, bus, context)
+                                try:
+                                    report["machines"][machine.name] = rehearse(
+                                        target, previous, head, bus, home, args.python, log, work)
+                                finally:
+                                    if bus.is_relative_to(home):
+                                        shutil.rmtree(bus)
                         except Exception as error:
                             report["machines"][machine.name] = {"passed": False, "error": str(error)}
             if not all(result["passed"] for result in report["machines"].values()):

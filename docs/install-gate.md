@@ -61,15 +61,23 @@ SQLite opens `mode=ro`, starts a read transaction and serializes through its
 pager, including committed WAL pages. Closed WAL-mode stores sometimes cannot
 open without creating SHM; only when there is no WAL or journal may they use
 `immutable=1`, with unchanged inode/size/mtime and absent companions checked
-again afterwards. A race fails the snapshot. SQLite companions are not copied
+again afterwards. If a writer opened WAL during that attempt, the immutable
+bytes are discarded and one normal SQLite transaction is attempted; otherwise
+the race fails closed. SQLite companions are not copied
 independently. Regular files are read to captured lengths; sockets are skipped
 and symlinks/special files refused. This is a per-store snapshot and file-prefix
 cut, not an atomic transaction across all independently committed stores.
 
 The installer is invoked as a client, never imported or rewritten. Its writes
-are restricted to private builds/copies and Git metadata; retained absolute
-session paths cannot write the originals. The gate removes its own agent/turn
+are restricted to private builds/copies, Git metadata and uv's existing shared
+package cache, not installed runtime packages; retained absolute session paths
+cannot write the originals. Each copy retains its original position relative
+to its synthetic home, so the gate itself does not hide default-root identity. The gate removes its own agent/turn
 identity from the child's environment using the existing launch declarations.
+It privately copies the configured npm cache: native preparation's pinned MCP
+install deliberately runs offline, so a new HOME must not discard that input.
+uv keeps using its existing cache instead of cloning the same dependencies
+again at every checkpoint; lock resolution still upgrades the declared mains.
 The previous executable is this machine's installed runtime; foreign runtime
 paths are recorded, not assumed runnable locally. The target revision supplies
 the installer and runtime being checked. A zero exit without an actual carry,
@@ -85,13 +93,32 @@ success, failure or interruption; only small private logs/receipts remain.
 
 - Implemented: source-derived affected paths, both read-only producers, private
   installer execution, exact-head status, refusal of skipped rehearsals.
-- Verified: six client/snapshot checks, including committed WAL data while a
+- Verified: seven client/snapshot checks (31.6 s in the final run), including
+  preserved default-root position inside its synthetic home, committed WAL data while a
   writer holds an uncommitted row, unchanged source-file hashes, closed WAL
   stores, denied writes, failed transport and symlink refusal.
 - Verified on desktop: read-only bubblewrap can serialize its live SQLite WAL
   store. This is not a completed full desktop rehearsal.
 - Verified on GitHub: required context `install-rehearsal`, strict=true,
   enforce_admins=true.
+- Verified: the actual native MCP dependency-preparation function installs all
+  95 packages offline using the private copy of the configured npm cache (5 s).
+- Main proof, pinned at `b76b58e67`: red. Laptop reached native preparation but
+  its initially empty npm cache rejected `zod-to-json-schema` with ENOTCACHED.
+  The private-cache fix above was subsequently verified on the actual function.
+  Desktop rejected a changing checkpointed projection store; a final normal
+  SQLite read after that journal transition is now implemented, but the full
+  two-machine proof has not been repeated after those corrections.
+- Historical proof, `b5b8de987^` to `b5b8de987`: laptop reached native preparation
+  and installed those 95 packages, then refused the native tree with
+  `Native package tree differs from pinned artifact` under npm 11.18.0. It did
+  not reach the writer guard. The command then hit its 300-second limit during
+  the desktop copy (exit 124); the receipt is failed, never skipped or green.
+  That red is not the requested regression proof. Private receipts:
+  `receipt-b76b58e67493-1152620.json` and `receipt-b5b8de987a1c-1177018.json`
+  under the owned scratch path below. The final client also preserves the
+  home-relative bus position and reuses uv's cache; these have focused coverage,
+  not a repeated passing full rehearsal.
 - Unfinished: both main rehearsals passing and the historical writer-guard
   failure at the actual guarded write. A different red does not prove this.
 
@@ -107,3 +134,7 @@ Private disposable output owner: `pi-install-gate`, at
 `/home/ts/mount/hdd/agent-scratch/pi-install-gate`. Keep concise receipts; remove
 large copies/builds when their run ends. Preserve original buses, sessions,
 credentials and uncertain inputs. No runtime was published or restarted.
+
+Assumed: an operator reviews same-repository candidates before executing them
+on private copies; the existing Claude installer worker owns the remaining
+rehearsal-identity and native-build corrections.

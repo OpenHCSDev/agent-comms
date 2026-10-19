@@ -112,7 +112,8 @@ class InstallGateTests(unittest.TestCase):
 
     def test_private_home_rebinds_route_and_preserves_live_pointer(self):
         home = self.root / "home"
-        context = {"root": "/foreign/bus", "route": {"version": 2, "root": "/foreign/bus",
+        context = {"root": "/foreign/bus", "home": "/foreign/home",
+                   "route": {"version": 2, "root": "/foreign/bus",
                    "wire_root_id": "a" * 32}, "runtime": "/foreign/runtime"}
         bus = self.root / "bus"
         prepare_home(home, bus, context)
@@ -121,6 +122,17 @@ class InstallGateTests(unittest.TestCase):
         self.assertEqual(route.stat().st_mode & 0o777, 0o600)
         self.assertEqual((home / ".local/share/agent-comms/current").resolve(),
                          (Path.home() / ".local/share/agent-comms/current").resolve())
+
+    def test_default_root_keeps_its_position_inside_the_synthetic_home(self):
+        bus = self.root / "snapshot"
+        bus.mkdir()
+        (bus / "bus.jsonl").write_text("original copy\n")
+        home = self.root / "home"
+        selected = prepare_home(home, bus, {"root": "/source/home/.agent-comms",
+                                "home": "/source/home", "route": None, "runtime": None})
+        self.assertEqual(selected, home / ".agent-comms")
+        self.assertEqual((selected / "bus.jsonl").read_text(), "original copy\n")
+        self.assertFalse(bus.exists())
 
 
 if __name__ == "__main__":

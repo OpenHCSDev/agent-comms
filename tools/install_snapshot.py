@@ -71,7 +71,8 @@ def snapshot(root: Path, output) -> None:
     home = Path.home()
     route = home / ".local/state/agent-comms/active-route.json"
     pointer = home / ".local/share/agent-comms/current"
-    context = {"root": str(root), "route": json.loads(route.read_text()) if route.exists() else None,
+    context = {"root": str(root), "home": str(home),
+               "route": json.loads(route.read_text()) if route.exists() else None,
                "runtime": str(pointer.resolve()) if pointer.exists() else None}
     with zstd.ZstdFile(output, "wb", level=1) as compressed, \
          tarfile.open(fileobj=compressed, mode="w|") as archive:
