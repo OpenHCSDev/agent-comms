@@ -39,10 +39,11 @@ class RuleCheck(PatternCheck):
     rule: type[StandingRule]
 
     def exists(self) -> bool:
-        return not isabstract(self.rule) and self.rule.declared_name is not None
+        return issubclass(self.rule, StandingRule) and not isabstract(self.rule)
 
     def cite(self) -> str:
-        return f"standing rule `{self.rule.declared_name}` (`{self.rule.__module__}.{self.rule.__qualname__}`)"
+        where = f"{self.rule.__module__}.{self.rule.__qualname__}"
+        return f"standing rule `{self.rule.declared_name}` (`{where}`)"
 
 
 @dataclass(frozen=True)
@@ -58,11 +59,14 @@ class RefusalCheck(PatternCheck):
         path = Path(__file__).parent.joinpath(*self.module.split(".")[1:]).with_suffix(".py")
         scope = ast.parse(path.read_text()).body
         for name in self.qualname.split("."):
-            found = next((node for node in scope if isinstance(
-                node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name), None)
-            if found is None:
+            defined = {
+                node.name: node.body
+                for node in scope
+                if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            if name not in defined:
                 return False
-            scope = found.body
+            scope = defined[name]
         return True
 
     def cite(self) -> str:
@@ -97,7 +101,7 @@ class CommanderRule(PatternSource):
     lead: str
 
     def cite(self) -> str:
-        return f"[comms-commander rule]({COMMANDER_SKILL}) \"{self.lead}\""
+        return f'[comms-commander rule]({COMMANDER_SKILL}) "{self.lead}"'
 
 
 @dataclass(frozen=True)
@@ -126,58 +130,74 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
     def section(cls) -> str:
         checks = "".join(f"- {check.cite()}\n" for check in cls.checks)
         sources = "; ".join(source.cite() for source in cls.sources)
-        return (f"## {cls.declared_name}\n\n{cls.signature}\n\n"
-                f"Checked by:\n\n{checks}\nLearned from: {sources}\n")
+        return (
+            f"## {cls.declared_name}\n\n{cls.signature}\n\n"
+            f"Checked by:\n\n{checks}\nLearned from: {sources}\n"
+        )
 
     @classmethod
     def catalog(cls) -> str:
         members = cls.members_with(BehaviourPattern)
-        cited = {failure: [m.declared_name for m in members if PostmortemFailure(failure) in m.sources]
-                 for failure in range(1, 11)}
+        cited = {
+            failure: [m.declared_name for m in members if PostmortemFailure(failure) in m.sources]
+            for failure in range(1, 11)
+        }
         failures = "".join(
             f"- [Failure {failure}]({POSTMORTEM}): "
             + (", ".join(f"`{name}`" for name in names) if names else "no pattern checks it yet")
-            + "\n" for failure, names in cited.items())
+            + "\n"
+            for failure, names in cited.items()
+        )
         return (
             "# Behaviour catalog\n\n"
             "Generated from `agent_comms.behaviour_patterns` by\n"
             "`python -m agent_comms.behaviour_patterns > docs/agents/behaviour-catalog.md`;"
             " do not edit by hand.\n\n"
-            "Each behaviour failure pattern is declared once in Core with its signature (what it looks"
-            " like in state, readable without trusting a report) and the existing checks that enforce"
-            " it. Patterns in code, rather than in behaviour, are the refactor-audit skill's catalog"
-            " (`refactor-audit/references/patterns/README.md`).\n\n"
-            f"The [Codex postmortem]({POSTMORTEM}) names ten failures; each pattern cites the ones it"
-            " checks:\n\n"
-            f"{failures}\n"
-            + "\n".join(member.section() for member in members))
+            "Each behaviour failure pattern is declared once in Core with its signature (what it"
+            " looks like in state, readable without trusting a report) and the existing checks"
+            " that enforce it. Patterns in code, rather than in behaviour, are the refactor-audit"
+            " skill's catalog (`refactor-audit/references/patterns/README.md`).\n\n"
+            f"The [Codex postmortem]({POSTMORTEM}) names ten failures; each pattern cites the"
+            " ones it checks:\n\n"
+            f"{failures}\n" + "\n".join(member.section() for member in members)
+        )
 
 
 class PlanIdlePattern(BehaviourPattern):
-    signature = ("A plan phase whose earlier phases are all done is not done itself, and no open"
-                 " order held by a unit serves it.")
+    signature = (
+        "A plan phase whose earlier phases are all done is not done itself, and no open"
+        " order held by a unit serves it."
+    )
     checks = (RuleCheck(PlanIdle),)
     sources = (ProblemOrder("P83", "34ba68c81"),)
 
 
 class BoardDisagreesPattern(BehaviourPattern):
-    signature = "An open order's progress reads no commit while a pull request linked to it has merged."
+    signature = (
+        "An open order's progress reads no commit while a pull request linked to it has merged."
+    )
     checks = (RuleCheck(BoardDisagrees),)
     sources = (ProblemOrder("P170", "c9c0c04db"), PostmortemFailure(7))
 
 
 class TacticalCommandPattern(BehaviourPattern):
-    signature = ("The commander's own session runs an install, maintenance, connector restart or carry"
-                 " command instead of ordering a unit to.")
+    signature = (
+        "The commander's own session runs an install, maintenance, connector restart or carry"
+        " command instead of ordering a unit to."
+    )
     checks = (ToolRefusal("agent_comms.commander.send_guard", "TacticalCommand"),)
     sources = (ProblemOrder("P171", "cba7b09c3"),)
 
 
 class PlainTextPattern(BehaviourPattern):
-    signature = ("A commander order, strike, roast or directive whose words outside cited spans match"
-                 " the declared jargon list in `PlainText`.")
-    checks = (VerbRefusal("agent_comms.commander.order", "refuse"),
-              ToolRefusal("agent_comms.connector", "DirectorCaller.require_directive"))
+    signature = (
+        "A commander order, strike, roast or directive whose words outside cited spans match"
+        " the declared jargon list in `PlainText`."
+    )
+    checks = (
+        VerbRefusal("agent_comms.commander.order", "refuse"),
+        ToolRefusal("agent_comms.connector", "DirectorCaller.require_directive"),
+    )
     sources = (CommanderRule("Hate jargon."), PostmortemFailure(8))
 
 
@@ -188,35 +208,51 @@ class UndeclaredAudiencePattern(BehaviourPattern):
 
 
 class RepeatedStrikePattern(BehaviourPattern):
-    signature = ("A second strike for one miss: the same actor, owner and reason as a live strike, or a"
-                 " send-back strike on an order already struck since it was sent.")
-    checks = (ToolRefusal("agent_comms.todos", "StrikeTodo.repeats"),
-              VerbRefusal("agent_comms.commander.order", "send"))
+    signature = (
+        "A second strike for one miss: the same actor, owner and reason as a live strike, or a"
+        " send-back strike on an order already struck since it was sent."
+    )
+    checks = (
+        ToolRefusal("agent_comms.todos", "StrikeTodo.repeats"),
+        VerbRefusal("agent_comms.commander.order", "send"),
+    )
     sources = (ProblemOrder("P184", "7af14a520"),)
 
 
 class StrikeInErrorPattern(BehaviourPattern):
-    signature = ("A strike recorded in error is deleted, or voided while not live, instead of a void"
-                 " recorded beside it with a plain reason.")
-    checks = (VerbRefusal("agent_comms.commander.order", "unstrike"),
-              ToolRefusal("agent_comms.todos", "VoidStrikeTodo.apply"))
+    signature = (
+        "A strike recorded in error is deleted, or voided while not live, instead of a void"
+        " recorded beside it with a plain reason."
+    )
+    checks = (
+        VerbRefusal("agent_comms.commander.order", "unstrike"),
+        ToolRefusal("agent_comms.todos", "VoidStrikeTodo.apply"),
+    )
     sources = (ProblemOrder("P47", "15d435152"),)
 
 
 class UncountedCheckPattern(BehaviourPattern):
-    signature = ("An order whose check line does not read `repo :: command -> integer`, prints no"
-                 " integer, or already prints its target before any work.")
-    checks = (VerbRefusal("agent_comms.goals", "OrderCheck.parse"),
-              VerbRefusal("agent_comms.goals", "NoIntegerPrinted"),
-              VerbRefusal("agent_comms.commander.order", "correct_check"))
+    signature = (
+        "An order whose check line does not read `repo :: command -> integer`, prints no"
+        " integer, or already prints its target before any work."
+    )
+    checks = (
+        VerbRefusal("agent_comms.goals", "OrderCheck.parse"),
+        VerbRefusal("agent_comms.goals", "NoIntegerPrinted"),
+        VerbRefusal("agent_comms.commander.order", "correct_check"),
+    )
     sources = (ProblemOrder("P114", "d889df612"), PostmortemFailure(4), PostmortemFailure(7))
 
 
 class StrikeOnNamedProblemPattern(BehaviourPattern):
-    signature = ("A strike or hunt recorded on a problem other than the one given as its argument, such"
-                 " as one moved by a problem number inside its reason.")
-    checks = (VerbRefusal("agent_comms.commander.order", "strike"),
-              VerbRefusal("agent_comms.commander.order", "hunt"))
+    signature = (
+        "A strike or hunt recorded on a problem other than the one given as its argument, such"
+        " as one moved by a problem number inside its reason."
+    )
+    checks = (
+        VerbRefusal("agent_comms.commander.order", "strike"),
+        VerbRefusal("agent_comms.commander.order", "hunt"),
+    )
     sources = (ProblemOrder("P194", "b26843727"), CommanderRule("Strikes, then fire."))
 
 
