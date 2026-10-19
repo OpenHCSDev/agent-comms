@@ -13,10 +13,10 @@ from .messages import Message
 from .page_traversal import NewerTraversal, OlderTraversal, PageCursor, PageTraversal
 from .private_path import FileRevision
 from .read_basis import (
-    ChannelDisplayScope, DisplaySelection, DMDisplayBasis,
+    ChannelDisplayScope, DisplayBasis, DisplaySelection, DMDisplayBasis,
     MessageDisplayScope, NoDisplaySelection,
 )
-from .wire_log import CurrentSnapshotOpening, WireSnapshot
+from .wire_log import WireSnapshot
 
 if TYPE_CHECKING:
     from .read_basis import HistoricalDisplay
@@ -40,6 +40,10 @@ class MessagePage:
     history_revision: FileRevision | None = None
     source_pages: tuple[MessagePage, ...] = ()
     bytes_read: int = 0
+
+    def select(self, sequences) -> MessagePage:
+        """Keep only painted messages and the corresponding original read proof."""
+        return self.selection.select(self, sequences)
 
     @classmethod
     def combine(cls, pages: tuple[MessagePage, ...]) -> MessagePage:
@@ -167,10 +171,6 @@ class MessageReadRequest[T](ABC):
     @abstractmethod
     def indexed(self, index, source: WireSnapshot) -> T: ...
 
-    def read(self, log) -> T:
-        with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-            return self.read_opened(source)
-
     def read_opened(self, source: WireSnapshot) -> T:
         return source.query_page_index(lambda index: self.indexed(index, source))
 
@@ -187,15 +187,6 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
     bounds: PageBounds = NEWEST_PAGE
     empty: ClassVar[MessagePage] = MessagePage((), False, False)
 
-    @classmethod
-    def every(cls, scope: MessageDisplayScope, *, after: int = 0) -> MessagePageRequest:
-        """All of a scope's messages after a sequence, with no count or byte bound.
-
-        The page index finds them by target, so the read costs their rows and
-        not the silent records between them.
-        """
-        return cls(scope, PageBounds(NewerTraversal(after), sys.maxsize, sys.maxsize))
-
     def indexed(self, index, source: WireSnapshot) -> MessagePage:
         traversal = self.bounds.traversal
         window = PageWindow(self.bounds)
@@ -209,9 +200,27 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                     break
         return traversal.result(window, more, opposite)
 
+    @classmethod
+    def every(cls, scope: MessageDisplayScope, *, after: int = 0) -> MessagePageRequest:
+        return cls(scope, PageBounds(NewerTraversal(after), sys.maxsize, sys.maxsize))
+
+    def displayed(self, reads, document, viewer, snapshot, conversation_snapshot, source):
+        def read(index):
+            page = self.indexed(index, source)
+            return DisplayedMessagePage(page, reads.capture_indexed(
+                viewer, page.messages, snapshot, source, index,
+                conversation_snapshot=conversation_snapshot, document=document))
+        return source.query_page_index(read)
+
 
 class ConversationMessagePageRequest(MessagePageRequest):
     """A presented conversation excludes declaration-owned state records."""
 
     def includes(self, message: Message) -> bool:
         return message.type.conversation_message and super().includes(message)
+
+
+@dataclass(frozen=True, slots=True)
+class DisplayedMessagePage:
+    page: MessagePage
+    displayed: DisplayBasis

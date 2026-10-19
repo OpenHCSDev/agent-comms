@@ -1,5 +1,7 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from agent_comms.wire_log import WireLog
+
 from conftest import publish_initial
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
@@ -52,10 +54,11 @@ def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp
     comms.messaging.send("bob", "#team", "second").message
     comms.messaging.send("bob", viewer, "direct").message
     before = comms.views.viewer_snapshot(str(tmp_path))
-    comms.bus.reads.mark_displayed(
-        viewer,
-        comms.bus.reads.capture(viewer, (first,), comms.registry.snapshot(), comms.bus.log.path),
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (first,), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     comms.channels.set_channel_any_mode("#extra", True)
     after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
     assert after.channel_unread["#team"] == 1
@@ -77,8 +80,10 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     direct = comms.messaging.send("bob", viewer.name, "direct").message
     channel = comms.messaging.send("bob", "#team", "channel").message
-    seen = comms.bus.reads.capture(viewer.name, (direct,), comms.registry.snapshot(),
-                                 comms.bus.log.path)
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        seen = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer.name, (direct,), comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer.name, seen)
     index_path = BusRouteCounts(comms.bus.log.path).path
     if not indexed:
@@ -96,9 +101,12 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
             with pytest.raises(sqlite3.OperationalError) as refused:
                 comms.bus.pending_counts_opened(source, basis)
             assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
-        comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
-            viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path))
-        comms.messaging.send("bob", viewer.name, "later direct").message
+        document = comms.bus.reads.read()
+        with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+            displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+                viewer.name, (channel,), comms.registry.snapshot(), opened, index, document=document))
+        comms.bus.reads.mark_displayed(viewer.name, displayed)
+        comms.messaging.send("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
         if not indexed:
             with pytest.raises(sqlite3.OperationalError) as refused:
@@ -383,10 +391,11 @@ def test_display_read_progress_preserves_append_index(tmp_path):
     # The real page owner builds the already-existing disposable offset index.
     page = comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer))
     assert len(page.messages) == 100
-    comms.bus.reads.mark_displayed(
-        viewer, comms.bus.reads.capture(viewer, (messages[1], messages[90]),
-                                       comms.registry.snapshot(), comms.bus.log.path),
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (messages[1], messages[90]), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     saved = BusDisplayIndex(comms.bus.log.path, viewer).path
     stored = saved.read_bytes()
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
@@ -409,8 +418,11 @@ def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 8
     saved = BusDisplayIndex(comms.bus.log.path, viewer).path
     stored = saved.read_bytes()
-    comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
-        viewer, (*messages[:4], messages[6]), comms.registry.snapshot(), comms.bus.log.path))
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (*messages[:4], messages[6]), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
     assert saved.read_bytes() == stored
 
@@ -422,10 +434,11 @@ def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
                 for n in range(10)]
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     before = comms.views.viewer_snapshot(str(tmp_path))
-    comms.bus.reads.mark_displayed(
-        viewer, comms.bus.reads.capture(viewer, (messages[3],),
-                                       comms.registry.snapshot(), comms.bus.log.path),
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (messages[3],), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     index_path = BusPageIndex(comms.bus.log.path).path
     assert index_path.exists()  # The initial metrics query now prepares this SQL owner.
     index_path.unlink()  # Exercise the missing disposable resource, not a stale setup assumption.
@@ -460,10 +473,11 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer.name))
     comms.views.viewer_snapshot(str(tmp_path))
-    comms.bus.reads.mark_displayed(
-        viewer.name, comms.bus.reads.capture(viewer.name, (message,),
-                                            comms.registry.snapshot(), comms.bus.log.path),
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer.name, (message,), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer.name, displayed)
     read = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
     assert read.channel_unread["#team"] == 0
     # Metadata updates preserve identity; removal and a new declaration do not.
@@ -516,12 +530,11 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     ]
     comms.messaging.send_user_message("bob", "own outgoing message", worktree=str(tmp_path))
     comms.views.viewer_snapshot(str(tmp_path))
-    comms.bus.reads.mark_displayed(
-        viewer,
-        comms.bus.reads.capture(
-            viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus.log.path
-        ),
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (messages[1], messages[4]), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
     from agent_comms.routing import DeliveryScope
