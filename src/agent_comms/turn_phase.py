@@ -125,7 +125,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         return self if accepted else PromptAcceptancePhase()
 
     def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
-        agents._emit_activity(self.activity_event(lease.identity.incarnation.name))
+        agents.set_activity(
+            lease.identity.incarnation.name, self.activity_state, self.activity_detail,
+        )
 
 
 class Excursion(TurnPhase, declared_name=None):
