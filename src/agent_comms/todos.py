@@ -14,7 +14,7 @@ import sqlite3
 import time
 import asyncio
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -1495,6 +1495,14 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
+        """Each pending problem's progress and latest verdict, as its Goal shows them."""
+        pulls = PullRequests()
+        return "\n".join(
+            " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
+                        *(verdict.line for verdict in todo.verdicts[-1:])))
+            for todo in todos if todo.pending)
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""

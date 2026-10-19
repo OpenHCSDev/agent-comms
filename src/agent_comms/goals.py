@@ -406,13 +406,7 @@ class ProblemGoalOrder(GoalOrder):
         return self.text
 
     def progress(self, goal: Goal, todos: Sequence[Todo], goals: Goals) -> str:
-        from .todos import OrderProgress, PullRequests
-
-        pulls, storage = PullRequests(), goals.registry.storage_rule
-        return "\n".join(
-            " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
-                        *(verdict.line for verdict in todo.verdicts[-1:])))
-            for todo in todos if todo.pending)
+        return goals.todos.progress(todos, goals.registry.storage_rule)
 
     def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
         return goal.progress
