@@ -1556,17 +1556,18 @@ class TodoStore(TypedStore):
             result.upsert(db)
             return self._current(db, todo_id)
 
-    def correct(self, db: sqlite3.Connection, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
-        """Correct published wording using the writer validated before its message was sent."""
-        if not (words := tuple(PlainText.found(text))):
+    def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
+        """Correct every open order the unit holds when its published text uses jargon."""
+        if not (words := tuple(PlainText.found(text))) or not self.path.exists():
             return ()
-        held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
-                if todo.state.open)
-        corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
-                          for todo in held)
-        for todo in corrected:
-            todo.upsert(db)
-        return corrected
+        with self.writing() as db:
+            held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
+                    if todo.state.open)
+            corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
+                              for todo in held)
+            for todo in corrected:
+                todo.upsert(db)
+            return corrected
 
     def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
         """Release every open problem the unit holds from this commander in one write; each
