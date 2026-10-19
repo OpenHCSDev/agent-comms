@@ -18,10 +18,26 @@ from pydantic import (
 )
 
 from agent_comms.activity import ActivityState
-from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
-from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
+from agent_comms.runtime_updates import (
+    AppendDraftItem,
+    CompletedItem,
+    DraftAccumulator,
+    FinishedTurn,
+    HiddenItem,
+    PageItem,
+    ParagraphDraft,
+    PublishedPage,
+    RuntimeUpdate,
+    StartedItem,
+    TextDraft,
+    TurnEnded,
+    TurnStarted,
+)
+from agent_comms.tool_calls import ToolCall
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
@@ -32,12 +48,6 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-
-from agent_comms.runtime_updates import (
-    AppendDraftItem, CompletedItem, DraftAccumulator, FinishedTurn, HiddenItem, PageItem,
-    ParagraphDraft, PublishedPage, RuntimeUpdate, StartedItem, TextDraft, TurnEnded, TurnStarted,
-)
-from .shared import ToolCall
 
 
 class UserInput(TaggedWire, ABC):
@@ -363,8 +373,9 @@ class ToolItem(Item, ABC):
 
     @property
     def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments,
-                        tool=ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id))
+        shown = ToolCall(self.id, self.tool_name, self.arguments)
+        tool = ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id)
+        return shown.recorded(tool) if tool else shown
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded, self.id)
@@ -647,8 +658,9 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'path': self.path}, self.kind.patch(self.path, self.diff),
-                        FilePatchTool(path=self.path)).finished('', ok, call_id)
+        call = ToolCall(call_id, 'edit', {'path': self.path}).recorded(FilePatchTool(path=self.path))
+        diff = self.kind.patch(self.path, self.diff)
+        return (call.patched(diff) if diff else call).finished('', ok, call_id)
 
 
 class FileChangeItem(Item):

@@ -1,19 +1,38 @@
 """Claude's completed JSONL blocks own transcript items and activity."""
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
 from typing import ClassVar, Literal
 from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
-from pydantic import Field, JsonValue, TypeAdapter, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    JsonValue,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 from agent_comms.activity import ActivityState
-from agent_comms.field_codec import FieldCodec
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.runtime_updates import (
+    ActiveItem,
+    FinishedItem,
+    HiddenItem,
+    HistoryNotice,
+    ReadingPhase,
+    RuntimeUpdate,
+    SessionFacts,
+    StatusUpdate,
+    Summarized,
+    TurnEnded,
+    TurnStarted,
+)
+from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -23,14 +42,15 @@ from agent_comms.transcript_events import (
 )
 
 from .shared import (
-    IncomingFrame, MonitorFrame, MonitorPart, MonitorProbe, ForeignMonitorFrame, MonitorObservation,
-    ObservedMonitor, MONITOR_FRAME,
+    MONITOR_FRAME,
+    ForeignMonitorFrame,
+    IncomingFrame,
+    MonitorFrame,
+    MonitorObservation,
+    MonitorPart,
+    MonitorProbe,
+    ObservedMonitor,
 )
-from agent_comms.runtime_updates import (
-    ActiveItem, FinishedItem, HiddenItem, HistoryNotice, ReadingPhase, RuntimeUpdate, SessionFacts,
-    StatusUpdate, Summarized, TurnEnded, TurnStarted,
-)
-from .shared import CliToolArguments, ToolCall
 
 
 class ClaudeMonitorFrame(IncomingFrame):
@@ -316,19 +336,7 @@ class ToolUse(AssistantBlock):
 
 
     def call(self) -> ToolCall:
-        """A call to a tool with a declared shape uses that declaration. The model can send input
-        that does not fit (Claude refuses it with an error result); it is shown as sent."""
-        arguments_type = CliToolArguments.types.get(self.name)
-        if arguments_type is not None:
-            try:
-                arguments = arguments_type.model_validate(self.input)
-                tool = arguments.record(call_id=self.id)
-            except ValidationError:  # Invalid external arguments remain an untyped external tool.
-                pass
-            else:
-                return ToolCall(self.id, FieldCodec.encode(type(tool)),
-                                arguments.model_dump(exclude_unset=True), arguments.diff(), tool)
-        return ToolCall(self.id, self.name, self.input)
+        return CliToolArguments.decode(ToolCall(self.id, self.name, self.input), self.input)
 
 
 class AssistantMessage(WireModel):
