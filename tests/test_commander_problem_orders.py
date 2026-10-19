@@ -388,7 +388,9 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    script.send('worker', due, body.read_text().replace('Problem: NEW', f'Problem: {created.id}'), replaces=created.messages[-1].message_id)  # without --clean is a send-back
+    numbered = body.read_text().replace('Problem: NEW', f'Problem: {created.id}')
+    # Without --clean this replaces the prior order and counts a send-back.
+    script.send('worker', due, numbered, replaces=created.messages[-1].message_id)
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
@@ -438,9 +440,11 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     problem(script, body)
     script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
     numbered = Path(body).read_text().replace('Problem: NEW', 'Problem: P1')
-    script.send('worker', '23:59', numbered, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
+    script.send('worker', '23:59', numbered,
+                replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', numbered, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
+    script.send('worker', '23:59', numbered,
+                replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
 

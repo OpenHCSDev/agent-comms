@@ -179,7 +179,8 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
-def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
+def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
+         traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
