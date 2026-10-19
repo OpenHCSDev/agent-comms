@@ -4,7 +4,13 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.todos import ProgressSource, PullRequests, StatusProgressSource
-from agent_comms.ui_model.commander import CommanderModel, ObserveCommander, OpenCardDetail
+from agent_comms.ui_model.commander import (
+    CommanderModel,
+    ObserveCommander,
+    OpenCardDetail,
+    ReadCommanderIdentity,
+)
+from agent_comms.ui_model.observation import ReadAnswered, ReadRefused
 from test_commander_problem_orders import create
 
 
@@ -41,6 +47,17 @@ def test_status_source_never_requests_acceptance_measurement(commander, monkeypa
     model = CommanderModel.read(comms, ObserveCommander(
         str(comms.root), comms.registry.require(caller.name).incarnation))
     assert model.units[0].orders[0].progress.state == 'no commit since the order'
+
+
+def test_commander_identity_is_resolved_or_refused_in_the_read_process(commander):
+    comms, caller = commander
+    answer = ReadCommanderIdentity(str(comms.root), caller.name).answer(comms)
+    assert isinstance(answer, ReadAnswered)
+    assert answer.value == ObserveCommander(
+        str(comms.root), comms.registry.require(caller.name).incarnation)
+    refusal = ReadCommanderIdentity(str(comms.root), 'absent-commander').answer(comms)
+    assert isinstance(refusal, ReadRefused)
+    assert 'absent-commander' in str(refusal.error)
 
 
 def test_commander_read_rejects_root_and_incarnation_changes(commander):

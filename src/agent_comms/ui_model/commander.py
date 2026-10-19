@@ -24,6 +24,7 @@ from agent_comms.ui_model.observation import (
     Observation,
     ObservationRequest,
     Observed,
+    ReadRequest,
     StoredRead,
     UnreadableHistory,
 )
@@ -194,6 +195,16 @@ class ObserveCommander(InterestRequest):
 
     def observation(self) -> CommanderReading:
         return CommanderReading(self)
+
+
+@dataclass(frozen=True)
+class ReadCommanderIdentity(ReadRequest):
+    """Resolve the external command spelling once, in the existing read process."""
+    root: str
+    name: str
+
+    def read(self, comms: Comms) -> ObserveCommander:
+        return ObserveCommander(self.root, comms.registry.require(self.name).incarnation)
 
 
 class CommanderReading(Observation[ObserveCommander]):

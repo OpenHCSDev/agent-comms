@@ -42,7 +42,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     StaleRevision,
 )
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -346,7 +346,8 @@ class ReadRequest(AwaitedRead):
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
             return ReadAnswered(self.request_id, value)
-        except (CoordinationReadUnavailable, RelationViolationError, UnreadableHistory, StaleRevision) as error:
+        except (CoordinationReadUnavailable, RelationViolationError, UnreadableHistory,
+                StaleRevision, ToolRefusedError) as error:
             return self.refused(error)
 
 
