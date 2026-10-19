@@ -16,6 +16,7 @@ import pytest
 from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.message_page import PageBounds
@@ -63,7 +64,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
         before_delivery = comms.bus.pending_counts_opened(source, basis)
     before_wire = tmp_path.joinpath("bus.jsonl").read_bytes()
-    assert bodies(comms.views.channel_history_page("#api")) == ["exact target"]
+    assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == ["exact target"]
     assert bodies(comms.views.channel_display_page("#api")) == ["exact target"]
 
     selected = comms.channels.set_channel_any_mode("#api", True)
@@ -78,8 +79,8 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     ]
     assert [message.target for message in page.messages] == ["#api", "bob", "carol", "bob"]
     assert len({message.seq for message in page.messages}) == len(page.messages)
-    assert bodies(comms.views.channel_history_page("#api")) == ["exact target"]
-    assert [message.body for message in list(comms.views.channel_history_page("#api").messages)] == ["exact target"]
+    assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == ["exact target"]
+    assert [message.body for message in list(comms.views.history_page(CommandTarget.named("#api")).messages)] == ["exact target"]
     assert bodies(comms.views.channel_display_page("#ui")) == ["unrelated channel"]
     assert tmp_path.joinpath("bus.jsonl").read_bytes() == before_wire
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
@@ -162,7 +163,7 @@ def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
     assert on.last_user_input > 0
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
     assert bodies(comms.views.channel_display_page("#api")) == ["human input to member"]
-    assert bodies(comms.views.channel_history_page("#api")) == []
+    assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == []
 
 
 def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
@@ -248,7 +249,7 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
 
     def append():
         started.set()
-        comms.messaging.send("alice", "bob", "outside boundary").message.message_id
+        wire(tmp_path).messaging.send("alice", "bob", "outside boundary").message.message_id
         finished.set()
 
     @contextmanager
@@ -263,7 +264,13 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=with_append):
+    original_page = comms.views.presentation.channel_page
+
+    def captured_page(*args, **kwargs):
+        with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=with_append):
+            return original_page(*args, **kwargs)
+
+    with patch.object(comms.views.presentation, "channel_page", side_effect=captured_page):
         assert bodies(comms.views.channel_display_page("#api")) == ["within boundary"]
     assert bodies(comms.views.channel_display_page("#api")) == [
         "within boundary",
@@ -295,9 +302,10 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
     started, finished = Event(), Event()
 
     def retag_and_send():
+        writer_comms = wire(tmp_path)
         started.set()
-        comms.channels.update_tags("alice", remove=frozenset({"api"}), add=frozenset({"ui"}))
-        comms.messaging.send("alice", "bob", "late nonmember").message.message_id
+        writer_comms.channels.update_tags("alice", remove=frozenset({"api"}), add=frozenset({"ui"}))
+        writer_comms.messaging.send("alice", "bob", "late nonmember").message.message_id
         finished.set()
 
     @contextmanager
@@ -312,7 +320,13 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=concurrent_public_change):
+    original_page = comms.views.presentation.channel_page
+
+    def captured_page(*args, **kwargs):
+        with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=concurrent_public_change):
+            return original_page(*args, **kwargs)
+
+    with patch.object(comms.views.presentation, "channel_page", side_effect=captured_page):
         assert bodies(comms.views.channel_display_page("#api")) == ["before retag"]
     later = comms.views.channel_display_page("#api")
     assert "late nonmember" not in bodies(later)
