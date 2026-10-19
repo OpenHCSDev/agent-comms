@@ -45,13 +45,14 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
 
     # The object being available locally is not installation: HEAD must contain it.
     assert not repo.contains(sha)
-    assert script.held_orders() == (todo,)
+    assert script.COMMANDER.orders() == (todo,)
     assert comms.goals.todos.get(todo.id) == todo
     if not delivered:
         assert 'waiting on install' in deadline_lines(script)[0]
 
     git(installed, 'checkout', '-q', '-B', 'main', sha)
     assert repo.contains(sha)
+    assert script.COMMANDER.orders() == ()
     assert script.held_orders() == ()
     closed = comms.goals.todos.get(todo.id)
     assert closed.state is DoneTodoState and closed.assignment is None

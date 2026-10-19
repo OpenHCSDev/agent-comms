@@ -82,17 +82,17 @@ def call(tool):
 
 def todos():
     """The problems this commander created; Core's Todo store is their one owner."""
-    return COMMANDER.orders()
+    return COMMS.goals.todos.for_commander(COMMS.registry.require(ME).incarnation)
 
 
 def held_orders() -> tuple[Todo, ...]:
     """This commander's open orders that a unit holds."""
-    return tuple(todo for todo in todos() if todo.assignment)
+    return COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
 
 
 def held_by(unit: str) -> tuple[Todo, ...]:
     """This commander's open orders held by one unit."""
-    return tuple(todo for todo in held_orders() if todo.holder == unit)
+    return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
 
 
 def units() -> frozenset[str]:
@@ -397,7 +397,7 @@ def board():
              '| Problem | Owner file | Owner | Order | Due | Progress | Delivered '
              '| Owner last acted |',
              '|---|---|---|---|---|---|---|---|']
-    listed, read = todos(), progress()
+    listed, read = COMMANDER.orders(), progress()
     activity = {unit: last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
         unit, last = t.holder, t.released[-1:]
@@ -617,7 +617,7 @@ def overdue():
     installs: list[str] = []
     while True:
         now = time.time()
-        held = held_orders()
+        held = tuple(todo for todo in COMMANDER.orders() if todo.assignment)
         activity = {unit: last_activity(unit) for unit in {t.assignment.owner for t in held}}
         if missing := first_calls(held, activity):
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
