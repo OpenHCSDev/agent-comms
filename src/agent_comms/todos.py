@@ -1611,6 +1611,12 @@ class TodoStore(TypedStore):
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
+    def units(self, commander: ThreadIncarnation) -> frozenset[str]:
+        """The threads this commander gives orders to: everyone who holds or held one of its problems."""
+        return frozenset(assignment.owner for todo in self.history_for_commander(commander)
+                         for assignment in (todo.assignment, *(release.previous for release in todo.released))
+                         if assignment)
+
     def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         states = TodoState.open_names()
         selected = ','.join('?' for state in states)
