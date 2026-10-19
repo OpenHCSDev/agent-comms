@@ -424,15 +424,29 @@ class UnrecognizedTransportStage(ProviderTransportStage):
 
 
 @dataclass(frozen=True)
-class ProviderDiagnosticError(PiPayload):
+class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
     message: str
-    code: int | str
     name: str | None = None
+
+    @classmethod
+    def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
+        return CodedProviderDiagnosticError if "code" in value else CodelessProviderDiagnosticError
 
     @property
     def description(self) -> str:
-        name = self.name or "Provider transport error"
-        return f"{name} (code {self.code})"
+        return self.name or "Provider transport error"
+
+@dataclass(frozen=True)
+class CodelessProviderDiagnosticError(ProviderDiagnosticError):
+    """Pi reported a provider error without a code."""
+
+@dataclass(frozen=True, kw_only=True)
+class CodedProviderDiagnosticError(ProviderDiagnosticError):
+    code: int | str
+
+    @property
+    def description(self) -> str:
+        return f"{super().description} (code {self.code})"
 
 
 class TransportStageText(TextRepresentation[ProviderTransportStage]):

@@ -20,7 +20,7 @@ from .field_codec import FieldCodec, Id128Text
 from .declared_family import DeclaredFamily
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .native_pi import NativeContextProof, NativePiUnavailable
+from .native_pi import NativeContextProof
 from .native_prompt_binding import expected_prompt_matches_journal, expected_prompt_bindings
 from .native_runtime_input import NativeRuntimeInput
 from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution
@@ -163,7 +163,7 @@ def read_historical_native_inputs(
                 corroborated = recorded.corroborates_input(
                     row.input_id, evidence=source_reads.for_source(session_file),
                 )
-            except (OSError, ValueError, NativePiUnavailable) as error:
+            except (OSError, ValueError) as error:
                 raise IdentityConflict("historical native context evidence is unavailable") from error
             if not corroborated:
                 raise IdentityConflict("historical native context differs from live-recorded proof")
