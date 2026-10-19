@@ -148,14 +148,14 @@ class Messaging:
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                             change: TaskChange = OriginalTaskChange()) -> Message:
-        """Pin a certified original USER message; never replay it or lease a turn."""
+        """Pin a checked message as sent by the user, without replaying it or starting a turn."""
         return self._pin_constraint(recipient, subject, HumanConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 
     def pin_input_constraint(self, recipient: str, subject, *, worktree: str,
                              scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                              change: TaskChange = OriginalTaskChange()) -> Message:
-        """Pin the original input provenance, not a reconstruction of its text."""
+        """Pin the recorded input and its author, rather than a copy of its text."""
         return self._pin_constraint(recipient, subject, NativeInputConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 

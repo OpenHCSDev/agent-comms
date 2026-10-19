@@ -236,11 +236,11 @@ class StoreLock:
     def current_source(
         self, log: WireLog, metadata: WireMetadata
     ) -> Iterator[CertifiedSourceRead]:
-        """Lend the current certificate under this retained physical bus lock.
+        """Read the bus's current checked state while keeping this bus lock.
 
-        A prior append may have advanced the immutable source originally lent
-        to this lock. Refresh that view, never reconstruct claim state or scan
-        an uncertified bus.
+        An append may have changed the bus since this lock first read it.
+        Refresh that read without reconstructing claims or scanning unchecked
+        bus data.
         """
         source = self.certified_read()
         if source.marker == metadata:

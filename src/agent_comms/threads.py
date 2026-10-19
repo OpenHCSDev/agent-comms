@@ -379,12 +379,12 @@ class Thread(ThreadProvenance):
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
-        """Bind a certified authored row to this preparation's original turn cut.
+        """Check whether a task record belongs to the active or last finished turn.
 
-        Beginning a lease clears last_finished_turn_id. The preceding allocation
-        is still derived from the original monotonic turn owner, not copied into
-        a timing register. Its row supplied the original authorized ID/generation.
-        Neither allocation nor finishing supplies subtask completion.
+        Starting a turn clears last_finished_turn_id. While it runs, recognize
+        the preceding turn by subtracting one from the current generation.
+        After it finishes, use the saved turn ID and generation instead.
+        Neither starting nor finishing a turn proves a subtask was completed.
         """
         if identity.incarnation != self.incarnation:
             return False

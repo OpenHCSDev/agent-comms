@@ -134,7 +134,7 @@ class RegistryOwner:
         lease, process, input generation and session must still match. The running
         turn retains its captured project/model/thinking while the document
         may select the next turn's configuration. This observes only the
-        original source; fresh input still requires current configuration.
+        session that started this turn; new input still requires current configuration.
         """
         self.require_active_turn()
         return self._snapshot_owner(

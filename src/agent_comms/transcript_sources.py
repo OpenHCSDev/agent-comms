@@ -161,7 +161,7 @@ class TranscriptTraversal(ABC):
 
     def read_records(self, reader, project, sources, initial, frontier,
                      *, max_messages, max_bytes):
-        """Consume each original source coordinate only when its record is read."""
+        """Advance each file position only after reading the record at that position."""
         consumed, records, used = initial, [], 0
         # A tool round opened by an already appended record keeps the window open
         # until its paired record is appended too; the bounded grace keeps an
@@ -468,7 +468,7 @@ class AssignedTranscriptSource(TranscriptSource):
         )
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
-        """One certified cut owns conversation, sent rows and their frontier."""
+        """Read conversation messages, sent messages and their end position together."""
         lookup = self.recipient.lookup
         conversation_request = ConversationSourceWindowRequest(limit=limit, ascending=False)
         sent_request = ConversationSourceWindowRequest(

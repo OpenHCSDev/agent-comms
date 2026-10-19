@@ -315,10 +315,10 @@ class NativeEvidenceRead:
 
 
 class NativeInputEvidenceRead(NativeEvidenceRead):
-    """Verify every source byte; decode only the header and original input records.
+    """Check every file byte, but decode only the header and submitted inputs.
 
-    The inherited descriptor, append and refusal lifetime is unchanged. This is
-    an acquired input-proof projection, not a history index or another store.
+    Keep the parent class's file handle, append handling and error behavior.
+    Read input evidence from that file without adding a history index or store.
     """
 
     def decode_rows(self, rows):

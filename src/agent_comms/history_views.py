@@ -354,7 +354,7 @@ class HistoryViews:
     def thread_presentations(
         self, names: Iterable[str], *, sent_source_limit: int = 5,
     ) -> ThreadPresentations:
-        """Read status once for only the requested rows, before their original sources."""
+        """Read the requested threads' status once, before loading their messages."""
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
             snapshot, self.agents, GoalWaits.at(self.root),
