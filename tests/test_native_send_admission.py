@@ -1,6 +1,9 @@
 """Actual raw-pipe claim_scope; no provider or native acceptance inferred."""
 
 from __future__ import annotations
+from contextlib import closing
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
@@ -38,7 +41,7 @@ tmp_path = private_root_fixture
 @pytest.mark.parametrize(
     ("direct", "drift"), [(False, "generation"), (False, "registry"), (True, "registry")]
 )
-async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, direct, drift, *, native_runtime_package):
+async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, direct, drift, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
     fake, calls = _fake_model(decision="IGNORE")
@@ -56,7 +59,11 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
     with pytest.raises(StaleFence):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name=owner.name,
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert calls == []
 
@@ -114,7 +121,7 @@ else:
 
 @pytest.mark.parametrize("direct", [False, True])
 @pytest.mark.parametrize("revoke", [False, True])
-async def test_actual_raw_writes_follow_committed_claim_without_global_exclusions(tmp_path, monkeypatch, direct, revoke, *, native_runtime_package):
+async def test_actual_raw_writes_follow_committed_claim_without_global_exclusions(tmp_path, monkeypatch, direct, revoke, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
     create = AttachedChild.start
@@ -153,7 +160,11 @@ async def test_actual_raw_writes_follow_committed_claim_without_global_exclusion
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name=owner.name,
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     if revoke:
         assert observed == []
@@ -166,129 +177,139 @@ async def test_actual_raw_writes_follow_committed_claim_without_global_exclusion
 
 
 async def _same_loop_backpressure_case(directory: Path, mode: str):
-    """Runs in a bounded subprocess so a regression cannot hang the pytest owner."""
-    import fcntl
-    import signal
-    import threading
-    import time
+    with closing(CursorDelivery()) as cursor_delivery:
+        """Runs in a bounded subprocess so a regression cannot hang the pytest owner."""
+        import fcntl
+        import signal
+        import threading
+        import time
 
-    import agent_comms.coordinated_runtime as runtime
+        import agent_comms.coordinated_runtime as runtime
 
-    with pytest.MonkeyPatch.context() as patch:
-        root, root_id, comms, _, people = _root(directory, direct=True)
-        owner = people[2]
-        comms.registry.declare(replace(owner, task="x" * 24000))
-        patch.setattr(native_prompt_send, "_MAX_SEND_SECONDS", 0.35)
-        native_turn = TrackedTurnSession.execute
+        with pytest.MonkeyPatch.context() as patch:
+            root, root_id, comms, _, people = _root(directory, direct=True)
+            owner = people[2]
+            comms.registry.declare(replace(owner, task="x" * 24000))
+            patch.setattr(native_prompt_send, "_MAX_SEND_SECONDS", 0.35)
+            native_turn = TrackedTurnSession.execute
 
-        async def bounded_turn(*args, **kwargs):
-            return await native_turn(*args, **kwargs, model_wait=ModelWait(0.35))
+            async def bounded_turn(*args, **kwargs):
+                return await native_turn(*args, **kwargs, model_wait=ModelWait(0.35))
 
-        patch.setattr(TrackedTurnSession, "execute", bounded_turn)
-        patch.setattr("agent_comms.backend.CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS",0.35)
-        loop = asyncio.get_running_loop()
-        create = AttachedChild.start
-        children = []
-        session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
+            patch.setattr(TrackedTurnSession, "execute", bounded_turn)
+            patch.setattr("agent_comms.backend.CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS",0.35)
+            loop = asyncio.get_running_loop()
+            create = AttachedChild.start
+            children = []
+            session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
 
-        async def launch(*args, **kwargs):
-            child = await create(
-                (sys.executable, "-c", _CHILD, str(session), str(directory / "unused"), "yes"),
-                **kwargs,
-            )
-            fcntl.fcntl(child.stdin.get_extra_info("pipe").fileno(), fcntl.F_SETPIPE_SZ, 4096)
-            children.append(child)
-            if mode == "preflight-drain":
-                original_stdin = child.stdin
+            async def launch(*args, **kwargs):
+                child = await create(
+                    (sys.executable, "-c", _CHILD, str(session), str(directory / "unused"), "yes"),
+                    **kwargs,
+                )
+                fcntl.fcntl(child.stdin.get_extra_info("pipe").fileno(), fcntl.F_SETPIPE_SZ, 4096)
+                children.append(child)
+                if mode == "preflight-drain":
+                    original_stdin = child.stdin
 
-                class SuspendedDrain:
-                    def __getattr__(self, name):
-                        return getattr(original_stdin, name)
+                    class SuspendedDrain:
+                        def __getattr__(self, name):
+                            return getattr(original_stdin, name)
 
-                    async def drain(self):
-                        loop.call_soon(lifecycle)
-                        await asyncio.Future()
+                        async def drain(self):
+                            loop.call_soon(lifecycle)
+                            await asyncio.Future()
 
-                child.stdin = SuspendedDrain()
-            return child
+                    child.stdin = SuspendedDrain()
+                return child
 
-        patch.setattr(AttachedChild, "start", launch)
-        write = os.write
-        byte_counts = []
-        lifecycle_done = []
-        queued = False
-        task = None
+            patch.setattr(AttachedChild, "start", launch)
+            write = os.write
+            byte_counts = []
+            lifecycle_done = []
+            queued = False
+            task = None
 
-        def lifecycle():
-            # This is intentionally a synchronous ordinary callback on the SAME
-            # loop that awaits native send. The grant has already released
-            # registry ownership; pipe backpressure cannot block this retirement.
-            comms.registry.unregister(owner.name)
-            lifecycle_done.append(True)
+            def lifecycle():
+                # This is intentionally a synchronous ordinary callback on the SAME
+                # loop that awaits native send. The grant has already released
+                # registry ownership; pipe backpressure cannot block this retirement.
+                comms.registry.unregister(owner.name)
+                lifecycle_done.append(True)
 
-        def raw_write(fd, data):
-            nonlocal queued
-            count = write(fd, data)
-            if threading.current_thread().name == "native-prompt-writer":
-                byte_counts.append(count)
-                if not queued:
-                    queued = True
-                    if mode == "lifecycle":
-                        loop.call_soon_threadsafe(lifecycle)
-                    elif mode == "cancel":
-                        loop.call_soon_threadsafe(task.cancel)
-                    elif mode == "repeat-cancel":
+            def raw_write(fd, data):
+                nonlocal queued
+                count = write(fd, data)
+                if threading.current_thread().name == "native-prompt-writer":
+                    byte_counts.append(count)
+                    if not queued:
+                        queued = True
+                        if mode == "lifecycle":
+                            loop.call_soon_threadsafe(lifecycle)
+                        elif mode == "cancel":
+                            loop.call_soon_threadsafe(task.cancel)
+                        elif mode == "repeat-cancel":
 
-                        def twice():
-                            task.cancel()
-                            loop.call_soon(task.cancel)
+                            def twice():
+                                task.cancel()
+                                loop.call_soon(task.cancel)
 
-                        loop.call_soon_threadsafe(twice)
-            return count
+                            loop.call_soon_threadsafe(twice)
+                return count
 
-        patch.setattr(native_prompt_send.os, "write", raw_write)
-        killpg = os.killpg
+            patch.setattr(native_prompt_send.os, "write", raw_write)
+            killpg = os.killpg
 
-        def cancel_during_cleanup(pid, sig):
-            if mode == "repeat-cancel" and sig == signal.SIGTERM:
-                loop.call_soon(task.cancel)
-            return killpg(pid, sig)
+            def cancel_during_cleanup(pid, sig):
+                if mode == "repeat-cancel" and sig == signal.SIGTERM:
+                    loop.call_soon(task.cancel)
+                return killpg(pid, sig)
 
-        patch.setattr(native_pi.os, "killpg", cancel_during_cleanup)
-        start = time.monotonic()
-        task = asyncio.create_task(
-            SelectedExecution(
-                root=root,
-                wire_root_id=root_id,
-                owner_name=owner.name,
-                native_package=VerifiedNativePackage.acquire(pinned_native_package()),
-            ).run()
-        )
-        error = asyncio.CancelledError if "cancel" in mode else native_pi.NativePiUnavailable
-        with pytest.raises(error):
-            await asyncio.wait_for(task, timeout=3)
-        assert time.monotonic() - start < 3
-        if mode == "preflight-drain":
-            assert byte_counts == []
-        else:
-            assert byte_counts and 0 < sum(byte_counts) < 24000
-        if mode in {"lifecycle", "preflight-drain"}:
-            assert lifecycle_done == [True]
-        assert all(child.returncode is not None for child in children)
-        for child in children:
-            with pytest.raises(ProcessLookupError):
-                os.kill(child.pid, 0)
-        assert not any(t.name == "native-prompt-writer" for t in threading.enumerate())
-        assert _held(root) == []
-        if mode not in {"lifecycle", "preflight-drain"}:
-            assert (
-                await SelectedExecution(
-                    root=root, wire_root_id=root_id, owner_name=owner.name, native_package=VerifiedNativePackage.acquire(pinned_native_package())
+            patch.setattr(native_pi.os, "killpg", cancel_during_cleanup)
+            start = time.monotonic()
+            task = asyncio.create_task(
+                SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name=owner.name,
+                    native_package=VerifiedNativePackage.acquire(
+                        pinned_native_package()
+                    ),
+                    cursor_delivery=cursor_delivery,
                 ).run()
-                is None
             )
-            assert len(children) == 1  # reserved/uncertain input is never replayed
-        print("BOUNDED_UNKNOWN_REAPED", flush=True)
+            error = asyncio.CancelledError if "cancel" in mode else native_pi.NativePiUnavailable
+            with pytest.raises(error):
+                await asyncio.wait_for(task, timeout=3)
+            assert time.monotonic() - start < 3
+            if mode == "preflight-drain":
+                assert byte_counts == []
+            else:
+                assert byte_counts and 0 < sum(byte_counts) < 24000
+            if mode in {"lifecycle", "preflight-drain"}:
+                assert lifecycle_done == [True]
+            assert all(child.returncode is not None for child in children)
+            for child in children:
+                with pytest.raises(ProcessLookupError):
+                    os.kill(child.pid, 0)
+            assert not any(t.name == "native-prompt-writer" for t in threading.enumerate())
+            assert _held(root) == []
+            if mode not in {"lifecycle", "preflight-drain"}:
+                assert (
+                    await SelectedExecution(
+                        root=root,
+                        wire_root_id=root_id,
+                        owner_name=owner.name,
+                        native_package=VerifiedNativePackage.acquire(
+                            pinned_native_package()
+                        ),
+                        cursor_delivery=cursor_delivery,
+                    ).run()
+                    is None
+                )
+                assert len(children) == 1  # reserved/uncertain input is never replayed
+            print("BOUNDED_UNKNOWN_REAPED", flush=True)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="deterministic Linux pipe capacity")
@@ -330,7 +351,7 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode
         ("wire", True),
     ],
 )
-async def test_short_claim_contention_sends_once_after_release(tmp_path, monkeypatch, held_store, revoke, *, native_runtime_package):
+async def test_short_claim_contention_sends_once_after_release(tmp_path, monkeypatch, held_store, revoke, *, native_runtime_package, cursor_delivery):
     """A busy store before claim_scope is not an attempted native prompt."""
     import sqlite3
     import threading
@@ -393,7 +414,11 @@ async def test_short_claim_contention_sends_once_after_release(tmp_path, monkeyp
     # claim_scope only, not a native context or successful model response.
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name=owner.name,
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     if revoke:
         assert not received.exists() or not received.read_text()
@@ -454,7 +479,7 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
 
 
 @pytest.mark.parametrize("direct", [False, True])
-async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_readers(tmp_path, monkeypatch, direct, *, native_runtime_package):
+async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_readers(tmp_path, monkeypatch, direct, *, native_runtime_package, cursor_delivery):
     root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
     create = AttachedChild.start
@@ -516,7 +541,11 @@ async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_re
     # the expected downstream error is NOT a post-write claim_scope failure.
     with pytest.raises(native_pi.NativePiUnavailable) as caught:
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name=owner.name,
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert "post-write" not in str(caught.value)
     assert observations == [

@@ -143,7 +143,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     )
 
 
-async def test_native(retained_native_acp_owner):
+async def test_native(retained_native_acp_owner, *, source_reads):
     """Retained native -> real tool send -> selected reply -> queued ACP input."""
     from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
     from agent_comms.coordinator import Coordination
@@ -226,9 +226,13 @@ async def test_native(retained_native_acp_owner):
         assert len(replies) == 1 and replies[0].body == "NATIVE_GOAL_WAIT_HANDLED"
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             proofs = read_historical_native_inputs(
-                store, wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup,
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", owner.created_at
+                ).lookup,
                 source_seq=original.seq,
+                source_reads=source_reads,
             )
             assert len(proofs) == 1 and isinstance(proofs[0].execution, FullNativeExecution)
             assert proofs[0].expected_prompt_equality_established
