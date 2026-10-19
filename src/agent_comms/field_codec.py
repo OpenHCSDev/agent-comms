@@ -92,9 +92,6 @@ class FieldPlan:
     def wire_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
-    def encode_value(self, value: object) -> object:
-        return self.value.encode_value(value)
-
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
@@ -659,6 +656,8 @@ class FieldCodec(Sealed):
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
         if annotation is None:
             return None, None
+        if annotation is object:
+            return Any, _JsonValueRepresentation
         if isinstance(annotation, type):
             # A class has no Annotated metadata. Its live capability still
             # determines representation, including inherited/virtual members.
@@ -677,7 +676,7 @@ class FieldCodec(Sealed):
             from pydantic import JsonValue
 
             if target is JsonValue:
-                return Any, representations[0] if representations else _AnyDecoder
+                return Any, representations[0] if representations else _JsonValueRepresentation
         if representations:
             return target, representations[0]
         if isinstance(target, type) and issubclass(target, WireValue):
@@ -736,30 +735,16 @@ class FieldCodec(Sealed):
 
     @classmethod
     def encode(cls, value: object, annotation: object = None) -> Any:
-        return compile_encoder(annotation).encode_value(value)
+        return compile_decoder(annotation).encode(value)
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
         """A document whose declaration names its leaf member stores that member untagged."""
-        member = _FamilyRecordDecoder.document_member(declared)
-        if member is None:
-            return cls.encode(value)
-        if get_origin(declared) is dict:
-            records = cast(dict[str, object], value)
-            return {key: cls.encode_fields(item) for key, item in records.items()}
-        return cls.encode_fields(value)
+        return compile_decoder(declared).encode_document(value)
 
     @classmethod
     def decode_document(cls, declared: type[T], data: object) -> T:
-        member = _FamilyRecordDecoder.document_member(declared)
-        if member is None:
-            return cls.decode(declared, data)
-        decoder = _member_decoder(member)
-        if get_origin(declared) is not dict:
-            return cast(T, decoder.decode(data))
-        if not isinstance(data, dict):
-            raise MalformedRecord("Expected a JSON object.")
-        return cast(T, {key: decoder.decode(item) for key, item in data.items()})
+        return cast(T, compile_decoder(declared).decode_document(data))
 
     @classmethod
     def encode_record(cls, value: object) -> dict[str, Any]:
@@ -774,7 +759,7 @@ class FieldCodec(Sealed):
     def encode_fields(cls, value: object) -> dict[str, object]:
         """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
         representation."""
-        return compile_encoder(type(value)).encode_fields(value)
+        return _member_decoder(type(value)).encode(value)
 
     @classmethod
     def decode_bound(cls, target: type[T], data: object, **context: object) -> T:
@@ -1059,45 +1044,18 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def decode(self, data: object) -> T: ...
 
-    def encode_value(self, value: object) -> object:
-        if isinstance(value, WireValue):
-            return type(value).encode(value)
-        kind = type(value)
-        if value is None or kind is str or kind is int or kind is bool:
-            return value
-        if kind is float and math.isfinite(cast(float, value)):
-            return value
-        if is_dataclass(value) and not isinstance(value, type):
-            return FieldCodec.encode_record(value)
-        if isinstance(value, type) and issubclass(value, DeclaredFamily):
-            return value.declared_name
-        if isinstance(value, Enum):
-            return FieldCodec.encode(value.value)
-        if isinstance(value, (list, tuple, frozenset)):
-            items = sorted(value) if isinstance(value, frozenset) else value
-            return self.encode_items(items)
-        if isinstance(value, dict):
-            return self.encode_mapping(value)
-        raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+    @abstractmethod
+    def encode(self, value: T) -> object: ...
 
-    def encode_items(self, items: Iterable[object]) -> list[object]:
-        encoder = compile_encoder(None)
-        return [encoder.encode_value(item) for item in items]
+    def accepts_value(self, value: object) -> bool:
+        """Select an in-process union case using its compiled declaration."""
+        return isinstance(value, self.target)
 
-    def encode_mapping(self, value: dict[object, object]) -> object:
-        encoder = compile_encoder(None)
-        if all(type(key) is str for key in value):
-            return {key: encoder.encode_value(item) for key, item in value.items()}
-        return [[encoder.encode_value(key), encoder.encode_value(item)]
-                for key, item in value.items()]
+    def encode_document(self, value: T) -> object:
+        return self.encode(value)
 
-    def encode_fields(self, value: object) -> dict[str, object]:
-        result = FieldCodec._record_plan(type(value)).encoded(value, "wire", FieldPlan.encode_value)
-        result.update(
-            (member.wire_name, FieldCodec.encode(getattr(value, name)))
-            for name, member in FieldCodec._projections(type(value), "wire").items()
-        )
-        return result
+    def decode_document(self, data: object) -> T:
+        return self.decode(data)
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode(data)
@@ -1156,6 +1114,9 @@ class _ScalarDecoder(ValueDecoder[Any]):
     def accepts(self, data: object) -> bool:
         return False
 
+    def encode(self, value: object) -> object:
+        raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+
 class _ExactScalarDecoder(_ScalarDecoder):
     """A JSON scalar decoded only from its own type."""
 
@@ -1164,6 +1125,14 @@ class _ExactScalarDecoder(_ScalarDecoder):
 
     def accepts(self, data: object) -> bool:
         return type(data) is self.target
+
+    def accepts_value(self, value: object) -> bool:
+        return self.accepts(value)
+
+    def encode(self, value: object) -> object:
+        if not self.accepts(value):
+            raise TypeError(f"Expected {self.target}, received {type(value).__name__}")
+        return value
 
 class _TextDecoder(_ExactScalarDecoder):
     __slots__ = ()
@@ -1204,8 +1173,11 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
-    def encode_value(self, value: object) -> object:
+    def encode(self, value: object) -> object:
         return None if value is None else self.representation.encode(value)
+
+    def accepts_value(self, value: object) -> bool:
+        return self.structural.accepts_value(value)
 
     @boundary_decoder
     def decode(self, data):
@@ -1220,9 +1192,8 @@ class _RepresentedDecoder(ValueDecoder[Any]):
                 return representation.from_wire(data)
             return representation.decode(data)
 
-@dataclass(frozen=True, slots=True)
-class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
-    annotations = (Any, object)
+class _JsonValueRepresentation(FieldRepresentation):
+    """An opaque JSON declaration validates JSON, not Python object representations."""
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -1249,6 +1220,25 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
         return {}
 
 
+@dataclass(frozen=True, slots=True)
+class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[Any]):
+    """Only an undeclared value needs runtime representation selection."""
+
+    annotations = (Any, None)
+
+    def accepts_value(self, value: object) -> bool:
+        return True
+
+    def encode(self, value: object) -> object:
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if type(value) is dict:
+            if all(type(key) is str for key in value):
+                return {key: self.encode(item) for key, item in value.items()}
+            return [[self.encode(key), self.encode(item)] for key, item in value.items()]
+        return compile_decoder(type(value)).encode(value)
+
+
 def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
     """A wire name the family does not declare is malformed data."""
     try:
@@ -1261,13 +1251,17 @@ def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFa
 class _FamilyNameDecoder(_ChoiceDecoder[Any]):
     origins = (type,)
 
-    @property
-    def family(self) -> type[DeclaredFamily]:
-        return get_args(self.target)[0]
+    family: type[DeclaredFamily]
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(target) if args and issubclass(args[0], DeclaredFamily) else _member_decoder(target)
+        return cls(target, args[0]) if args and issubclass(args[0], DeclaredFamily) else _member_decoder(target)
+
+    def accepts_value(self, value: object) -> bool:
+        return isinstance(value, type) and issubclass(value, self.family)
+
+    def encode(self, value: type[DeclaredFamily]) -> str:
+        return value.declared_name
 
     def editor_choices(self):
         return tuple((name, name) for name in self.family.names())
@@ -1281,10 +1275,20 @@ class _FamilyNameDecoder(_ChoiceDecoder[Any]):
 class _LiteralDecoder(_ChoiceDecoder[Any]):
     origins = (Literal,)
     values: tuple[object, ...]
+    value_plans: tuple[ValueDecoder[object], ...]
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(target, args)
+        return cls(target, args, tuple(compile_decoder(type(value)) for value in args))
+
+    def accepts_value(self, value: object) -> bool:
+        return any(type(value) is type(item) and value == item for item in self.values)
+
+    def encode(self, value: object) -> object:
+        for item, plan in zip(self.values, self.value_plans, strict=True):
+            if type(value) is type(item) and value == item:
+                return plan.encode(value)
+        raise TypeError(f"Value does not match {self.target}")
 
     def editor_choices(self):
         return tuple((str(value), value) for value in self.values)
@@ -1309,6 +1313,15 @@ class UnionDecoder[T](ValueDecoder[T]):
 
     def argument_options(self) -> dict[str, object]:
         return self.alternatives[0].argument_options()
+
+    def accepts_value(self, value: object) -> bool:
+        return any(alternative.accepts_value(value) for alternative in self.alternatives)
+
+    def encode(self, value: T) -> object:
+        for alternative in self.alternatives:
+            if alternative.accepts_value(value):
+                return alternative.encode(value)
+        raise TypeError(f"Value does not match {self.target}")
 
     def decode(self, data: object) -> T:
         return self.decode_bound(data, {})
@@ -1338,7 +1351,13 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(target, tuple(compile_decoder(item) for item in args))
+        return cls(target, tuple(compile_decoder(item) for item in (args or (Any,))))
+
+    def accepts_value(self, value: object) -> bool:
+        return isinstance(value, self.container)
+
+    def encode(self, value: Iterable[object]) -> list[object]:
+        return self.encode_items(value)
 
     def decode(self, data):
         if not isinstance(data, list):
@@ -1346,9 +1365,7 @@ class _ArrayDecoder(ValueDecoder[Any]):
         return self.container(self.decode_items(data))
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
-        if not self.items:
-            return ValueDecoder.encode_items(self, items)
-        return [self.items[0].encode_value(item) for item in items]
+        return [self.items[0].encode(item) for item in items]
 
     def decode_items(self, data):
         return (self.items[0].decode(value) for value in data)
@@ -1356,6 +1373,9 @@ class _ArrayDecoder(ValueDecoder[Any]):
 class _FrozenSetDecoder(_ArrayDecoder):
     origins = (frozenset,)
     container = frozenset
+
+    def encode(self, value: frozenset[object]) -> list[object]:
+        return self.encode_items(sorted(value))
 
 class _ListDecoder(_ArrayDecoder):
     origins = (list,)
@@ -1367,6 +1387,8 @@ class _TupleDecoder(_ArrayDecoder):
 
     @classmethod
     def from_annotation(cls, target, args):
+        if target is tuple:
+            return _VariadicTupleDecoder(target, (compile_decoder(Any),))
         if len(args) == 2 and args[1] is Ellipsis:
             return _VariadicTupleDecoder(target, (compile_decoder(args[0]),))
         return _FixedTupleDecoder(target, tuple(compile_decoder(item) for item in args))
@@ -1376,9 +1398,7 @@ class _VariadicTupleDecoder(_TupleDecoder):
 
 class _FixedTupleDecoder(_TupleDecoder):
     def encode_items(self, items: Iterable[object]) -> list[object]:
-        if not self.items:
-            return super().encode_items(items)
-        return [encoder.encode_value(item) for encoder, item in zip(self.items, items, strict=True)]
+        return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]
 
     def decode_items(self, data):
         if len(data) != len(self.items):
@@ -1411,19 +1431,16 @@ def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]]:
 class _DictDecoder(ValueDecoder[Any]):
     key: ValueDecoder[object]
     value: ValueDecoder[object]
-    entries: Callable[[object], Iterable[tuple[object, object]]]
     origins = (dict,)
 
     @classmethod
     def from_annotation(cls, target, args):
-        entries = _object_entries if args[0] is str else _object_or_pair_entries
-        return cls(target, compile_decoder(args[0]), compile_decoder(args[1]), entries)
+        key, value = args or (str, Any)
+        plan = _StringKeyDictDecoder if key is str else _PairKeyDictDecoder
+        return plan(target, compile_decoder(key), compile_decoder(value))
 
-    def encode_mapping(self, value: dict[object, object]) -> object:
-        if self.key.target is str:
-            return {key: self.value.encode_value(item) for key, item in value.items()}
-        return [[self.key.encode_value(key), self.value.encode_value(item)]
-                for key, item in value.items()]
+    def accepts_value(self, value: object) -> bool:
+        return isinstance(value, dict)
 
     def decode(self, data):
         return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
@@ -1434,27 +1451,36 @@ class _DictDecoder(ValueDecoder[Any]):
                     value, selections, fields=self.value.field_names)
                 for key, value in self.entries(data) if key in encoded}
 
+class _StringKeyDictDecoder(_DictDecoder):
+    entries = staticmethod(_object_entries)
+
+    def encode(self, value: dict[str, object]) -> dict[str, object]:
+        return {key: self.value.encode(item) for key, item in value.items()}
+
+    def encode_document(self, value: dict[str, object]) -> dict[str, object]:
+        return {key: self.value.encode_document(item) for key, item in value.items()}
+
+    def decode_document(self, data: object) -> dict[str, object]:
+        return {self.key.decode(key): self.value.decode_document(value)
+                for key, value in self.entries(data)}
+
+
+class _PairKeyDictDecoder(_DictDecoder):
+    entries = staticmethod(_object_or_pair_entries)
+
+    def encode(self, value: dict[object, object]) -> list[list[object]]:
+        return [[self.key.encode(key), self.value.encode(item)]
+                for key, item in value.items()]
+
+
 @dataclass(frozen=True, slots=True)
 class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
 
-    @staticmethod
-    def document_member(declared: object) -> type[DeclaredFamily] | None:
-        """The leaf member a document declares directly or as its mapping's values."""
-        if get_origin(declared) is dict and get_args(declared)[0] is str:
-            declared = get_args(declared)[1]
-        if not (isinstance(declared, type) and issubclass(declared, DeclaredFamily)):
-            return None
-        if not declared.decodes_tagged_records():
-            return None
-        members = declared._member_declarations()
-        if declared not in members or any(
-            other is not declared and issubclass(other, declared) for other in members
-        ):
-            return None
-        return declared
+    def encode(self, value: Member) -> dict[str, object]:
+        return {**value.record_tag(), **_member_decoder(type(value)).encode(value)}
 
     def editor_choices(self):
         return tuple((member.label, {self.target.family_discriminator: member.declared_name})
@@ -1488,12 +1514,32 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
 
+class _LeafDocumentDecoder(_FamilyRecordDecoder):
+    """A directly declared leaf document omits its family selector."""
+
+    def encode_document(self, value: DeclaredFamily) -> object:
+        return _member_decoder(type(value)).encode(value)
+
+    def decode_document(self, data: object) -> object:
+        return _member_decoder(self.target).decode(data)
+
+
 @dataclass(frozen=True, slots=True)
 class _RecordDecoder(ValueDecoder[Any]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
     target: type
+
+    def encode(self, value: object) -> dict[str, object]:
+        result = FieldCodec._record_plan(type(value)).encoded(
+            value, "wire", lambda entry, current: entry.value.encode(current)
+        )
+        result.update(
+            (member.wire_name, FieldCodec.encode(getattr(value, name)))
+            for name, member in FieldCodec._projections(type(value), "wire").items()
+        )
+        return result
 
     def checked(self, data: object) -> dict:
         target = self.target
@@ -1537,6 +1583,15 @@ class _RecordDecoder(ValueDecoder[Any]):
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(_ChoiceDecoder[Any]):
     target: type[Enum]
+    value_plan: ValueDecoder[object]
+
+    @classmethod
+    def from_annotation(cls, target, args):
+        value_types = tuple(dict.fromkeys(type(member.value) for member in target))
+        return cls(target, ValueDecoder.for_members(value_types))
+
+    def encode(self, value: Enum) -> object:
+        return self.value_plan.encode(value.value)
 
     def editor_choices(self):
         return tuple((str(member.value), member.value) for member in self.target)
@@ -1544,16 +1599,6 @@ class _EnumDecoder(_ChoiceDecoder[Any]):
     def decode(self, data):
         with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target(data)
-
-@lru_cache(maxsize=None)
-def compile_encoder(annotation: object) -> ValueDecoder[object]:
-    """Resolve encoding once through the existing annotation plan family.
-
-    The same plan already owns representation, fixed/variadic elements and
-    mapping keys/values; encoding does not maintain a parallel type resolver.
-    """
-    return compile_decoder(annotation)
-
 
 @overload
 def compile_decoder[T](annotation: type[T]) -> ValueDecoder[T]: ...
@@ -1563,19 +1608,35 @@ def compile_decoder(annotation: object) -> ValueDecoder[object]: ...
 def compile_decoder(annotation: object) -> ValueDecoder[object]:
     """Compile one annotation's decoder. Declarations are finite and
     immutable for this process, so every decoder is built once."""
-    target, representation = FieldCodec._representation(annotation)
-    structural = _structural_decoder(target)
+    declared, representation = FieldCodec._representation(annotation)
     if representation is None:
-        return structural
+        return _structural_decoder(declared)
+    # The capability applies to every member of its declared nullable type,
+    # including non-JSON Python classes such as Path.
+    if get_origin(declared) in (Union, types.UnionType):
+        structural = UnionDecoder(declared, tuple(
+            compile_decoder(Annotated[member, representation]) for member in get_args(declared)
+        ))
+    else:
+        structural = (_ScalarDecoder(declared)
+                      if isinstance(declared, type) and declared not in ValueDecoder._by_annotation
+                      else _structural_decoder(declared))
     return _RepresentedDecoder(annotation, representation, structural)
 
-def _structural_decoder(target: object) -> ValueDecoder[object]:
-    decoder = ValueDecoder._by_annotation.get(target) or ValueDecoder._by_origin.get(get_origin(target))
+def _structural_decoder(annotation: object) -> ValueDecoder[object]:
+    decoder = ValueDecoder._by_annotation.get(annotation) or ValueDecoder._by_origin.get(
+        get_origin(annotation) or annotation
+    )
     if decoder is not None:
-        return decoder.from_annotation(target, get_args(target))
-    if isinstance(target, type) and issubclass(target, DeclaredFamily):
-        return _FamilyRecordDecoder(target)
-    return _member_decoder(target)
+        return decoder.from_annotation(annotation, get_args(annotation))
+    if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
+        members = annotation._member_declarations()
+        leaf_document = annotation.decodes_tagged_records() and annotation in members and not any(
+            other is not annotation and issubclass(other, annotation) for other in members
+        )
+        plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
+        return plan(annotation)
+    return _member_decoder(annotation)
 
 @lru_cache(maxsize=None)
 def _member_decoder(target: object) -> ValueDecoder[object]:
@@ -1583,5 +1644,5 @@ def _member_decoder(target: object) -> ValueDecoder[object]:
     if isinstance(target, type) and is_dataclass(target):
         return _RecordDecoder(target)
     if isinstance(target, type) and issubclass(target, Enum):
-        return _EnumDecoder(target)
-    return _ScalarDecoder(target)
+        return _EnumDecoder.from_annotation(target, ())
+    raise TypeError(f"Unsupported JSON type: {target}")
