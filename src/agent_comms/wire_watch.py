@@ -126,13 +126,17 @@ class WireWatch(ABC):
         pass
 
     @staticmethod
-    async def observations(*sources: WatchSource) -> AsyncGenerator[WireWatch]:
+    async def observations(*sources: WatchSource, refresh_seconds: float | None = None) -> AsyncGenerator[WireWatch]:
         watcher = open_wire_watcher(*sources)
         try:
             while True:
                 await watcher.prepare()
                 yield watcher
-                watcher = await watcher.wait()
+                try:
+                    async with asyncio.timeout(refresh_seconds):
+                        watcher = await watcher.wait()
+                except TimeoutError:
+                    pass
         finally:
             watcher.close()
 
@@ -204,8 +208,6 @@ class NativeFileWatch(FileWatch):
                         self.invalid = True
         except BlockingIOError:
             pass
-        except OSError:
-            self.invalid = True
         return frozenset(changed)
 
     def close(self) -> None:

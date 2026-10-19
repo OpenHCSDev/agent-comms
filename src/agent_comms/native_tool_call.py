@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, ClassVar, Never
 if TYPE_CHECKING:
     from .native_tool_transport import ToolTransport
     from .envelope_claim_transitions import FileClaimPath
+    from .storage_room import RoomReservation
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -183,6 +184,17 @@ class CallProgress:
     observation: CallObservation = field(default_factory=AwaitingAnnouncement)
     claim_scope: CallClaim = field(default_factory=AwaitingClaim)
     started: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    room: RoomReservation = field(init=False, repr=False)
+
+    def __post_init__(self):
+        # The reservation is mutable call state, not part of its frozen payload.
+        from .storage_room import NoRoomNeeded
+        self.room = NoRoomNeeded()
+
+    async def finish_room(self):
+        from .storage_room import NoRoomNeeded
+        await asyncio.to_thread(self.room.finish)
+        self.room = NoRoomNeeded()
 
 
 @dataclass(frozen=True)
@@ -270,8 +282,10 @@ class CodingCall(NativeToolCall):
     @abstractmethod
     def digest(self) -> str: ...
 
-    def decide_storage(self, registry, thread: str) -> None:
-        """A call without executable effects has nothing to decide."""
+    @classmethod
+    def storage_effects(cls, cwd):
+        """A call without executable effects needs no room."""
+        return ()
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int

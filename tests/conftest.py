@@ -266,7 +266,7 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order: ())
 
     for created, name in enumerate(("lead", "worker"), 1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     return comms, ThreadCaller("lead")

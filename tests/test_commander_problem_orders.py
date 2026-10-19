@@ -512,7 +512,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
-    with pytest.raises(SystemExit, match='does not pass undelivered work'):
+    with pytest.raises(ValueError, match='The order check is 1 away'):
         script.correct_check('P1', corrected, why)  # main still holds 0
     with pytest.raises(TodoConflict):
         CommsOrderCheckTool(problem='P1', check=OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)),
@@ -546,7 +546,7 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
                     "Works when: the installed app shows the counter at one after restart\n"
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
+    with pytest.raises(ValueError, match='Jargon'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
     assert script.held_orders() == () and 'Problem: NEW' in body.read_text()
 
@@ -1335,7 +1335,7 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
 
     def guarded(*targets):
         command = 'agent-comms send --from lead ' + ' '.join(f'--to {target}' for target in targets) + ' --body hi'
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([])
         return capsys.readouterr().out
 
@@ -1356,7 +1356,7 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
                                                           command, kind):
     """lead's registered process runs in Claude session s1. With no install planned, tactical work
     run in s1 is refused with the instruction to plan one; once the install is planned for worker,
-    it is refused with the order to send worker. The same command from another session, and an
+    it is refused with the order to send worker, and once it is planned for lead it runs. The same command from another session, and an
     order whose body names the command, pass. Once lead's process is gone no session can be
     classified, so every session is refused with the read error."""
     import io, os, subprocess
@@ -1372,7 +1372,7 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
                                        process_identity=ProcessIdentity.capture(process.pid)))
 
         def guarded(command, session):
-            hook = {'session_id': session, 'tool_input': {'command': command}}
+            hook = {'session_id': session, 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}}
             monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(hook)))
             send_guard.main([])
             return capsys.readouterr().out
@@ -1387,6 +1387,8 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
         assert 'order send --to worker' in refused['permissionDecisionReason']
         assert guarded(command, 's2') == ''
         assert guarded(f'agent-comms-commander order send --to worker --body "run {command}"', 's1') == ''
+        PlannedInstallDeadline(RecordedEventTime(2000.0), 'lead').plan(comms.root)
+        assert guarded(command, 's1') == ''
     finally:
         process.kill()
         process.wait()
@@ -1401,7 +1403,7 @@ def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_
     create(commander, 'P1')
     for command in ('agent-comms send --from user --to lead --body "agent-comms send --from lead --to worker"',
                     'agent-comms send --from user --to lead --body "x; agent-comms send --from lead --to worker"'):
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([])
         assert capsys.readouterr().out == ''
 

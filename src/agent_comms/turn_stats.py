@@ -13,7 +13,7 @@ from . import pi_commands as commands
 from . import turn_phase as phases
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
+    from .backend import NativeSession
     from .pi_events import Response
 
 
@@ -50,34 +50,22 @@ class StatsRequest:
             for future in self._pending
         )
 
-    async def request(self, session: TurnSession) -> None:
+    async def request(self, session: NativeSession) -> None:
         if session.native.proc.stdin is None or self.requested:
             return
         self.generation = session.inputs.generation
         self.settlement_count = session.settlement_count
         requests = (
-            commands.GetState(
-                id=(
-                    f"agent-comms-stats-state-{secrets.token_hex(16)}"
-                    if session.persistent_session
-                    else None
-                )
-            ),
-            commands.GetSessionStats(
-                id=(
-                    f"agent-comms-stats-usage-{secrets.token_hex(16)}"
-                    if session.persistent_session
-                    else None
-                )
-            ),
+            commands.GetState(id=f"agent-comms-stats-state-{secrets.token_hex(16)}"),
+            commands.GetSessionStats(id=f"agent-comms-stats-usage-{secrets.token_hex(16)}"),
         )
         self._pending = tuple(session.native.reader.track(command) for command in requests)
         for command in requests:
             session.native.proc.stdin.write(session.native.reader.command_bytes(command))
         await session.native.proc.stdin.drain()
 
-    async def settle(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if session.persistent_session is None or not (self.complete or self.failed):
+    async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:
+        if not (self.complete or self.failed):
             return
         await asyncio.sleep(0)
         queued = session.inputs.queue.has_ready_work

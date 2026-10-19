@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from collections.abc import Mapping
 from typing import ClassVar, Self
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tool_call import SelectedToolDenied
 
@@ -48,7 +48,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def for_name(cls, name: str) -> type[ToolDeclaration] | UndeclaredTool:
         try:
             return cls.member_named(name.lower())
-        except ValueError:
+        except UnknownFamilyMember:
             return UndeclaredTool(name)
 
     @classmethod

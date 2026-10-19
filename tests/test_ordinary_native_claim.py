@@ -22,8 +22,9 @@ async def test_ordinary_native_write_commits_claim(native_backend, monkeypatch):
 
     async def observed_allow(owner, turn, round_number, call):
         assert isinstance(owner, OwnedSend), "This must exercise ordinary, not selected, input"
-        await allow(owner, turn, round_number, call)
+        reservation = await allow(owner, turn, round_number, call)
         claims.append(owner.claims[str(target.resolve())])
+        return reservation
 
     def chunks():
         assert native.provider.posts <= 2, "Never replay the ordinary input or tool"

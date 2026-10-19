@@ -175,10 +175,7 @@ class RestartEnvironment(EnvironmentRecord):
 
     def auth_revision(self) -> tuple[int, int]:
         """Observe this owner's credentials, never an ambient or fork directory."""
-        try:
-            info = (self.native_config / "auth.json").stat()
-        except FileNotFoundError:
-            return 0, 0  # No credentials file yet.
+        info = (self.native_config / "auth.json").stat()
         return info.st_mtime_ns, info.st_size
 
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:

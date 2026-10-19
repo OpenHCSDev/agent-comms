@@ -55,6 +55,7 @@ class ActivityState(Enum):
     STARTING = ("starting", WorkingThreadPresentationStatus())
     THINKING = ("thinking", WorkingThreadPresentationStatus())
     WORKING = ("working", WorkingThreadPresentationStatus())
+    WAITING_FOR_ROOM = ("waiting for room", WorkingThreadPresentationStatus())
     # Appended once when the thread is permanently deleted. The log stays
     # append-only; the latest-per-thread fold drops the thread on this record.
     DELETED = ("deleted", IdleThreadPresentationStatus())
