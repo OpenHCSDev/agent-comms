@@ -181,9 +181,9 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert [message.body for message in channel] == ["@Alice investigate"]
         assert all(message.role.notification_references(message) for message in channel)
         with pytest.raises(ValueError, match="not generically sendable"):
-            comms.messaging.send_message(
+            comms.messaging.send(
                 "Alice", "sender", "Invented claim notice", ClaimNoticeKind
-            )
+            ).message
 
 
 def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
@@ -192,8 +192,8 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
             comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
         )
         assert dict(comms.bus.log.claim_projection()) == {str(resource): claimed}
-        comms.messaging.send_message("Alice", "sender", "Explicit release",
-                                     releases=(str(resource),))
+        comms.messaging.send("Alice", "sender", "Explicit release",
+                                     releases=(str(resource),)).message
         with pytest.raises(IdentityConflict, match="already consumed"):
             publish_selected_resource_claim(
                 comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
@@ -222,7 +222,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
         async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
             comms = agent._comms
             comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
-            comms.messaging.send_message("sender", session, "Change the value")
+            comms.messaging.send("sender", session, "Change the value").message
             native.provider.tool_call = ("write", {"path": str(target), "content": "value = 2\n"})
             native.provider.text = "Changed it."
 

@@ -45,7 +45,7 @@ async def test_native_send_and_bash_share_checked_execution(native_backend, monk
             yield {}, "tool_calls"
 
         monkeypatch.setattr(native.provider, "response_chunks", chunks)
-        comms.messaging.send_message("requester", session, "Fresh isolated Send and coding execution verification")
+        comms.messaging.send("requester", session, "Fresh isolated Send and coding execution verification").message
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 35)
         assert native.provider.posts == 3

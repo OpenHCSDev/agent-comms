@@ -87,7 +87,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
             scope=ExplicitTaskScopeSelection(TurnTaskScope(project=owner.worktree)))
     comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(comms.root)))
     with pytest.raises(RelationViolationError, match="author"):
-        comms.messaging.send_message("peer", owner.name, "claim human source", task=pin.task)
+        comms.messaging.send("peer", owner.name, "claim human source", task=pin.task).message
     assert (comms.root / "bus.jsonl").read_bytes() == before
     comms.registry.rename(owner.name, "renamed-recipient")
     renamed = comms.registry.require("renamed-recipient")

@@ -183,7 +183,7 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
 ):
     comms, agent, _ = _session(tmp_path)
     for index in range(101):
-        comms.messaging.send_message("sender", "beta", f"old {index}")
+        comms.messaging.send("sender", "beta", f"old {index}").message
     comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new canonical"}, caller=NoThreadCaller())
     fake, calls = _fake_model(decision="FULL")
@@ -267,7 +267,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
     assert person.owner_thread == "beta" and person.participant_generation == 3
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
-        comms.messaging.send_message("sender", "beta", "not published after uncertain rename")
+        comms.messaging.send("sender", "beta", "not published after uncertain rename").message
     bus = responder(comms.root, comms.registry)
     with (
         Coordination(str(comms.root / "coordination.sqlite3")) as store,
@@ -531,7 +531,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
             updates.append(cursor.envelope)
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    comms.messaging.send_message("sender", "beta", "first")
+    comms.messaging.send("sender", "beta", "first").message
     assert await agent.inputs.drain_inbox("beta") == 1
     await reply_turn_finished(agent, "beta")
     assert updates[-1].status == "proven"
@@ -610,7 +610,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         comms = agent._comms
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
         async with native.original_input(agent, session, "Current human input") as turn:
-            sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+            sent = comms.messaging.send("sender", session, "Selected input after current turn").message
             native.provider.text = json.dumps(FieldCodec.encode((Message(
                 session, sent.exact_reply_target, "Selected input acknowledged",
                 InfoKind, timestamp=0,

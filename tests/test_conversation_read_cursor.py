@@ -29,7 +29,7 @@ def setup_conversations(root):
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset({"a", "b"}), str(root),
         ))
-    messages = [comms.messaging.send_message("sender", target, target)
+    messages = [comms.messaging.send("sender", target, target).message
                 for target in ("#a", "#b", "#a", "#b")]
     return comms, messages
 

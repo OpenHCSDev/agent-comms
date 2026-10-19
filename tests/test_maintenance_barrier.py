@@ -43,7 +43,7 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     control = comms.owners.maintenance
     # A post pending when the drain begins; the drain refuses new publication.
     # Use the actual scratch bus, not a constructed message pretending to be a post.
-    post = comms.messaging.send_message('sender', '#team', 'mid-drain channel post')
+    post = comms.messaging.send('sender', '#team', 'mid-drain channel post').message
     hold = control.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     queued = ScheduledTurn.incoming(post)
     starts = []
@@ -107,7 +107,7 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
 
     comms, agent, _root_id = _session(tmp_path)
     gate = comms.owners.maintenance
-    post = comms.messaging.send_message('sender', '#team', 'while draining')
+    post = comms.messaging.send('sender', '#team', 'while draining').message
     hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     assert await agent.inputs.drain_inbox('beta') == 0
     assert await agent.inputs.drain_inbox('beta') == 0

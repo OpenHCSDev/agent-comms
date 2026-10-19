@@ -50,9 +50,9 @@ def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team', 'extra'}), str(tmp_path / 'bob')))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    first = comms.messaging.send_message("bob", "#team", "first")
-    comms.messaging.send_message("bob", "#team", "second")
-    comms.messaging.send_message("bob", viewer, "direct")
+    first = comms.messaging.send("bob", "#team", "first").message
+    comms.messaging.send("bob", "#team", "second").message
+    comms.messaging.send("bob", viewer, "direct").message
     before = comms.views.viewer_snapshot(str(tmp_path))
     document = comms.bus.reads.read()
     with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
@@ -78,8 +78,8 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.registry.register(replace(viewer, tags=frozenset({"team"})))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    direct = comms.messaging.send_message("bob", viewer.name, "direct")
-    channel = comms.messaging.send_message("bob", "#team", "channel")
+    direct = comms.messaging.send("bob", viewer.name, "direct").message
+    channel = comms.messaging.send("bob", "#team", "channel").message
     document = comms.bus.reads.read()
     with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
         seen = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
@@ -106,7 +106,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
             displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
                 viewer.name, (channel,), comms.registry.snapshot(), opened, index, document=document))
         comms.bus.reads.mark_displayed(viewer.name, displayed)
-        comms.messaging.send_message("bob", viewer.name, "later direct")
+        comms.messaging.send("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
         if not indexed:
             with pytest.raises(sqlite3.OperationalError) as refused:
@@ -128,8 +128,8 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.registry.register(viewer)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    comms.messaging.send_message("bob", viewer.name, "direct")
-    comms.messaging.send_message("bob", "#team", "channel")
+    comms.messaging.send("bob", viewer.name, "direct").message
+    comms.messaging.send("bob", "#team", "channel").message
     expected = comms.views.viewer_snapshot(str(tmp_path))
 
     bus_path = comms.bus.log.path
@@ -213,7 +213,7 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     for body in ("first", "second"):
-        comms.messaging.send_message("sender", viewer, body)
+        comms.messaging.send("sender", viewer, body).message
     index = BusRouteCounts(comms.bus.log.path)
     index.prepare()
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
@@ -246,8 +246,8 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     viewer = comms.messaging.user_identity(str(tmp_path))
-    comms.messaging.send_message("bob", viewer.name, "direct")
-    comms.messaging.send_message("bob", "#team", "channel")
+    comms.messaging.send("bob", viewer.name, "direct").message
+    comms.messaging.send("bob", "#team", "channel").message
     original = comms.bus.log.opened_wire_snapshot
     opened = []
 
@@ -270,7 +270,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
     """An actual stale-read outcome preserves the same observer and last answer."""
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    comms.messaging.send("bob", "#team", "first")
+    comms.messaging.send("bob", "#team", "first").message.message_id
 
     receiver, connection = Pipe()
     service = ObservationService(comms, connection)
@@ -285,7 +285,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
         assert published.snapshot.channel_unread["#team"] == 1
         observer = service.interest.observations[SidebarReading]
         original = comms.views.presentation.display_view_metrics
-        comms.messaging.send("bob", "#team", "second")
+        comms.messaging.send("bob", "#team", "second").message.message_id
         preserved = comms.bus.log.path.read_bytes()
 
         def change_source(*args, **kwargs):
@@ -325,7 +325,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     for number in range(100):
-        comms.messaging.send("bob", "#team", f"message {number}")
+        comms.messaging.send("bob", "#team", f"message {number}").message.message_id
     expected = comms.views.viewer_snapshot(str(tmp_path))
     assert expected.channel_unread["#team"] == 100
 
@@ -334,7 +334,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
         assert fresh.views.viewer_snapshot(str(tmp_path)) == expected
         assert decode.call_count == 0
 
-    comms.messaging.send("bob", "#team", "one new message")
+    comms.messaging.send("bob", "#team", "one new message").message.message_id
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         latest = fresh.views.viewer_snapshot(str(tmp_path))
         assert latest.channel_unread["#team"] == 101
@@ -351,8 +351,8 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    comms.messaging.send("bob", "#team", "first")
-    comms.messaging.send("bob", "#team", "second")
+    comms.messaging.send("bob", "#team", "first").message.message_id
+    comms.messaging.send("bob", "#team", "second").message.message_id
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
     checkpoint = BusDisplayIndex(
@@ -365,7 +365,7 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
 
     bus_path = comms.bus.log.path
     two = bus_path.read_bytes()
-    comms.messaging.send("bob", "#team", "third")
+    comms.messaging.send("bob", "#team", "third").message.message_id
     three = bus_path.read_bytes()
     replacement = bus_path.with_name("replacement.jsonl")
     replacement.write_bytes(two)
@@ -384,7 +384,7 @@ def test_display_read_progress_preserves_append_index(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
+    messages = [comms.messaging.send("bob", "#team", f"message {n}").message
                 for n in range(100)]
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     before = comms.views.viewer_snapshot(str(tmp_path))
@@ -405,7 +405,7 @@ def test_display_read_progress_preserves_append_index(tmp_path):
     assert saved.read_bytes() == stored
     assert after.channels == before.channels
     # A new row still contributes once, after the unchanged old prefix.
-    comms.messaging.send_message("bob", "#team", "appended")
+    comms.messaging.send("bob", "#team", "appended").message
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
 
 
@@ -413,7 +413,7 @@ def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    messages = [comms.messaging.send_message("bob", "#team", f"message {n}") for n in range(8)]
+    messages = [comms.messaging.send("bob", "#team", f"message {n}").message for n in range(8)]
     comms.messaging.send_user_message("#team", "my message", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 8
     saved = BusDisplayIndex(comms.bus.log.path, viewer).path
@@ -430,7 +430,7 @@ def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
 def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
+    messages = [comms.messaging.send("bob", "#team", f"message {n}").message
                 for n in range(10)]
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     before = comms.views.viewer_snapshot(str(tmp_path))
@@ -469,7 +469,7 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
 
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    message = comms.messaging.send_message("bob", "#team", "retained")
+    message = comms.messaging.send("bob", "#team", "retained").message
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer.name))
     comms.views.viewer_snapshot(str(tmp_path))
@@ -494,7 +494,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
-    comms.messaging.send("bob", "#team", "first")
+    comms.messaging.send("bob", "#team", "first").message.message_id
     appended = []
     original = comms.bus.log.opened_wire_snapshot
 
@@ -525,7 +525,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     comms.registry.declare(comms.registry.new_thread('bob', frozenset(), str(tmp_path / 'bob')))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     messages = [
-        comms.messaging.send_message("bob", viewer if number % 2 else "#team", f"message {number}")
+        comms.messaging.send("bob", viewer if number % 2 else "#team", f"message {number}").message
         for number in range(6)
     ]
     comms.messaging.send_user_message("bob", "own outgoing message", worktree=str(tmp_path))
@@ -565,7 +565,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         assert published.snapshot.unread == expected
         with closing(CoordinationStore.writer(BusRouteCounts(comms.bus.log.path).path)) as writer:
             writer.execute("BEGIN IMMEDIATE")
-            comms.messaging.send_message("renamed-bob", viewer, "during index contention")
+            comms.messaging.send("renamed-bob", viewer, "during index contention").message
             # Use the real SQLite busy result, not a wording-only DatabaseError.
             with patch.object(CoordinationStore, "writer_timeout", 0):
                 with pytest.raises(CoordinationReadUnavailable) as busy:

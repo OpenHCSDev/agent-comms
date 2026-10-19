@@ -33,7 +33,7 @@ def test_new_scope_preserves_indexed_progress_and_edges(
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
     messages = [
-        comms.messaging.send_message("sender", "recipient", body)
+        comms.messaging.send("sender", "recipient", body).message
         for body in ("noise", "review first", "review " + "x" * 3000,
                      "noise", "review last")
     ]
@@ -58,7 +58,7 @@ def test_dm_and_channel_pages_by_default_and_explicit_bounds(tmp_path, conversat
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
     target = "recipient" if conversation == "dm" else "#review"
-    sent = [comms.messaging.send_message("sender", target, f"{conversation} {n}") for n in range(4)]
+    sent = [comms.messaging.send("sender", target, f"{conversation} {n}").message for n in range(4)]
 
     def page(bounds=PageBounds()):
         if conversation == "dm":

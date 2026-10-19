@@ -126,9 +126,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     "#team", "@worker QUEUED_CHANNEL_REQUEST", worktree=str(project)
                 )
             else:
-                message = comms.messaging.send_message(
+                message = comms.messaging.send(
                     "peer", "#team", "@worker STEER_CHANNEL_REQUEST"
-                )
+                ).message
             messages = [message]
             if case in {"batch", "batch_rename"}:
                 messages.append(

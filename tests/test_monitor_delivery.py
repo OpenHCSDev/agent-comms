@@ -150,12 +150,12 @@ def test_old_emission_has_no_invented_evidence_or_replay(tmp_path):
 async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     from contextlib import aclosing
     import asyncio
-    first=wired.messaging.send_message('PR111','fixer','first')
+    first=wired.messaging.send('PR111','fixer','first').message
     async with aclosing(wired.bus.watch('fixer', acknowledgment=ExplicitWatchAcknowledgment)) as stream:
         assert (await anext(stream)).reference==first.reference
         pending=asyncio.create_task(anext(stream))
         try:
-            second=wired.messaging.send_message('PR111','fixer','second')
+            second=wired.messaging.send('PR111','fixer','second').message
             async with asyncio.timeout(3):
                 taken=await pending
                 while taken.reference==first.reference:
