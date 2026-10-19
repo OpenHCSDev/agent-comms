@@ -29,7 +29,7 @@ class LedgerDocument(CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]]):
+class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]], lock_rank=7):
     """One free-form JSON document; no in-memory mirror or closed value family."""
 
     filename: ClassVar[str] = "ledger.json"
