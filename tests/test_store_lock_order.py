@@ -8,8 +8,10 @@ from agent_comms.comms import wire
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.historical_views import DMDisplayHistory
-from agent_comms.store_files import SharedLock, StoreLock
+from agent_comms.message_bus import MessageBus
+from agent_comms.store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner
 from agent_comms.threads import Thread
+from agent_comms.wire_log import WireLog
 
 
 def test_undeclared_store_rank_is_rejected_before_acquisition():
@@ -18,13 +20,24 @@ def test_undeclared_store_rank_is_rejected_before_acquisition():
             pytest.fail("Unranked owner was authorized")
 
 
-def test_concrete_store_cannot_inherit_or_omit_its_rank():
-    with pytest.raises(TypeError, match="own lock_rank"):
-        class UnrankedCatalog(ChannelCatalog):
-            pass
-    with pytest.raises(TypeError, match="own lock_rank"):
-        class MissingRankCatalog(ChannelCatalog):
+@pytest.mark.parametrize("owner_type", [MessageBus, WireLog, ChannelCatalog])
+def test_concrete_store_must_be_declared_at_startup(owner_type, monkeypatch):
+    monkeypatch.setattr(StoreOwner, "__registry__", dict(StoreOwner.__registry__))
+    class UnrankedOwner(owner_type):
+        pass
+
+    with pytest.raises(TypeError, match="missing from the lock order"):
+        StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order)
+    with pytest.raises(TypeError, match="absent from the declared lock order"):
+        object.__new__(UnrankedOwner).lock_rank
+    with pytest.raises(TypeError, match="derive from the composition root"):
+        class MissingRankOwner(owner_type):
             lock_rank = None
+
+
+def test_duplicate_owner_in_order_is_rejected():
+    with pytest.raises(TypeError, match="occurs twice"):
+        StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order, WireLog)
 
 
 def test_conversation_read_and_native_write_share_declared_order(tmp_path):
@@ -39,6 +52,13 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
             return
         path = os.readlink(f'/proc/self/fd/{frame.f_locals["descriptor"]}')
         actor = threading.current_thread().name
+        if actor == "native":
+            # Activity is read and released before the ordered publication hold.
+            parent = frame.f_back
+            while parent is not None and parent.f_code is not StoreLock.ordered.__wrapped__.__code__:
+                parent = parent.f_back
+            if parent is None:
+                return
         if actor == "native" and event == "call" and path.endswith(".bus.jsonl.lock"):
             writer_at_bus.set()
         if event != "return":
