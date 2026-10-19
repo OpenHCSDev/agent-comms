@@ -39,9 +39,7 @@ class RepositoryName(WireValue):
     def from_wire(cls, data: object) -> RepositoryName:
         if not isinstance(data, str):
             raise MalformedRecord("Repo ID must be an owner/repo string.")
-        owner, separator, name = data.partition("/")
-        if not separator:
-            raise ValueError("Repo ID must have the exact owner/repo form.")
+        owner, _, name = data.partition("/")
         return cls(owner, name)
 
     @classmethod
