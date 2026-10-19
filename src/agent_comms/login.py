@@ -15,20 +15,9 @@ def run_login(provider: str = "") -> int:
     package = ConfigOptions.configured().package
     env = os.environ.copy()
     ThreadLaunch.strip(env)
-    env.pop("AGENT_COMMS_PROJECT_SOCKET", None)
-    env.pop("AGENT_COMMS_PROJECT_REQUEST", None)
-    env = package.node_environment(env)
-    env["AGENT_COMMS_LOGIN_PROVIDER"] = provider
-    command = [
-        *package.node(),
-        "--no-session",
-        "--no-tools",
-        "--no-extensions",
-        "-e",
-        str(package.cli.with_name("pi_login_control.mjs")),
-        "--no-skills",
-        "--no-context-files",
-        "--no-prompt-templates",
-        "--no-themes",
-    ]
+    env = {**package.node_environment(env), "AGENT_COMMS_LOGIN_PROVIDER": provider}
+    env.pop("AGENT_COMMS_PROJECT_SOCKET", None), env.pop("AGENT_COMMS_PROJECT_REQUEST", None)
+    command = [*package.node(), "--no-session", "--no-tools", "--no-extensions",
+               "-e", str(package.cli.with_name("pi_login_control.mjs")), "--no-skills",
+               "--no-context-files", "--no-prompt-templates", "--no-themes"]
     return subprocess.call(command, env=env)
