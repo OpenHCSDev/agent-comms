@@ -136,9 +136,9 @@ def test_started_turn_still_finishes_after_its_project_changes(tmp_path):
         replace(turn, thread=comms.registry.require("owner")).require_running_turn(comms.registry)
 
 
-async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp_path):
+async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp_path, native_runtime_package):
     """The live failure: a direct message's turn changed project, then no turn ever started."""
-    async with native_backend_fixture(tmp_path) as native:
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         await native.author_history()
         second = tmp_path / "second"
         second.mkdir()
