@@ -17,7 +17,7 @@ from pydantic import (
     ValidateAs,
 )
 
-from agent_comms.activity import ActivityState
+from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
@@ -289,7 +289,6 @@ class Item(TaggedWire, ABC):
     )
     id: str
     # What the CLI is doing while it produces this item.
-    activity: ClassVar[ActivityState] = ActivityState.WORKING
     doing: ClassVar[str] = ''
 
     @abstractmethod
@@ -303,8 +302,8 @@ class Item(TaggedWire, ABC):
         return DraftAccumulator(started_at)
 
     @property
-    def activity_detail(self) -> str:
-        return self.doing
+    def phase(self) -> TurnPhase:
+        return ModelWaitPhase(self.doing)
 
 class TextBody(WireModel):
     text: str
@@ -328,7 +327,6 @@ class PlanItem(TextBody, Item):
 
 class ReasoningItem(Item):
     wire_tag = 'reasoning'
-    activity = ActivityState.THINKING
     summary: list[str] = Field(default_factory=list)
 
     def accumulator(self, started_at: EventTime) -> ParagraphDraft:
@@ -381,8 +379,8 @@ class ToolItem(Item, ABC):
         return self.call.finished(self.output, self.succeeded, self.id, timestamp)
 
     @property
-    def activity_detail(self) -> str:
-        return self.call.title
+    def phase(self) -> TurnPhase:
+        return ToolRunningPhase(tools=((self.id, self.call.title),))
 
 
 class CommandItem(ToolItem):
@@ -543,7 +541,10 @@ class SendOutputItem(FunctionOutputItem):
 
 class CompactionItem(Item):
     wire_tag = 'contextCompaction'
-    doing = 'Compacting context'
+
+    @property
+    def phase(self) -> TurnPhase:
+        return CompactionPhase()
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript('Context compacted.', position=self.id, timestamp=timestamp),)
@@ -580,8 +581,8 @@ class SleepItem(Item):
         return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).', position=self.id, timestamp=timestamp),)
 
     @property
-    def activity_detail(self) -> str:
-        return f'Waiting {self.durationMs} ms'
+    def phase(self) -> TurnPhase:
+        return ToolRunningPhase(tools=((self.id, f'Waiting {self.durationMs} ms'),))
 
 
 class ImageViewItem(Item):
@@ -614,8 +615,8 @@ class WebSearchItem(Item):
         return (NoticeTranscript(f'Web search: {self.query}', position=self.id, timestamp=timestamp),)
 
     @property
-    def activity_detail(self) -> str:
-        return f'Searching: {self.query}'
+    def phase(self) -> TurnPhase:
+        return ToolRunningPhase(tools=((self.id, f'Searching: {self.query}'),))
 
 
 class PatchChange(TaggedWire, ABC):
@@ -799,7 +800,7 @@ class Started(ItemNotification):
     startedAtMs: int
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
-        return StartedItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail,
+        return StartedItem(self.turnId, self.item.id, self.item.phase,
                            self.item.accumulator(EventTime.capture(self.startedAtMs / 1000)))
 
 

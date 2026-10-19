@@ -8,7 +8,7 @@ from typing import ClassVar, Literal
 from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
-from agent_comms.activity import ActivityState
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.runtime_updates import (
@@ -127,8 +127,7 @@ class TextualPart(Part, ABC):
     text: str
     time: PartTime | None = None
     event_type: ClassVar[builtins.type[LiveTextTranscript]]
-    activity: ClassVar[ActivityState]
-    detail: ClassVar[str]
+    phase: ClassVar[TurnPhase]
 
     def timestamp(self, message: MessageInfo) -> float:
         return (self.time.start if self.time is not None else message.time.created) / 1000
@@ -144,14 +143,13 @@ class TextualPart(Part, ABC):
         accumulator = self.accumulator(message)
         if self.finished(message):
             return (CompletedItem(message.id, self.id, accumulator.events),)
-        return (StartedItem(message.id, self.id, self.activity, self.detail, accumulator),)
+        return (StartedItem(message.id, self.id, self.phase, accumulator),)
 
 
 class TextPart(TextualPart):
     wire_tag = 'text'
     event_type = AssistantTranscript
-    activity = ActivityState.WORKING
-    detail = 'Replying'
+    phase = ModelWaitPhase('Replying')
 
     def matches(self, session: str, text: str) -> bool:
         return self.sessionID == session and self.text == text
@@ -166,8 +164,7 @@ class TextPart(TextualPart):
 class ReasoningPart(TextualPart):
     wire_tag = 'reasoning'
     event_type = ThinkingTranscript
-    activity = ActivityState.THINKING
-    detail = ''
+    phase = ModelWaitPhase()
 
 
 class ToolArguments(WireModel):
@@ -201,7 +198,8 @@ class PendingTool(ToolState):
     wire_tag = 'pending'
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
-        return (ActiveItem(message.id, part.id, ActivityState.WORKING, self.call(part).title),)
+        return (ActiveItem(message.id, part.id,
+                           ToolRunningPhase(tools=((part.callID, self.call(part).title),))),)
 
 
 class RunningTool(PendingTool):

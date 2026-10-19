@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .activity import ActivityState
+from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
@@ -35,7 +35,7 @@ class DraftAccumulator:
 
     def started(self, update: StartedItem) -> tuple[RuntimeUpdate, ...]:
         return (
-            *self.activity(ActiveItem(update.turn_id, update.item_id, update.state, update.detail)),
+            *self.activity(ActiveItem(update.turn_id, update.item_id, update.phase)),
             *self.snapshot(update.turn_id, update.item_id),
         )
 
@@ -179,9 +179,9 @@ class ThreadOutput:
     def end_all_turns(self) -> None:
         self.drafts.clear()
 
-    def status(self, state: ActivityState, detail: str = "") -> None:
-        detail = " ".join(detail.split())
-        self.agents.set_activity(self.transcript.incarnation.name, state, detail)
+    def enter(self, phase: TurnPhase) -> None:
+        detail = " ".join(phase.activity_detail.split())
+        self.agents.set_activity(self.transcript.incarnation.name, phase.activity_state, detail)
 
 
 class ReadingPhase(ABC):
@@ -238,14 +238,14 @@ class TurnStarted(StatusUpdate):
     detail: str = ""
 
     def publish(self, output: ThreadOutput) -> None:
-        output.status(ActivityState.WORKING, self.detail)
+        output.enter(ModelWaitPhase(self.detail))
 
 
 @dataclass(frozen=True)
 class TurnEnded(StatusUpdate):
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.end_turn()
-        output.status(ActivityState.IDLE)
+        output.enter(IdlePhase())
 
 
 @dataclass(frozen=True)
@@ -254,11 +254,10 @@ class ActiveItem(KeyedItem, StatusUpdate):
 
     turn_id: str
     item_id: str
-    state: ActivityState
-    detail: str
+    phase: TurnPhase
 
     def publish(self, output: ThreadOutput) -> None:
-        output.status(self.state, self.detail)
+        output.enter(self.phase)
 
     def accumulate(self, output: ThreadOutput) -> tuple[RuntimeUpdate, ...]:
         return output.active_item(self)
