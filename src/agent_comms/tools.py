@@ -1077,7 +1077,7 @@ class CommsSendTool(ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
         try:
-            caller.require_directive(comms, self.body)
+            caller.require_directive(comms, self.target, self.body)
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
             result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         except ToolRefusedError as error:

@@ -37,6 +37,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from pydantic import JsonValue
 
+from .channel_targets import CommandTarget
 from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
@@ -49,7 +50,7 @@ from .connector_store import (
     RegisteredClient, digest,
 )
 from .messages import Message
-from .todos import DirectiveText
+from .todos import AuthorizedAct, DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import CommsChannelsTool, ReadTool, ToolRequest
 
@@ -62,9 +63,11 @@ class DirectorCaller(ThreadCaller):
     """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
     request when that thread holds owner requests."""
 
-    def require_directive(self, comms: Comms, body: str) -> None:
-        """A directive passes DirectiveText. claude-ai directs the commanders, so the
-        commander rules review does not gate it."""
+    def require_directive(self, comms: Comms, target: str, body: str) -> None:
+        """Refuse routine permission questions to humans; the owner needs no commander review."""
+        for name in CommandTarget.named(target).direct_names:
+            for human_body in comms.registry.require(name).role.human(body):
+                AuthorizedAct.require(human_body)
         DirectiveText.require(body)
 
     def sent(self, comms: Comms, message: Message) -> None:

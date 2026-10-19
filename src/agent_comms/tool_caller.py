@@ -45,8 +45,8 @@ class ToolCaller(ABC):
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
 
     @abstractmethod
-    def require_directive(self, comms: Comms, body: str) -> None:
-        """A caller whose sends direct units refuses a body its directive checks refuse."""
+    def require_directive(self, comms: Comms, target: str, body: str) -> None:
+        """The calling role checks its directive for this destination before publication."""
 
     @abstractmethod
     def sent(self, comms: Comms, message: Message) -> None:
@@ -75,7 +75,7 @@ class NoThreadCaller(ToolCaller):
     def may_reconfigure(self, comms: Comms, name: str) -> bool:
         return not comms.registry.status(name).active
 
-    def require_directive(self, comms: Comms, body: str) -> None:
+    def require_directive(self, comms: Comms, target: str, body: str) -> None:
         """A caller with no thread gives no directive."""
 
     def sent(self, comms: Comms, message: Message) -> None:
@@ -103,7 +103,7 @@ class ThreadCaller(ToolCaller):
         return (not comms.registry.status(name).active
                 or comms.registry.canonical_name(name) == comms.registry.canonical_name(self.name))
 
-    def require_directive(self, comms: Comms, body: str) -> None:
+    def require_directive(self, comms: Comms, target: str, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""
 
     def sent(self, comms: Comms, message: Message) -> None:

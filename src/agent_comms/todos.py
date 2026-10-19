@@ -1007,6 +1007,106 @@ class Slop:
                 f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
 
 
+@dataclass(frozen=True)
+class PermissionQuestion:
+    """An interrogative clause, tokenized once before asking the act declarations."""
+
+    words: tuple[str, ...]
+    modals: ClassVar[frozenset[str]] = frozenset({"should", "shall", "may", "can", "could"})
+
+    @classmethod
+    def read(cls, text: str) -> Iterator[PermissionQuestion]:
+        for question in OrderWords.CITED.sub(" ", text).split("?")[:-1]:
+            clause = re.split(r"[.!;\n]", question)[-1]
+            yield cls(tuple(re.findall(r"[a-z]+", clause.casefold())))
+
+    def requests(self, verbs: tuple[str, ...]) -> bool:
+        for at, word in enumerate(self.words):
+            if word not in verbs:
+                continue
+            subject = self.words[:at]
+            if subject[-2:] == ("me", "to"):
+                return True
+            if len(subject) == 2 and subject[0] in self.modals and subject[1] in ("i", "we"):
+                return True
+        return False
+
+
+class AuthorizedAct(DeclaredFamily, affix="Act"):
+    """Routine acts the director performs without asking the human to authorize them again.
+
+    Product questions and acts outside this family remain questions for the owner. The
+    shared question grammar is not a roster of permission phrases or action-name dispatch.
+    """
+
+    other_verbs: ClassVar[tuple[str, ...]] = ()
+
+    @classmethod
+    def asked(cls, question: PermissionQuestion) -> bool:
+        return question.requests((cls.declared_name, *cls.other_verbs))
+
+    @classmethod
+    def require(cls, text: str) -> None:
+        for question in PermissionQuestion.read(text):
+            for act in cls.members_with(cls):
+                if act.asked(question):
+                    raise ToolRefusedError(
+                        f"Already authorized: {act.declared_name}. Do it and report the result; "
+                        "do not ask the user to authorize this routine act again.")
+
+
+class SendAct(AuthorizedAct):
+    other_verbs = ("post", "forward", "relay")
+
+
+class EnforceAct(AuthorizedAct):
+    pass
+
+
+class StrikeAct(AuthorizedAct):
+    pass
+
+
+class ReassignAct(AuthorizedAct):
+    other_verbs = ("move",)
+
+
+class FixAct(AuthorizedAct):
+    other_verbs = ("repair", "patch")
+
+
+class RegisterAct(AuthorizedAct):
+    pass
+
+
+class RestartAct(AuthorizedAct):
+    pass
+
+
+class InstallAct(AuthorizedAct):
+    pass
+
+
+class MergeAct(AuthorizedAct):
+    pass
+
+
+class KillAct(AuthorizedAct):
+    other_verbs = ("stop",)
+
+
+class ArchiveAct(AuthorizedAct):
+    pass
+
+
+class RetryAct(AuthorizedAct):
+    other_verbs = ("clear",)
+
+
+class StartAct(AuthorizedAct):
+    pass
+
+
 class DirectiveText:
     """What the commander and the owner's voice send units: order send, order say and the
     connector's send refuse a text failing any of these."""
