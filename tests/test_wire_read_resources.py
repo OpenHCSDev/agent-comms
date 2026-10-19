@@ -111,25 +111,30 @@ def test_relationship_tail_decode_does_not_hold_publication_resources(tmp_path, 
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.messaging.send("sender", "recipient", "first").message
+    first = comms.messaging.send("sender", "recipient", "first").message
     decoding = threading.Event()
     release = threading.Event()
     original = WireRecord.public_from_wire
 
-    def pause_decode(record):
-        decoding.set()
-        assert release.wait(timeout=5)
-        return original(record)
+    with ThreadPoolExecutor(max_workers=1) as reads, ThreadPoolExecutor(max_workers=1) as writes:
+        reader_thread = reads.submit(threading.current_thread).result(timeout=5)
 
-    monkeypatch.setattr(WireRecord, "public_from_wire", pause_decode)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        reader = executor.submit(comms.relationships.snapshot, "recipient")
+        def pause_decode(record):
+            if threading.current_thread() is reader_thread and record.get('seq') == first.seq:
+                decoding.set()
+                assert release.wait(timeout=5)
+            return original(record)
+
+        monkeypatch.setattr(WireRecord, "public_from_wire", pause_decode)
+        reader = reads.submit(comms.relationships.snapshot, "recipient")
         assert decoding.wait(timeout=5)
-        publication = executor.submit(
+        publication = writes.submit(
             comms.messaging.send, "sender", "recipient", "during decode"
         )
-        second = publication.result(timeout=5).message
-        release.set()
+        try:
+            second = publication.result(timeout=5).message
+        finally:
+            release.set()
         reader.result(timeout=5)
 
     assert second.seq == 2
