@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, replace
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
@@ -19,6 +20,7 @@ from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
+from .external_transcript import DraftRow
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
@@ -260,6 +262,8 @@ class TrackedTurnSession(TurnSession):
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
+        self.draft_written_at = 0.0
+        self.draft_timestamp = 0.0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
         self.finished = False
 
@@ -512,9 +516,24 @@ class TrackedTurnSession(TurnSession):
         if event.assistant_message_event is not None:
             await self.dispatch(event.assistant_message_event)
 
+    @cached_property
+    def draft_publication(self):
+        return self.ownership.enter_context(DraftRow.publication(
+            self.startup.root, self.command.input_id))
+
+    async def assistant_started(self) -> None:
+        self.draft_written_at = 0.0
+        self.draft_timestamp = time.time()
+        self.draft_publication.begin_message(self.draft_timestamp)
+
     @handles(TextDelta)
     async def text_delta(self, delta: TextDelta) -> None:
         self.text_parts.append(delta.delta)
+        self.draft_publication.append_text(delta.delta)
+        now = time.monotonic()
+        if now - self.draft_written_at >= .1:
+            self.draft_publication.publish()
+            self.draft_written_at = now
 
     @handles(pi.MessageEnd)
     async def message_end(self, event: pi.MessageEnd) -> None:

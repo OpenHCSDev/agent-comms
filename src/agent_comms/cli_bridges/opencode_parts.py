@@ -189,7 +189,7 @@ class ToolState(TaggedWire, ABC):
     def call(self, part: ToolPart) -> ToolCall:
         sent = self.input.model_dump(by_alias=True, exclude_unset=True)
         return ToolCall(part.callID, part.tool, self.input.model_dump(exclude_unset=True),
-                        tool=CliToolArguments.record_of(part.tool, sent))
+                        tool=CliToolArguments.record_of(part.tool, sent, call_id=part.callID))
 
 
 class PendingTool(ToolState):

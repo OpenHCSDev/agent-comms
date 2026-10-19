@@ -128,7 +128,7 @@ class FunctionCallItem(RolloutItem):
         state.tools[self.call_id] = self.name
         return (FinishedItem('', self.call_id, (ToolStartTranscript(
             position=position, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
-            tool=ToolDeclaration.record(self.name, self.raw_input)),)),)
+            tool=ToolDeclaration.record(self.name, self.raw_input, call_id=self.call_id)),)),)
 
 
 class CustomToolCallItem(FunctionCallItem):

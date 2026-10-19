@@ -571,7 +571,7 @@ def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms)
     judged, nor into the failed bus an abort keeps as evidence."""
     unit = comms.registry.declare(comms.registry.new_thread(
         "hold-unit", frozenset({"hold"}), str(comms.root), execution=ExternalThreadExecution))
-    transcript = ExternalTranscript(comms.root, unit.incarnation)
+    transcript = ExternalTranscript(comms.root, unit.incarnation.lookup)
     with transcript.writing():
         pass
 
@@ -601,7 +601,7 @@ def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms)
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):
     unit = comms.registry.declare(comms.registry.new_thread(
         "drain-unit", frozenset({"drain"}), str(comms.root), execution=ExternalThreadExecution))
-    transcript = ExternalTranscript(comms.root, unit.incarnation)
+    transcript = ExternalTranscript(comms.root, unit.incarnation.lookup)
     output = ThreadOutput(transcript, comms.agents)
     output.status(ActivityState.WORKING, "before the drain")
     with transcript.writing():

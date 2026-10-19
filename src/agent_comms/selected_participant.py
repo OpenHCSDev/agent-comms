@@ -19,6 +19,7 @@ from .native_arguments import SelectedModel
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
+from .coordination_tables.executions import ExecutionOrigin
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
@@ -73,6 +74,19 @@ class SelectedParticipant(MroDispatch):
         self.owner = await Coordination.run_worker(partial(
             self.comms.registry.attach_native_session, self.owner, identity.session_file
         ))
+
+    async def fail_before_send(self, max_attempts: int) -> None:
+        """Settle captured originals when acquisition fails before any native send."""
+        await self.require_current()
+        snapshot = self.store.executions.create(
+            self.batch.execution_id, ExecutionOrigin.WIRE,
+            self.lookup, self.owner.thread.name, max_attempts,
+            sources=self.batch.sources,
+        ).value
+        self.store.executions.fail_unstarted(
+            self.batch.execution_id, expected_revision=snapshot.execution.revision,
+            reason_code="session-acquisition-failed",
+        )
 
     async def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
         """Acquire the strictly newer coordinator owner required by a retry."""

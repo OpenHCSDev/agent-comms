@@ -166,7 +166,7 @@ class ToolStart(ToolEvent):
     @classmethod
     def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
-        title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments))
+        title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments, call_id=call_id))
         return cls(call_id, name, title, arguments, declaration.acp_kind)
 
 

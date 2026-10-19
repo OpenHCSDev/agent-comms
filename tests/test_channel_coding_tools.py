@@ -111,7 +111,7 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
     arguments = {"path": "x", "tool": "write"}
     with pytest.raises(SelectedToolDenied, match="family selector"):
         CodingCall.decode("selector", "read", arguments)
-    assert ToolDeclaration.record("read", arguments) is None
+    assert ToolDeclaration.record("read", arguments, call_id="refused") is None
 
 
 @pytest.mark.asyncio

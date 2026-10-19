@@ -42,7 +42,7 @@ async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, re
     with pytest.raises(SelectedToolDenied) as denied:
         await (pending if pending is not None else socket.handle_request(raw))
     assert "received bool" in socket.failure_response(denied.value)["error"]
-    assert isinstance(socket.calls.require(0, "bad").claim_scope, ArgumentRefusal)
+    assert isinstance(socket.calls.require(0, "bad").progress.claim_scope, ArgumentRefusal)
     socket.tool_finished(ToolExecutionEnd(tool_call_id="bad", tool_name="bash", is_error=True), "b" * 32)
     socket.assert_complete()
     assert not (tmp_path / "selected-tool-ledger").exists()
