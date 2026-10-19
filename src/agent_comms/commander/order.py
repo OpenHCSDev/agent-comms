@@ -643,8 +643,6 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
         if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
-        if not work.strikes:
-            continue
         if (crossed := t.late_since(now)) is None:
             continue
         answer = reply(t.holder, ordered)
