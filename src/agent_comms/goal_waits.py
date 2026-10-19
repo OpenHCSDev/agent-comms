@@ -309,7 +309,8 @@ class GoalWaits(ThreadOwnedState, TypedStore):
 
     @staticmethod
     def for_goal(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:
-        return next((rows.get(recorded.id, NoGoalWait()) for recorded in goal.active()), NoGoalWait())
+        return next((rows.get(recorded.id, NoGoalWait())
+                     for recorded in goal.active()), NoGoalWait())
 
     @classmethod
     def execution(
@@ -384,14 +385,12 @@ class GoalWaits(ThreadOwnedState, TypedStore):
                     ),
                     None,
                 )
-                if agents.is_working(target.incarnation, snapshot):
-                    # A persisted wait does not make a *new* live owner turn
-                    # part of the old wait graph. It may send the reply before
-                    # its turn finishes; only the reporting turn belongs here.
-                    if peer_wait is None or not peer_wait.report_turn.matches_current(
-                        peer.turn_record.read()
-                    ):
-                        return ()
+                # Only the reporting turn belongs to the persisted wait graph.
+                if agents.is_working(target.incarnation, snapshot) and (
+                    peer_wait is None or not peer_wait.report_turn.matches_current(
+                        peer.turn_record.read())
+                ):
+                    return ()
                 if peer_wait is not None:
                     pending.append(canonical)
         return tuple(sorted(seen))
