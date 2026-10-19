@@ -23,17 +23,18 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
 
 
+def system_clock() -> int:
+    """The coordination session's default millisecond clock."""
+    return time.time_ns() // 1_000_000
+
+
 class CoordinationSession(CoordinationStore):
     def __init__(
-        self, path: str, *, clock_ms: Callable[[], int] | None = None,
+        self, path: str, *, clock_ms: Callable[[], int] = system_clock,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
         super().__init__(path, contention)
-        self._clock_ms = clock_ms or self.system_clock
-
-    @staticmethod
-    def system_clock() -> int:
-        return time.time_ns() // 1_000_000
+        self._clock_ms = clock_ms
 
     def now(self, floor: int = 0) -> int:
         now = self._clock_ms()

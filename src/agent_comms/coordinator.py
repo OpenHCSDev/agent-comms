@@ -20,6 +20,7 @@ from .coordination_session import (
     CoordinationSession,
     NativeCoordinationSession,
     ReadNativeCoordinationSession,
+    system_clock,
 )
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
@@ -124,7 +125,7 @@ class Coordination:
     @classmethod
     async def run_async(
         cls, path: str | Path, operation: Callable[[Self], Result], *,
-        clock_ms: Callable[[], int] | None = None,
+        clock_ms: Callable[[], int] = system_clock,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> Result:
         """Join an operation before releasing its caller's resources.
@@ -132,14 +133,12 @@ class Coordination:
         A resident worker owns the connection; other callers own it for this
         operation. Neither may export the connection or its borrowed resources.
         """
-        return await cls._worker.get().run(
-            cls, path, operation, clock_ms or CoordinationSession.system_clock, contention
-        )
+        return await cls._worker.get().run(cls, path, operation, clock_ms, contention)
 
     @classmethod
     def _run_owned(
         cls, path: str | Path, operation: Callable[[Self], Result],
-        clock_ms: Callable[[], int] | None, contention: StoreContention,
+        clock_ms: Callable[[], int], contention: StoreContention,
     ) -> Result:
         with cls(str(path), clock_ms=clock_ms, contention=contention) as store:
             return operation(store)
@@ -147,18 +146,16 @@ class Coordination:
     @classmethod
     async def run_read_async(
         cls, path: str | Path, operation: Callable[[Self], Result], *,
-        clock_ms: Callable[[], int] | None = None,
+        clock_ms: Callable[[], int] = system_clock,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> Result:
         """Run a typed coordination read; the callback bounds its snapshot."""
-        return await cls._worker.get().run_read(
-            cls, path, operation, clock_ms or CoordinationSession.system_clock, contention
-        )
+        return await cls._worker.get().run_read(cls, path, operation, clock_ms, contention)
 
     @classmethod
     def _run_read_owned(
         cls, path: str | Path, operation: Callable[[Self], Result],
-        clock_ms: Callable[[], int] | None, contention: StoreContention,
+        clock_ms: Callable[[], int], contention: StoreContention,
     ) -> Result:
         with cls(
             str(path),
@@ -169,7 +166,7 @@ class Coordination:
             return operation(store)
 
     def __init__(
-        self, path: str, *, clock_ms: Callable[[], int] | None = None,
+        self, path: str, *, clock_ms: Callable[[], int] = system_clock,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
         session_type: type[CoordinationSession] | None = None,
     ):
@@ -233,7 +230,7 @@ class CoordinationWorker(CoordinationRoute):
         self,
         store_type: type[Coordination],
         path: str | Path,
-        clock_ms: object,
+        clock_ms: Callable[[], int],
         contention: StoreContention,
     ) -> None:
         # Match the resident factory, including its default clock/busy policy.
@@ -241,7 +238,7 @@ class CoordinationWorker(CoordinationRoute):
         if (store_type, Path(path).absolute(), clock_ms, contention) != (
             self.store_type,
             self.path,
-            CoordinationSession.system_clock,
+            system_clock,
             DEFAULT_STORE_CONTENTION,
         ):
             raise ValueError("operation differs from the resident coordination owner")
@@ -285,7 +282,7 @@ class CoordinationWorker(CoordinationRoute):
         store_type: type[Coordination],
         path: str | Path,
         operation: Callable[..., Result],
-        clock_ms: object,
+        clock_ms: Callable[[], int],
         contention: StoreContention,
     ) -> Result:
         self.require(store_type, path, clock_ms, contention)
@@ -296,7 +293,7 @@ class CoordinationWorker(CoordinationRoute):
         store_type: type[Coordination],
         path: str | Path,
         operation: Callable[..., Result],
-        clock_ms: object,
+        clock_ms: Callable[[], int],
         contention: StoreContention,
     ) -> Result:
         self.require(store_type, path, clock_ms, contention)

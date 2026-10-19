@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.coordination_database import CoordinationStore, StoreBusy
 from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.coordination_session import CoordinationSession, system_clock
 from agent_comms.coordinator import Coordination
 
 PACKAGE = Path(__file__).parents[1] / "src" / "agent_comms"
@@ -125,7 +126,7 @@ async def test_resident_connections_keep_thread_affinity_and_fresh_snapshots(tmp
             with store.session.transaction() as db:
                 db.execute("UPDATE participants SET display_name = 'Updated' WHERE participant_lookup = 'first'")
         await Coordination.run_worker(lambda: Coordination._run_owned(
-            path, rename, None, StoreBusy()))
+            path, rename, system_clock, StoreBusy()))
         assert await Coordination.run_read_async(path, read) == "Updated"
         await Coordination.run_async(path, write)
         assert len(writer_ids) == len(reader_ids) == len(threads) == 1
@@ -199,6 +200,20 @@ async def test_resident_initializer_failure_closes_partial_store(tmp_path, monke
             await Coordination.run_async(tmp_path / "coordination.sqlite3", lambda store: None)
     assert len(closed) == 1
     assert closed[0] != threading.get_ident()
+
+
+@pytest.mark.asyncio
+async def test_clock_default_and_explicit_clock_follow_session_owner(tmp_path):
+    path = tmp_path / "coordination.sqlite3"
+    before = system_clock()
+    assert await Coordination.run_async(path, lambda store: store.session.now()) >= before
+    assert await Coordination.run_read_async(path, lambda store: store.session.now(), clock_ms=lambda: 47) == 47
+    with CoordinationSession(str(path), clock_ms=lambda: 31) as session:
+        assert session.now() == 31
+    async with Coordination.worker(path):
+        assert await Coordination.run_async(path, lambda store: store.session.now()) >= before
+        with pytest.raises(ValueError, match="resident coordination owner"):
+            await Coordination.run_read_async(path, lambda store: store.session.now(), clock_ms=lambda: 47)
 
 
 @pytest.mark.asyncio
