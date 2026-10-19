@@ -39,7 +39,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import (
-    ConversationRole,
     InfoKind,
     Message,
     MessageKind,
@@ -263,15 +262,15 @@ class Send(Operation):
     target: str = field(metadata={'wire_name': 'to'})
     body: str
     kind: type[MessageKind] = field(metadata={'wire_name': 'type'})
-    role: Annotated[MessageRole, MessageRoleName] = field(default_factory=ConversationRole)
+    role: Annotated[MessageRole, MessageRoleName] = field(default_factory=MessageRoleName.default)
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--to', required=True)
         parser.add_argument('--body', required=True)
         parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
-        parser.add_argument('--role', default=MessageRoleName.encode(ConversationRole()),
-                            choices=MessageRole.names())
+        parser.add_argument('--role', default=MessageRoleName.encode(MessageRoleName.default()),
+                            choices=MessageRoleName.names())
 
     async def run(self, bridge: CliBridge) -> None:
         result = await asyncio.to_thread(bridge.comms.messaging.send, bridge.binding.bus,

@@ -11,27 +11,21 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type
 
-from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
+from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import (
-    FieldCodec,
-    FieldRepresentation,
-    InlineRecord,
-    MalformedRecord,
-    NullMember,
-    projected,
-)
+from .field_codec import FieldCodec, FieldRepresentation, InlineRecord, MalformedRecord, NullMember, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
-from .page_traversal import LiveCursor, PageCursor
 from .response_policy import InformationalPolicy, ResponseEligibility
-from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
-from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
+from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
+from .ui_model.message_category import MessageCategory, InboundCategory, OtherCategory
+
+from .page_traversal import LiveCursor, PageCursor
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -156,6 +150,7 @@ class MessageRoleWire:
 
 class MessageRole(InlineRecord, DeclaredFamily, affix="Role"):
     category: ClassVar[type[MessageCategory]]
+    sendable: ClassVar[bool] = False
 
     @classmethod
     def wire_record(cls):
@@ -184,20 +179,32 @@ class MessageRole(InlineRecord, DeclaredFamily, affix="Role"):
             raise ValueError("direct frozen recipient must match the exact stored target.")
 
 
-class MessageRoleName(FieldRepresentation):
+class MessageRoleName(FieldRepresentation[MessageRole]):
     """Command input names a sendable role; persisted messages keep their inline wire form."""
 
     @classmethod
-    def encode(cls, value: object) -> object:
-        return FieldCodec.encode(type(value))
+    def encode(cls, value: MessageRole) -> str:
+        return value.declared_name
 
     @classmethod
     def decode(cls, value: object) -> MessageRole:
-        return MessageRole.member_named(FieldCodec.decode(str, value))()
+        name = FieldCodec.decode(str, value)
+        if name not in cls.names():
+            raise MalformedRecord(f"Role {name!r} cannot be sent.")
+        return MessageRole.member_named(name)()
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(type[MessageRole])
+        return {"type": "string", "enum": cls.names()}
+
+    @staticmethod
+    def default() -> MessageRole:
+        return ConversationRole()
+
+    @staticmethod
+    def names() -> tuple[str, ...]:
+        return tuple(role.declared_name for role in MessageRole.members_with(MessageRole)
+                     if role.sendable)
 
 
 class InformationalMessage:
@@ -214,6 +221,7 @@ class InformationalMessage:
 @dataclass(frozen=True, slots=True)
 class ConversationRole(MessageRole):
     category = InboundCategory
+    sendable = True
 
     def wire_fields(self):
         return MessageRoleWire()
@@ -243,6 +251,7 @@ class ConversationRole(MessageRole):
 @dataclass(frozen=True, slots=True)
 class NoticeRole(InformationalMessage, MessageRole):
     category = OtherCategory
+    sendable = True
 
     def wire_fields(self):
         return MessageRoleWire(notice=True)
@@ -263,6 +272,7 @@ class NoticeRole(InformationalMessage, MessageRole):
 
 @dataclass(frozen=True)
 class Membership(InformationalMessage):
+    sendable = False
     change: MembershipChange
 
     def wire_fields(self):
@@ -276,19 +286,20 @@ class Membership(InformationalMessage):
 
 
 @dataclass(frozen=True, slots=True)
-class MembershipConversationRole(Membership, ConversationRole, declared_name=None):
+class MembershipConversationRole(Membership, ConversationRole):
     def as_historical(self):
         return HistoricalMembershipConversationRole(self.change)
 
 
 @dataclass(frozen=True, slots=True)
-class MembershipNoticeRole(Membership, NoticeRole, declared_name=None):
+class MembershipNoticeRole(Membership, NoticeRole):
     def as_historical(self):
         return HistoricalMembershipNoticeRole(self.change)
 
 
 class HistoricalRole:
     """Historical rows cannot create current reply or notification work."""
+    sendable = False
 
     def notification_references(self, message):
         return ()
@@ -303,19 +314,19 @@ class HistoricalRole:
         return super().as_notice().as_historical()
 
 
-class HistoricalConversationRole(HistoricalRole, ConversationRole, declared_name=None):
+class HistoricalConversationRole(HistoricalRole, ConversationRole):
     pass
 
 
-class HistoricalNoticeRole(HistoricalRole, NoticeRole, declared_name=None):
+class HistoricalNoticeRole(HistoricalRole, NoticeRole):
     pass
 
 
-class HistoricalMembershipConversationRole(HistoricalRole, MembershipConversationRole, declared_name=None):
+class HistoricalMembershipConversationRole(HistoricalRole, MembershipConversationRole):
     pass
 
 
-class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, declared_name=None):
+class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole):
     pass
 
 

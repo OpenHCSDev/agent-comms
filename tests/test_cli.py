@@ -116,7 +116,7 @@ class TestCliSuccess:
 
     def test_send_notice_and_conversation_record_channel_wake_modes(self, cli, comms):
         from agent_comms.cli_bridges.shared import Send
-        from agent_comms.messages import MessageRole, NoticeRole
+        from agent_comms.messages import MessageRoleName, NoticeRole
         import argparse
 
         comms.channels.create_tag("comms")
@@ -138,7 +138,7 @@ class TestCliSuccess:
         bridged = Send.from_arguments(parser.parse_args(
             ["--to", "#comms", "--body", "record", "--role", "notice"]))
         assert isinstance(bridged.role, NoticeRole)
-        assert MessageRole.names() == ("conversation", "notice")
+        assert MessageRoleName.names() == ("conversation", "notice")
 
     def test_acknowledge_marks_only_its_references_beside_a_reader(self, cli, tmp_path):
         import fcntl

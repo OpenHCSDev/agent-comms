@@ -305,7 +305,7 @@ class InlineFamilyPlan(InlineFieldPlan):
             for entry in FieldCodec._record_plan(member).fields))))
 
 
-class FieldRepresentation(ABC):
+class FieldRepresentation[Value = object](ABC):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
     Private transports can declare captures without permitting those objects in
@@ -320,11 +320,11 @@ class FieldRepresentation(ABC):
 
     @classmethod
     @abstractmethod
-    def encode(cls, value: object) -> object: ...
+    def encode(cls, value: Value) -> object: ...
 
     @classmethod
     @abstractmethod
-    def decode(cls, value: object) -> object: ...
+    def decode(cls, value: object) -> Value: ...
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
