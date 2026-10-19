@@ -35,10 +35,12 @@ from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
+from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .goal_management import Goals
 
 
@@ -513,7 +515,10 @@ class MergedProgress(FoundProgress):
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
     """The fleet's next install: one time for the bus and the unit that runs it, set by the
     commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
-    carries it as its own deadline. Install, maintenance and carry work is the installer's."""
+    carries it as its own deadline. Install, maintenance and carry work is the installer's.
+    Each live install by ``tools/upgrade_bus.py`` plans the next one a cadence later."""
+
+    cadence: ClassVar[int] = 30 * 60
 
     @staticmethod
     def path_in(root: Path) -> Path:
@@ -535,8 +540,15 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
     def refusal(self, work: str, commander: str) -> str:
         """Why the commander does not run the installer's work itself."""
 
+    @abstractmethod
+    def overdue(self, now: float) -> tuple[str, ...]:
+        """Why an install of main is due at ``now``, read from the schedule's time alone."""
+
 
 class UnplannedInstallDeadline(InstallDeadline):
+    def overdue(self, now: float) -> tuple[str, ...]:
+        return ("no install is planned on this bus",)
+
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
@@ -550,6 +562,15 @@ class UnplannedInstallDeadline(InstallDeadline):
 class PlannedInstallDeadline(InstallDeadline):
     at: RecordedEventTime
     installer: str
+
+    @classmethod
+    def after(cls, installer: str, now: float) -> PlannedInstallDeadline:
+        """The install a live install plans: the same installer, one cadence on."""
+        return cls(RecordedEventTime(now + cls.cadence), installer)
+
+    def overdue(self, now: float) -> tuple[str, ...]:
+        due = time.strftime("%H:%M", time.localtime(self.at.at))
+        return (f"due {due}, installer {self.installer}",) * (now >= self.at.at)
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
@@ -569,6 +590,21 @@ class PlannedInstallDeadline(InstallDeadline):
         if now > self.at.at:
             return [f"INSTALL LATE (due {due}), not the orders; waiting: {', '.join(waiting)}"]
         return [f"INSTALL due {due}; waiting: {', '.join(waiting)}"]
+
+
+@dataclass(frozen=True)
+class InstallDue(UndatedStandingRule):
+    """Merged work reaches the bus on the install schedule, not at the end of an order."""
+
+    why: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(map(cls, InstallDeadline.read(comms.root).overdue(time.time())))
+
+    def line(self) -> str:
+        return (f"INSTALL DUE ({self.why}) -> the installer rehearses and installs main with "
+                "tools/upgrade_bus.py and posts the result to the commander")
 
 
 @dataclass(frozen=True)
@@ -696,12 +732,17 @@ class OrderText(OrderWords):
     refusal = "Soft wording {1}: state the edit, do not ask."
 
 
-class BluntText(OrderWords):
-    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
+class BluntWords:
+    """The words that name witnessed incompetence, and the refusal a text lacking them gets."""
 
-    REFUSED = re.compile(r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
-                         r"worthless|broke|broken|pointless|waste)\b", re.I)
-    refusal = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+    REFUSED: ClassVar[re.Pattern] = re.compile(
+        r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
+        r"worthless|broke|broken|pointless|waste)\b", re.I)
+    refusal: ClassVar[str] = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+
+
+class BluntText(BluntWords, OrderWords):
+    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
 
     @staticmethod
     def refuses(found: list[str]) -> bool:
@@ -741,16 +782,15 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
-class DefectText(OrderWords):
+class DefectText(BluntWords, OrderWords):
     """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
     a text naming no defect needs no label."""
 
     SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
-    REFUSED, refusal = BluntText.REFUSED, BluntText.refusal  # the label is BluntText's own
 
     @classmethod
     def found(cls, text: str) -> list[str]:
-        return [] if BluntText.found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
+        return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
 class DirectiveText:
@@ -1225,6 +1265,10 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         return tuple(member.declared_name for member in cls.members_with(cls) if member.open)
 
     @classmethod
+    def require_open(cls, current: Todo) -> None:
+        pass
+
+    @classmethod
     def prepare_change(cls, goals, current):
         pass
 
@@ -1258,6 +1302,10 @@ class BlockedTodoState(TodoState):
 
 class DoneTodoState(TodoState):
     open: ClassVar[bool] = False
+
+    @classmethod
+    def require_open(cls, current: Todo) -> None:
+        raise TodoError(f"{current.id} is done; a strike or hunt is recorded on an open problem.")
 
     @classmethod
     def prepare_change(cls, goals, current):

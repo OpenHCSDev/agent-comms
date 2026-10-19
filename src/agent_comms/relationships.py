@@ -652,7 +652,6 @@ class RemoveRelationshipEdit(RelationshipEdit):
 class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
 
-    lock_rank = 5
     filename = "relationships.json"
     json_indent = 2
     json_suffix = "\n"
