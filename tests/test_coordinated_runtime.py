@@ -236,7 +236,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             from agent_comms.agent_events import PromptAccepted
 
             await observer(PromptAccepted())
-            await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
+            await observer(PiEvent.from_wire(proof_rows[-1]))
         return NativeTurnResult(
             reply,
             NativeContextProof(
