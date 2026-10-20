@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,15 +11,33 @@ from .field_codec import MalformedRecord
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
+    from .native_child import PiSessionChild
     from .native_entries import NativeEvidenceRead
+    from .pi_native_backend import PersistentPiSession
 
 
 class NativeReopenError(ValueError):
     """Saved session cannot be safely reloaded; no provider input may start."""
 
 
+class SessionRetention(ABC):
+    """Only an attested saved identity can return a child to its session owner."""
+
+    @classmethod
+    def from_optional(cls, identity: NativeSessionIdentity | None) -> SessionRetention:
+        return NoSessionRetention() if identity is None else identity
+
+    @abstractmethod
+    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool: ...
+
+
+class NoSessionRetention(SessionRetention):
+    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+        return False
+
+
 @dataclass(frozen=True)
-class NativeSessionIdentity:
+class NativeSessionIdentity(SessionRetention):
     """SessionManager's observed saved-session identity."""
 
     session_id: str = field(metadata={"wire_name": "sessionId"})
@@ -27,6 +46,9 @@ class NativeSessionIdentity:
     def __post_init__(self):
         if not self.session_id or not Path(self.session_file).is_absolute():
             raise NativeReopenError("Saved native session identity is incomplete")
+
+    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+        return session.retain(child, self)
 
     @property
     def path(self) -> Path:

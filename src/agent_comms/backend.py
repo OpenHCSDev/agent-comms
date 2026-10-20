@@ -50,6 +50,7 @@ from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_session_reopen import SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
@@ -167,11 +168,11 @@ async def stream_agent_events(
                         ),
                         tool_mode=tool_mode,
                         steering_queue=steering_queue,
-                        finish_event=finish_event,
+                        finish_signal=FinishSignal.from_event(finish_event),
                         model_wait=model_wait,
                         rpc_abort_grace=rpc_abort_grace,
                         send_boundary=send_boundary,
-                        native_start=native_start,
+                        input_start=InputStartListener.from_callback(native_start),
                         interrupt_boundary=interrupt_boundary,
                         native_session=persistent_session,
                         ui_request=ui_request,
@@ -191,28 +192,53 @@ class InputStartListener(ABC):
 
     started_events: tuple[events.AgentEvent, ...]
 
+    @classmethod
+    def from_callback(
+        cls, report: Callable[[str | None, str, str], bool] | None,
+    ) -> InputStartListener:
+        if report is None:
+            return NoInputStartListener()
+        return ReportInputStart(partial(report, None), report)
+
     @abstractmethod
-    def __call__(self, public_id: str | None, native_id: str, text: str) -> bool: ...
+    def original(self, native_id: str, text: str) -> bool: ...
+
+    @abstractmethod
+    def following(self, public_id: str, native_id: str, text: str) -> bool: ...
 
 
 class NoInputStartListener(InputStartListener):
     started_events = ()
 
-    def __call__(self, public_id: str | None, native_id: str, text: str) -> bool:
+    def original(self, native_id: str, text: str) -> bool:
+        return True
+
+    def following(self, public_id: str, native_id: str, text: str) -> bool:
         return True
 
 
 @dataclass(frozen=True)
 class ReportInputStart(InputStartListener):
-    report: Callable[[str | None, str, str], bool]
+    on_original: Callable[[str, str], bool]
+    on_following: Callable[[str, str, str], bool]
     started_events = (events.OriginalInputStarted(),)
 
-    def __call__(self, public_id: str | None, native_id: str, text: str) -> bool:
-        return self.report(public_id, native_id, text)
+    def original(self, native_id: str, text: str) -> bool:
+        return self.on_original(native_id, text)
+
+    def following(self, public_id: str, native_id: str, text: str) -> bool:
+        return self.on_following(public_id, native_id, text)
+
+
+NO_INPUT_START_LISTENER = NoInputStartListener()
 
 
 class FinishSignal(ABC):
     """Own the optional external finish wait, without a nullable task in the reader."""
+
+    @classmethod
+    def from_event(cls, event: asyncio.Event | None) -> FinishSignal:
+        return NoFinishSignal() if event is None else EventFinishSignal(event)
 
     @abstractmethod
     def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]: ...
@@ -231,6 +257,9 @@ class EventFinishSignal(FinishSignal):
         return () if settling else (asyncio.create_task(self.event.wait()),)
 
 
+NO_FINISH_SIGNAL = NoFinishSignal()
+
+
 class NativeSession(MroDispatch, ABC):
     """Shared child acquisition, attestation, observation and retirement."""
 
@@ -245,21 +274,19 @@ class NativeSession(MroDispatch, ABC):
         self,
         launch: NativePiRpcLaunch,
         steering_queue: TurnInbox | None = None,
-        finish_event: asyncio.Event | None = None,
+        finish_signal: FinishSignal = NO_FINISH_SIGNAL,
         model_wait: TurnWait = DEFAULT_MODEL_WAIT,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
         send_boundary: SendBoundary | None = None,
         interrupt_boundary: SendBoundary | None = None,
-        native_start: Callable[[str | None, str, str], bool] | None = None,
+        input_start: InputStartListener = NO_INPUT_START_LISTENER,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         *, startup: NativeStartup, native_session: PersistentPiSession,
     ):
         self.launch = launch
         self.tool_socket: ToolTransport
-        self.finish_signal = (
-            NoFinishSignal() if finish_event is None else EventFinishSignal(finish_event)
-        )
+        self.finish_signal = finish_signal
         self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
             model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS,
@@ -268,9 +295,7 @@ class NativeSession(MroDispatch, ABC):
         self.rpc_abort_grace = rpc_abort_grace
         self.send_boundary = send_boundary
         self.interrupt_boundary = interrupt_boundary
-        self.input_start = (
-            NoInputStartListener() if native_start is None else ReportInputStart(native_start)
-        )
+        self.input_start = input_start
         self.native_session = native_session
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup
@@ -317,9 +342,6 @@ class NativeSession(MroDispatch, ABC):
             self.watchdog.phase = SettlingStatsPhase()
             await self.stats.request(self)
         return ()
-
-    def notify_input_started(self, public_id, native_id, text):
-        return self.input_start(public_id, native_id, text)
 
     def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
         """Publish the actual observer phase without storing another phase copy."""
@@ -590,13 +612,10 @@ class NativeSession(MroDispatch, ABC):
     async def retain_or_close(self) -> None:
         self.tool_socket.assert_complete()
         await self.native.finish_input()
-        identity = self.native.attestation.identity
-        if (
-            identity is not None
-            and self.prompt_state.permits_retention(self)
-        ):
+        retention = SessionRetention.from_optional(self.native.attestation.identity)
+        if self.prompt_state.permits_retention(self):
             self.native.sensitive_diagnostics = self.output.sensitive
-            self.native_session.retain(self.native, identity)
+            retention.retain(self.native, self.native_session)
         if not self.native_session.child_state.retained:
             outcome = await self.native.shutdown(graceful=True)
             if isinstance(outcome, TimedOutOutcome):
@@ -661,7 +680,7 @@ class TurnSession(NativeSession):
     ) -> tuple[events.AgentEvent, ...]:
         """Own the original/follow-up input effect across all decoded user messages."""
         if self.prompt_state.awaiting_start and self.matches_original_input(message):
-            if not self.notify_input_started(None, self.command.input_id, self.command.message):
+            if not self.input_start.original(self.command.input_id, self.command.message):
                 self.inputs.uncertain = True
                 self.output.record_failure(
                     failures.InputMissing("Pi input start did not match the durable attempt.")

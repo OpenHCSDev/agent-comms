@@ -174,7 +174,7 @@ class InputForwarding:
         entry = self.pending.get(native_id)
         if entry is None or message.text != entry.message:
             return False, None
-        if not session.notify_input_started(entry.id, native_id, entry.message):
+        if not session.input_start.following(entry.id, native_id, entry.message):
             return False, None
         self.retire(native_id)
         self.started = True

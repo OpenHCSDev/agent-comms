@@ -33,7 +33,7 @@ from pydantic import PrivateAttr
 from agent_comms_hooks import ClaudeHook
 from agent_comms_hooks.watch import PeerSync
 
-from ..change_report import FileLine
+from ..change_report import FileLine, SourceReference
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..comms import Comms
@@ -382,7 +382,7 @@ class Commander(CommanderContext):
                     if replacing:
                         listed[pid].require_replacement(replaces)
                     if pid in listed:
-                        listed[pid].holder_state.require_trace(unit, trace)
+                        listed[pid].holder_state.require_trace(unit, SourceReference.from_optional(trace))
             except MalformedRecord as error:
                 problems.append(str(error))
         if replaces and not replacing:

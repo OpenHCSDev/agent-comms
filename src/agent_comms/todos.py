@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
-from .change_report import FileLine
+from .change_report import FileLine, SourceReference
 from .bus_publication import AgentOrigin
 from .channel_targets import CommandTarget
 from .child_process import (
@@ -1934,23 +1934,20 @@ class GoalRef(RecordMember, GoalReference):
 class TodoHolder(ABC):
     """Current, released and absent holders own their assignment behaviour."""
 
-    def holder_name(self) -> str | None:
-        return None
-
     def held(self, current: Todo) -> Assignment:
         raise TodoError(f"{current.id} has no open order.")
 
     @abstractmethod
     def previous_assignment(self) -> Assignment: ...
 
-    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
+    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
         return False
 
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return proposed
 
     @abstractmethod
-    def require_trace(self, owner: str, traced: FileLine | None) -> None: ...
+    def require_trace(self, owner: str, traced: SourceReference) -> None: ...
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         return proposed
@@ -1963,7 +1960,7 @@ class NoTodoHolder(TodoHolder):
     def previous_assignment(self) -> Assignment:
         raise TodoError("Problem has no previous holder.")
 
-    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
         pass
 
 
@@ -1999,9 +1996,6 @@ class Assignment(TodoHolder):
         """Who made the assignment: the order's commander, or Core's stall watcher."""
         return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
-    def holder_name(self) -> str:
-        return self.owner
-
     def held(self, current: Todo) -> Assignment:
         return self
 
@@ -2011,14 +2005,14 @@ class Assignment(TodoHolder):
     def current_assignments(self) -> tuple[Assignment, ...]:
         return (self,)
 
-    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
+    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
 
-    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
         owners = {self.owner, *(previous.name for previous in self.previous_owners)}
-        if owner != self.owner and len(owners) >= 2 and traced is None:
-            raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
-                             "and pass --traced PATH:LINE.")
+        if owner != self.owner and len(owners) >= 2:
+            traced.require(f"This problem has had {sorted(owners)}; read the failing path "
+                           "and pass --traced PATH:LINE.")
 
     def previous_assignment(self) -> Assignment:
         """The current holder supplies its own assignment for retirement."""
@@ -2529,7 +2523,7 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return self.previous.handed_to(proposed)
 
-    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
         self.previous.require_trace(owner, traced)
 
     def story_text(self) -> str:
@@ -2795,7 +2789,7 @@ class Todo(TypedTable):
     @property
     def holder(self) -> str | None:
         """The unit holding this problem; None once it is closed or released."""
-        return self.holder_state.holder_name()
+        return next((held.owner for held in self.holder_state.current_assignments()), None)
 
     @property
     def holder_state(self) -> TodoHolder:
@@ -2843,7 +2837,7 @@ class Todo(TypedTable):
             raise TodoConflict(self)
 
     def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
-        if not self.holder_state.owned_by(actor, generation):
+        if generation is None or not self.holder_state.owned_by(actor, generation):
             raise TodoConflict(self)
 
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
@@ -2852,7 +2846,7 @@ class Todo(TypedTable):
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
         self.order.require_transfer(self)
         holder = self.holder_state
-        holder.require_trace(proposed.owner, traced)
+        holder.require_trace(proposed.owner, SourceReference.from_optional(traced))
         proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 

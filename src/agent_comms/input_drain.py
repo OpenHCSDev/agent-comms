@@ -608,11 +608,14 @@ class DrainTurn(ABC):
     @abstractmethod
     async def resume(self, maintenance: MaintenanceIngress) -> None: ...
 
-    async def finish_original(self, inputs: InputDrain) -> None:
-        pass
+    @abstractmethod
+    async def finish_original(self, inputs: InputDrain) -> None: ...
 
 
 class NoDrainTurn(DrainTurn):
+    async def finish_original(self, inputs: InputDrain) -> None:
+        pass
+
     def opened(self) -> DrainTurn:
         return AwaitingDrainTurn(TurnInbox())
 
@@ -627,6 +630,9 @@ class NoDrainTurn(DrainTurn):
 class AwaitingDrainTurn(DrainTurn):
     inbox: TurnInbox
     is_open = True
+
+    async def finish_original(self, inputs: InputDrain) -> None:
+        pass
 
     def opened(self) -> DrainTurn:
         return self

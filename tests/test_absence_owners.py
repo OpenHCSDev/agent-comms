@@ -5,10 +5,13 @@ import asyncio
 import pytest
 
 from agent_comms.agent_backend import InputId, SendNow, TurnInbox
-from agent_comms.backend import EventFinishSignal, NoFinishSignal, NoInputStartListener, ReportInputStart
+from agent_comms.backend import EventFinishSignal, FinishSignal, InputStartListener, NoFinishSignal, NoInputStartListener
+from agent_comms.change_report import FileLine, SourceReference
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_drain import DrainedSession, NoPrivateObservation
 from agent_comms.native_child import NoInputForwarder
 from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
+from agent_comms.native_session_reopen import SessionRetention
 from agent_comms.turn_input_source import SelectedOriginalInput
 
 
@@ -44,8 +47,8 @@ def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
     from agent_comms.todos import NoTodoHolder, TodoError
 
     holder = NoTodoHolder()
-    assert holder.holder_name() is None and holder.current_assignments() == ()
-    holder.require_trace("first owner", None)
+    assert holder.current_assignments() == ()
+    holder.require_trace("first owner", SourceReference.from_optional(None))
     with pytest.raises(TodoError, match="no previous holder"):
         holder.previous_assignment()
     attempt = NoPreviousAttempt()
@@ -57,6 +60,7 @@ def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
 
 
 async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
+    assert isinstance(FinishSignal.from_event(None), NoFinishSignal)
     assert NoFinishSignal().waiters(settling=False) == ()
     event = asyncio.Event()
     finish = EventFinishSignal(event)
@@ -65,11 +69,14 @@ async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
     event.set()
     assert await waiter
     listener = NoInputStartListener()
-    assert listener(None, "native", "input") and listener.started_events == ()
+    assert listener.original("native", "input") and listener.started_events == ()
+    assert listener.following("public", "native", "input")
     seen = []
-    reporting = ReportInputStart(lambda *args: seen.append(args) or False)
-    assert not reporting(None, "native", "input")
-    assert seen == [(None, "native", "input")] and len(reporting.started_events) == 1
+    reporting = InputStartListener.from_callback(lambda *args: seen.append(args) or False)
+    assert not reporting.original("native", "input")
+    assert not reporting.following("public", "following-native", "next")
+    assert seen == [(None, "native", "input"), ("public", "following-native", "next")]
+    assert len(reporting.started_events) == 1
     calls = []
     async def forward():
         calls.append("start")
@@ -88,7 +95,12 @@ async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
 
 async def test_unobserved_private_state_and_unmeasured_session_have_no_authority(tmp_path):
     assert not await NoPrivateObservation().coordination_unchanged(None, "session", None)
-    assert not DrainedSession().settled()
+    state = DrainedSession()
+    assert not state.settled()
+    await state.turn.finish_original(None)
+    state.open_inbox()
+    await state.turn.finish_original(None)
+    assert not SessionRetention.from_optional(None).retain(None, None)
     missing = SessionLoad.capture(str(tmp_path / "missing.jsonl"))
     assert isinstance(missing, UnmeasuredSessionLoad)
     assert missing.diagnostic == {} and missing.summary == "unknown"
@@ -97,3 +109,12 @@ async def test_unobserved_private_state_and_unmeasured_session_have_no_authority
     measured = SessionLoad.capture(str(saved))
     assert isinstance(measured, MeasuredSessionLoad)
     assert measured.diagnostic == {"session_bytes": len(b"saved session")}
+
+
+def test_source_reference_owns_missing_trace_without_changing_file_line_wire():
+    missing = SourceReference.from_optional(None)
+    with pytest.raises(ValueError, match="read the failing path"):
+        missing.require("read the failing path")
+    location = FileLine("source.py", 17)
+    assert SourceReference.from_optional(location).require("not missing") is location
+    assert FieldCodec.encode(location) == "source.py:17"

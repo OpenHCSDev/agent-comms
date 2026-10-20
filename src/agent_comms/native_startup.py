@@ -73,7 +73,7 @@ class NativeStartupPolicy:
     readiness_max_seconds: float = 35.0
 
     def readiness_timeout(
-        self, session_load: SessionLoad, *, base_seconds: float | None = None
+        self, session_load: SessionLoad, *, base_seconds: float
     ) -> float:
         """Bound get_state wait by saved-session size, not the model/turn clock.
 
@@ -81,9 +81,8 @@ class NativeStartupPolicy:
         extra seconds for each full 8 MiB beyond the first 8 MiB, up to 35s.
         Missing/unreadable sessions retain the ten-second base bound.
         """
-        base = self.readiness_seconds if base_seconds is None else base_seconds
         extra_steps = session_load.extra_steps(self.readiness_step_bytes)
-        return min(self.readiness_max_seconds, base + extra_steps * self.readiness_step_seconds)
+        return min(self.readiness_max_seconds, base_seconds + extra_steps * self.readiness_step_seconds)
 
 
 NATIVE_STARTUP_POLICY = NativeStartupPolicy()
