@@ -164,7 +164,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
     from cutover.carry import STEPS, CarryChain, CarryLedger
     from test_bus_route_counts_locking import _case
     from test_carry import REPO, CheckoutStack, Repository
-    from tools.upgrade_bus import Revisions, carry_all
+    from upgrade_bus import Revisions, carry_all
     from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = _case(tmp_path / 'wire', monkeypatch)

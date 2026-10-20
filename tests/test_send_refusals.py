@@ -8,7 +8,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.notification_assignment import NotificationAssignment
-from tools.cutover.carry_send_refusals import SendRefusalOutcomes
+from cutover.carry_send_refusals import SendRefusalOutcomes
 
 
 def test_install_preserves_existing_coordination_rows(comms):
