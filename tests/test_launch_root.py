@@ -124,11 +124,29 @@ def test_cli_root_wins_without_published_route(tmp_path, monkeypatch, joined):
     assert not (tmp_path / '.local/state/agent-comms/active-route.json').exists()
 
 
-def test_later_root_spelling_does_not_cancel_the_published_launch(tmp_path, monkeypatch):
+def test_unrecognized_cli_option_does_not_start_against_a_published_bus(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    publish_route(tmp_path)
+    assert main(['threads', '--unknown-option']) == 1
+    with pytest.raises(RelationViolationError, match='did not select a root at startup'):
+        LaunchRoot.current()
+
+
+def test_generic_startup_does_not_parse_the_cli_root_flag(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
     root = publish_route(tmp_path)
-    assert main(['threads', '--root']) == 1  # malformed CLI option, not a launch override
+    LaunchRoot.startup(['agent-comms', 'threads', '--root'], ActiveRoute.published_launch)
     assert LaunchRoot.current().path == root
+
+
+def test_launch_root_and_cli_root_each_work_without_a_published_route(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    root = tmp_path / 'explicit'
+    comms = Comms(root)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    assert main([LaunchRoot.argument, str(root), 'threads']) == 0
+    assert main([LaunchRoot.argument, str(tmp_path / 'wrong'), '--root', str(root), 'threads']) == 0
 
 
 def test_rootless_real_cli_child_fails_without_published_route(tmp_path):
