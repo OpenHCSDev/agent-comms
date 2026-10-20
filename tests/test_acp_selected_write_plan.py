@@ -35,6 +35,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.envelope_claim_transitions import UnclaimedResource
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.native_pi import NativePiUnavailable
@@ -235,7 +236,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
         with Comms(root).bus.log.checked_read() as source:
             assert source.claim_operation_used(acknowledgement.operation_id)
-            assert source.claim(str(resource)) is None
+            assert source.claim(str(resource)) == UnclaimedResource()
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
         assert await agent._drain_private_nk("beta", root_id) == 0
