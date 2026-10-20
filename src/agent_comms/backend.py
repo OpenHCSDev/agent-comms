@@ -45,7 +45,7 @@ from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
-from .field_codec import Id128Text, MalformedRecord
+from .field_codec import Id128Text, MalformedRecord, boundary_decoder
 from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
@@ -194,6 +194,7 @@ class InputStartListener(ABC):
     started_events: tuple[events.AgentEvent, ...]
 
     @classmethod
+    @boundary_decoder
     def from_callback(
         cls, report: Callable[[str | None, str, str], bool] | None,
     ) -> InputStartListener:
@@ -238,6 +239,7 @@ class FinishSignal(ABC):
     """Own the optional external finish wait, without a nullable task in the reader."""
 
     @classmethod
+    @boundary_decoder
     def from_event(cls, event: asyncio.Event | None) -> FinishSignal:
         return NoFinishSignal() if event is None else EventFinishSignal(event)
 

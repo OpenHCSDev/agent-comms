@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .field_codec import MalformedRecord
+from .field_codec import MalformedRecord, boundary_decoder
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
@@ -24,6 +24,7 @@ class SessionRetention(ABC):
     """Only an attested saved identity can return a child to its session owner."""
 
     @classmethod
+    @boundary_decoder
     def from_optional(cls, identity: NativeSessionIdentity | None) -> SessionRetention:
         return NoSessionRetention() if identity is None else identity
 

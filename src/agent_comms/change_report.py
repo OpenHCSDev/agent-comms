@@ -14,13 +14,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from .field_codec import MalformedRecord, WireValue
+from .field_codec import MalformedRecord, WireValue, boundary_decoder
 
 
 class SourceReference(ABC):
     """A source reference either supplies its location or explains why it is required."""
 
     @classmethod
+    @boundary_decoder
     def from_optional(cls, location: FileLine | None) -> SourceReference:
         return NoSourceReference() if location is None else location
 

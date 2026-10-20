@@ -25,7 +25,7 @@ from agent_comms.coordination_tables.executions import ExecutionOrigin, Executio
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import boundary_decoder, projected
 
 if TYPE_CHECKING:
     from .attempt_states import TerminalAttempt
@@ -105,6 +105,7 @@ class RecoverySnapshot:
         return self.execution.lifecycle.completed
 
     @property
+    @boundary_decoder
     def previous_attempt(self) -> PreviousAttempt:
         return self.attempt if self.attempt is not None else NoPreviousAttempt()
 

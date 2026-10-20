@@ -50,6 +50,7 @@ from .field_codec import (
     RecordMember,
     SubclassUnion,
     WireValue,
+    boundary_decoder,
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
@@ -2824,6 +2825,7 @@ class Todo(TypedTable):
         return next((held.owner for held in self.holder_state.current_assignments()), None)
 
     @property
+    @boundary_decoder
     def holder_state(self) -> TodoHolder:
         """Decode the stored optional assignment once into its behaviour owner."""
         if self.assignment is not None:
@@ -2868,6 +2870,7 @@ class Todo(TypedTable):
         if self.assignment != expected:
             raise TodoConflict(self)
 
+    @boundary_decoder
     def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
         if generation is None or not self.holder_state.owned_by(actor, generation):
             raise TodoConflict(self)

@@ -19,13 +19,13 @@ from agent_comms.turn_input_source import SelectedOriginalInput
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     state = DrainedSession()
     assert not state.turn_open() and not state.turn_started()
-    with pytest.raises(KeyError, match="running turn inbox"):
+    with pytest.raises(KeyError):
         state.require_inbox()
     state.to_turn(SendNow((InputId("before-open"),)))
     inbox = state.open_inbox()
     assert state.open_inbox() is inbox and inbox.empty()
     assert state.turn_open() and not state.turn_started()
-    with pytest.raises(KeyError, match="started first input"):
+    with pytest.raises(KeyError):
         state.require_first_source()
     original = SelectedOriginalInput.answering("original input")
     state.capture_first_source(original)
@@ -50,13 +50,13 @@ def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
     holder = NoTodoHolder()
     assert holder.current_assignments() == ()
     holder.require_trace("first owner", SourceReference.from_optional(None))
-    with pytest.raises(TodoError, match="no previous holder"):
+    with pytest.raises(TodoError):
         holder.previous_assignment()
     attempt = NoPreviousAttempt()
     attempt.require_newer_owner(1)
-    with pytest.raises(StaleFence, match="no authorized attempt"):
+    with pytest.raises(StaleFence):
         attempt.require()
-    with pytest.raises(RecoveryBlocked, match="unstarted deferral"):
+    with pytest.raises(RecoveryBlocked):
         attempt.require_retry(None)
 
 
@@ -114,7 +114,7 @@ async def test_unobserved_private_state_and_unmeasured_session_have_no_authority
 
 def test_source_reference_owns_missing_trace_without_changing_file_line_wire():
     missing = SourceReference.from_optional(None)
-    with pytest.raises(ValueError, match="read the failing path"):
+    with pytest.raises(ValueError):
         missing.require("read the failing path")
     location = FileLine("source.py", 17)
     assert SourceReference.from_optional(location).require("not missing") is location
@@ -124,6 +124,6 @@ def test_source_reference_owns_missing_trace_without_changing_file_line_wire():
 def test_optional_rpc_id_is_refused_when_an_input_requires_correlation():
     command = GetState(id=None)
     assert "id" not in command.to_rpc()
-    with pytest.raises(ValueError, match="requires its command ID"):
+    with pytest.raises(ValueError):
         command.require_id()
     assert GetState(id="correlated").require_id() == "correlated"

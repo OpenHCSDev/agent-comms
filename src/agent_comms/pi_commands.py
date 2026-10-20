@@ -14,7 +14,7 @@ from uuid import uuid4
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, boundary_decoder
 from .image_inputs import ImageInput
 from .native_session_reopen import NativeSessionIdentity
 from .native_turn_context import NativeContextData
@@ -69,6 +69,7 @@ class PiCommand(DeclaredFamily):
         default_factory=lambda: uuid4().hex, metadata={"wire_absent_none": True}
     )
 
+    @boundary_decoder
     def require_id(self) -> str:
         """Operations that correlate an input require the command's actual ID."""
         if self.id is None:

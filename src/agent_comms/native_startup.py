@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .diagnostics import PublicationMeasurements
+from .field_codec import boundary_decoder
 
 if TYPE_CHECKING:
     from .native_pi import NativePiRpcLaunch
@@ -28,6 +29,7 @@ class SessionLoad(ABC):
     def extra_steps(self, step_bytes: int) -> int: ...
 
     @classmethod
+    @boundary_decoder
     def capture(cls, session_file: str | None) -> SessionLoad:
         if session_file is None:
             return UnmeasuredSessionLoad()
