@@ -79,6 +79,7 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
+from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .turn_digests import LastTurns, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
 from .relationships import RelationshipEdit
@@ -938,6 +939,28 @@ class CommsTurnsTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
         return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderStoryTool(ReadTool, ToolRequest):
+    label = "Order story"
+    description = ("Read a saved order's dated facts from its Todo, oldest first. "
+                   "Send-back and its implied strike share one reason. "
+                   "Overwritten order bodies cannot be reconstructed.")
+    order_id: str = tool_field("Immutable order ID")
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
+        return comms.goals.todos.for_order(self.order_id).story()
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFleetStoryTool(ThreadReadTool):
+    label = "Fleet story"
+    description = "Read one story line for every open problem of this commander."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
+        actor = comms.registry.require(caller.subject(self.thread)).incarnation
+        return FleetStory(tuple(todo.story().line for todo in comms.goals.todos.for_commander(actor)))
 
 
 @dataclass(frozen=True, kw_only=True)

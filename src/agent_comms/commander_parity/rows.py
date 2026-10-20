@@ -20,6 +20,7 @@ from .lifecycle import (
     verify_order_progress,
 )
 from .load import LoadComparison
+from .story import StoryCase
 from .measurements import RuleComparison, StorageComparison, measured_load
 
 
@@ -133,6 +134,7 @@ class PublicStoryParityRow(ParityRow):
     current = "`fleet-narrative.md`; `judge.py roast`"
     native = "`comms_order_story`, `comms_fleet_story`; send-back reason posted once"
     phases = (StoryPhase,)
+    comparison = StoryCase.read
 
 
 class ScheduledWakeParityRow(ParityRow):
