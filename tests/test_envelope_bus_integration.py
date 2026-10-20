@@ -105,18 +105,13 @@ def test_valid_json_without_newline_not_exposed_by_any_gated_read(
         comms.bus.log.latest_sequence()
     with (
         pytest.raises(RelationViolationError, match="Incomplete"),
-        comms.bus.log.verified_snapshot() as records,
+        comms.bus.log.full_history_snapshot() as (_, messages),
     ):
-        list(records)
+        list(messages)
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.bus.log.claim_projection()
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.relationships._recent_messages()  # independent direct bus-tail reader
-    with (
-        pytest.raises(RelationViolationError, match="Incomplete"),
-        comms.bus.log.full_history_snapshot(),
-    ):
-        pass
 
 
 def test_malformed_complete_row_is_not_an_ordinary_message(tmp_path: Path) -> None:
@@ -585,8 +580,8 @@ def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
 
 
 def _ordinary_locked_iterator(comms: Comms) -> list[Message]:
-    with comms.bus.log.verified_snapshot() as records:
-        return [message for record in records for message in record.messages()]
+    with comms.bus.log.full_history_snapshot() as (_, messages):
+        return list(messages)
 
 
 def _ordinary_snapshot(comms: Comms) -> list[object]:
