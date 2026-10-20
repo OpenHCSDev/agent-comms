@@ -30,12 +30,8 @@ class TranscriptRecords:
 
         self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
 
-    @property
-    def at(self):
-        return self.timestamp.at.timestamp()
-
     def event(self, declaration, *args, **facts):
-        return declaration(*args, timestamp=self.at, **facts)
+        return declaration(*args, timestamp=self.timestamp.at.timestamp(), **facts)
 
     def entry(self, declaration, **facts):
         return declaration(timestamp=self.timestamp, **facts)
