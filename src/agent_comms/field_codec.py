@@ -718,6 +718,11 @@ class FieldRepresentation(ABC):
     def schema(cls) -> dict[str, Any]:
         raise TypeError(f"{cls.__name__} has no JSON schema")
 
+    @classmethod
+    def argument_options(cls) -> dict[str, object]:
+        """argparse options for this representation's command-line text."""
+        return {}
+
 
 class WiredValue(Protocol):
     def to_wire(self) -> object: ...
@@ -772,6 +777,10 @@ class SingleFieldValue(WireValue):
     def schema(cls):
         return FieldCodec.value_schema(cls.wire_field().annotation)
 
+    @classmethod
+    def argument_options(cls) -> dict[str, object]:
+        return compile_decoder(cls.wire_field().annotation).argument_options()
+
     def to_wire(self):
         entry = self.wire_field()
         return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
@@ -794,6 +803,13 @@ class SubclassUnion(DeclaredFamily, WireValue):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(ValueDecoder.for_members(cls.members_with(cls)).target)
+
+    @classmethod
+    def argument_options(cls) -> dict[str, object]:
+        """The union root offers its members' choices; a member offers only its own."""
+        if cls._family_root is not cls:
+            return super().argument_options()
+        return ValueDecoder.for_members(cls.members_with(cls)).argument_options()
 
 
 class NullMember(WireValue):
@@ -1715,6 +1731,9 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     @property
     def uses_representation(self) -> bool:
         return True
+
+    def argument_options(self) -> dict[str, object]:
+        return self.representation.argument_options()
 
     def encode(self, value: object) -> object:
         return None if value is None else self.representation.encode(value)
