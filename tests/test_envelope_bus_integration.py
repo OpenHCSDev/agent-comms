@@ -339,7 +339,7 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path):
     with pytest.raises(StoredHistoryUnreadable, match="Unreadable bus row") as malformed:
         read_history(comms)
     assert isinstance(malformed.value.__cause__, StoredHistoryUnreadable)
-    assert type(malformed.value.__cause__.__cause__) is MalformedRecord
+    assert isinstance(malformed.value.__cause__.__cause__, MalformedRecord)
     assert "claim_transition" in str(malformed.value.__cause__.__cause__)
 
 
