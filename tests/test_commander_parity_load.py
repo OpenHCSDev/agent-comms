@@ -1,3 +1,5 @@
+import shutil
+import sys
 from dataclasses import replace
 
 import pytest
@@ -5,7 +7,7 @@ import pytest
 from agent_comms.commander.capacity import Load
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander_parity.load import CommandComparison, LoadComparison, state_files
-from agent_comms.commander_parity.observations import MeasuredOutput
+from agent_comms.commander_parity.observations import CapacityObservation, MeasuredOutput
 
 
 def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_path):
@@ -26,6 +28,22 @@ def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_
     path.write_text("after")
     after = state_files(tmp_path)
     assert not LoadComparison(observed, before, after).passed
+
+
+def test_capacity_observes_actual_cli_selected_root(commander_script, tmp_path, monkeypatch):
+    original, _ = commander_script
+    selected = tmp_path / "selected"
+    shutil.copytree(original.root, selected)
+    before = state_files(original.root)
+    monkeypatch.setattr(sys, "argv", ["capacity-observation"])
+
+    observed = CapacityObservation().read(selected)
+
+    assert observed.root == str(selected.resolve())
+    assert observed.commander == original.commander
+    assert observed.current.strip() == observed.native
+    assert state_files(original.root) == before
+    assert sys.monitoring.get_tool(sys.monitoring.PROFILER_ID) is None
 
 
 @pytest.mark.parametrize(
