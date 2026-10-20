@@ -47,7 +47,7 @@
 | 14 | Heartbeat: next unit every minute | `rotate.py` (60 s loop) | Core-owned scheduled commander wake | `control_plane` |
 | 15 | Standing rules broken right now | `rotate.py broken_rules` | `StandingRule` members derive violations on read | `control_plane` |
 | 16 | Rule review | `rules.py`; `rules.jsonl`; maximum age | Rule instruction segments in the commander's turn context, with provenance | `control_plane` |
-| 17 | Load and forking | `capacity.py`: six units, ten-minute beat age; `forks/` | Reporting-only `commander_load.CommanderLoad.of`; P253 removes forking policy | `control_plane` |
+| 17 | Load and forking | `agent-comms-commander capacity`: load and live fork reports; ten-minute beat age | Reporting-only `commander.capacity.Load.of`; no capacity refusal or automatic fork policy | `control_plane` |
 | 18 | Growth alarm | `growth_watch.py`: merges growing src by more than 40 net lines | `commander.config.Repo.main_changes` → `commander_measurements.MergeGrowth.read` | `control_plane` |
 | 19 | Storage hygiene | `storage.py`: checkout limit, cleanup under 30 GB, allocation floor 5 GB | `UnitStorage`, derived from worktree paths and free disk | `control_plane` |
 | 20 | Commander reaches units only through orders | `send_guard.py` (PreToolUse hook) | Harness hook checking Core order tools | `control_plane` |
@@ -58,7 +58,7 @@
 | 25 | Unit wording gets a correction, not a strike | scratch `vibe_watch.py` | `PlainText` for commander verdicts/strikes; unit wording gets correction | `record_plane` |
 | 26 | Alerts carry only decisions | none; every line interrupts | `messages.AlertKind.require_publishable`, `tools.CommsDecisionTool` | `control_plane` |
 | 27 | Momentum prediction per unit, compared with the outcome | none | Prediction record and later outcome on commander page; `CommitMomentum` is a partial candidate | `commander_page` |
-| 28 | Measured load and self-report | `capacity.py` unit count | Reporting-only `commander_load.CommanderLoad.of`: orders, overdue, edits and live forks | `control_plane` |
+| 28 | Measured load and self-report | `capacity.py` unit count | `commander.capacity.Load.of` reports orders, overdue, edits and forks; self-report comparison unverified | `control_plane` |
 | 29 | No handoff of finished, checked work | none; scratch transfer moved P507 after its fix was pushed and checked | Transfer refuses delivered checked work; that owner merges; check is reused | `record_plane` |
 | 30 | A proof is bound to the build it ran on | none; screenshots and logs are bare paths | Build run records runtime and Core/Toad revisions; close requires delivered commit | `record_plane` |
 | 31 | An order states its intent as a deletion target | none; P520 renamed a decision rather than deleting it | Order owns deletion family/site/count; delivery refuses nonzero or renamed decisions | `record_plane` |

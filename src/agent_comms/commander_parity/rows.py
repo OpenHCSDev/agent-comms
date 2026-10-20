@@ -9,7 +9,8 @@ from ..plan_phases import (
     ReviewQueuePhase,
     StoryPhase,
 )
-from . import ParityRow
+from . import ParityComparison, ParityRow
+from .load import LoadComparison
 
 
 class CreateProblemParityRow(ParityRow):
@@ -143,9 +144,15 @@ class RuleReviewParityRow(ParityRow):
 class LoadForkingParityRow(ParityRow):
     number = 17
     capability = "Load and forking"
-    current = "`capacity.py`: six units, ten-minute beat age; `forks/`"
-    native = "Reporting-only `commander_load.CommanderLoad.of`; P253 removes forking policy"
+    current = "`agent-comms-commander capacity`: load and live fork reports; ten-minute beat age"
+    native = (
+        "Reporting-only `commander.capacity.Load.of`; no capacity refusal or automatic fork policy"
+    )
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return LoadComparison.read()
 
 
 class GrowthAlarmParityRow(ParityRow):
@@ -235,7 +242,7 @@ class MeasuredLoadParityRow(ParityRow):
     number = 28
     capability = "Measured load and self-report"
     current = "`capacity.py` unit count"
-    native = "Reporting-only `commander_load.CommanderLoad.of`: orders, overdue, edits and live forks"
+    native = "`commander.capacity.Load.of` reports orders, overdue, edits and forks; self-report comparison unverified"
     phases = (ControlPlanePhase,)
 
 

@@ -20,6 +20,9 @@ class ParityComparison(ABC):
     @abstractmethod
     def passed(self) -> bool: ...
 
+    def describe(self) -> str:
+        return repr(self)
+
 
 @dataclass(frozen=True)
 class UnverifiedParity(ParityComparison):
@@ -27,6 +30,9 @@ class UnverifiedParity(ParityComparison):
 
     reason: str = "The native/current workflow comparison has not run."
     passed: ClassVar[bool] = False
+
+    def describe(self) -> str:
+        return self.reason
 
 
 class ParityRow(
@@ -40,6 +46,11 @@ class ParityRow(
 
     @classmethod
     def compare(cls, todos: Iterable[Todo]) -> ParityComparison:
+        return UnverifiedParity()
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        """Run this declared workflow now; a run is not durable cutover authority."""
         return UnverifiedParity()
 
     @classmethod
