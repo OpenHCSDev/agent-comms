@@ -1,4 +1,4 @@
-"""One independent Pi turn on its own session child, closed when the turn ends."""
+"""Native recorded-protocol turns share the transport's required launch fields."""
 
 from __future__ import annotations
 
@@ -11,18 +11,26 @@ from agent_comms.native_package import VerifiedNativePackage, pinned_native_pack
 from agent_comms.selected_actions import NoSelectedTools
 
 
-async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None,
-                          *, tool_mode=NoSelectedTools(), **kwargs):
-    """Run ``backend.stream_agent_events`` on a fresh session and close its child after."""
+async def session_turn_events(session, agent_bin, agent_args, task, cwd, env_extra=None,
+                              *, tool_mode=NoSelectedTools(), **kwargs):
+    """Use the real transport on a caller-owned session, without replacing methods."""
+    async with aclosing(backend.stream_agent_events(
+        agent_bin, agent_args, task, cwd, env_extra,
+        persistent_session=session, root=Path(cwd), tool_mode=tool_mode,
+        package=VerifiedNativePackage.acquire(pinned_native_package()),
+        session_directory=Path(cwd), **kwargs,
+    )) as stream:
+        async for event in stream:
+            yield event
+
+
+async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None, **kwargs):
+    """Close the independent session after its actual native stream has ended."""
     session = PersistentPiSession()
     try:
-        async with aclosing(
-            backend.stream_agent_events(agent_bin, agent_args, task, cwd, env_extra,
-                                        persistent_session=session, root=Path(cwd), tool_mode=tool_mode,
-                                        package=VerifiedNativePackage.acquire(pinned_native_package()),
-                                        session_directory=Path(cwd), **kwargs)
-        ) as stream:
-            async for event in stream:
-                yield event
+        async for event in session_turn_events(
+            session, agent_bin, agent_args, task, cwd, env_extra, **kwargs,
+        ):
+            yield event
     finally:
         await session.close()

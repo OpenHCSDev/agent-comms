@@ -9,9 +9,8 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
-from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, NativeTurnError
+from agent_comms.acp_failure import NativeMessageFailureSource, NativeTurnError
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
 
@@ -19,7 +18,7 @@ from delivery_owner_fixture import canonical_agent
 @pytest.mark.asyncio
 @pytest.mark.parametrize("notification_fails", [False, True])
 @pytest.mark.parametrize("refuse_before_terminal", [False, True])
-async def test_actual_native_outcome_classifies_once_and_next_input_is_independent(
+async def test_actual_native_failure_notifies_once_and_next_input_is_independent(
     private_comms, tmp_path, monkeypatch, notification_fails, refuse_before_terminal,
 ):
     provider = LoopbackProvider(status=200, text="saved isolated history",
@@ -60,14 +59,6 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             updates.append(update)
 
     agent.sessions.client = Client()
-    calls = []
-    classify = ACPFailure.from_detail
-
-    def once(cls, code, text, **kwargs):
-        calls.append(text)
-        return classify(code, text, **kwargs)
-
-    monkeypatch.setattr(ACPFailure, "from_detail", classmethod(once))
     try:
         async with asyncio.timeout(25):
             await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
@@ -98,7 +89,6 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             failure = failures[0]
             assert isinstance(failure.source, NativeMessageFailureSource)
             assert failure.failure.input_state.has_started
-            assert len(calls) == 1
             if refuse_before_terminal:
                 assert failure.failure.retry_result.attempt == 1
                 assert failure.failure.retry_result.success is False
@@ -116,7 +106,9 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             provider.text = "answered a genuinely new independent input"
             await agent.turns.run_agent_turn("project", "project", "Distinct new work after settled failure",
                                             original_owner_input=True)
-            assert len(calls) == 1  # Successful completion does not reclassify an old error.
+            assert len([item for update in attempted
+                        for item in decode_updates(update.field_meta)
+                        if isinstance(item, RequestFailedUpdate)]) == 1
             assert provider.posts == 3 + int(refuse_before_terminal)
             # Only a native re-request adds an HTTP post; user commits stay three.
             journal = [json.loads(line) for line in saved.read_text().splitlines()]

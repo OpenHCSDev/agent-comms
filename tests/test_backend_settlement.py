@@ -7,10 +7,11 @@ from pathlib import Path
 import pytest
 
 import agent_comms.agent_events as ae
-import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.fresh_private_session import create_fresh_private_session
+from pi_session_turn import session_turn_events
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
 
@@ -22,16 +23,18 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSI
 async def test_followup_outlives_previous_native_settlement(
     tmp_path, start_before_settlement, inject_during_stats
 ):
-    session = tmp_path / "session.jsonl"
-    session.write_text('{"type":"session","version":3,"id":"same"}\n')
+    identity = create_fresh_private_session(tmp_path / 'sessions', worktree=tmp_path)
+    session, session_id = identity.path, identity.session_id
     stub = tmp_path / "pi-stub"
     stub.write_text(f"#!{sys.executable}\n" + f"""
 import json, sys, threading, time
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import request_response, read_request, send as send_row
 lock = threading.Lock()
 busy = False
 def send(event):
     with lock:
-        print(json.dumps(event), flush=True)
+        send_row(event)
 def start(command):
     send({{"type":"message_start", "message":{{"role":"user",
           "content":command["message"], "inputId":command["inputId"]}}}})
@@ -46,16 +49,14 @@ def finish():
     busy = False
     send({{"type":"agent_settled"}})
 for line in sys.stdin:
-    command = json.loads(line)
+    command = read_request(line)
     kind = command["type"]
     if kind == "get_state":
-        send({{"type":"response", "command":kind, "id":command.get("id"),
-              "success":True, "data":{{"nativeInputProofCapability":
-              "pi-native-input-v1-live-only", "sessionId":"same",
-              "sessionFile":{str(session)!r}, "isStreaming":busy}}}})
+        send(request_response(command, {{"nativeInputProofCapability":
+              "pi-native-input-v1-live-only", "sessionId":{session_id!r},
+              "sessionFile":{str(session)!r}, "isStreaming":busy}}))
     elif kind == "get_session_stats":
-        send({{"type":"response", "command":kind, "id":command.get("id"),
-              "success":True, "data":{{"contextUsage":{{"tokens":2}}}}}})
+        send(request_response(command, {{"contextUsage":{{"tokens":2}}}}))
     elif kind == "prompt":
         send({{"type":"response", "command":kind, "id":command["id"], "success":True}})
         if command["message"] == "first":
@@ -73,7 +74,7 @@ for line in sys.stdin:
             threading.Thread(target=finish, daemon=True).start()
 """)
     stub.chmod(0o755)
-    queue = asyncio.Queue()
+    queue = TurnInbox()
     finish_event = asyncio.Event()
     persistent = PersistentPiSession()
     starts = []
@@ -82,17 +83,16 @@ for line in sys.stdin:
 
     async def collect():
         nonlocal injected
-        async for event in backend.stream_agent_events(
-            str(stub),
+        async for event in session_turn_events(
+            persistent, str(stub),
             [],
             "first",
             str(tmp_path),
-            root=Path(str(tmp_path)), session_file=str(session),
+            session_file=str(session),
             steering_queue=queue,
             finish_event=finish_event,
-            persistent_session=persistent,
             native_start=lambda public_id, native_id, text: starts.append(text) or True,
-         session_directory=Path(str(tmp_path))):
+        ):
             events.append(event)
             inject = (
                 isinstance(event, ae.ContextUsageObservation) and event.context_used == PiCount.from_wire(2)
