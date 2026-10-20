@@ -177,7 +177,9 @@ class PendingSeal(CheckpointSeal):
                 or self.prior.root_id != marker.root_id):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
         if relocated:
-            saved = saved.rebind_source(bus, marker, db, info)
+            # Preserve the pending intent until its entire suffix is proved and
+            # committed; a zero-suffix rebind cannot complete a pending append.
+            saved.require_prefix(bus, info)
         return super().recover(bus, marker, db, path, saved, info)
 
     def recovery_end(self, info: os.stat_result) -> int:
