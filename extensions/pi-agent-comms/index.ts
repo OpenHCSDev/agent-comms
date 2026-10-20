@@ -23,9 +23,9 @@ interface ToolDeclaration {
 	parameters: Record<string, unknown>;
 }
 
-function run(args: string[], timeout = 30_000): Record<string, unknown> {
+function run(args: string[], launchArguments: string[], timeout = 30_000): Record<string, unknown> {
 	try {
-		const stdout = execFileSync(CLI, args, {
+		const stdout = execFileSync(CLI, [...launchArguments, ...args], {
 			encoding: "utf-8",
 			timeout,
 		});
@@ -55,6 +55,7 @@ export default function (pi: ExtensionAPI) {
 	const currentThread = process.env.AGENT_COMMS_THREAD;
 	pi.registerFlag("comms-catalog", { type: "string", description: "Core native launch catalog" });
 	let serviceTier: unknown;
+	let launchArguments: string[];
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
@@ -69,6 +70,55 @@ export default function (pi: ExtensionAPI) {
 	});
 	// Managed lifetimes belong to Core's attested session/turn owners. Only
 	// standalone forks attach themselves, checkpoint, publish activity and release.
+	// Decode the one launch catalog before any standalone session hook uses it.
+	pi.on("session_start", () => {
+		const path = pi.getFlag("comms-catalog");
+		if (typeof path !== "string") throw new Error("Native launch did not supply its tool catalog");
+		const startup = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		serviceTier = startup.service_tier;
+		launchArguments = startup.launch_arguments as string[];
+		const catalog = startup.tools as ToolDeclaration[];
+		for (const declaration of catalog) {
+			pi.registerTool({
+				name: declaration.name,
+				label: declaration.label,
+				description: declaration.description,
+				parameters: Type.Unsafe(declaration.parameters),
+				async execute(_id, params, _signal, _onUpdate, ctx) {
+					if (declaration.name === "comms_model") {
+						const selected = String(params.model ?? "").trim();
+						const separator = selected.indexOf("/");
+						if (separator <= 0 || separator === selected.length - 1) {
+							throw new Error("Model must be an exact provider/model identifier");
+						}
+						const provider = selected.slice(0, separator);
+						const modelId = selected.slice(separator + 1);
+						const model = ctx.modelRegistry.find(provider, modelId);
+						if (!model) throw new Error(`Unknown model: ${selected}`);
+						const thinkingLevel = String(params.thinking_level ?? "").trim();
+						if (thinkingLevel) {
+							const allLevels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+							const levels = model.reasoning
+								? allLevels.filter((level) => {
+									const mapped = model.thinkingLevelMap?.[level as keyof typeof model.thinkingLevelMap];
+									return mapped !== null && (level !== "xhigh" && level !== "max" || mapped !== undefined);
+								})
+								: ["off"];
+							if (!levels.includes(thinkingLevel)) {
+								throw new Error(`Thinking level ${thinkingLevel} is unavailable for ${selected}; choose one of: ${levels.join(", ")}`);
+							}
+						}
+					}
+					const result = run([
+						"tool", ...(currentThread ? ["--from", currentThread] : []),
+						"--tool", declaration.name, "--arguments", JSON.stringify(params),
+					], launchArguments);
+					if (declaration.name === "comms_model" && result.thread === currentThread) serviceTier = result.service_tier;
+					return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: result };
+				},
+			});
+		}
+	});
 	if (forkThread && !managed) {
 		const activity = (state: string, detail = "") => {
 			try {
@@ -80,7 +130,7 @@ export default function (pi: ExtensionAPI) {
 					state,
 					"--detail",
 					detail.slice(0, 240),
-				]);
+				], launchArguments);
 			} catch {
 				// Activity reporting must never disrupt the agent turn.
 			}
@@ -96,7 +146,7 @@ export default function (pi: ExtensionAPI) {
 					"--session-file",
 					sessionFile,
 					"--pid", String(process.pid),
-				]);
+				], launchArguments);
 			}
 		});
 
@@ -106,7 +156,7 @@ export default function (pi: ExtensionAPI) {
 		// the compaction that follows.
 		pi.on("session_before_compact", async (_event, _ctx) => {
 			try {
-				const result = run(["checkpoint", "--name", forkThread], 150_000);
+				const result = run(["checkpoint", "--name", forkThread], launchArguments, 150_000);
 				console.error(`agent-comms checkpoint: ${JSON.stringify(result)}`);
 			} catch (error) {
 				console.error(
@@ -125,71 +175,11 @@ export default function (pi: ExtensionAPI) {
 		pi.on("session_shutdown", async () => {
 			activity("idle");
 			try {
-				run(["release", "--name", forkThread]);
+				run(["release", "--name", forkThread], launchArguments);
 			} catch {
 				// The owner may already have stopped or deleted the thread.
 			}
 		});
 	}
 
-	pi.on("session_start", () => {
-		const path = pi.getFlag("comms-catalog");
-		if (typeof path !== "string") throw new Error("Native launch did not supply its tool catalog");
-		const startup = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-		serviceTier = startup.service_tier;
-		const catalog = startup.tools as ToolDeclaration[];
-	for (const declaration of catalog) {
-		pi.registerTool({
-			name: declaration.name,
-			label: declaration.label,
-			description: declaration.description,
-			parameters: Type.Unsafe(declaration.parameters),
-			async execute(_id, params, _signal, _onUpdate, ctx) {
-				if (declaration.name === "comms_model") {
-					const selected = String(params.model ?? "").trim();
-					const separator = selected.indexOf("/");
-					if (separator <= 0 || separator === selected.length - 1) {
-						throw new Error("Model must be an exact provider/model identifier");
-					}
-					const provider = selected.slice(0, separator);
-					const modelId = selected.slice(separator + 1);
-					const model = ctx.modelRegistry.find(provider, modelId);
-					if (!model) {
-						throw new Error(`Unknown model: ${selected}`);
-					}
-					const thinkingLevel = String(params.thinking_level ?? "").trim();
-					if (thinkingLevel) {
-						const allLevels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
-						const levels = model.reasoning
-							? allLevels.filter((level) => {
-								const mapped = model.thinkingLevelMap?.[level as keyof typeof model.thinkingLevelMap];
-								return mapped !== null && (level !== "xhigh" && level !== "max" || mapped !== undefined);
-							})
-							: ["off"];
-						if (!levels.includes(thinkingLevel)) {
-							throw new Error(
-								`Thinking level ${thinkingLevel} is unavailable for ${selected}; choose one of: ${levels.join(", ")}`,
-							);
-						}
-					}
-				}
-				const result = run([
-					"tool",
-					...(currentThread ? ["--from", currentThread] : []),
-					"--tool",
-					declaration.name,
-					"--arguments",
-					JSON.stringify(params),
-				]);
-				if (declaration.name === "comms_model" && result.thread === currentThread) {
-					serviceTier = result.service_tier;
-				}
-				return {
-					content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-					details: result,
-				};
-			},
-		});
-	}
-	});
 }

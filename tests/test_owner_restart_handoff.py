@@ -22,7 +22,7 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
-def test_selected_runtime_stays_pinned_to_the_calling_interpreter(tmp_path, monkeypatch):
+def test_selected_runtime_stays_pinned_to_the_calling_interpreter(tmp_path, monkeypatch, verified_native_package):
     first, second = tmp_path / "first", tmp_path / "second"
     first.mkdir()
     second.mkdir()
@@ -44,7 +44,7 @@ def test_selected_runtime_stays_pinned_to_the_calling_interpreter(tmp_path, monk
     assert selected.environment(projected) == projected
     assert RestoredRuntime(Path("/old/bin/python")).environment(original) == original
     _, native_environment = NativePiRpcLaunch.bootstrap(
-        first / "package/dist/cli.js", (), tmp_path, original,
+        verified_native_package, (), tmp_path, original,
         RestartEnvironment.inherit(original), selected,
     )
     assert native_environment["VIRTUAL_ENV"] == str(first)

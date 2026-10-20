@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Callable
@@ -31,7 +31,7 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable, NativePiRpcLaunch
 from .native_package import VerifiedNativePackage
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRoot, LaunchRuntime, RestartEnvironment
 from .threads import Thread
 from .wire_watch import WatchSource, WireWatch
 
@@ -206,7 +206,7 @@ class ModelConfigOption(CatalogConfigOption):
             from .pi_commands import GetAvailableModels
 
             data = await GetAvailableModels().discover(
-                self.agent_bin, self.agent_args.argv, self.configuration.root, package=self.package
+                self.agent_bin, self.agent_args.argv, LaunchRoot.current().path, package=self.package
             )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -236,7 +236,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root,
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, LaunchRoot.current().path,
             package=self.package,
         )
         levels = [member.declared_name for member in data.levels]
@@ -279,7 +279,7 @@ class ConfigOptions:
         configuration = RestartEnvironment.inherit(os.environ)
         package = partial(
             NativePiRpcLaunch.package_for_command,
-            command, LaunchRuntime.running(), configuration.root,
+            command, LaunchRuntime.running(), LaunchRoot.current().path,
         )
         return cls(command, NativeArguments.configured(), configuration, package)
 
@@ -321,7 +321,7 @@ class SessionConfigOptions(ConfigOptions):
         super().__init__(
             agent_bin,
             agent_args,
-            replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
+            RestartEnvironment.inherit(os.environ),
             partial(comms.owners.launch_authority.package_for, agent_bin),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
