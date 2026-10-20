@@ -2,6 +2,7 @@
 
 from agent_comms.channel_targets import ChannelTarget, ThreadTarget
 from agent_comms.wire_log import WireLog
+from native_unread_fixture import dm_counts
 
 from conftest import publish_initial
 from agent_comms.bus_publication import AgentOrigin
@@ -21,7 +22,7 @@ from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import CoordinationReadUnavailable, StaleRevision
+from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
@@ -119,7 +120,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         assert comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent.items(), registry=basis.registry) == sent
         assert "bob" in sent and "renamed-bob" not in sent
     latest = comms.views.viewer_snapshot(str(tmp_path))
-    assert {reference.name: shown.count for reference, shown in latest.unread.items() if type(reference) is ThreadTarget and shown.count} == {"renamed-bob": 1}
+    assert dm_counts(latest.unread) == {"renamed-bob": 1}
     assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
 
 
@@ -167,7 +168,13 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     request.receive(service)
     results = []
     original_snapshot = comms.views.viewer_snapshot
+    from agent_comms.bus_route_counts import RouteIndexRebuilding
     from agent_comms.private_path import FileRevision
+    from agent_comms.ui_model.observation import ReadAnswered, ReadRequest
+
+    class ForegroundRead(ReadRequest):
+        def read(self, service_comms):
+            return service_comms.registry.require("bob").name
 
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     attempts = []
@@ -179,11 +186,24 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         while receiver.poll():
             results.append(receiver.recv())
         first = next(value for value in results if isinstance(value, SidebarObserved))
-        assert {reference.name for reference, shown in first.snapshot.unread.items() if shown.pending} >= {"bob", "#team"}
+        assert {reference for reference, shown in first.snapshot.unread.items() if shown.pending} >= {
+            ThreadTarget("bob"), ChannelTarget("#team")}
         assert isinstance(first.derived[0]["#team"].unread, IndexingUnread)
-        assert projection_bytes() == before
+        if not attempts:
+            assert projection_bytes() == before
+        else:
+            assert any(isinstance(value, ReadAnswered) and value.request_id == 9976
+                       and value.value == "bob" for value in results)
         attempts.append(True)
-        return original_snapshot(*args, **kwargs)
+        try:
+            # Sidebar unread no longer needs the route index. Exercise its live
+            # bounded reader here to keep the observer's foreground yield covered.
+            with comms.bus.snapshot(viewer=NamedViewer(viewer.name)) as (basis, source):
+                comms.bus.pending_counts_opened(source, basis)
+            return original_snapshot(*args, **kwargs)
+        except RouteIndexRebuilding:
+            ForegroundRead(str(comms.root), request_id=9976).receive(service)
+            raise
 
     try:
         with patch.object(comms.views, "viewer_snapshot", side_effect=complete):
@@ -192,9 +212,8 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
             results.append(receiver.recv())
         completed = [value for value in results if isinstance(value, SidebarObserved)][-1]
         assert completed.snapshot == expected
-        assert {reference.name for reference, shown in completed.snapshot.unread.items() if shown.pending} == frozenset()
-        assert len(attempts) == 1
-        assert not BusRouteCounts(bus_path).path.exists()
+        assert {reference for reference, shown in completed.snapshot.unread.items() if shown.pending} == frozenset()
+        assert len(attempts) == 2
         assert FileRevision.from_stat(comms.bus.activity_index.path.stat()) == activity_revision
         assert service.interest.observations[SidebarReading].request is request
     finally:
@@ -235,7 +254,7 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
         while receiver.poll():
             answers.append(receiver.recv())
         completed = [answer for answer in answers if isinstance(answer, SidebarObserved)][-1]
-        assert {reference.name: shown.count for reference, shown in completed.snapshot.unread.items() if type(reference) is ThreadTarget and shown.count} == {"sender": 2}
+        assert dm_counts(completed.snapshot.unread) == {"sender": 2}
         assert not {reference.name for reference, shown in completed.snapshot.unread.items() if shown.pending}
         assert service.interest.observations[SidebarReading].request is request
     finally:
@@ -261,7 +280,7 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
 
     monkeypatch.setattr(comms.bus.log, "opened_wire_snapshot", observed)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
-    assert {reference.name: shown.count for reference, shown in snapshot.unread.items() if type(reference) is ThreadTarget and shown.count} == {"bob": 1}
+    assert dm_counts(snapshot.unread) == {"bob": 1}
     assert snapshot.unread[ChannelTarget('#team')].count == 1
     assert snapshot.last_sent["bob"] > 0
     assert len(opened) == 1 and opened[0].stream.closed
@@ -540,7 +559,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
             viewer, (messages[1], messages[4]), comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer, displayed)
-    assert {reference.name: shown.count for reference, shown in wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread.items() if type(reference) is ThreadTarget and shown.count} == {"bob": 2}
+    assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread) == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
     from agent_comms.routing import DeliveryScope
 
@@ -555,8 +574,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     assert expected == {"renamed-bob": 2}
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         snapshot = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-        assert {reference.name: shown.count for reference, shown in snapshot.unread.items()
-                if type(reference) is ThreadTarget and shown.count} == expected
+        assert dm_counts(snapshot.unread) == expected
         assert decode.call_count == 0
     ledger = comms.bus.reads.read()
     receiver, connection = Pipe()
@@ -569,31 +587,26 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             receiver.recv()
         observer = service.interest.observations[SidebarReading]
         published = observer.published
-        assert {reference.name: shown.count for reference, shown in published.snapshot.unread.items()
-                if type(reference) is ThreadTarget and shown.count} == expected
+        assert dm_counts(published.snapshot.unread) == expected
         with closing(CoordinationStore.writer(BusRouteCounts(comms.bus.log.path).path)) as writer:
             writer.execute("BEGIN IMMEDIATE")
             comms.messaging.send("renamed-bob", viewer, "during index contention").message
-            # Use the real SQLite busy result, not a wording-only DatabaseError.
+            # Human unread uses the page index, so an unrelated route writer
+            # must neither defer the new count nor stall the existing observer.
             with patch.object(CoordinationStore, "writer_timeout", 0):
-                with pytest.raises(CoordinationReadUnavailable) as busy:
-                    wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-                assert busy.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread) == {
+                    "renamed-bob": 3}
                 await service.observe(set())
             writer.rollback()
-        while receiver.poll():
-            result = receiver.recv()
-            assert not isinstance(result, SidebarObserved)
         assert service.interest.observations[SidebarReading] is observer
-        assert observer.published is published
+        assert observer.published is not published
         assert observer.request is request
-        await service.observe(set())
         recovered = []
         while receiver.poll():
             recovered.append(receiver.recv())
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
-        assert {reference.name: shown.count for reference, shown in latest.snapshot.unread.items() if type(reference) is ThreadTarget and shown.count} == {"renamed-bob": 3}
-        assert {reference.name: shown.count for reference, shown in wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread.items() if type(reference) is ThreadTarget and shown.count} == {"renamed-bob": 3}
+        assert dm_counts(latest.snapshot.unread) == {"renamed-bob": 3}
+        assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread) == {"renamed-bob": 3}
         assert service.interest.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.reads.read() == ledger

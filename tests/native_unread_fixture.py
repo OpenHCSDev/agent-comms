@@ -1,8 +1,18 @@
 """Await actual native index preparation; tests declare their own registry threads."""
 
+from collections.abc import Mapping
+
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
+from agent_comms.ui_model.unread import UnreadPresentation
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.view_unread import TranscriptReadState
+
+
+def dm_counts(unread: Mapping[CommandTarget, UnreadPresentation]) -> dict[str, int]:
+    """Human DMs only; NativeThreadTarget subclasses ThreadTarget for saved replies."""
+    return {reference.name: shown.count for reference, shown in unread.items()
+            if type(reference) is ThreadTarget and shown.count}
 
 
 def native_reader(path):
