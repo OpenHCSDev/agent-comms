@@ -40,7 +40,7 @@ def scenario(comms: Comms, project, monkeypatch):
             comms.registry.new_thread(name, frozenset(), str(project), created_at=float(created)))
     # Commander-specific rules read this bus's record, never the machine's installed config.
     from agent_comms.commander.config import CommanderConfig
-    CommanderConfig(commander="lead", root=comms.root, cli=project / "agent-comms",
+    CommanderConfig(commander="lead", root=comms.root,
         state=comms.root / "state", board=comms.root / "board.md",
         narrative=comms.root / "narrative.md", skill=comms.root / "skill.md",
         rules=(), repos=(), worktrees=comms.root / "wt", scratch=comms.root / "scratch",
