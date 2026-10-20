@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import json
+import os
 import subprocess
 import sys
+from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -13,7 +14,14 @@ from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, GitCommitText, JsonShapeFamily, JsonShapeMember, PathText, TextRepresentation
+from .field_codec import (
+    FieldCodec,
+    GitCommitText,
+    JsonShapeFamily,
+    JsonShapeMember,
+    PathText,
+    TextRepresentation,
+)
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -31,6 +39,14 @@ class LaunchRuntime:
         """Keep ordinary launches on the calling process's installation."""
         return cls(Path(sys.executable))
 
+    @staticmethod
+    def current_pointer() -> Path:
+        return Path.home() / ".local/share/agent-comms/current"
+
+    @classmethod
+    def installed(cls) -> LaunchRuntime:
+        return cls(cls.current_pointer() / "bin/python")
+
     @property
     def prefix(self) -> Path:
         return self.interpreter.parent.parent.resolve()
@@ -41,7 +57,9 @@ class LaunchRuntime:
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
-            RestartEnvironment.inherit(source).for_interpreter(self.interpreter).without_pythonpath(),
+            RestartEnvironment.inherit(source)
+            .for_interpreter(self.interpreter)
+            .without_pythonpath(),
             virtual_env=str(self.prefix),
         )
         return configuration.apply_runtime(source)
@@ -51,34 +69,66 @@ class LaunchRuntime:
             raise ValueError("Target interpreter is unavailable")
 
 
+class ProofBuildMismatchError(ValueError):
+    """A retained proof does not identify the currently installed pair."""
+
+
+class BuildIdentity(DeclaredFamily, affix="BuildIdentity"):
+    @abstractmethod
+    def recorded(self) -> RecordedBuildIdentity: ...
+
+    @abstractmethod
+    def require_installed(self) -> None: ...
+
+
 @dataclass(frozen=True)
-class StackBuild:
+class UnrecordedBuildIdentity(BuildIdentity):
+    def recorded(self) -> RecordedBuildIdentity:
+        return RecordedBuildIdentity.installed()
+
+    def require_installed(self) -> None:
+        installed = RecordedBuildIdentity.installed()
+        raise ProofBuildMismatchError(
+            f"Proof build is unrecorded; installed Core {installed.core}, "
+            f"Toad {installed.toad}; run and record a new proof."
+        )
+
+
+@dataclass(frozen=True)
+class RecordedBuildIdentity(BuildIdentity):
     """The installed pair, observed from its interpreter rather than this caller's imports."""
 
     core: Annotated[str, GitCommitText]
     toad: Annotated[str, GitCommitText]
 
-    @classmethod
-    def installed(cls) -> StackBuild:
-        from .owner_cutover import StoppedOwnerInstallation
+    def recorded(self) -> RecordedBuildIdentity:
+        return self
 
-        runtime = LaunchRuntime(StoppedOwnerInstallation.current_pointer() / "bin/python")
+    @classmethod
+    def installed(cls) -> RecordedBuildIdentity:
+        runtime = LaunchRuntime.installed()
         runtime.require_available()
         output = subprocess.check_output(
-            (str(runtime.interpreter), "-c",
-             "import json; from importlib.metadata import distribution; "
-             "from agent_comms.package_stamp import STAMP; "
-             "print(json.dumps([STAMP.commit(), "
-             "distribution('batrachian-toad').read_text('direct_url.json')]))"),
-            env=runtime.environment(os.environ), text=True, timeout=30,
+            (
+                str(runtime.interpreter),
+                "-c",
+                "import json; from importlib.metadata import distribution; "
+                "from agent_comms.package_stamp import STAMP; "
+                "print(json.dumps([STAMP.commit(), "
+                "distribution('batrachian-toad').read_text('direct_url.json')]))",
+            ),
+            env=runtime.environment(os.environ),
+            text=True,
+            timeout=30,
         )
         core, metadata = FieldCodec.decode(tuple[str, str], json.loads(output))
         source = FieldCodec.decode(DistributionSource, json.loads(metadata))
         return cls(core, source.vcs_info.commit_id)
 
-    def require_same(self, installed: StackBuild) -> None:
+    def require_installed(self) -> None:
+        installed = self.installed()
         if self != installed:
-            raise ValueError(
+            raise ProofBuildMismatchError(
                 f"Proof build Core {self.core}, Toad {self.toad} differs from installed "
                 f"Core {installed.core}, Toad {installed.toad}; run the proof again."
             )
@@ -184,6 +234,7 @@ class RestartEnvironment(EnvironmentRecord):
         default=default_agent_directory,
         metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
     )
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
         object.__setattr__(self, "agent_directory", self.absolute(self.agent_directory))
@@ -197,7 +248,9 @@ class RestartEnvironment(EnvironmentRecord):
     def inherit(cls, environment: Mapping[str, str]):
         values = cls.inherited(environment)
         native_name, agent_name = cls.variable("native_config"), cls.variable("agent_directory")
-        values[native_name] = values.get(native_name) or values.get(agent_name) or str(cls.default_agent_directory)
+        values[native_name] = (
+            values.get(native_name) or values.get(agent_name) or str(cls.default_agent_directory)
+        )
         return FieldCodec.decode(cls, values)
 
     def for_agent(self, directory: Path) -> RestartEnvironment:
@@ -211,14 +264,18 @@ class RestartEnvironment(EnvironmentRecord):
         """Put this process's runtime first, exactly once; preserve other search paths."""
         directory = str(interpreter.parent)
         inherited = os.defpath if self.path is None else self.path
-        path = os.pathsep.join((directory, *(entry for entry in inherited.split(os.pathsep)
-                                            if entry != directory)))
+        path = os.pathsep.join(
+            (directory, *(entry for entry in inherited.split(os.pathsep) if entry != directory))
+        )
         return replace(self, path=path)
 
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
-        native = (FieldCodec.wire_key(declared) for declared in fields(self)
-                  if declared.metadata.get("native"))
+        native = (
+            FieldCodec.wire_key(declared)
+            for declared in fields(self)
+            if declared.metadata.get("native")
+        )
         return {key: encoded[key] for key in native}
 
     def auth_revision(self) -> tuple[int, int]:
@@ -300,8 +357,13 @@ class ThreadLaunch(EnvironmentRecord):
         return FieldCodec.decode(cls, values)
 
     @classmethod
-    def called_by(cls, name: str, canonicalize: Callable[[str], str], *,
-                  environment: Mapping[str, str] = os.environ) -> bool:
+    def called_by(
+        cls,
+        name: str,
+        canonicalize: Callable[[str], str],
+        *,
+        environment: Mapping[str, str] = os.environ,
+    ) -> bool:
         try:
             caller = cls.current(environment).name
         except CallingThreadUnavailable:

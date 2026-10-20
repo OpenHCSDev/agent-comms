@@ -7,14 +7,14 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import re
-import subprocess
 import sqlite3
+import subprocess
 import sys
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -33,23 +33,29 @@ from .child_process import (
 from .bus_publication import AgentOrigin
 from .external_transcript import ExternalTranscript
 from .messages import InfoKind, Message
+from .channel_targets import CommandTarget
 from .command import Command
-from .launch_runtime import StackBuild
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
-from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
+from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .standing_rules import UndatedStandingRule
+from .storage_rules import StorageRule
 from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
-from .standing_rules import UndatedStandingRule
-from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -85,7 +91,8 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
     evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
                                       metadata={"wire_omit_default": True})
-    proof_build: StackBuild | None = field(default=None, metadata={"wire_omit_default": True})
+    proof_build: BuildIdentity = field(default_factory=UnrecordedBuildIdentity,
+                                       metadata={"wire_omit_default": True})
 
     @property
     def work(self) -> str:
@@ -112,16 +119,7 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
             await self.require_source(each)
             each.result.require(await self.checked(each))
         return replace(self, at=await self.delivery_time(check),
-                       proof_build=self.proof_build or await asyncio.to_thread(StackBuild.installed))
-
-    def require_current_build(self) -> None:
-        installed = StackBuild.installed()
-        if self.proof_build is None:
-            raise ValueError(
-                f"Proof build is unrecorded; installed Core {installed.core}, "
-                f"Toad {installed.toad}; run and record a new proof."
-            )
-        self.proof_build.require_same(installed)
+                       proof_build=await asyncio.to_thread(self.proof_build.recorded))
 
     @abstractmethod
     async def require_source(self, check): ...
@@ -1699,7 +1697,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 
     def installed(self, works, artifact):
         self.run.require_closing(works)
-        self.delivery.require_current_build()
+        self.delivery.proof_build.require_installed()
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
     def require_checked(self, problem: str) -> None:
