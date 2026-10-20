@@ -991,15 +991,18 @@ class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
                 fsync_parent=True,
             )
 
+    def fresh(self) -> bool:
+        """No marker, log or repair copy exists: nothing was ever written to this bus."""
+        repair = self.path.with_name(self.path.name + ".corrupt")
+        return not any(
+            path.exists() or path.is_symlink() for path in (self.metadata_path, self.path, repair))
+
     def require_fresh_private_root_unlocked(self) -> None:
         self._assert_private_directory()
         root_info = self.path.parent.lstat()
         if root_info.st_uid != os.geteuid() or stat.S_IMODE(root_info.st_mode) != 0o700:
             raise RelationViolationError("Private bus directory must be owner-only.")
-        repair = self.path.with_name(self.path.name + ".corrupt")
-        if any(
-            path.exists() or path.is_symlink() for path in (self.metadata_path, self.path, repair)
-        ):
+        if not self.fresh():
             raise RelationViolationError(
                 "Existing unmarked bus data is read-only until its history is rewritten "
                 "into the current source format."

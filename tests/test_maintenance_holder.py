@@ -23,10 +23,8 @@ from agent_comms.maintenance_barrier import (
     MaintenancePhase,
     MaintenanceState,
     PausedPhase,
-    ReadyPhase,
 )
 from agent_comms.store_files import ExclusiveLock, SharedLock, _async_store_lock, _store_lock
-from cutover.carry_maintenance_identity import MaintenanceIdentity
 
 
 def _hold(root: Path, phase: type[MaintenancePhase], ready) -> None:
@@ -116,27 +114,3 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
             status.require_open()
 
 
-def test_legacy_ready_has_one_registered_conversion(tmp_path: Path):
-    barrier = MaintenanceBarrier(tmp_path / "registry.json")
-    tmp_path.mkdir(exist_ok=True)
-    marker = {"version": 1, "root": str(tmp_path.resolve()), "generation": 4}
-    state = {**marker, "operator": "upgrade-bus", "nonce": "a" * 32, "phase": "ready"}
-    barrier.marker_path.write_text(json.dumps(marker))
-    barrier.state_path.write_text(json.dumps(state))
-    assert MaintenanceIdentity.carry(tmp_path, apply=False).changed == 1
-    assert MaintenanceIdentity.carry(tmp_path, apply=True).changed == 1
-    assert barrier.read().phase is ReadyPhase
-    assert barrier.read().operator == MaintenanceOperator.current()
-    assert MaintenanceIdentity.carry(tmp_path, apply=True).changed == 0
-
-
-def test_legacy_active_name_is_not_fabricated_into_a_process(tmp_path: Path):
-    barrier = MaintenanceBarrier(tmp_path / "registry.json")
-    marker = {"version": 1, "root": str(tmp_path.resolve()), "generation": 4}
-    state = {**marker, "operator": "upgrade-bus", "nonce": "a" * 32, "phase": "draining"}
-    barrier.marker_path.write_text(json.dumps(marker))
-    barrier.state_path.write_text(json.dumps(state))
-    before = barrier.state_path.read_bytes()
-    with pytest.raises(MalformedRecord):
-        MaintenanceIdentity.carry(tmp_path, apply=True)
-    assert barrier.state_path.read_bytes() == before

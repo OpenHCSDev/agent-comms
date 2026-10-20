@@ -29,7 +29,7 @@ Inspected 2026-10-19, installed runtime `toad-864cd9d37-core-67d8e63a7-native-95
 | `judge back IDS --msg ORDER --line LINE --why REASON --roast TEXT --fix TEXT --slop PATTERN-ID --fact FACT --at FILE:LINE --derive MECHANISM --by FILE:LINE [--fork NAME]` | Same spelling | Supported fields. Core posts to the verdict audience rather than the old unconditional whole-fleet broadcast; original random RTS edit IDs are not Core call IDs. |
 | `judge superseded IDS --by ORDER --line LINE --why REASON` | No `superseded` | GAP: no corresponding Core verdict type or verb. |
 | `judge alarm` | Same spelling | Command exists. Existing RTS verdict identities must be carried before its pending-edit count can be called equivalent. |
-| `rules review [--as NAME]`, `rules answer N TEXT [--as NAME]`, `rules stale` | Same spelling | Supported; reviews live in Core's rule-review store. Old `rules.jsonl` is not imported by the requested five-file carry. |
+| `rules review [--as NAME]`, `rules answer N TEXT [--as NAME]`, `rules stale` | `rules review` | Prints every rule; nothing is drawn, answered or stored. |
 | `capacity` | Same spelling | Command exists. Neither RTS nor Core exposes `require`/`beat` as CLI flags. Installed runtime above predates P617's external-event/count repair. |
 | `rotate`, `tool_watch` | `rotate`, **`tool-watch`** | Different watcher spelling; launcher uses the hyphenated Core command. State readers use Core. |
 
@@ -51,8 +51,7 @@ These are missing source facts / owner model cases, not permission to keep a sec
 
 * All six filename launchers use `current/bin/agent-comms-commander`. The supplied grep check prints 0.
 * `order overdue` printed `OVERDUE: doctrine-segment (due 04:49, order d3702a707bcb, no commit since the order; no reply since the order)`. This is the earlier single-Todo copy, **not fleet alarm parity**.
-* `judge show` returned seven actual native edits; `capacity` reported `covered: load 4, forks []`; `rules stale` reported the old main commander's review age. No provider input was sent.
-* `rules review --as doctrine-segment` and all six `rules answer ... --as doctrine-segment` commands ran through the installed launcher; subsequent `rules stale --as doctrine-segment` reported fresh.
+* `judge show` returned seven actual native edits; `capacity` reported `covered: load 4, forks []`. No provider input was sent.
 * Existing refactor-audit AST census parsed all 12 commander files and all 20 cutover files with zero omissions. No source scanner was added.
 * `tool-watch` remained running for its eight-second observation, then its owned process group was stopped. That confirms launch, not a new-call digest or storage strike.
 * `rotate` printed its P617 line, then failed: `RelationViolationError: external_transcripts.sqlite3 differs from its declaration`. This copy has the P617-converted event rows; installed T064518Z still has the old array reader. It requires the matching installed runtime, not a source splice or reversing the conversion.

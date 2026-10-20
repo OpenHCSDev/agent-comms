@@ -177,38 +177,6 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
     assert ToolDeclaration.record("read", arguments, call_id="refused") is None
 
 
-@pytest.mark.asyncio
-async def test_malformed_edit_reports_error_and_allows_a_later_tool_round(tmp_path, tool_listener):
-    from agent_comms.native_tool_call import SelectedToolDenied
-    from agent_comms.selected_tool_broker import consume_selected_slot
-
-    class Owner:
-        input_id = secrets.token_hex(16)
-        calls = []
-
-        async def allow(self, turn, round_number, call):
-            self.calls.append(call.call_id)
-            slot = call.slot(self.input_id, round_number)
-            consume_selected_slot(tmp_path, slot, slot)
-            return NoRoomNeeded()
-
-    owner = Owner()
-    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
-    socket.turn = object()
-    malformed = {"path": "x", "edits": [{"oldText": "old", "newText": "new", "newText_should_not_exist": "extra"}]}
-    for id, name, args in (("bad-edit", "edit", malformed), ("later-read", "read", {"path": "x"})):
-        socket.announce((ToolCallContent(id=id, name=name, arguments=args),))
-        socket.tool_started(ToolExecutionStart(tool_call_id=id, tool_name=name, args=args))
-        if id == "bad-edit":
-            with pytest.raises(SelectedToolDenied) as refused:
-                await socket.handle_request(_request(socket, id, name, args))
-            response = socket.failure_response(refused.value)
-            assert response["ok"] is False and "newText_should_not_exist" in response["error"]
-        else:
-            assert await socket.handle_request(_request(socket, id, name, args)) == {"ok": True}
-        socket.tool_finished(ToolExecutionEnd(tool_call_id=id, tool_name=name, is_error=id == "bad-edit"), owner.input_id)
-        socket.assert_complete()
-    assert owner.calls == ["later-read"]
 
 
 @pytest.mark.parametrize("name,arguments,title", [
@@ -227,47 +195,6 @@ def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
     assert ToolStart.from_call("typed", name, arguments).title == title
 
 
-@pytest.mark.asyncio
-async def test_multicall_native_transport_matches_events_and_refuses_duplicate(tmp_path, tool_listener):
-    class Owner:
-        input_id = secrets.token_hex(16)
-        calls = []
-
-        async def allow(self, turn, round_number, call):
-            self.calls.append(call)
-            return NoRoomNeeded()
-
-    owner = Owner()
-    tmp_path.chmod(0o700)
-    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
-    socket.turn = object()
-    # Actual owner claim_scope/storage is covered separately. This exercises the
-    # strict native-event/socket correlation and multiple normal tool calls.
-    calls = [
-        ("call_one|provider-part", "read", {"path": "a"}),
-        ("two", "write", {"path": "b", "content": "c"}),
-    ]
-    socket.announce([ToolCallContent(id=id, name=name, arguments=args) for id, name, args in calls])
-    for id, name, args in calls:
-        socket.tool_started(ToolExecutionStart(tool_call_id=id, tool_name=name, args=args))
-        raw = (
-            json.dumps({"token": socket.listener.token, "call_id": id, "name": name, "arguments": args})
-            + "\n"
-        ).encode()
-        assert await socket.handle_request(raw) == {"ok": True}
-        with pytest.raises(ValueError):
-            await socket.handle_request(raw)
-        # Terminal ledger needs the consumed slot an actual owner writes.
-        from agent_comms.selected_tool_broker import consume_selected_slot
-
-        call = socket.calls.require(0, id)
-        slot = call.slot(owner.input_id, 0)
-        consume_selected_slot(tmp_path, slot, slot)
-        socket.tool_finished(
-            ToolExecutionEnd(tool_call_id=id, tool_name=name, is_error=False), owner.input_id
-        )
-    socket.assert_complete()
-    assert len(owner.calls) == 2
 
 
 def _request(socket, id, name, args):

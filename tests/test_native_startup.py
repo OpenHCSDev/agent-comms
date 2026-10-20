@@ -1,11 +1,9 @@
 """Native startup readiness is size-aware, and cancellation reaps a starting child."""
 
 
-import pytest
 
 from agent_comms.native_startup import MeasuredSessionLoad, NativeStartupPolicy, UnmeasuredSessionLoad
 
-pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 
 
 def test_readiness_budget_is_size_aware_bounded_and_not_a_turn_deadline():

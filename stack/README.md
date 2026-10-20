@@ -80,7 +80,7 @@ in [native proof cutover](native-proof-cutover.md). There is no runtime legacy
 reader. The native session JSONL metadata index remains a separate startup cost;
 indexed proof recovery does not claim to remove that history read.
 
-A retained bus is upgraded with `tools/upgrade_bus.py`, which relocks the same
+A retained bus is upgraded with `agent-comms install`, which relocks the same
 way. The stack's source overrides select editable Core and the UI mains even when
 Toad's own manifest pins an older dependency. Preserve active sessions and
 uncertain inputs; new Toad launches load the updated packages without restarting

@@ -18,13 +18,16 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
 from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+
+if TYPE_CHECKING:
+    from .wire_log import WireLog
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +109,8 @@ class ActiveRoute(CommsRoute):
     def published_launch(cls) -> LaunchRoot:
         match read_active_route():
             case ActiveRoute() as route:
+                if not route.root.is_dir():
+                    raise ValueError("active comms route root is missing")
                 route.observe_root()
                 return LaunchRoot.from_path(route.root)
             case _:
@@ -132,17 +137,23 @@ class ActiveRoute(CommsRoute):
             route = FieldCodec.decode(cls, record)
         except MalformedRecord as error:
             raise MalformedRecord(f"active comms route {path} is invalid: {error}") from error
-        if not route.root.is_dir():
-            raise ValueError("active comms route root is missing")
         return route
 
-    def observe_root(self) -> Path:
-        from .wire_log import WireLog
+    def wire_log(self) -> WireLog:
+        from .wire_log import WireLog  # the wire log's module imports this one
 
+        return WireLog(WireLog.path_in(self.root))
+
+    def selects_its_root(self) -> bool:
+        """Whether the root still exists and carries the marker this route was published for."""
+        return self.root.is_dir() and (
+            self.wire_log().read_metadata_unlocked().wire_root_id == self.wire_root_id)
+
+    def observe_root(self) -> Path:
         # The writer atomically replaces this marker. Reuse its owner/mode,
         # ancestry and protocol decoder, without taking the mutation/durability
         # barrier or interpreting registry/history merely to observe identity.
-        marker = WireLog(WireLog.path_in(self.root)).private_marker_unlocked()
+        marker = self.wire_log().private_marker_unlocked()
         if marker.root_id != self.wire_root_id:
             raise RelationViolationError("private route root ID changed")
         return super(ActiveRoute, self).observe_root()
@@ -352,21 +363,77 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
 
 
 def replace_unreadable_active_route(route: ActiveRoute, path: Path | None = None) -> Path:
-    """The owner's explicit repair of an old-version or unreadable route file.
-
-    The old file is kept beside the new one under a backup name; a readable or
-    absent route is refused, so a live route is still only ever installed once.
-    """
+    """The owner's explicit repair of a route file that selects no bus. The old file is kept
+    beside the new one under a backup name, so a live route is still only ever installed once."""
     with _route_directory(route, path) as (path, directory):
+        return RouteFile.read(path).replace(route, path, directory)
+
+
+def route_new_bus(route: ActiveRoute, path: Path) -> str:
+    """Install's route to a bus it just created."""
+    with _route_directory(route, path) as (path, directory):
+        return RouteFile.read(path).route_new_bus(route, path, directory)
+
+
+class RouteFile(ABC):
+    """What the default route file holds when install or the owner's repair reads it. A file
+    that selects no bus (unreadable, an old version, or naming a root gone or replaced) is
+    replaced by both; every other state owns its own answer."""
+
+    @staticmethod
+    def read(path: Path) -> RouteFile:
         try:
             current = read_active_route(path)
         except MalformedRecord:
-            backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
-            _publish_active_route_locked(route, path, directory, backup=backup)
-            return backup
-        raise ValueError(
-            f"active comms route {path} is readable and selects {current.root}; it is not replaced"
-            if current is not None else f"active comms route {path} is absent; nothing to replace")
+            return ReplaceableRoute()
+        match current:
+            case ActiveRoute() as selected if selected.selects_its_root():
+                return SelectingRoute(selected)
+            case ActiveRoute():
+                return ReplaceableRoute()
+        return AbsentRoute()
+
+    def launch_root(self) -> Path:
+        """Where install runs: the default root, where it creates a bus."""
+        return LocalRoute.default().root
+
+    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
+        backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
+        _publish_active_route_locked(route, path, directory, backup=backup)
+        return backup
+
+    def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        return f"replaced {path}; old route kept at {self.replace(route, path, directory)}"
+
+
+class ReplaceableRoute(RouteFile):
+    """Selects no bus: install and the repair both replace it."""
+
+
+class AbsentRoute(RouteFile):
+    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
+        raise ValueError(f"active comms route {path} is absent; nothing to replace")
+
+    def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        _publish_active_route_locked(route, path, directory)
+        return f"published {path}"
+
+
+@dataclass(frozen=True)
+class SelectingRoute(RouteFile):
+    """Still selects its own bus: it is kept, and install runs there."""
+
+    current: ActiveRoute
+
+    def launch_root(self) -> Path:
+        return self.current.root
+
+    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
+        raise ValueError(f"active comms route {path} is readable and selects "
+                         f"{self.current.root}; it is not replaced")
+
+    def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        return f"kept {path}: it selects {self.current.root}"
 
 
 @contextmanager

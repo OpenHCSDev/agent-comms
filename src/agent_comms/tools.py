@@ -71,6 +71,10 @@ from .goal_history import RecordedGoalRevision
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_waits import StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
+from .standing_rules import StandingRule
+from .plan_phases import OrderPhase
+from .message_reference import MessageReference
+from .message_page import PageBounds
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
 from .message_page import PageBounds
@@ -125,8 +129,6 @@ from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .plan_phases import OrderPhase
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
-from .rule_reviews import RuleReviewEntry, RuleReviews
-from .standing_rules import RulesDue, StandingRule
 from .thread_execution import (
     ArchiveOwnerControl,
     NativeOwnerCommand,
@@ -959,20 +961,6 @@ class CommsStandingRulesTool(ThreadToolRequest):
             rule.enforce(comms, caller.name)
         return StandingRulesRead(
             tuple(rule.line() for rule in broken if rule.broke_after(self.after)))
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsRuleReviewTool(ThreadToolRequest):
-    label = "Record rule review"
-    description = "Record the rules a review drew, or one drawn rule's answer; replies what is due."
-    entry: Annotated[
-        RuleReviewEntry, *tool_field("A drawn review, or the answer to drawn rule n")
-    ]
-
-    def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        RuleReviews(comms.root).write(caller.name, self.entry)
-        due = RulesDue.violations(comms, caller.name)
-        return StandingRulesRead(tuple(rule.line() for rule in due))
 
 
 @dataclass(frozen=True, kw_only=True)

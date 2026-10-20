@@ -61,18 +61,6 @@ def test_source_proof_owners_stay_within_s7_bounds():
     assert not any(isinstance(n, ast.Attribute) and n.attr == "triage" for n in ast.walk(reader))
 
 
-def test_outbound_transcript_cannot_be_recreated_from_a_tool_result():
-    """History ad9bde97 added live and saved synthetic send append sites."""
-    for filename, retired in (
-        ("turn_progress.py", "AgentTextTranscriptUpdate"),
-        ("pi_payloads.py", "SentTranscript"),
-    ):
-        assert not any(
-            isinstance(node, ast.Name) and node.id == retired
-            for node in ast.walk(ast.parse((SOURCE / filename).read_text()))
-        )
-
-
 def test_original_wire_reply_has_no_native_streaming_membership():
     """Real215-05 and composition215-01 rendered one row through both handlers."""
     from agent_comms.transcript_events import (

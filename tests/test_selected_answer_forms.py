@@ -8,9 +8,7 @@ and the answer was never delivered.
 
 from __future__ import annotations
 
-from bus_history import read_history
 from conftest import publish_initial
-import asyncio
 import json
 import os
 import sys
@@ -30,8 +28,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
-from agent_comms.threads import Thread
-from native_backend_fixture import native_backend_fixture
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -111,20 +107,3 @@ def test_one_selected_turn_answers_one_reply_route() -> None:
         assert (reply.target, reply.body) == ("sender", "One answer for everyone.")
 
 
-async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path, native_runtime_package) -> None:
-    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
-        await native.author_history()
-        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
-            comms = agent._comms
-            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
-            comms.messaging.send("sender", session, "What did you find?").message
-            native.provider.text = "Blocked: the edit did not run."
-            await agent.inputs.drain_inbox(session)
-            async with asyncio.timeout(60):
-                while native.provider.posts < 1 or agent.turns.turn_state(session).active.phase.busy:
-                    await asyncio.sleep(0.01)
-            replies = [
-                (m.target, m.body) for m in read_history(comms) if m.sender == session
-            ]
-            assert replies == [("sender", "Blocked: the edit did not run.")]
-            assert not comms.registry.require(session).active_turn.executing

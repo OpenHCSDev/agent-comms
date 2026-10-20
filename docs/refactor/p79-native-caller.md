@@ -22,4 +22,4 @@ Before/after AST: current source/tests/tools, actual installed Core and metaclas
 
 Local source batch before test trimming: 92 passed, 6 failed. All six fail identically against untouched installed Core 21c25f49d, at wire_log.py:512 with Private bus writer has no durable protocol marker; these are retained baseline fixture failures, assigned to core-retry's existing fixture work. No caller failure is hidden. Ratchet exits 0. `git grep -n 'caller: ToolCaller = NoThreadCaller()' -- src | wc -l` returns 0 on this branch.
 
-Acceptance is a fresh scratch-root native thread on the reviewed installed runtime: actual comms_set_goal records the goal under that thread. Source tests and ratchet are necessary but not installed acceptance. Installs run through tools/upgrade_bus.py, by whichever unit the commander assigns, on either machine.
+Acceptance is a fresh scratch-root native thread on the reviewed installed runtime: actual comms_set_goal records the goal under that thread. Source tests and ratchet are necessary but not installed acceptance. Installs run through agent-comms install, by whichever unit the commander assigns, on either machine.

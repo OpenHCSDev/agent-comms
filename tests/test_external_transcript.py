@@ -152,6 +152,10 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
     newest = asyncio.run(unread.read_page(loader))
     older = asyncio.run(unread.read_page(loader, before=newest.before))
     later = asyncio.run(unread.read_page(loader, after=older.after))
+    # An unread page's own edges are not bounds: an agent tab opened before any
+    # read still gets the newest page instead of a refused source.
+    assert asyncio.run(unread.read_page(loader, before=unread)).events == newest.events
+    assert asyncio.run(newest.after.read_page(loader, before=unread)).events == newest.events
     assert [event.text for event in newest.events] == ["third"]
     assert [event.text for event in older.events] == ["second"]
     assert [event.text for event in later.events] == ["third"]

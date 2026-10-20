@@ -235,6 +235,15 @@ class RecitedRulesFailure(PostmortemFailure):
     )
 
 
+class DeletedLiveStateFailure(PostmortemFailure):
+    number = 16
+    title = "It deleted state without checking who was using it"
+    evidence = (
+        "October 20 cleanup: the commander removed /home/ts/wt/unit-directive-delete--P295, a "
+        "running unit's worktree; install 9 then failed restarting that unit and rolled back."
+    )
+
+
 @dataclass(frozen=True)
 class CommanderRule(PatternSource):
     lead: str

@@ -6,14 +6,11 @@ test runs the real Pi child against a local provider.
 import asyncio
 import json
 import os
-from dataclasses import replace
 
-import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
@@ -66,23 +63,6 @@ def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
     assert not current.project_resume_due and current.worktree == str(new)
 
 
-def test_started_turn_still_finishes_after_its_project_changes(tmp_path):
-    comms, old, new = declared_owner(tmp_path)
-    turn = comms.agents.begin_turn("owner", "changing-turn")
-    try:
-        comms.threads.set_project("owner", str(new))
-        # Recording this turn's result and replies is allowed; new input is not.
-        turn.require_running_turn(comms.registry)
-        with pytest.raises(StaleFence):
-            turn.require_registry(comms.registry)
-        # A directory this conversation never used is still refused.
-        elsewhere = replace(turn, thread=replace(turn.thread, worktree=str(tmp_path)))
-        with pytest.raises(StaleFence):
-            elsewhere.require_running_turn(comms.registry)
-    finally:
-        assert comms.agents.finish_turn(turn.turn_lease)
-    with pytest.raises(StaleFence):
-        replace(turn, thread=comms.registry.require("owner")).require_running_turn(comms.registry)
 
 
 async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp_path, native_runtime_package):

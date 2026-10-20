@@ -21,7 +21,6 @@ from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
-pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 async def until(predicate):

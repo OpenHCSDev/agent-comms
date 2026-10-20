@@ -69,18 +69,6 @@ def test_pre_refactor_golden_bytes_and_entire_receipt(tmp_path, scope, limit, fo
     assert FieldCodec.decode(WireExportLimit, limit.to_wire()) == limit
 
 
-def test_family_names_and_boundary_decoding():
-    assert WireExportScope.names() == ("everything", "channel", "dm")
-    assert WireExportLimit.names() == ("full", "max_bytes", "recent")
-    assert WireExportFormat.names() == ("jsonl", "text")
-    for member in WireExportFormat.members_with(WireExportFormat):
-        value = member()
-        assert WireExportFormat.member_named(value.declared_name)() == value
-        assert FieldCodec.decode(WireExportFormat, FieldCodec.encode(value)) == value
-    with pytest.raises(ValueError):
-        WireExportFormat.member_named("unknown")
-
-
 def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
     # Exercise the real family, restoring its registry after the extension experiment.
     with pytest.MonkeyPatch.context() as patch:

@@ -1,6 +1,6 @@
 import pytest
 
-from cutover.runtime_resolution import ResolvedLock, RuntimeResolution
+from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
 
 
 def manifest(core="core", toad="toad", wheel="old-wheel"):

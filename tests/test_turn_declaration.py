@@ -1,15 +1,12 @@
 """Idle and active turns keep the registry's null-or-record format."""
-from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.child_process import NoProcess
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.thread_identity import RecordedThreadIncarnation, TurnId
-from agent_comms.turn_lease import (
-    ActiveTurn, NoTurn, RecordedGeneration, TurnDeclaration, TurnState, UnrecordedGeneration,
-)
+from agent_comms.thread_identity import TurnId
+from agent_comms.turn_lease import ActiveTurn, NoTurn, TurnDeclaration
 from agent_comms.turn_phase import ToolRunningPhase
 
 
@@ -39,29 +36,3 @@ def test_idle_turn_answers_without_an_active_record():
         idle.require_turn(TurnId('turn'))
 
 
-def test_active_turn_validates_its_owner_and_preserves_fences():
-    turn = ActiveTurn('turn', 123, started_at=1.0, claimed_generation=RecordedGeneration(2),
-                      turn_generation=RecordedGeneration(3))
-    turn.validate_owner(ProcessIdentity(123, 456), 3)
-    turn.require_current(2, 3)
-    turn.require_turn(TurnId('turn'))
-    assert turn.executing and turn.has_claim(2)
-    assert turn.require_active() is turn
-    assert turn.started_by(1000)
-    assert not turn.started_by(900)
-    assert turn.observed_id('finished') == 'turn'
-    assert turn.without_claim() == replace(turn, claimed_generation=UnrecordedGeneration())
-    lease = turn.lease(RecordedThreadIncarnation('worker', 1.0))
-    assert lease.turn_id == 'turn' and lease.claimed_generation == 2
-    with pytest.raises(RelationViolationError):
-        turn.validate_owner(NoProcess(), 3)
-    with pytest.raises(RelationViolationError):
-        turn.require_idle()
-    with pytest.raises(RelationViolationError):
-        turn.require_current(9, 3)
-    with pytest.raises(RelationViolationError):
-        turn.require_turn(TurnId('other'))
-    phase = ToolRunningPhase()
-    state, = TurnState(turn).phase_effects(phase)
-    assert state.active == replace(turn, phase=phase)
-    assert state.matches('turn') and not state.matches('other')

@@ -441,12 +441,23 @@ class ContextStore(TypedStore):
     def record_in(self, db: sqlite3.Connection, manifest: ContextManifest) -> int:
         source = ContextStoreInfo.source_in(db).initialized(db)
         prior = self.latest(db, source.source, manifest.thread)
+        return self.record_after(db, source.source, prior, manifest).record_id
+
+    def record_after(
+        self,
+        db: sqlite3.Connection,
+        source: ContextStoreIdentity,
+        prior: RecordedContextState,
+        manifest: ContextManifest,
+    ) -> CapturedContext:
+        """Record ``manifest`` after ``prior``; the result is the next request's prior,
+        so a writer holding its last request never resolves it again."""
         record, entries = prior.capture(manifest)
         record.turn.require_recorded()
         for entry in entries:
             # A journal identity owns the first entry value across requests.
             ContextEntry.capture(entry).insert_if_absent(db)
-        return ContextRequest.append(db, record)
+        return CapturedContext(source, ContextRequest.append(db, record), record, manifest)
 
     def resolve(
         self,

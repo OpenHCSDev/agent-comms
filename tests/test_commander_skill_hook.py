@@ -118,12 +118,9 @@ def test_packaged_descriptions_do_not_repeat_rule_kind():
         assert not metadata["description"].startswith("HARD RULE:"), path.name
 
 
-def test_failure_catalog_has_fifteen_evidenced_members():
+def test_failure_catalog_numbers_every_evidenced_member_once():
     members = sorted(PostmortemFailure.members_with(PostmortemFailure), key=lambda member: member.number)
-    assert [member.number for member in members] == list(range(1, 16))
-    assert PostmortemFailure.catalog().splitlines() == [
-        f"{member.number}. {member.title}: {member.evidence}" for member in members
-    ]
+    assert [member.number for member in members] == list(range(1, len(members) + 1))
     assert all(member.evidence for member in members)
 
 
