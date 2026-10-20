@@ -5,14 +5,18 @@ hardcodes a home directory, a bus root or a unit name.
 """
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 from ..comms import Comms
 from ..errors import RelationViolationError
+from ..field_codec import boundary_decoder
+from ..install_choices import CommanderConfigFile, NoConfigFile, RepoChoice, WrittenConfigFile
 from ..native_arguments import NativeArguments
 from ..repo import Repo
 from ..threads import Thread
@@ -81,6 +85,12 @@ class CommanderConfig(CommanderRole, BaseModel):
         root = Path(root).resolve()
         return cls.model_validate_json(cls.root_path(root).read_text(), context=root)
 
+    @staticmethod
+    def homed(root: Path, home: Path) -> dict[str, Any]:
+        """The fields an install derives from this machine; the commander and repos are recorded."""
+        return {'root': root, 'state': home / '.local/state/agent-comms/commander',
+                'worktrees': home / 'wt', 'scratch': home / '.cache/agent-scratch', 'disk': home}
+
     @classmethod
     def packaged_rules_files(cls) -> tuple[Path, ...]:
         """All packaged rule files, shared by review and session context."""
@@ -107,3 +117,64 @@ class CommanderConfig(CommanderRole, BaseModel):
                           self.scratch):
             directory.mkdir(parents=True, exist_ok=True)
         return path
+
+
+class CommanderRecord(ABC):
+    """This bus's commander.json, or the bus has none; an install updates it through here."""
+
+    @staticmethod
+    @boundary_decoder
+    def read(root: Path) -> CommanderRecord:
+        root = root.resolve()
+        if CommanderConfig.root_path(root).is_file():
+            return RecordedCommander(CommanderConfig.read_root(root))
+        return NoCommanderRecord()
+
+    @abstractmethod
+    def commanded_by(self, name: str, root: Path, home: Path) -> RecordedCommander: ...
+
+    @abstractmethod
+    def rehomed(self, root: Path, home: Path) -> CommanderRecord: ...
+
+    @abstractmethod
+    def with_repos(self, choice: RepoChoice) -> CommanderRecord: ...
+
+    @abstractmethod
+    def write(self, home: Path) -> CommanderConfigFile: ...
+
+
+@dataclass(frozen=True)
+class RecordedCommander(CommanderRecord):
+    config: CommanderConfig
+
+    def commanded_by(self, name: str, root: Path, home: Path) -> RecordedCommander:
+        return RecordedCommander(self.config.model_copy(
+            update={**CommanderConfig.homed(root, home), 'commander': name}))
+
+    def rehomed(self, root: Path, home: Path) -> RecordedCommander:
+        return RecordedCommander(self.config.model_copy(update=CommanderConfig.homed(root, home)))
+
+    def with_repos(self, choice: RepoChoice) -> RecordedCommander:
+        return RecordedCommander(self.config.model_copy(
+            update={'repos': choice.applied(self.config.repos)}))
+
+    def write(self, home: Path) -> WrittenConfigFile:
+        return WrittenConfigFile(str(self.config.write(home)))
+
+
+@dataclass(frozen=True)
+class NoCommanderRecord(CommanderRecord):
+    """The bus records no commander; an install names none, so it writes no config."""
+
+    def commanded_by(self, name: str, root: Path, home: Path) -> RecordedCommander:
+        return RecordedCommander(CommanderConfig(
+            commander=name, repos=(), **CommanderConfig.homed(root, home)))
+
+    def rehomed(self, root: Path, home: Path) -> NoCommanderRecord:
+        return self
+
+    def with_repos(self, choice: RepoChoice) -> NoCommanderRecord:
+        return self
+
+    def write(self, home: Path) -> NoConfigFile:
+        return NoConfigFile()

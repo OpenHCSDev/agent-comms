@@ -102,7 +102,6 @@ from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .read_basis import AnonymousViewer, DisplayViewer, OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
-from .repo import Repo
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .send_result import SendResult
@@ -117,6 +116,10 @@ from .thread_execution import (
     ThreadExecution,
 )
 from .thread_text import NoThreadText, ThreadText
+from .install_choices import (
+    CommanderChoice, CommanderConfigFile, InstallerChoice, KeptCommander, KeptRepos, RepoChoice,
+    UnnamedInstaller,
+)
 from .thread_model import ThreadModel
 from .thread_management import (
     ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
@@ -597,7 +600,7 @@ class SubagentsImportedResult(CliResult):
 
 @dataclass(frozen=True)
 class InstallResult(CliResult):
-    config: str
+    config: CommanderConfigFile
     registered: dict[str, tuple[str, ...]]
 
 
@@ -1528,12 +1531,12 @@ class InstallCliCommand(CliCommand):
     ] = dataclasses.field(default_factory=Path.cwd)
     to: Annotated[str, Argument(flags=("--to",))] = "origin/main"
     installer: Annotated[
-        str,
+        InstallerChoice,
         Argument(
             flags=("--installer",),
             options={"help": "The unit running this install; the next install's plan names it"},
         ),
-    ] = "claude-code"
+    ] = UnnamedInstaller()
     rehearse: Annotated[
         bool,
         Argument(flags=("--rehearse",), options={"help": "Carry and read a copy of the bus; change nothing"}),
@@ -1556,16 +1559,16 @@ class InstallCliCommand(CliCommand):
     project: Annotated[
         Path,
         PathText,
-        Argument(flags=("--project",)),
+        Argument(flags=("--project",), options={"help": "The worktree harness threads register in"}),
     ] = dataclasses.field(default_factory=Path.cwd)
     repos: Annotated[
-        tuple[Annotated[Path, PathText], ...],
-        Normalize(_tags),
-        Argument(flags=("--repos",)),
-    ] = ()
-    commander: Annotated[str, Argument(flags=("--commander",))] = (
-        "claude-code"
-    )
+        RepoChoice,
+        Argument(flags=("--repos",), options={"help": "Replace the commander's recorded repositories"}),
+    ] = KeptRepos()
+    commander: Annotated[
+        CommanderChoice,
+        Argument(flags=("--commander",), options={"help": "Record this thread as the bus's commander"}),
+    ] = KeptCommander()
 
     @classmethod
     def published_launch(cls) -> LaunchRoot:
@@ -1582,18 +1585,13 @@ class InstallCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         """The install child's last step, on the bus it carried or created."""
-        from .commander.config import CommanderConfig
+        from .commander.config import CommanderRecord
 
         home = Path.home()
         project = self.project.resolve()
-        config = CommanderConfig(
-            commander=self.commander, root=ctx.root,
-            state=home / ".local/state/agent-comms/commander",
-            repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
-            worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
-        )
-        return InstallResult(str(config.write(home)), {
-            type(harness).declared_name: harness.register(ctx, self.commander, project)
+        record = self.commander.configured(CommanderRecord.read(ctx.root), ctx.root, home)
+        return InstallResult(record.with_repos(self.repos).write(home), {
+            type(harness).declared_name: harness.register(ctx, project)
             for harness in Harness.present(home)})
 
 

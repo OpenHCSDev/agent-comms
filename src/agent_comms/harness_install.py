@@ -57,6 +57,8 @@ class Harness(DeclaredFamily, affix="Harness"):
 
     executable: ClassVar[str]
     skills_dir: ClassVar[str]
+    # External threads install registers for this harness; a harness that registers itself has none.
+    bus_threads: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def present(cls, home: Path) -> tuple[Harness, ...]:
@@ -71,18 +73,14 @@ class Harness(DeclaredFamily, affix="Harness"):
         skills = Path(str(files('agent_comms') / 'skills'))
         return {self.home / self.skills_dir / skill.name: skill for skill in skills.iterdir() if skill.is_dir()}
 
-    def bus_threads(self, commander: str) -> tuple[str, ...]:
-        """External threads install registers for this harness; a harness that registers itself has none."""
-        return ()
-
     @abstractmethod
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
 
-    def register(self, comms: Comms, commander: str, project: Path) -> tuple[str, ...]:
+    def register(self, comms: Comms, project: Path) -> tuple[str, ...]:
         """Declare this harness's bus threads; publication already linked and configured it."""
         names = comms.registry.snapshot()
-        registered = tuple(name for name in self.bus_threads(commander) if not names.taken(name))
+        registered = tuple(name for name in self.bus_threads if not names.taken(name))
         for name in registered:
             comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project),
                                                                 execution=ExternalThreadExecution))
@@ -103,9 +101,7 @@ class ClaudeCodeHarness(Harness):
 
     executable: ClassVar[str] = 'claude'
     skills_dir: ClassVar[str] = '.claude/skills'
-
-    def bus_threads(self, commander: str) -> tuple[str, ...]:
-        return (commander,)
+    bus_threads: ClassVar[tuple[str, ...]] = ('claude-code',)
 
     def configure(self) -> tuple[Path, ...]:
         settings = self.home / '.claude/settings.json'
@@ -129,9 +125,7 @@ class CodexHarness(Harness):
 
     executable: ClassVar[str] = 'codex'
     skills_dir: ClassVar[str] = '.codex/skills'
-
-    def bus_threads(self, commander: str) -> tuple[str, ...]:
-        return ('codex',)
+    bus_threads: ClassVar[tuple[str, ...]] = ('codex',)
 
     def configure(self) -> tuple[Path, ...]:
         unit = self.home / '.config/systemd/user/codex-comms-inbox.service'
