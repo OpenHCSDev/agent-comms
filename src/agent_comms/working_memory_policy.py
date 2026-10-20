@@ -5,7 +5,6 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
 from .message_reference import MessageReference
 
 
@@ -27,19 +26,3 @@ class GrantedAnnotationPolicy(AnnotationPolicy):
 
     def observe(self, worker, session_id, manifest, values):
         worker.start(self, session_id, manifest, values)
-
-    def acquire(self, comms, incarnation):
-        from .retained_task_facts import RetainedTaskFacts
-        snapshot = comms.registry.snapshot()
-        owner = snapshot.require(incarnation.resolved(snapshot).name)
-        with comms.bus.log.checked_read() as original:
-            facts = RetainedTaskFacts(tuple(original.retained_task_facts(owner.incarnation)))
-            current = facts.current_authored_sources(owner, snapshot)
-            selected = next((message for message in current if message.reference == self.source), None)
-            if selected is None:
-                raise RelationViolationError("Annotation grant is absent, superseded or dropped")
-            grant = selected.task.require_annotation_grant()
-            grant.require_publication(selected.sender, snapshot, original)
-            rules = tuple(rule for message in current
-                          for rule in message.task.annotation_rules(message, facts))
-        return grant, rules

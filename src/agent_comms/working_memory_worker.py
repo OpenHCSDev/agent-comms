@@ -10,6 +10,8 @@ from acp.schema import SessionInfoUpdate
 
 from .acp_extension import ContextAnnotatedUpdate, encode_updates
 from .coordinator import Coordination
+from .errors import RelationViolationError
+from .retained_task_facts import RetainedTaskFacts
 from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
 from .working_memory_disclosure import DisclosureState, DisclosureWithheld
 from .working_memory_labels import QuestionVersion
@@ -48,9 +50,26 @@ class AnnotationWorker:
         return await Coordination.run_async(self.comms.root / "coordination.sqlite3",
                                             lambda store: operation(store.annotations))
 
+    def grant(self, policy, incarnation):
+        """The policy's grant and the current annotation rules, read once under the log."""
+        snapshot = self.comms.registry.snapshot()
+        owner = snapshot.require(incarnation.resolved(snapshot).name)
+        with self.comms.bus.log.checked_read() as original:
+            facts = RetainedTaskFacts(tuple(original.retained_task_facts(owner.incarnation)))
+            current = facts.current_authored_sources(owner, snapshot)
+            selected = next((message for message in current
+                             if message.reference == policy.source), None)
+            if selected is None:
+                raise RelationViolationError("Annotation grant is absent, superseded or dropped")
+            grant = selected.task.require_annotation_grant()
+            grant.require_publication(selected.sender, snapshot, original)
+            rules = tuple(rule for message in current
+                          for rule in message.task.annotation_rules(message, facts))
+        return grant, rules
+
     async def answer(self, policy, manifest, segment, span, question):
         grant, rules = await Coordination.run_worker(
-            partial(policy.acquire, self.comms, manifest.thread))
+            partial(self.grant, policy, manifest.thread))
         grant.require_segment(segment)
         version = QuestionVersion.current(question, rules)
         rows = await Coordination.run_worker(partial(WorkingMemoryAnnotations.labels,
