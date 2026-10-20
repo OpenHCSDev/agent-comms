@@ -13,11 +13,11 @@ ledger (``carries.json``) names the carry steps still pending; each runs from
 the revision that declares it (``tools/cutover/carry.py``). Every run first
 rehearses on a copy of the bus: the steps, then ``who``, ``threads`` and
 ``history`` reads, and every file no step names as rewritten must be
-byte-identical. The rehearsal prepares native Pi in the staged stack exactly as
-the live phase does. ``--rehearse`` stops there.
+unchanged by saved-file size, nanosecond mtime and inode. The rehearsal
+prepares native Pi in the staged stack exactly as the live phase does. ``--rehearse`` stops there.
 
 A live run then stops the running agent owners with the installed CLI, backs
-the bus up (tar plus a hash of every file), moves the checkout,
+the bus up (tar plus saved-file metadata), moves the checkout,
 relocks and syncs its stack, prepares native Pi, carries the bus, reads it
 back, and starts only the owners it stopped. A failure after the backup
 keeps maintenance held and preserves the bus, checkout and backup for forward
@@ -47,7 +47,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import publish_runtime
-from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
+from cutover.backup import (
+    Backup,
+    RestoreSpace,
+    SavedFile,
+    UpgradeRefused,
+    bus_files,
+    transcripts_held,
+)
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 from cutover.runtime_resolution import RuntimeResolution
 from install_gate import PracticeCopy, prepare_runtime_home
@@ -79,15 +86,20 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
     return completed.stdout
 
 
-def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
+def carried(root: Path, before: dict[str, SavedFile], steps: list[dict]) -> dict[str, int]:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
-    changed = {name for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
+    physical = {name for name in before.keys() | after.keys()
+                if before.get(name) != after.get(name)}
+    # SQLite's committed WAL belongs to its database declaration, not a second carry.
+    changed = {name[:-4] if name.endswith('-wal') and name[:-4] in before.keys() | after.keys()
+               else name for name in physical}
     unnamed = sorted(changed - {CarryLedger.name}
                      - {name for step in steps for name in step["rewritten"]})
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
-    return {"identical": len(before.keys() - changed), "rewritten": len(changed)}
+    return {"identical": len(before.keys() - changed), "rewritten": len(changed),
+            "restore_bytes": sum(before[name].size for name in physical & before.keys())}
 
 
 @dataclass(frozen=True)
@@ -210,6 +222,17 @@ publish_active_route(ActiveRoute(root, marker.root_id))
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
+    def running_owners(self, root: Path) -> list[str]:
+        """Use the restart request's receiving declaration in the selected runtime."""
+        selected = run(self.python, "-c", """import json, sys
+from pathlib import Path
+from agent_comms.comms import Comms
+from agent_comms.owner_restart import OwnerRestartRequest
+snapshot = Comms(Path(sys.argv[1])).registry.snapshot()
+print(json.dumps([thread.name for thread in OwnerRestartRequest().threads(snapshot)]))
+""", root, cwd=self.checkout, env=self.environment())
+        return FieldCodec.decode(list[str], FieldCodec.parse(selected))
+
     def owners(self, root: Path, command: str, names: list[str]) -> None:
         """Run the captured owner set together and join every request before proceeding."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
@@ -319,8 +342,9 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> 
         return {**report, "copy": asdict(measurement)}
 
 
-def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
-                   reader: Stack, revisions: Revisions, stopping: list[dict]) -> dict:
+def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[Step, ...],
+                   staged: Stack, reader: Stack, revisions: Revisions,
+                   stopping: list[dict]) -> dict:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
@@ -352,11 +376,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
             staged = Stack.build(revisions.tree(target))
             install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
                                  installer, spill_dir)
+            rehearsal = install.rehearsal()
             report = {"from": current, "to": target, "pending": [step.name for step in pending],
-                      "rehearsal": install.rehearsal()}
+                      "rehearsal": rehearsal}
             if rehearse_only:
                 return report
-            report["live"] = install.live()
+            report["live"] = install.live(rehearsal)
             return report
         finally:
             revisions.close()
@@ -391,16 +416,17 @@ class Install(ABC):
     def rehearsal(self) -> dict: ...
 
     @abstractmethod
-    def live(self) -> dict: ...
+    def live(self, rehearsal: dict) -> dict: ...
 
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
         return rehearse(self.root, self.staged, self.revisions, self.installer)
 
-    def live(self) -> dict:
+    def live(self, rehearsal: dict) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
-                    self.installed, self.staged, self.revisions, self.installer, self.spill_dir)
+                    self.installed, self.staged, self.revisions, self.installer, self.spill_dir,
+                    rehearsal['files']['restore_bytes'])
 
 
 class UnchangedInstall(Install):
@@ -410,7 +436,7 @@ class UnchangedInstall(Install):
     def rehearsal(self) -> dict:
         return {"unchanged": self.target}
 
-    def live(self) -> dict:
+    def live(self, rehearsal: dict) -> dict:
         self.installed.publish()
         PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
         return {"unchanged": self.target}
@@ -418,12 +444,13 @@ class UnchangedInstall(Install):
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
          installed: Stack, staged: Stack, revisions: Revisions, installer: str,
-         spill_dir: Path) -> dict:
+         spill_dir: Path, restore_bytes: int) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
+    restore = RestoreSpace.measure(restore_bytes, root.parent)
+    restore.require()
     stopping = before_stop(root, pending, staged, revisions)
-    running = [thread["name"] for thread in staged.cli(root, "threads")["threads"]
-               if thread["role"] == "agent" and thread["status"] == "running"]
+    running = staged.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
@@ -469,6 +496,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
               file=sys.stderr)
         raise
     return {"stopped_and_started": running, **passed, "services": services,
+            "restore_space": {"needed": restore.needed, **asdict(restore)},
             "backup": str(backup.path)}
 
 
