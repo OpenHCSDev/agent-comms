@@ -87,7 +87,9 @@ class DirectiveAnswers(Carry):
         if store.path.exists():
             with store.locked():
                 store.private_guard_unlocked()
-                raw = FieldCodec.parse(store.path.read_bytes())
+                raw = FieldCodec.decode(
+                    dict[str, JsonValue], FieldCodec.parse(store.path.read_bytes())
+                )
                 found = cls.convert(raw)
                 document = RegistryDocument.from_wire(raw)
                 changed += found
