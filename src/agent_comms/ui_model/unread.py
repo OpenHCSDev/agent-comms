@@ -14,11 +14,9 @@ if TYPE_CHECKING:
 class UnreadPresentation(ABC):
     pending = False
 
-    @classmethod
-    def for_view(
-        cls, snapshot: CoordinationSnapshot, reference: CommandTarget,
-    ) -> UnreadPresentation:
-        return snapshot.unread[reference]
+    @staticmethod
+    def for_view(snapshot: CoordinationSnapshot, target: CommandTarget) -> UnreadPresentation:
+        return snapshot.unread[target]
 
     @property
     @abstractmethod
