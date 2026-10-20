@@ -114,6 +114,32 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "inbox", "--thread", "b")
         assert out == {"messages": []}
 
+    def test_send_notice_and_conversation_record_channel_wake_modes(self, cli, comms):
+        from agent_comms.cli_commands import Send
+        from agent_comms.messages import SendableRole, NoticeRole
+        import argparse
+
+        comms.channels.create_tag("comms")
+        for name in ("sender", "one", "two"):
+            tags = frozenset() if name == "sender" else frozenset({"comms"})
+            comms.registry.declare(comms.registry.new_thread(name, tags, str(comms.root)))
+        comms.messaging.initialize_private_initial_protocol()
+        for role, expected in (("notice", "passive"), ("conversation", "bounded_triage")):
+            code, sent = cli(comms.root, "send", "--from", "sender", "--to", "#comms",
+                             "--body", "public record", "--role", role)
+            assert code == 0
+            row = next(json.loads(line) for line in comms.bus.log.path.read_text().splitlines()
+                       if json.loads(line)["id"] == sent["id"])
+            manifest = row["_agent_comms_private_v1"]["initial"]
+            assert len(manifest["audience"]["recipients"]) == 2
+            assert [decision["wake_mode"] for decision in manifest["decisions"]] == [expected] * 2
+        parser = argparse.ArgumentParser()
+        Send.add_arguments(parser)
+        bridged = Send.from_arguments(parser.parse_args(
+            ["--to", "#comms", "--body", "record", "--role", "notice"]))
+        assert bridged.role is NoticeRole
+        assert SendableRole.names() == ("conversation", "notice")
+
     def test_acknowledge_marks_only_its_references_beside_a_reader(self, cli, tmp_path):
         import fcntl
         import threading
@@ -371,7 +397,7 @@ class TestSelectedTargetActions:
         options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions'])
-        parsed = CliCommand.member_named(options.command).from_namespace(options)
+        parsed = CliCommand.member_named(options.command).from_arguments(options)
         assert parsed == explicit
         with pytest.raises(ValueError, match='cannot be overridden'):
             action.bound[0].edited({'all': True})

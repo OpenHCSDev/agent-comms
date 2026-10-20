@@ -30,7 +30,6 @@ import json
 import os
 import shutil
 import signal
-import stat
 import subprocess
 import sys
 import tempfile
@@ -46,7 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
-from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
+from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.external_transcript import ExternalTranscript
@@ -230,19 +229,11 @@ def carry_all(
 
 
 def copy_bus(root: Path, copy: Path) -> None:
-    """Copy under the bus's wire lock so no writer tears the copy; sockets and maintenance files are skipped."""
+    """Hold the wire; SQLite owns each committed database copy and its companions."""
     # The maintenance files describe the live root; a copy is a new root and starts open.
-    held = set(MaintenanceBarrier(root / "registry.json").witness_paths)
-
-    def skipped(directory: str, names: list[str]) -> set[str]:
-        return {name for name in names
-                if Path(directory, name) in held
-                or stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
-
-    from agent_comms.store_files import _store_lock
-
+    held = MaintenanceBarrier(root / "registry.json").witness_paths
     with _store_lock(root / "wire"):
-        shutil.copytree(root, copy, symlinks=True, ignore=skipped)
+        StoreBackup.copy_tree(root, copy, excluded=held)
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
@@ -437,7 +428,7 @@ def main() -> None:
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse), indent=2))
     except UpgradeRefused as error:
-        raise SystemExit(f"upgrade-bus: {error}")
+        raise SystemExit(error.output)
 
 
 if __name__ == "__main__":

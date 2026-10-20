@@ -253,37 +253,79 @@ class Step:
                           if isinstance(target, ast.Name)] == ["column"])
 
     @staticmethod
-    def holds_carry(source: bytes) -> bool:
+    def holds_carry(source: bytes, parents: Mapping[str, type[Carry]]) -> bool:
         """Whether a module declares a Carry subclass, read without importing it."""
         return any(isinstance(node, ast.ClassDef)
-                   and any(parent_name(base) in carry_parents() for base in node.bases)
+                   and any(parent_name(base) in parents for base in node.bases)
                    for node in ast.parse(source).body)
 
     @classmethod
-    def declared(cls, name: str, source: bytes, revision: str) -> Step:
+    def declared(
+        cls, name: str, source: bytes, revision: str, parents: Mapping[str, type[Carry]]
+    ) -> Step:
         """The step a module declares, read without importing it. A ``carry_*`` module
         holding no Carry is refused: a conversion outside the chain never runs."""
-        parents = carry_parents()
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef):
                 for base in node.bases:
-                    if (family := parents.get(parent_name(base))) is not None:
-                        return cls(name, revision, node.name, family, cls.declared_columns(source))
+                    if (parent := parent_name(base)) in parents:
+                        return cls(
+                            name, revision, node.name, parents[parent], cls.declared_columns(source)
+                        )
         raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
 
-def parent_name(base: ast.expr) -> str | None:
-    """The class a step names as its parent, bare or through its module."""
+def parent_name(base: ast.expr) -> str:
+    """Decode a static parent reference; an unsupported expression is not absence."""
     match base:
         case ast.Name(id=name) | ast.Attribute(attr=name):
             return name
-    return None
+        case ast.Subscript(value=parent):
+            return parent_name(parent)
+    raise ValueError(f"Unsupported carry parent expression: {ast.dump(base)}")
 
 
-def carry_parents() -> dict[str | None, type[Carry]]:
-    """Carry and every parent this module gives a step to inherit, by name."""
-    return {name: value for name, value in globals().items()
-            if isinstance(value, type) and issubclass(value, Carry)}
+def carry_parents(source: bytes) -> dict[str, type[Carry]]:
+    """The target's parent declarations and ordering behavior, without its Core imports.
+
+    Compile only Carry headers and their ordering method. Python owns inheritance
+    and C3 resolution; no second interpreter or restated precedence policy does.
+    """
+    parents: dict[str, type[Carry]] = {}
+
+    def declared(parent: type[Carry]) -> type[Carry]:
+        parents[parent.__name__] = parent
+        return parent
+
+    names = {Carry.__name__}
+    declarations: list[ast.stmt] = [
+        ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0)
+    ]
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if node.name != Carry.__name__ and not any(
+            parent_name(base) in names for base in node.bases
+        ):
+            continue
+        methods: list[ast.stmt] = [
+            method for method in node.body
+            if isinstance(method, ast.FunctionDef) and method.name == Carry.precedes.__name__
+        ]
+        if node.name == Carry.__name__:
+            if not methods:
+                raise ValueError("Target Carry declares no ordering behavior")
+            node.bases = [ast.Name(id=Carry.__name__, ctx=ast.Load())]
+        node.body = methods or [ast.Pass()]
+        node.decorator_list = [ast.Name(id=declared.__name__, ctx=ast.Load())]
+        declarations.append(node)
+        names.add(node.name)
+    tree = ast.fix_missing_locations(ast.Module(body=declarations, type_ignores=[]))
+    exec(compile(tree, str(STEPS / "carry.py"), "exec"),
+         {Carry.__name__: Carry, declared.__name__: declared})
+    if Carry.__name__ not in parents:
+        raise ValueError("Target tree declares no Carry family")
+    return parents
 
 
 class UnorderedSteps(ValueError):
@@ -315,12 +357,13 @@ class CarryChain:
         """The steps in the tree in the order the main line added them, and every step
         its history added and later deleted."""
         known = {}
+        parents = carry_parents(git(repo, "show", f"{revision}:{STEPS}/carry.py"))
         tree = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
         for path in tree:
             if path.startswith("carry_") and path.endswith(".py"):
                 name = path.removesuffix(".py")
                 known[name] = Step.declared(
-                    name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
+                    name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision, parents)
         retired = cls.retired_at(repo, revision, known)
         retired_columns = frozenset(
             column for name in retired

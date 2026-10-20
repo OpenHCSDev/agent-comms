@@ -6,19 +6,21 @@ import json
 import os
 import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
 import time
+from collections.abc import Collection
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Self
+from typing import ClassVar, Iterator, Self
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.locked_store import RuntimeFile
+from agent_comms.locked_store import LockedStore, RuntimeFile
 from agent_comms.store_files import _atomic_write_text
 
 HOLD_TRANSCRIPTS = """import sys
@@ -35,6 +37,18 @@ with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as wri
 
 class UpgradeRefused(Exception):
     """The update stopped without permission to discard its original data."""
+    prefix: ClassVar[str] = "upgrade-bus: refused:"
+
+    @property
+    def output(self) -> str:
+        return f"{self.prefix} {self}"
+
+    @classmethod
+    def public_message(cls, output: str) -> str:
+        for line in reversed(output.splitlines()):
+            if line.startswith(cls.prefix):
+                return line
+        return "Installer failed without a declared refusal; private traceback retained on host"
 
 
 def bus_files(root: Path) -> dict[str, str]:
@@ -149,6 +163,48 @@ class StoreBackup(Backup):
         return (CoordinationStore.digest(path) if CoordinationStore.is_database(path)
                 else hashlib.sha256(path.read_bytes()).hexdigest())
 
+    @staticmethod
+    def copy_file(source: str | Path, target: str | Path) -> Path:
+        """Copy one store through its SQLite snapshot, never through live WAL bytes."""
+        source, target = Path(source), Path(target)
+        if CoordinationStore.is_database(source):
+            with closing(CoordinationStore.read_snapshot(source)) as reader:
+                with closing(sqlite3.connect(target)) as writer:
+                    reader.backup(writer)
+            shutil.copystat(source, target)
+        else:
+            shutil.copy2(source, target)
+        return target
+
+    @classmethod
+    def copy_tree(
+        cls, source: Path, target: Path, *, excluded: Collection[Path] = ()
+    ) -> None:
+        """Copy committed files; their owners declare transient names before any stat."""
+
+        def transient(directory: str, names: list[str]) -> set[str]:
+            omitted: set[str] = set()
+            for name in sorted(names):
+                path = Path(directory) / name
+                if name in omitted or path in excluded or LockedStore.is_staging(path):
+                    omitted.add(name)
+                    continue
+                if stat.S_ISSOCK(path.lstat().st_mode):
+                    omitted.add(name)
+                elif (
+                    path.is_file()
+                    and not path.is_symlink()
+                    and CoordinationStore.is_database(path)
+                ):
+                    omitted.update(
+                        companion.name for companion in CoordinationStore.files(path)[1:]
+                    )
+            return omitted
+
+        shutil.copytree(
+            source, target, symlinks=True, ignore=transient, copy_function=cls.copy_file
+        )
+
     def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
         contents = {}
         for source in files:
@@ -157,12 +213,7 @@ class StoreBackup(Backup):
             name = str(source.relative_to(self.root))
             target = self.data_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            if CoordinationStore.is_database(source):
-                with closing(CoordinationStore.read_snapshot(source)) as reader:
-                    with closing(sqlite3.connect(target)) as writer:
-                        reader.backup(writer)
-            else:
-                shutil.copy2(source, target)
+            self.copy_file(source, target)
             with target.open('rb') as ready:
                 os.fsync(ready.fileno())
             contents[name] = self.digest(target)
