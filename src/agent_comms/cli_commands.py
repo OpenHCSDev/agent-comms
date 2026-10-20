@@ -1415,7 +1415,8 @@ class RestartCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         results = ctx.owners.restart_owners(
-            None if self.all_ else (self.name,), agent_bin=self.agent_bin, agent_args=self.agent_args
+            None if self.all_ else (self.name,),
+            agent_bin=self.agent_bin, agent_args=self.agent_args,
         )
         return OwnersRestartedResult(results)
 

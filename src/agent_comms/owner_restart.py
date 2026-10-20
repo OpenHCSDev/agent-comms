@@ -119,7 +119,7 @@ class OwnerRestartHandoff:
                 agent_bin=lifecycle.restart_entrypoint(source.record.agent_bin, runtime))
             record = record.with_command(self.agent_bin, self.agent_args)
             return lifecycle._launch_owner_unlocked(
-                thread, record, environment=self.runtime.apply_runtime(source.environment),
+                thread, record, environment=source.environment,
             )
 
         return self._launch(lifecycle, target)

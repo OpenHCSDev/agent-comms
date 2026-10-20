@@ -428,7 +428,7 @@ class OwnerLifecycle:
         thread: Thread,
         record: LaunchRecord,
         *,
-        environment: Mapping[str, str],
+        environment: dict[str, str],
         initial_input: LaunchInput = LaunchInput(),
     ) -> Thread:
         # Prepared and acquired environments meet only at process launch.
