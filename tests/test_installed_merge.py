@@ -9,21 +9,25 @@ from agent_comms.repo import Repo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import (CheckedProblemOrder, DoneTodoState, MergedProblemOrder, OperationDelivery,
                                MergedPullRequest, PullRequests, UnorderedProblemOrder)
-from agent_comms.tools import CommsOrderDoneTool
+from agent_comms.tools import CommsOrderDoneTool, CommsOrderServeTool
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.plan_phases import RecordPlanePhase, UnplannedPhase
 from cutover.carry_merged_orders import MergedOrders
+from cutover.carry_order_phases import OrderPhases
 from test_commander_problem_orders import working
 from test_order_progress import checkout, commit, deadline_lines, git
 
 
 @pytest.mark.parametrize('delivered', (False, True))
-@pytest.mark.parametrize('legacy_depth', (0, 1, 2))
+@pytest.mark.parametrize('legacy_depth', (0, 1, 2, 3))
 def test_installed_merge_closes_pending_or_delivered_order_once(
         commander, commander_script, checkout, tmp_path, monkeypatch, capsys,
         delivered, legacy_depth):
     comms, caller = commander
     script, _ = commander_script
     todo, unit = checkout
+    CommsOrderServeTool(problem=todo.id, serves=RecordPlanePhase).apply(comms, caller)
+    todo = comms.goals.todos.get(todo.id)
     if delivered:
         CommsOrderDoneTool(problem=todo.id, order_id=todo.order.id,
                           delivery=OperationDelivery(at=RecordedEventTime(500)),
@@ -75,9 +79,10 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
 
     if legacy_depth:
         legacy = {'kind': 'merged', 'original': FieldCodec.encode(original), 'sha': sha}
-        if legacy_depth == 2:
+        for _ in range(legacy_depth - 1):
             closed = replace(closed, order=closed.order.folded('P2', 'Same root cause.'))
             legacy = {**FieldCodec.encode(closed.order), 'original': legacy}
+            legacy.pop('serves')  # Before P291 the fold discarded this base fact.
         encoded = json.dumps(legacy)
         with comms.goals.todos.writing() as db:
             db.execute('UPDATE todo SET "order"=? WHERE id=?', (encoded, todo.id))
@@ -86,7 +91,16 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
             assert db.execute('SELECT "order" FROM todo WHERE id=?', (todo.id,)).fetchone()[0] == encoded
         assert MergedOrders.carry(comms.root, apply=True).changed == 1
         assert MergedOrders.carry(comms.root, apply=True).changed == 0
+        if legacy_depth >= 2:
+            with comms.goals.todos.writing() as db:
+                before_phase = db.execute('SELECT "order" FROM todo WHERE id=?', (todo.id,)).fetchone()[0]
+            assert OrderPhases.carry(comms.root, apply=False).changed == legacy_depth - 1
+            with comms.goals.todos.writing() as db:
+                assert db.execute('SELECT "order" FROM todo WHERE id=?', (todo.id,)).fetchone()[0] == before_phase
+            assert OrderPhases.carry(comms.root, apply=True).changed == legacy_depth - 1
+            assert OrderPhases.carry(comms.root, apply=True).changed == 0
         assert comms.goals.todos.get(todo.id) == closed
+    assert RecordPlanePhase.serving((closed,)) == (closed,)
 
     def no_child(*args, **kwargs):
         pytest.fail('A repeated closed-order read launched a subprocess')
@@ -144,6 +158,8 @@ def test_only_checked_orders_are_selected_for_merge_reconciliation(commander, ch
     comms.goals.todos.reconcile_merges(comms.registry.require('lead').incarnation,
                                       (), comms.registry.storage_rule)
     assert comms.goals.todos.get(todo.id) == unordered
+    assert unordered.order.serves is UnplannedPhase
+    assert RecordPlanePhase.serving((unordered,)) == ()
 
 
 def test_failed_git_is_not_a_negative_ancestry_result(tmp_path):
