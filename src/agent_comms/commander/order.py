@@ -76,7 +76,7 @@ from ..todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from ..tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
+from ..tool_caller import NoThreadCaller, ThreadCaller
 from ..tools import (
     CommsChangeProblemTool,
     CommsFireTool,
@@ -764,8 +764,9 @@ class Commander(CommanderContext):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    fork: ToolCaller = option("--fork", type=ThreadCaller,
-                              default=NoThreadCaller(), help="the acting commander's name")
+    fork: ThreadCaller | NoThreadCaller = option(
+        "--fork", type=ThreadCaller, normalize=FieldCodec.encode,
+        default=NoThreadCaller(), help="the acting commander's name")
 
     def who(self, ctx: Commander) -> str:
         return self.fork.acting_name(ctx.commander)
