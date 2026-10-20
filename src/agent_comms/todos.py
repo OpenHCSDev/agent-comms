@@ -1667,6 +1667,9 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
 
+    def require_close(self) -> None:
+        """Retiring an erroneous order does not claim installed work."""
+
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
         return (f"{todo.id}: order {self.id} withdrawn from {self.previous.owner}, "
