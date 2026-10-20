@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from dataclasses import dataclass
-from types import FrameType, MethodType
+from sys import monitoring
+from types import CodeType, MethodType
 
 from ..commander.config import CommanderConfig
 from ..comms import Comms
 from ..standing_rules import DiskLow, StandingRule
 from ..storage_rules import UnitStorage
 from . import ParityComparison, UnverifiedParity
-from .load import LoadComparison, state_files
+from .load import state_files
 
 
 @dataclass(frozen=True)
@@ -46,19 +45,24 @@ class RuleComparison(ParityComparison):
         before = state_files(config.state)
         observed: list[tuple[StandingRule, ...]] = []
 
-        def observe(frame: FrameType, event: str, value: tuple[StandingRule, ...]) -> None:
-            if event == "return" and frame.f_code is code:
-                observed.append(value)
+        def observe(_code: CodeType, _offset: int, value: tuple[StandingRule, ...]) -> None:
+            observed.append(value)
 
-        previous = sys.getprofile()
-        sys.setprofile(observe)
+        # Subscribe to the owner's real return event, not string-dispatched profile traffic.
+        monitoring.use_tool_id(monitoring.PROFILER_ID, __name__)
         try:
+            monitoring.register_callback(
+                monitoring.PROFILER_ID, monitoring.events.PY_RETURN, observe
+            )
+            monitoring.set_local_events(monitoring.PROFILER_ID, code, monitoring.events.PY_RETURN)
             current = owner.broken(comms, config.commander)
-        except (OSError, subprocess.SubprocessError) as error:
-            return UnverifiedParity(str(error))
         finally:
-            sys.setprofile(previous)
-        native = tuple(rule for returned in observed for rule in returned if rule.broke_after(0.0))
+            monitoring.free_tool_id(monitoring.PROFILER_ID)
+        if len(observed) != 1:
+            return UnverifiedParity(
+                f"Expected one {owner.__qualname__}.violations call: {len(observed)}"
+            )
+        native = tuple(rule for rule in observed[0] if rule.broke_after(0.0))
         return cls(
             f"{owner.__module__}.{owner.__qualname__}",
             tuple(rule.line() for rule in current),
@@ -83,11 +87,3 @@ class StorageComparison(ParityComparison):
     @classmethod
     def read(cls) -> StorageComparison:
         return cls(RuleComparison.read(UnitStorage), RuleComparison.read(DiskLow))
-
-
-def measured_load() -> ParityComparison:
-    observed = LoadComparison.read()
-    return UnverifiedParity(
-        f"Live Load comparison passed={observed.passed}: {observed.describe()}; "
-        "missing native self-report comparison owner"
-    )

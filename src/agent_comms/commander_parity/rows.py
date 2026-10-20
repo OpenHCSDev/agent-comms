@@ -12,7 +12,7 @@ from ..plan_phases import (
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
-from .measurements import RuleComparison, StorageComparison, measured_load
+from .measurements import RuleComparison, StorageComparison
 
 
 class CreateProblemParityRow(ParityRow):
@@ -260,7 +260,7 @@ class MeasuredLoadParityRow(ParityRow):
 
     @classmethod
     def verify(cls) -> ParityComparison:
-        return measured_load()
+        return LoadComparison.read()
 
 
 class FinishedWorkTransferParityRow(ParityRow):
