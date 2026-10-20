@@ -97,7 +97,7 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
 
 
 def carried(root: Path, before: dict[str, SavedFile], steps: list[dict],
-            expected: set[str] | None = None) -> dict:
+            expected: frozenset[str] = frozenset()) -> dict:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
     physical = {name for name in before.keys() | after.keys()
@@ -109,7 +109,7 @@ def carried(root: Path, before: dict[str, SavedFile], steps: list[dict],
                      - {name for step in steps for name in step["rewritten"]})
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
-    outside = sorted(changed - expected) if expected is not None else []
+    outside = sorted(changed - expected) if expected else []
     if outside:
         raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
     return asdict(RehearsalFiles(
@@ -359,7 +359,7 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> 
 
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[Step, ...],
                    staged: Stack, reader: Stack, revisions: Revisions,
-                   stopping: list[dict], expected: set[str] | None = None) -> dict:
+                   stopping: list[dict], expected: frozenset[str] = frozenset()) -> dict:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
@@ -465,8 +465,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     and reads back its own owners."""
     files = RehearsalFiles(**rehearsal_files)
     restore = RestoreSpace.measure(files.restore_bytes, root.parent)
-    expected = set(files.names)
-    selected = tuple(root / name for name in sorted(expected | {CarryLedger.name})) if pending else ()
+    expected = frozenset((*files.names, CarryLedger.name))
+    selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore.require()
     stopping = before_stop(root, pending, staged, revisions)
     running = staged.running_owners(root)
@@ -505,7 +505,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         state = maintenance.read()
         recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
         os.environ[HOLDER_NONCE] = recovery.nonce
-        if backup is not None and not backup.original():
+        if backup and not backup.original():
             backup.restore()
         restored = maintenance.read()
         restored_hold = restored.phase.hold_for(maintenance, restored, MaintenanceOperator.current())
