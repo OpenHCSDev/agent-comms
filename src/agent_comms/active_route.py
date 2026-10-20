@@ -15,14 +15,15 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass
+from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
+from .launch_runtime import LaunchRecord, LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 
 
@@ -145,9 +146,41 @@ def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRou
         return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
-    if "AGENT_COMMS_ROOT" in os.environ:
-        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute())
-    return CommsRoute.current()
+    return LaunchRecord.current().root_selection.route()
+
+
+class RouteChangedError(ValueError):
+    """The selected route was replaced; reopen against the current one."""
+
+
+class ExplicitLaunchRoot(LaunchRoot):
+    def write_scope(self) -> nullcontext[None]:
+        return nullcontext()
+
+    def route(self) -> CommsRoute:
+        return resolve_comms_route(self.path)
+
+
+class CurrentLaunchRoot(LaunchRoot):
+    @classmethod
+    def capture(cls) -> CurrentLaunchRoot:
+        return cls(CommsRoute.current().observe_root())
+
+    @contextmanager
+    def write_scope(self) -> Iterator[None]:
+        with guard_default_route_write(self.path):
+            if self.route().observe_root() != self.path:
+                raise RouteChangedError("default Comms route changed before write")
+            yield
+
+    def route(self) -> CommsRoute:
+        return CommsRoute.current()
+
+
+def at_root(record: LaunchRecord, path: Path | str | None) -> LaunchRecord:
+    if path is None:
+        return record
+    return replace(record, root_selection=ExplicitLaunchRoot(Path(path).resolve()))
 
 
 class RoutePublicationUnknownError(RelationViolationError):

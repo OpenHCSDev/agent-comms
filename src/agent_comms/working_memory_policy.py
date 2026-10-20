@@ -1,14 +1,11 @@
 """External annotation permission is an original human wire declaration."""
 from __future__ import annotations
 
-import json
-import os
 from abc import abstractmethod
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .retained_task_facts import RetainedTaskFacts
 from .task_sources import AnnotationDisclosureGrant
@@ -16,11 +13,6 @@ from .task_sources import AnnotationDisclosureGrant
 
 @dataclass(frozen=True)
 class AnnotationPolicy(DeclaredFamily, affix="AnnotationPolicy"):
-    @classmethod
-    def configured(cls):
-        raw = os.environ.get("AGENT_COMMS_ANNOTATION_POLICY")
-        return FieldCodec.decode(cls, json.loads(raw)) if raw else DisabledAnnotationPolicy()
-
     @abstractmethod
     def observe(self, worker, session_id, manifest, values): ...
 

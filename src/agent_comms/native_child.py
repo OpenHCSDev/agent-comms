@@ -3,25 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .pi_events import PiEvent
-
 from .child_process import AttachedChild, ChildOutcome, join_retirement
+from .launch_runtime import LaunchRecord
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
+from .pi_events import PiEvent
 from .pi_rpc import PiRpcChannel
-from .private_path import PrivateSocketRole
+from .selected_session import SelectedSession
 from .session_revision import SessionRevision
 
 if TYPE_CHECKING:
-    from .turn_context import Provenance
+    from .threads import Thread
+    from .turn_context import Provenance, TurnContext
 
 
 @dataclass
@@ -36,10 +38,27 @@ class PiChild:
     async def reply_ui(self, response) -> None:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
 
+    @staticmethod
+    def native_environment(
+        record: LaunchRecord, cwd: Path, source: Mapping[str, str],
+    ) -> dict[str, str]:
+        """Translate the held record only at the unchanged Node environment boundary."""
+        return (record.runtime.environment(source, configuration=record.configuration)
+                | record.configuration.encode_native() | record.native_values(cwd))
+
     @classmethod
-    async def start_command(cls, argv, *, cwd, env=None, pass_fds=(), event_type=PiEvent, **state):
-        proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
-        return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
+    async def start_command(
+        cls, argv, *, record: LaunchRecord, cwd, env=None, pass_fds=(),
+        event_type=PiEvent, **state,
+    ):
+        with state.pop('resources', ExitStack()) as resources:
+            environment = cls.native_environment(
+                record, Path(cwd), os.environ if env is None else env)
+            proc = await AttachedChild.start(
+                argv, cwd=cwd, env=environment, pass_fds=pass_fds, runtime=record.runtime)
+            assert proc.stdout is not None
+            return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type),
+                       resources=resources.pop_all(), **state)
 
     async def request(self, command):
         if self.retired:
@@ -148,12 +167,16 @@ class PiSessionChild(PiChild):
     async def start(cls, key, attestation):
         launch, _ = key
         with ExitStack() as resources:
-            environment = dict(launch.env)
-            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
-                address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
-                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
-                key=key, attestation=attestation, resources=resources.pop_all())
+            record = launch.record.prepare(resources)
+            return await cls.start_command(
+                launch.argv,
+                record=record,
+                cwd=str(launch.cwd),
+                env=launch.env,
+                key=key,
+                attestation=attestation,
+                resources=resources.pop_all(),
+            )
 
 
 class NativeChildState(ABC):
@@ -171,10 +194,10 @@ class NativeChildState(ABC):
             worktree=worktree, environment=environment, session_file=session_file,
         )
 
-    def reuse(self, key) -> PiSessionChild | None:
+    def reuse(self, key: object) -> PiSessionChild | None:
         return None
 
-    async def context_for_input(self, thread, context):
+    async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
         return context
 
     def idle(self) -> RetainedNative:
@@ -259,7 +282,7 @@ class RetainedNative(ChildNative):
     def current(self) -> bool:
         return self.child.proc.alive() and self.revision.current(self.identity.session_file)
 
-    def idle(self):
+    def idle(self) -> RetainedNative:
         if not self.current:
             return super().idle()
         return self
@@ -286,10 +309,9 @@ class RetainedNative(ChildNative):
         if self.current and self.child.key[0].package == package:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
-                root=root, directory=directory, worktree=worktree, environment=environment, session_file=session_file)
-            if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
-                original, authentication
-            ):
+                root=root, worktree=worktree, environment=environment,
+                selection=SelectedSession.for_launch(directory, session_file))
+            if candidate.same_acquired(original, authentication):
                 return original
         return super().managed_launch(
             command, arguments, package=package, root=root, directory=directory,

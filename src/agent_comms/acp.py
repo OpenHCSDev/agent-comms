@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import sys
 import time
@@ -46,25 +45,25 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
-from .acp_failure import NativeTurnError
 from .acp_extension import (
     CompactRequest,
     TextRouteUpdate,
     encode_updates,
 )
+from .acp_failure import NativeTurnError
 from .agent_event_updates import AcpEventConsumer
-from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
-from .field_codec import FieldCodec, MalformedRecord
 from .cursor_publication import CursorPublication
+from .field_codec import FieldCodec, MalformedRecord
+from .image_inputs import prompt_images
 from .input_drain import InputDrain
-from .queued_input import DeliveredInput
-from .schedule_rules import SelectedWakeCheck
 from .input_effects import InputEffects
+from .launch_runtime import LaunchRecord
 from .message_bus import MessageBus
 from .publisher import ResponseWrites
+from .queued_input import DeliveredInput
 from .routing import MessageRoute
 from .runtime import (
     UNBOUND_CONTROLLER,
@@ -72,6 +71,7 @@ from .runtime import (
     RuntimeServer,
     socket_path,
 )
+from .schedule_rules import SelectedWakeCheck
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
@@ -97,8 +97,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str | None = None,
-        agent_args: list[str] | None = None,
+        agent_bin: str,
+        agent_args: list[str],
         runtime_enabled: bool = False,
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
@@ -116,10 +116,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
         self._runtime = RuntimeServer(self)
-        from .working_memory_policy import AnnotationPolicy
         from .working_memory_worker import AnnotationWorker
 
-        self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
+        self.annotations = AnnotationWorker(
+            comms, self._runtime, self, LaunchRecord.current().annotation
+        )
         self.cursors = CursorPublication(comms, self._runtime)
         self.turns = TurnRunner(
             comms,
@@ -297,10 +298,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
 
     def _debug_log(self, message: str) -> None:
-        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
-        if debug_path:
-            with open(debug_path, "a") as debug_log:
-                debug_log.write(f"[{time.time():.3f}] {message}\n")
+        LaunchRecord.current().debug.append(f"[{time.time():.3f}] {message}\n")
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         return await self.turns.cancel(session_id, **kwargs)
@@ -489,50 +487,26 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    from .active_route import resolve_comms_route
 
-    with resolve_comms_route().hold_client_route():
+    record = LaunchRecord.startup(sys.argv)
+    with record.root_selection.route().hold_client_route():
         if "--login" in sys.argv[1:]:
             from .login import run_login
 
             index = sys.argv.index("--login")
             return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
-        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
-        if debug_path:
-            import logging
-
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s %(name)s %(levelname)s %(message)s",
-                filename=debug_path + ".log",
-            )
+        record.debug.configure()
         # The stdio ACP client only attaches to a separately owned worker. A
         # private launch is checked before it can request an owner; the worker
         # independently repeats the same preflight.
-        comms = wire()
+        comms = wire(record.root_selection.path)
         comms.owners.require_launch_authority()
 
         async def run() -> None:
-            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-
-                async def watchdog() -> None:
-                    while True:
-                        await asyncio.sleep(5)
-                        tasks = [t for t in asyncio.all_tasks() if not t.done()]
-                        with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
-                            debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
-                            for task in tasks:
-                                stack = task.get_stack()
-                                innermost = [
-                                    f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
-                                    for frame in stack
-                                    if frame
-                                ][-4:]
-                                debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
-
-                asyncio.create_task(watchdog())
             agent = CommsClient(
                 comms,
+                record.agent_bin,
+                list(record.agent_args),
                 runtime_enabled=True,
                 use_unstable_protocol=True,
             )
@@ -544,16 +518,14 @@ def main() -> int:
                     else f"{event.direction.value}"
                 )
 
-            conn_kwargs: dict[str, Any] = {}
-            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-                conn_kwargs["observers"] = [observe]
+            conn_kwargs = record.debug.connection_options(observe)
             try:
                 await run_agent(agent, use_unstable_protocol=agent.use_unstable_protocol,
                                 **conn_kwargs)  # type: ignore[arg-type]
             finally:
                 await agent.shutdown()
 
-        asyncio.run(run())
+        asyncio.run(record.debug.serve(run))
         return 0
 
 

@@ -3,25 +3,24 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .active_route import at_root
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
+from .cli_result import ThreadToolCatalogResult
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .cli_result import ThreadToolCatalogResult
-from .launch_runtime import RestartEnvironment
-from .native_arguments import NativeArguments
-from .native_tools import NativeRequestTools
-from .store_files import _atomic_write_text
 from .goals import (
     GoalDeclaration,
     NoGoal,
 )
+from .launch_runtime import LaunchRecord, NativeOwnerLaunchRecord, ThreadLaunch
+from .native_arguments import NativeArguments
+from .native_tools import NativeRequestTools
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -35,21 +34,21 @@ from .registration_inheritance import (
     InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
+from .store_files import _atomic_write_text
+from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     ThreadProvenance,
     ThreadRole,
+    TurnFence,
     TurnId,
     TurnIdentity,
 )
-from .thread_identity import TurnFence
 from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
-from .task_sources import TaskScope
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .launch_runtime import ThreadLaunch
 
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
@@ -164,23 +163,20 @@ class Thread(ThreadProvenance):
         if not self.restart_candidates(status):
             raise RelationViolationError("Restart requires another live owner")
 
-    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
-        """Project this captured owner through the original native binding."""
+    def native_launch(self, root, snapshot, worktree: str) -> LaunchRecord:
+        """Project this captured thread and checked project request into its child's record."""
         from .runtime_requests import ProjectRuntimeRequest
 
-        project = ProjectRuntimeRequest.for_native(snapshot, self)
-        return {
-            **replace(self.launch(), worktree=worktree, managed=True).encode(),
-            "AGENT_COMMS_ROOT": str(root),
-            **project.environment(root),
-        }
+        record = NativeOwnerLaunchRecord.from_record(at_root(LaunchRecord.current(), Path(root)),
+                         thread=self.launch())
+        return ProjectRuntimeRequest.for_native(snapshot, self).launch(record)
 
     def native_launch_arguments(self, arguments: NativeArguments, package: Path) -> tuple[str, ...]:
         """Write this native launch's catalog in its config directory, not a CLI cache; only a
         launch that loads the agent-comms extension registers the flag that reads it."""
         if not arguments.loads(NativeRequestTools.native_extension(package)):
             return arguments.argv
-        directory = RestartEnvironment.inherit(os.environ).native_config
+        directory = LaunchRecord.current().configuration.native_config
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
         catalog = ThreadToolCatalogResult(tuple(NativeRequestTools.catalog()), self.service_tier)
@@ -189,9 +185,8 @@ class Thread(ThreadProvenance):
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""
-        from .launch_runtime import ThreadLaunch
 
-        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
+        return ThreadLaunch(self.name)
 
     def native_session_directory(self, root: Path) -> Path:
         return root / "native-sessions" / self.incarnation.require_recorded().lookup
@@ -430,23 +425,8 @@ class Thread(ThreadProvenance):
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
 
-def current_thread(registry) -> Thread:
-    """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import ThreadLaunch
-
-    launch = ThreadLaunch.current()
-    return registry.new_thread(
-        name=launch.name,
-        tags=launch.tags,
-        worktree=launch.worktree,
-        parent=launch.parent,
-        task=launch.task,
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    )
-
-
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from . import pi_native_backend, pi_durable_backend  # noqa: E402, F401
+from . import pi_durable_backend, pi_native_backend  # noqa: E402, F401
 
 AgentBackend.seal()

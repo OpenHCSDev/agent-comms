@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
@@ -28,29 +28,33 @@ if TYPE_CHECKING:
     from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
+from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ThreadImported, ImportSnapshot
+from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .input_disposition import InputDispositions
+from .launch_runtime import LaunchRecord, LaunchRuntime
 from .message_bus import MessageBus
-from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
-from .launch_runtime import LaunchRuntime
-from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
+from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
-    PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
-    RegistryPrivacy, _require_no_private_owner_rename,
+    PRIVATE_OWNER_RENAME_PENDING,
+    PrivateOwnerRenameIntent,
+    PrivateRegistryGuard,
+    PublicRegistry,
+    RegistryPrivacy,
+    _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
-from .thread_owned_state import ThreadOwnedState
-from .threads import Thread, current_thread
 from .thread_identity import AgentThreadRole, ThreadRole
-from .agent_backend import RuntimeLocation
+from .thread_owned_state import ThreadOwnedState
+from .threads import Thread
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
@@ -459,13 +463,13 @@ class ThreadManagement:
 
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""
-        resolved_bin = NativeArguments.configured_binary()
+        resolved_bin = LaunchRecord.current().agent_bin
         runtime = LaunchRuntime.running()
         with spec.prepared(self, resolved_bin, runtime) as child:
             child = self.registry._declare_unlocked(child)
             try:
                 owned = self.owners._launch_owner_unlocked(
-                    child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
+                    child, LaunchRecord.current(), initial_input=spec.task,
                 )
                 spec.task.record_first_input(
                     partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
@@ -477,9 +481,8 @@ class ThreadManagement:
                 raise
 
     def adopt_current(self) -> Thread:
-        """Declare and register the current process's thread from env."""
-        thread = current_thread(self.registry)
-        return self.registry.declare(thread)
+        """Return the thread reserved before this owner process was launched."""
+        return self.registry.require(LaunchRecord.current().require_thread().name)
 
 
 @dataclass(frozen=True, slots=True)

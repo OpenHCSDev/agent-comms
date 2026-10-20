@@ -21,6 +21,7 @@ from .agent_backend import (
 from .agent_events import Error
 from .coordination_database import CoordinationStore
 from .external_transcript import ExternalCut
+from .launch_runtime import LaunchRecord
 from .native_child import PiChild
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
@@ -93,7 +94,8 @@ class DurableTranscript(TranscriptSource):
             return
         with asyncio.Runner() as loop:
             child = loop.run(PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
-                cwd=str(Path(self.location.path).parent), event_type=DurablePiEvent))
+                cwd=str(Path(self.location.path).parent), event_type=DurablePiEvent,
+                record=LaunchRecord.current()))
             try:
                 loop.run(child.request(OpenHistory(self.location.path)))
                 yield replace(self, execute=lambda source, command: loop.run(child.request(command)))
@@ -229,7 +231,8 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
                     lock = resources.enter_context(thread.runtime.writer_lock.open('a+b'))
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
-                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
+                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent,
+                        record=LaunchRecord.current(), resources=resources.pop_all())
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
                     await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))

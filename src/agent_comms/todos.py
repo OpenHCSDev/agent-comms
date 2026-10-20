@@ -7,14 +7,14 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import re
-import subprocess
 import sqlite3
+import subprocess
 import sys
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -27,22 +27,29 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
+from .channel_targets import CommandTarget
 from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
-from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
+from .launch_runtime import LaunchRuntime
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .standing_rules import UndatedStandingRule
+from .storage_rules import StorageRule
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
-from .standing_rules import UndatedStandingRule
-from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -88,7 +95,8 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
         return self.work
 
     async def run(self, check, *command):
-        result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
+        result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120,
+                                      runtime=LaunchRuntime.running())
         if result.outcome != ExitedOutcome(0):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
@@ -222,7 +230,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
             return True
         result = await BoundedRun.run(
             ("git", "merge-base", "--is-ancestor", self.delivered, head),
-            cwd=check.directory, timeout=120)
+            cwd=check.directory, timeout=120, runtime=LaunchRuntime.running())
         if result.outcome not in (ExitedOutcome(0), ExitedOutcome(1)):
             raise ValueError(result.stderr.decode(errors="replace") or
                              "Could not check the delivered commit against its PR head.")

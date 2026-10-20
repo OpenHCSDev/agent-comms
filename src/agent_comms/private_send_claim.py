@@ -26,8 +26,8 @@ from .following_inputs import FollowingInputs
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import SelectedModel
-from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_entries import NativeEvidenceScope
+from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary, send_fenced_prompt
@@ -167,7 +167,7 @@ class PrivateSendClaim(PromptBoundary):
                 session=self.session,
                 model=model,
                 thinking_level=self.owner.thread.thinking_level,
-                environment=self.owner.thread.native_environment(
+                environment=self.owner.thread.native_launch(
                     self.bus.log.path.parent, registry,
                     self.owner.thread.worktree,
                 ),

@@ -14,8 +14,12 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
+from .launch_runtime import (
+    LaunchRecord,
+    LaunchRuntime,
+    RestartEnvironment,
+)
 from .owner_launch import RetainedOwnerLaunch
-from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
@@ -53,8 +57,10 @@ class OwnerRestartRequest:
 
     def environment(self, lifecycle: OwnerLifecycle) -> RestartEnvironment:
         self.launch_runtime.require_available()
-        return RestartEnvironment.inherit(lifecycle.restart_environment(
-            os.environ if self.runtime is None else self.runtime.encode(), self.launch_runtime))
+        configuration = (
+            LaunchRecord.current().configuration if self.runtime is None else self.runtime
+        )
+        return lifecycle.restart_environment(configuration, self.launch_runtime)
 
 
 @dataclass(frozen=True)
@@ -108,24 +114,27 @@ class OwnerRestartHandoff:
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
+            record = replace(source.record, runtime=runtime, configuration=self.runtime,
+                agent_bin=lifecycle.restart_entrypoint(source.record.agent_bin, runtime))
+            record = replace(record,
+                agent_bin=self.agent_bin if self.agent_bin is not None else record.agent_bin,
+                agent_args=self.agent_args if self.agent_args is not None else record.agent_args)
             return lifecycle._launch_owner_unlocked(
-                thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary, runtime),
-                self.agent_args if self.agent_args is not None else source.arguments,
-                environment=self.runtime.apply_runtime(source.environment),
-                launch_runtime=runtime,
+                thread, record, environment=self.runtime.apply_runtime(source.environment),
             )
 
         return self._launch(lifecycle, target)
 
     def restore(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
         """Restore EACH acquired launch unchanged under its authentic decoder."""
-        runtime = RestoredRuntime.running()
-        if any(owner.launch.interpreter != str(runtime.interpreter) for owner in self.owners):
+        runtime = LaunchRuntime.running()
+        if any(
+            owner.launch.record.runtime.interpreter != runtime.interpreter for owner in self.owners
+        ):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
         return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
-            thread, source.binary, source.arguments, environment=source.environment,
-            launch_runtime=runtime,
+            thread, source.record, environment=source.environment,
         ))
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:

@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import argparse
-import builtins
 import asyncio
+import builtins
 import json
 import os
 import secrets
@@ -17,10 +17,13 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Generic, Literal, Self, TypeVar
+
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
 
+from agent_comms import field_codec, messages
+from agent_comms.active_route import at_root
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import ChangeReport
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
@@ -39,11 +42,9 @@ from agent_comms.config_options import CatalogConfigOption, CatalogSelection, Co
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec, option
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.launch_runtime import LaunchRecord
 from agent_comms.message_reference import MessageReference
-from agent_comms import messages
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -508,12 +509,15 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     async def watch_child(self) -> None:
         """One child stream; the bus owns waiting and its next attempt after a hold."""
-        child = await AttachedChild.start((
-            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-            stdio=StreamingChildStdio(input_enabled=False))
+        record = at_root(LaunchRecord.current(), Path(self.binding.root))
+        with record.arguments() as arguments:
+            child = await AttachedChild.start((
+                str(record.runtime.interpreter.with_name('agent-comms')), *arguments,
+                '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
+                '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+                stdio=StreamingChildStdio(input_enabled=False), runtime=record.runtime,
+                pass_fds=arguments.pass_fds)
         try:
             async for item in WatchLine.stream(child):
                 await item.handle(self, child)

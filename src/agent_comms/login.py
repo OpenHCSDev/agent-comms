@@ -3,9 +3,10 @@
 import os
 import re
 import subprocess
+from pathlib import Path
 
 from .config_options import ConfigOptions
-from .launch_runtime import ThreadLaunch
+from .launch_runtime import LaunchRecord, LoginLaunchRecord
 
 
 def run_login(provider: str = "") -> int:
@@ -13,11 +14,10 @@ def run_login(provider: str = "") -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
         raise ValueError("Invalid provider identifier")
     package = ConfigOptions.configured().package
-    env = os.environ.copy()
-    ThreadLaunch.strip(env)
-    env = {**package.node_environment(env), "AGENT_COMMS_LOGIN_PROVIDER": provider}
-    env.pop("AGENT_COMMS_PROJECT_SOCKET", None)
-    env.pop("AGENT_COMMS_PROJECT_REQUEST", None)
+    record = LoginLaunchRecord.from_record(LaunchRecord.current(), login_provider=provider)
+    from .native_child import PiChild
+
+    env = PiChild.native_environment(record, Path.cwd(), package.node_environment(dict(os.environ)))
     command = [
         *package.node(),
         "--no-session",

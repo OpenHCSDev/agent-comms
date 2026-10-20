@@ -17,7 +17,7 @@ from .cli_result import CliResult
 from .comms import Comms
 from .fresh_private_session import create_fresh_private_session
 from .goals import NoGoal
-from .launch_runtime import RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRecord
 from .native_entries import ImportedSessionWriter, NativeEntry
 from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility
@@ -171,8 +171,8 @@ class CheckRoot:
             command = command[1:]
         if not command or "{root}" not in command:
             raise ValueError("check-root needs -- COMMAND with an explicit {root} argument")
-        environment = ThreadLaunch.strip(dict(os.environ))
-        RestartEnvironment.strip(environment, "root")
+        record = LaunchRecord.current()
+        environment = record.runtime.environment(os.environ, configuration=record.configuration)
         with self.open() as copied:
             arguments = tuple(argument.replace("{root}", str(copied.root)) for argument in command)
             return CheckRootResult(

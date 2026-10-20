@@ -8,28 +8,36 @@ commands do not own coordination, backend or identity lifecycles.
 from __future__ import annotations
 
 import asyncio
-import json
 from abc import abstractmethod
-from functools import partial
-from .coordinator import Coordination
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
 from .command import Command
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireValue
-from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
+from .launch_runtime import ProjectLaunchRecord
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
-from .thread_presentation import LiveThreadOwnerBinding
-from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
+from .private_bus_checkpoint import ContextManifestReference
 from .thread_identity import ThreadIncarnation
+from .thread_presentation import LiveThreadOwnerBinding
 from .tool_result import DeclaredReply
+from .turn_context import (
+    ContextManifest,
+    ContextSourceText,
+    PreviewProvenance,
+    Provenance,
+    RecordedContextTurn,
+    SegmentManifest,
+    TurnContext,
+)
 from .working_memory_labels import ClassifierVersion, ModelLabel
 from .working_memory_questions import SpanAnswer
 
@@ -177,13 +185,15 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
         snapshot.require_owner_process(owner, process)
         return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
 
-    def environment(self, root):
+    def launch(self, record):
         from .runtime import socket_path
 
-        return {
-            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
-        }
+        return ProjectLaunchRecord.from_record(
+            record,
+            thread=record.require_thread(),
+            project_socket=socket_path(record.root_selection.path, self.binding.process.pid),
+            project_request=self.to_wire(),
+        )
 
     def require_original(self, entry):
         if not entry.matches_name(self.thread):

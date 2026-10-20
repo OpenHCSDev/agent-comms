@@ -13,29 +13,34 @@ import json
 import os
 import sys
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
 
+from .active_route import at_root
 from .child_process import ParentedProcess, ProcessIdentity
 from .comms import Comms, wire
+from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .coordination_errors import CoordinationError
 from .field_codec import FieldCodec
-from .native_arguments import NativeArguments
+from .launch_runtime import (
+    LaunchRecord,
+    LaunchRuntime,
+    RestartEnvironment,
+    RestartQueueLaunchRecord,
+)
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
-from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
-from .restart_refusals import RestartRefusal
 from .private_path import PrivateDirectoryRole
-from .thread_identity import RecordedThreadIncarnation
+from .restart_refusals import RestartRefusal
 from .store_files import _atomic_write_text, _store_lock
+from .thread_identity import RecordedThreadIncarnation
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
 
 DIRECTORY = "owner-restart-queue"
@@ -109,14 +114,12 @@ class RestartTarget:
     agent_bin: str
 
     @classmethod
-    def capture(cls, comms: Comms, source: Mapping[str, str], selected: LaunchRuntime):
-        runtime = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
-        )
+    def capture(cls, comms: Comms, source: LaunchRecord, selected: LaunchRuntime):
+        runtime = comms.owners.restart_environment(LaunchRecord.current().configuration, selected)
         return cls(
             str(selected.interpreter),
             runtime,
-            comms.owners.restart_entrypoint(source[NativeArguments.binary_key], selected),
+            comms.owners.restart_entrypoint(source.agent_bin, selected),
         )
 
     @property
@@ -136,8 +139,8 @@ class RestartTarget:
 
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
-        current = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime)
+        current = comms.owners.restart_environment(
+            LaunchRecord.current().configuration, self.launch_runtime
         )
         if not self.is_current_watcher or self.runtime != current:
             raise ValueError("Watcher target runtime changed")
@@ -263,7 +266,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
         status = snapshot.statuses[owner.name]
         owner.require_restart_owner(status)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = RestartTarget.capture(comms, launch.environment, launch_runtime)
+        target = RestartTarget.capture(comms, launch.record, launch_runtime)
         target.require_available(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with queue.locked():
@@ -274,7 +277,11 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
                 queue.save(result)
             else:
                 result = QueuedRestart(
-                    uuid.uuid4().hex, selection, launch.interpreter, target, PendingRestart()
+                    uuid.uuid4().hex,
+                    selection,
+                    str(launch.record.runtime.interpreter),
+                    target,
+                    PendingRestart(),
                 )
                 queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
@@ -284,11 +291,15 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
 
 def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
     # The resident watcher inherits only its declared runtime configuration.
-    return ParentedProcess.launch(
-        (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
-        env=target.runtime.encode(),
-        runtime=target.launch_runtime,
-    )
+    record = RestartQueueLaunchRecord.from_record(at_root(LaunchRecord.current(), root),
+                     runtime=target.launch_runtime, configuration=target.runtime,
+                     agent_bin=target.agent_bin)
+    with record.arguments() as arguments:
+        return ParentedProcess.launch(
+            (str(record.runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve()), *arguments),
+            env=target.runtime.encode(), runtime=target.launch_runtime,
+            pass_fds=arguments.pass_fds,
+        )
 
 
 def status(comms: Comms, name: str) -> list[QueuedRestart]:
@@ -414,6 +425,7 @@ async def run(comms: Comms) -> None:
 
 
 def main() -> None:
+    LaunchRecord.startup(sys.argv)
     if len(sys.argv) != 2:
         raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
     comms = wire(sys.argv[1])

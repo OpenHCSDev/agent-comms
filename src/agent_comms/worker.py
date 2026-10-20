@@ -1,23 +1,24 @@
 """Persistent owner for a forked thread; idle turns consume no model process."""
 
-import asyncio
 import argparse
+import asyncio
 import os
 import signal
-from functools import partial
-from .coordinator import Coordination
+import sys
 from contextlib import suppress
+from functools import partial
 
 from .acp import CommsAgent
 from .comms import Comms, wire
-from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, ThreadLaunch
+from .coordinator import Coordination
+from .launch_runtime import LaunchRecord
 
 
 async def run() -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
-    comms = wire()
+    record = LaunchRecord.current()
+    comms = wire(record.root_selection.path)
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
     async with Coordination.worker(comms.root / "coordination.sqlite3"):
@@ -25,27 +26,25 @@ async def run() -> None:
 
 
 async def run_owner(comms: Comms) -> None:
-    name = ThreadLaunch.current().name
+    record = LaunchRecord.current()
+    name = LaunchRecord.current().require_thread().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
-        agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
+        agent_bin=record.agent_bin,
+        agent_args=list(record.agent_args),
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stopped.set)
-    initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
-        if key := ThreadLaunch.take_startup_input():
-            initial = asyncio.create_task(run_startup_input(agent, name, key))
-        await stopped.wait()
+        startup = LaunchRecord.current().take_startup_input()
+        async with startup.running(partial(run_startup_input, agent, name)):
+            await stopped.wait()
     finally:
-        if initial is not None:
-            initial.cancel()
-            await asyncio.gather(initial, return_exceptions=True)
         await agent.shutdown()
 
 
@@ -94,24 +93,13 @@ def main() -> int:
     before consulting a route or wire so discovery cannot start an owner.
     Registration belongs to the original thread management operation.
     """
-    argparse.ArgumentParser(
-        prog="agent-comms-agent", description=__doc__,
-        epilog=(
-            f"Select an existing owner with {ThreadLaunch.variable('name')}. "
-            "Use agent-comms for commands."
-        ),
-    ).parse_args()
-    name = ThreadLaunch.current().name
-
-    comms = wire()
-    comms.owners.require_private_launch()  # Headless execution needs a private bus root.
-    thread = comms.registry.require(name)
-    if thread.process_identity.alive():
-        raise ValueError(f"Thread {thread.name!r} already has a live owner")
+    record = LaunchRecord.startup(sys.argv)
+    argparse.ArgumentParser(prog="agent-comms-agent", description=__doc__).parse_args()
+    wire(record.root_selection.path).owners.require_private_launch()
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    raise SystemExit(main())

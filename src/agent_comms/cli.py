@@ -11,20 +11,28 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator
+from functools import partial
 from pathlib import Path
 
+from .active_route import CurrentLaunchRoot, ExplicitLaunchRoot
 from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import client_wire
 from .coordination_errors import CoordinationError
+from .launch_runtime import LaunchRecord
 
 
 def _fail(error: BaseException) -> int:
     """The declared wire family owns classification, causes and JSON encoding."""
     print(CoreError.from_exception(error).model_dump_json(), flush=True)
     return 1
+
+
+class ProcessArguments:
+    def __iter__(self) -> Iterator[str]:
+        return iter(sys.argv[1:])
 
 
 class CliArgumentParser(argparse.ArgumentParser):
@@ -38,20 +46,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
     parser.add_argument(
         "--root",
-        default=None,
-        help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
+        default=CurrentLaunchRoot.capture,
+        type=lambda value: partial(ExplicitLaunchRoot, Path(value).expanduser().resolve()),
+        help="Comms root directory (otherwise the supplied launch record's root)",
     )
+    parser.add_argument(LaunchRecord.argument, help=argparse.SUPPRESS)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
         declaration.add_parser(subparsers)
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Iterable[str] = ProcessArguments()) -> int:
     try:
-        args = build_parser().parse_args(argv, namespace=SendArguments())
+        arguments = list(argv)
+        args = build_parser().parse_args(arguments, namespace=SendArguments())
+        record = LaunchRecord.client_startup(arguments, args.root())
         command = CliCommand.member_named(args.command).from_arguments(args)
-        with client_wire(Path(args.root).expanduser() if args.root else None) as comms:
+        with client_wire(record.root_selection.path) as comms:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

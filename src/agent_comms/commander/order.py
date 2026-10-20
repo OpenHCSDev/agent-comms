@@ -39,6 +39,7 @@ from ..external_transcript import ExternalTranscript
 from ..field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import OrderCheck, ProblemGoalOrder
+from ..launch_runtime import LaunchRuntime
 from ..message_reference import MessageReference
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase
@@ -448,7 +449,8 @@ class Commander(CommanderContext):
             sys.exit(f'Refused: {check.directory} is not a clean checkout of origin/main; '
                      'the corrected check runs on main')
         check.result.require(asyncio.run(BoundedRun.run(
-            ('bash', '-c', check.command), cwd=check.directory, timeout=90)))
+            ('bash', '-c', check.command), cwd=check.directory, timeout=90,
+            runtime=LaunchRuntime.running())))
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 

@@ -6,6 +6,7 @@ from importlib import import_module
 
 import agent_comms.commander as package
 
+from ..launch_runtime import LaunchRecord
 from .order import Commander
 
 
@@ -15,6 +16,7 @@ def tool_name(module: str) -> str:
 
 
 def main() -> None:
+    LaunchRecord.startup(sys.argv)
     parser = argparse.ArgumentParser(add_help=False)
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument('--config', dest='config', type=Commander.read,

@@ -19,9 +19,11 @@ from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from .active_route import at_root
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
+from .launch_runtime import AcpLaunchRecord, LaunchRecord
 from .maintenance_barrier import MaintenanceBarrier
-from .route_selection import RouteSelection, child_root, selected_write
+from .route_selection import RouteSelection
 
 
 def _release_abandoned(task: asyncio.Future[ExitStack]) -> None:
@@ -42,7 +44,7 @@ class AcpIngress:
     attached: str | None = None
 
     def _registries(self) -> list[Path]:
-        roots = {self.selection.root}
+        roots = {self.selection.root_selection.path}
         if self.attached is not None:
             attached = Path(self.attached).expanduser()
             roots.add(attached if attached.is_absolute() else self.cwd / attached)
@@ -55,7 +57,7 @@ class AcpIngress:
 
     def _lock_prompt(self, locks: ExitStack) -> None:
         locks.enter_context(
-            selected_write(self.selection.root, implicit=self.selection.implicit)
+            self.selection.root_selection.write_scope()
         )
         self._lock_roots(locks)
 
@@ -88,14 +90,10 @@ class AcpIngress:
         with await self._acquire(self._lock_prompt):
             yield
 
-    def _project_launch(self, child_env: dict[str, str]) -> None:
-        """Publish the captured root into the child only after acquiring the locks."""
-        from .active_route import read_active_route
-
-        child_env["AGENT_COMMS_ROOT"] = str(self.selection.root)
-        # The child derives its launch from this root; only the route must not move.
-        if self.selection.implicit and read_active_route() not in (None, self.selection.route):
-            raise ValueError("ACP root changed before private launch")
+    def _project_launch(self) -> LaunchRecord:
+        """Use the captured route for this client's explicit child record."""
+        return AcpLaunchRecord.from_record(
+            at_root(LaunchRecord.current(), self.selection.root_selection.path))
 
     async def spawn(
         self, argv: tuple[str, ...], *, env: Mapping[str, str],
@@ -127,18 +125,19 @@ class AcpIngress:
 
         def spawn_under_lock() -> None:
             try:
-                if child_root(child_env, cwd) != self.selection.root:
-                    raise ValueError("ACP child environment conflicts with its selected route")
                 # Route SH precedes the wire gate, matching the publisher's
                 # route EX -> private-root preflight order.
                 with self.selection.route.hold_client_route(), ExitStack() as locks:
                     self._lock_roots(locks)
-                    self._project_launch(child_env)
-                    process = asyncio.run_coroutine_threadsafe(
-                        AttachedChild.start(
-                            argv, env=child_env, cwd=cwd, pass_fds=pass_fds, stdio=stdio,
-                        ), loop,
-                    ).result()
+                    record = self._project_launch()
+                    with record.arguments() as arguments:
+                        process = asyncio.run_coroutine_threadsafe(
+                            AttachedChild.start(
+                                (*argv, *arguments), env=child_env, cwd=cwd,
+                                pass_fds=(*pass_fds, *arguments.pass_fds), stdio=stdio,
+                                runtime=record.runtime,
+                            ), loop,
+                        ).result()
                     process_ready.set_result(process)
                     # The caller accepts the observed process or asks for its
                     # retirement before the gate is released to maintenance.

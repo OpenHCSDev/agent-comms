@@ -7,17 +7,22 @@ owners for each process. This module installs no marker, participant, schema or 
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import shutil
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
 from .coordinator import Coordination
+from .launch_runtime import LaunchRuntime
 from .native_arguments import NativeArguments
 from .native_package import (
-    MANIFEST, NativePackageError, VerifiedNativePackage, pinned_native_package,
+    MANIFEST,
+    NativePackageError,
+    VerifiedNativePackage,
+    pinned_native_package,
 )
 from .native_pi import NativePiUnavailable, _private_session_dir
 from .wire_log import WireLog
@@ -26,7 +31,6 @@ if TYPE_CHECKING:
     from .acp_extension import CursorScope
     from .active_route import CommsRoute
     from .cursor_publication import CursorPublication
-    from .launch_runtime import LaunchRuntime
     from .threads import Thread
 
 
@@ -53,7 +57,7 @@ class RootLaunch(ABC):
     @property
     @abstractmethod
     def child_root(self) -> Path:
-        """The root a launched child names in ``AGENT_COMMS_ROOT``."""
+        """The root written into the child's explicit launch record."""
 
     @abstractmethod
     def require_private(self) -> PrivateNkLaunch:
@@ -148,7 +152,7 @@ class PrivateNkLaunch(RootLaunch):
         return runtime.native_entrypoint
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
-        if agent_bin == NativeArguments.default_binary:
+        if agent_bin == NativeArguments.command_name:
             # The default stock binary cannot attest native input IDs.
             # Keep the owner on this installation's pinned Pi entrypoint.
             agent_bin = runtime.native_entrypoint

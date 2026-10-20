@@ -19,7 +19,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
@@ -1398,7 +1397,7 @@ class AttachedChild(ChildProcess):
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
         stdio: ChildStdio = StreamingChildStdio(),
-        runtime: LaunchRuntime = LaunchRuntime.running(),
+        runtime: LaunchRuntime,
     ) -> AttachedChild:
         if not command:
             raise ValueError("A child command is required")
@@ -1489,42 +1488,6 @@ class AttachedChild(ChildProcess):
             return TimedOutOutcome(await self.stop())
 
 
-class ParentLifeline:
-    """Inherited pipe for a Python child which must die with its launcher.
-
-    Lifted from the recovery reader's parent watchdog. The child enters guard()
-    before calling the blocking operation; EOF releases OS-owned locks even
-    when the operation is stuck on another Python thread.
-    """
-
-    variable = "AGENT_COMMS_PARENT_LIFELINE_FD"
-
-    def __enter__(self):
-        self.read_fd, self.write_fd = os.pipe()
-        return self
-
-    def __exit__(self, *_):
-        os.close(self.read_fd)
-        os.close(self.write_fd)
-
-    @property
-    def environment(self) -> dict[str, str]:
-        return {**os.environ, self.variable: str(self.read_fd)}
-
-    @classmethod
-    def guard(cls) -> None:
-        descriptor = int(os.environ.pop(cls.variable))
-        os.fstat(descriptor)
-
-        def parent_watchdog() -> None:
-            try:
-                os.read(descriptor, 1)
-            finally:
-                os._exit(1)
-
-        threading.Thread(target=parent_watchdog, daemon=True).start()
-
-
 class BoundedRun:
     @classmethod
     @asynccontextmanager
@@ -1558,7 +1521,7 @@ class BoundedRun:
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
-        runtime: LaunchRuntime = LaunchRuntime.running(),
+        runtime: LaunchRuntime,
     ):
         """Borrow a collected result; this scope still owns child retirement.
 
@@ -1659,11 +1622,12 @@ class ParentedProcess(SynchronousProcess):
         env: dict[str, str] | None = None,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
-        runtime: LaunchRuntime = LaunchRuntime.running(),
+        runtime: LaunchRuntime,
+        pass_fds: tuple[int, ...] = (),
     ) -> ParentedProcess:
         if not command:
             raise ValueError("A child command is required")
-        with Platform.current().launch(command, (), runtime) as launch:
+        with Platform.current().launch(command, pass_fds, runtime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
                 if before_start is not None:
@@ -1759,12 +1723,12 @@ class NamespacedChild(ChildProcess):
                 platform.namespace_argv(launch, ready_w, release_r),
                 cwd=cwd,
                 env=env,
-                pass_fds=(ready_w, release_r),
+                pass_fds=(ready_w, release_r), runtime=LaunchRuntime.running(),
             )
             descriptor = platform.open_pidfd(child.pid)
             watchdog = await AttachedChild.start(
                 WatchDeadlineCommand(descriptor, deadline).argv(),
-                pass_fds=(descriptor,),
+                pass_fds=(descriptor,), runtime=LaunchRuntime.running(),
             )
             assert watchdog.stdout is not None
             async with asyncio.timeout(max(0, deadline - time.monotonic())):

@@ -4,23 +4,23 @@ from __future__ import annotations
 
 import logging
 import time
+from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
-from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
-from .declared_family import DeclaredFamily
 from .cli_result import CliResult
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
-from .thread_identity import ThreadIncarnation
 from .thread_execution import ConversationPreparation
+from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
@@ -45,26 +45,26 @@ from .exporting import (
 )
 from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
+from .launch_runtime import LaunchRecord
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
-from .page_traversal import OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
+from .page_traversal import OlderTraversal
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
-    MessageNotification,
-    ThreadRecord,
     CountedRead,
     InboxRead,
+    MessageNotification,
+    ThreadRecord,
     ThreadView,
     WireRevision,
 )
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
 from .store_files import SharedLock, _store_lock
 from .thread_presentation import ThreadPresentation
-from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class PollTarget(DeclaredFamily, affix="Target"):
 @dataclass(frozen=True)
 class CallingThreadTarget(PollTarget):
     def thread(self, registry: Registration) -> Thread:
-        return registry.require(current_thread(registry).name)
+        return registry.require(LaunchRecord.current().require_thread().name)
 
 
 @dataclass(frozen=True)

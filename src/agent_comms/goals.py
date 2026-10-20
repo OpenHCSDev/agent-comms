@@ -15,41 +15,59 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
-                            ExitedOutcome, SignaledOutcome, TimedOutOutcome)
+from .child_process import (
+    BoundedRun,
+    CheckPrinted,
+    ChildOutcome,
+    ChildResult,
+    CountPrinted,
+    ExitedOutcome,
+    SignaledOutcome,
+    TimedOutOutcome,
+)
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
-    FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember,
-    RecordMember, SubclassUnion,
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
 )
-from .goal_states import ActiveGoal, GoalState
 from .goal_failure_observation import FailedTurnProjection
-from .turn_goal_permission import ContinuationGoalPermission, InactiveGoalPermission, TurnGoalPermission
+from .goal_states import ActiveGoal, GoalState
+from .launch_runtime import LaunchRuntime
 from .registration_inheritance import RegistrationInheritance
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .turn_goal_permission import (
+    ContinuationGoalPermission,
+    InactiveGoalPermission,
+    TurnGoalPermission,
+)
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
+    from .agent_activity import AgentActivity
     from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
     from .goal_presentation import ThreadGoalExecution
     from .goal_waits import GoalWait, GoalWaits
-    from .agent_activity import AgentActivity
     from .registry_document import RegistrySnapshot
     from .task_sources import TaskScope
-    from .threads import Thread
     from .thread_status import ThreadStatus
+    from .threads import Thread
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
     from .goal_attempts import GoalAttemptStore, LaunchPermit
-    from .turn_goal_account import VerifiedGoalSettlement
-    from .thread_identity import TurnId
-    from .todos import Todo
+    from .goal_management import Goals
     from .messages import Message
     from .private_bus_checkpoint import CheckedRead
+    from .thread_identity import TurnId
+    from .todos import Todo
+    from .turn_goal_account import VerifiedGoalSettlement
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -323,7 +341,7 @@ class OrderCheck:
     async def run(self) -> ChildResult:
         """The check on its directory's live state."""
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
-                                    timeout=self.timeout)
+                                    timeout=self.timeout, runtime=LaunchRuntime.running())
 
     def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
         """Read the check run result without starting the check."""

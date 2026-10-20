@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
+from .field_codec import boundary_decoder
 from .native_arguments import NativeArguments
-from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
-from .private_path import NativeSessionFileRole
-from .launch_runtime import RestartEnvironment, ThreadLaunch
+from .native_session_reopen import NativeSessionIdentity
 from .pi_vocabulary import ThinkingChoice
+from .private_path import NativeSessionFileRole
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
@@ -49,13 +48,6 @@ class SelectedSession:
     def launch_arguments(self, thinking_level: type[ThinkingChoice]) -> tuple[str, ...]:
         return NativeArguments(()).with_thinking(thinking_level).argv
 
-    def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
-        environment = ThreadLaunch.strip(dict(os.environ))
-        environment.update(original or {})
-        configuration = RestartEnvironment.inherit(environment).for_agent(agent_dir)
-        environment["PI_OFFLINE"] = "1"
-        return environment, configuration
-
     def attest(self, identity: NativeSessionIdentity) -> Path:
         # Only an unselected new session uses the originally allocated directory.
         return _session_location(self.directory, identity.session_file)
@@ -72,7 +64,8 @@ class SelectedSession:
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @classmethod
-    def for_launch(cls, directory: Path, path: Path | None) -> SelectedSession:
+    @boundary_decoder
+    def for_launch(cls, directory: Path, path: Path | str | None) -> SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,

@@ -12,7 +12,7 @@ from typing import ClassVar
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRecord, LaunchRuntime
 
 
 class PiHelperError(ValueError):
@@ -82,13 +82,11 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         node = shutil.which("node")
         if node is None:
             raise PiHelperError("Pi helper needs Node")
-        configuration = RestartEnvironment.inherit(environment)
-        environment.update(configuration.encode_native())
         for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             environment.pop(key, None)
         environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
         environment["PI_OFFLINE"] = "1"
-        command = (node, "--no-global-search-paths")
+        command: tuple[str, ...] = (node, "--no-global-search-paths")
         # Every current caller supplies the verified native deployment.
         fence = package / "dist/agent-comms-import-fence.mjs"
         command += ("--import", str(fence))
@@ -98,12 +96,14 @@ class PiHelper(DeclaredFamily, affix="Helper"):
     async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
         command, environment = cls.launch(request, dict(os.environ if env is None else env))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
+        from .native_child import PiChild
+
         outcome = await BoundedRun.run(
             command,
             input=payload.encode(),
             timeout=cls.timeout_for(request),
             cwd=cwd,
-            env=environment,
+            env=PiChild.native_environment(LaunchRecord.current(), cwd, environment),
             runtime=request.launch_runtime,
         )
         if not outcome.outcome.successful:
