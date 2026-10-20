@@ -9,7 +9,6 @@ import sqlite3
 import stat
 import subprocess
 import sys
-import tarfile
 import tempfile
 import time
 from abc import ABC, abstractmethod
@@ -182,87 +181,6 @@ class ResourceBackup[Contents](ABC):
 
     @abstractmethod
     def restore(self) -> None: ...
-
-
-@dataclass
-class Backup(ResourceBackup[SavedFile]):
-    """Whole-bus archive with selective per-file restoration."""
-    contents: ClassVar[type] = SavedFile
-
-    def capture(self, files: tuple[Path, ...]) -> dict[str, SavedFile]:
-        with tarfile.open(self.path / 'bus.tar', 'w') as archive:
-            for path in files:
-                archive.add(path, str(Path(self.root.name) / path.relative_to(self.root)))
-        with (self.path / 'bus.tar').open('rb') as ready:
-            os.fsync(ready.fileno())
-        return bus_files(self.root)
-
-    def original(self) -> bool:
-        return self.files() == bus_files(self.root)
-
-    def restore(self) -> None:
-        """Stage only changed saved files beside targets; leave unchanged files in place."""
-        saved = self.files()
-        current = bus_files(self.root)
-        changed = {name for name in saved if saved[name] != current.get(name)}
-        extra = current.keys() - saved.keys()
-        RestoreSpace.measure(sum(saved[name].size for name in changed), self.root.parent).require()
-        staged: dict[str, Path] = {}
-        try:
-            with tarfile.open(self.path / 'bus.tar') as archive:
-                for name in sorted(changed):
-                    target = self.root / name
-                    if not target.parent.resolve().is_relative_to(self.root.resolve()):
-                        raise UpgradeRefused(f'Restore target escapes bus: {name}')
-                    member = archive.getmember(str(Path(self.root.name) / name))
-                    if not member.isfile():
-                        raise UpgradeRefused(f'Restore member is not a regular file: {name}')
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
-                    stage = Path(temporary)
-                    staged[name] = stage
-                    with os.fdopen(descriptor, 'wb') as output:
-                        source = archive.extractfile(member)
-                        if not source:
-                            raise UpgradeRefused(f'Cannot read restore member: {name}')
-                        with source:
-                            shutil.copyfileobj(source, output)
-                        output.flush()
-                        os.fchmod(output.fileno(), member.mode)
-                        os.fsync(output.fileno())
-                    if not saved[name].matches_extraction(SavedFile.at(stage)):
-                        raise UpgradeRefused(
-                            f'Restore size differs for {name}; original bus is intact')
-            failed = self.root.with_name(f'.{self.root.name}.failed-{self.path.name}')
-            failed.mkdir(mode=0o700)
-            for name in sorted(changed | extra):
-                target = self.root / name
-                if target.exists():
-                    retained = failed / name
-                    retained.parent.mkdir(parents=True, exist_ok=True)
-                    os.replace(target, retained)
-                if name in staged:
-                    os.replace(staged[name], target)
-            # SQLite rebuilds its shared-memory index from the restored database/WAL.
-            for name in changed | extra:
-                database = self.root / (name[:-4] if name.endswith('-wal') else name)
-                if not database.exists() or not CoordinationStore.is_database(database):
-                    continue
-                transient = CoordinationStore.files(database)[2]
-                if transient.exists():
-                    retained = failed / transient.relative_to(self.root)
-                    retained.parent.mkdir(parents=True, exist_ok=True)
-                    os.replace(transient, retained)
-            copied = bus_files(self.root)
-            if saved.keys() != copied.keys() or any(
-                not original.matches_extraction(copied[name]) for name, original in saved.items()
-            ):
-                raise UpgradeRefused(f'The restored bus differs; failed data is at {failed}')
-            self.restore_route()
-            print(f'Restored changed files; failed data is kept at {failed}', file=sys.stderr)
-        finally:
-            for stage in staged.values():
-                stage.unlink(missing_ok=True)
 
 
 class StoreBackup(ResourceBackup[str]):
