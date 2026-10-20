@@ -26,17 +26,21 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
 from . import skills
-from .change_report import FileLine
-from .child_process import (
-    BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
-)
 from .bus_publication import AgentOrigin
-from .external_transcript import ExternalTranscript
-from .messages import InfoKind, Message
+from .change_report import FileLine
 from .channel_targets import CommandTarget
+from .child_process import (
+    BoundedRun,
+    CheckPrinted,
+    ChildResult,
+    ExitedOutcome,
+    NoIntegerPrinted,
+    OrderCheckFailedError,
+)
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
+from .external_transcript import ExternalTranscript
 from .field_codec import (
     FieldCodec,
     GitCommitText,
@@ -48,6 +52,7 @@ from .field_codec import (
 )
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from .messages import InfoKind, Message
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
