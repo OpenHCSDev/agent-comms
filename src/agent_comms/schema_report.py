@@ -83,7 +83,7 @@ class StoreSchemaReport:
                 continue
             declarations = owner.schema_objects()
             expected.update(declarations)
-            indexes.update(owner.index_schema_objects())
+            indexes.update((name, declarations[name]) for name in owner.index_schema_objects())
             compared.update(declarations)
             # Extra triggers or indexes attached to a known table also differ.
             compared.update(row.name for row in _StoredTable.read(db.execute(

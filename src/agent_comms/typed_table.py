@@ -836,7 +836,11 @@ class TypedStore(RootFile, StoreWriter):
 
     @classmethod
     def declared_indexes(cls) -> dict[str, str]:
-        return {name: sql for row in cls.rows for name, sql in row.index_schema_objects().items()}
+        indexes: dict[str, str] = {}
+        for row in cls.rows:
+            schema = row.schema_objects()
+            indexes.update((name, schema[name]) for name in row.index_schema_objects())
+        return indexes
 
     @classmethod
     def declared_schema(cls) -> dict[str, str]:
