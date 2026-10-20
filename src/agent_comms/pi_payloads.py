@@ -14,7 +14,17 @@ from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from decimal import Decimal
 from functools import singledispatch
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Literal,
+    Self,
+    Union,
+    get_args,
+    get_origin,
+)
 from uuid import uuid4
 
 
@@ -69,6 +79,15 @@ class PiReported[T](SingleFieldValue):
     __slots__ = ()
     reported: ClassVar[bool] = True
     value: T
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        """The value decodes and encodes as the field it fills, family tag included."""
+        annotation = cls.wire_field().annotation
+        return cls(FieldCodec.decode(annotation, project_wire(data, annotation)))
+
+    def to_wire(self) -> object:
+        return FieldCodec.encode(self.value, self.wire_field().annotation)
 
     def value_or[D](self, default: D) -> T | D:
         return self.value
@@ -173,7 +192,9 @@ def project_object(value, target):
         (
             option
             for option in wire_options(target)
+            # A null member is never the record a JSON object normalizes into.
             if isinstance(option, type) and is_dataclass(option)
+            and not issubclass(option, NullMember)
         ),
         None,
     )
