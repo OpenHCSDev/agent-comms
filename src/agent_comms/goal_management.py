@@ -41,7 +41,12 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 from .goal_presentation import GoalSnapshot, GoalWaitTarget, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration
-from .input_attempt import ReservedInput, UnresolvedInput
+from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
+    InputDeliveryScope,
+    ReservedInput,
+    UnresolvedInput,
+)
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
@@ -134,7 +139,7 @@ class Goals:
         name: str,
         *,
         include_history: bool = False,
-        awaiting_keys: frozenset[str] | None = None,
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
@@ -143,18 +148,18 @@ class Goals:
                 InputDispositions(self.root)
                 .unresolved(aliases)
                 .delivery_overview(
-                    aliases, include_history=include_history, awaiting_keys=awaiting_keys
+                    aliases, include_history=include_history, scope=scope
                 )
             )
 
     def dismiss_historical_inputs(
-        self, name: str, *, awaiting_keys: frozenset[str] | None = None
+        self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
         with _store_lock(self._wire_lock_path):
             aliases = self.registry.entry(name).entry.names
             return InputDispositions(self.root).dismiss_historical(
-                aliases, awaiting_keys=awaiting_keys
+                aliases, scope=scope
             )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> StandbyReview:

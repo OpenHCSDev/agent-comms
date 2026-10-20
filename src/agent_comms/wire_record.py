@@ -7,21 +7,22 @@ it creates no durable representation, codec or second proof store.
 
 from __future__ import annotations
 
+import json
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast, BinaryIO, ClassVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, cast
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord, WireValue
+from .messages import Message
 from .thread_identity import ThreadIncarnation
-from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .delivery_policy import KeyedResponseAcknowledgement
-    from .messages import Message
     from .wire_metadata import WireMetadata
 
 
@@ -54,7 +55,6 @@ class WireRecord(ABC):
     @classmethod
     def from_wire(cls, value: Mapping, root_id: str) -> WireRecord:
         from .bus_publication import CommittedDelivery, has_private_wire_fields
-        from .messages import Message
 
         if "observation" in value:
             return DeferredObservationWireRecord.decode(value)
@@ -64,12 +64,22 @@ class WireRecord(ABC):
         return PublicWireRecord(message)
 
     @classmethod
-    def public_from_wire(cls, value: Mapping) -> WireRecord:
+    def public_from_wire(cls, value: object) -> WireRecord:
         """Display decoding preserves public messages and validates silent rows."""
-        from .messages import Message
-        if "observation" in value:
-            return DeferredObservationWireRecord.decode(value)
-        return PublicWireRecord(Message.from_wire(value))
+        from .bus_publication import has_private_wire_fields
+        try:
+            if not isinstance(value, Mapping):
+                raise MalformedRecord("Bus row must be an object")
+            if "observation" in value:
+                return DeferredObservationWireRecord.decode(value)
+            owner = RedactedPublicWireRecord if has_private_wire_fields(value) else PublicWireRecord
+            return owner(Message.from_wire(value))
+        except MalformedRecord as error:
+            raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
+
+    def page_records(self, raw_size: int, metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
+        """Silent facts consume physical bytes, never message/display budgets."""
+        return iter(())
 
     def messages(self) -> tuple[Message, ...]:
         return ()
@@ -111,6 +121,10 @@ class MessageWireRecord(WireRecord):
 
     def messages(self) -> tuple[Message, ...]:
         return (self.message,)
+
+    def page_records(self, raw_size: int, metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
+        self.require_claim(metadata)
+        yield self.message, raw_size
 
     def sequence_after(self, previous: int) -> int:
         if self.message.seq <= previous:
@@ -278,6 +292,13 @@ class PublicWireRecord(MessageWireRecord):
         self.message.require_retained_claim(metadata.claimed_after_seq)
 
 
+class RedactedPublicWireRecord(PublicWireRecord):
+    """A display projection, not attestation of the original private envelope."""
+
+    def page_records(self, raw_size: int, metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
+        yield self.message, len(json.dumps(self.message.to_wire()).encode()) + 1
+
+
 @dataclass
 class WireScan:
     """One stream's cross-row monotonicity and publication-key authority."""
@@ -300,9 +321,11 @@ class WireScan:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 
-from .turn_context import (
-    ContextEntryManifest, ContextEntryReference, ContextSources,
-    RecordedContextManifest, SegmentManifest,
-)
 from .delivery_policy import KeyedResponseAcknowledgement
-from .messages import Message
+from .turn_context import (
+    ContextEntryManifest,
+    ContextEntryReference,
+    ContextSources,
+    RecordedContextManifest,
+    SegmentManifest,
+)

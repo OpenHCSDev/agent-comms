@@ -6,21 +6,23 @@ import sqlite3
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
-from .input_origin import InputOrigin, UnattributedInputOrigin
 from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
     HistoricalInput,
     InputAttempt,
+    InputDeliveryScope,
     MissingInput,
     ReservedInput,
     StartedInput,
     StoredInput,
     UnresolvedInput,
 )
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
@@ -44,8 +46,7 @@ class DeliveryOverview(ToolResult):
     dismissed_historical_count: int = field(metadata={"wire_name": "dismissedHistoricalCount"})
     historical_inputs: tuple[HistoricalInput, ...] = field(
         metadata={"wire_name": "historicalInputs"})
-    current_scope: Literal["owner_queue", "unobserved"] = field(
-        metadata={"wire_name": "currentScope"})
+    current_scope: type[InputDeliveryScope] = field(metadata={"wire_name": "currentScope"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,13 +148,13 @@ class InputDocument:
         owners: frozenset[str],
         *,
         include_history: bool = False,
-        awaiting_keys: frozenset[str] | None = None,
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         current: list[UnresolvedInput] = []
         historical: list[HistoricalInput] = []
         dismissed = historical_count = 0
         for row in self.unknown(owners):
-            if row.historical_notice(awaiting_keys):
+            if scope.historical_notice(row):
                 dismissed += int(row.notice_dismissed)
                 historical_count += int(not row.notice_dismissed)
                 if include_history:
@@ -161,8 +162,8 @@ class InputDocument:
                         HistoricalInput.notice(row, row.notice_dismissed))
             else:
                 current.append(UnresolvedInput.of(row))
-        return DeliveryOverview(tuple(current), historical_count, dismissed, tuple(historical),
-                                "owner_queue" if awaiting_keys is not None else "unobserved")
+        return DeliveryOverview(
+            tuple(current), historical_count, dismissed, tuple(historical), type(scope))
 
 
 def _unresolved_kinds() -> str:
@@ -404,16 +405,16 @@ class InputDispositions(TypedStore):
         self,
         owners: frozenset[str],
         *,
-        awaiting_keys: frozenset[str] | None = None,
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         def dismiss(document: InputDocument) -> InputDocument:
             changed = {
                 row.key: replace(row, notice_dismissed=True)
                 for row in document.unknown(owners)
-                if row.historical_notice(awaiting_keys) and not row.notice_dismissed
+                if scope.historical_notice(row) and not row.notice_dismissed
             }
             return replace(document, rows={**document.rows, **changed}) if changed else document
 
         where, parameters = _members("owner", sorted(owners))
         return self._update(f"unresolved = 1 AND {where}", parameters, dismiss).delivery_overview(
-            owners, awaiting_keys=awaiting_keys)
+            owners, scope=scope)

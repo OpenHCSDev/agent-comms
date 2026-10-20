@@ -7,7 +7,7 @@ coverage and offsets are never used across a changed inode, shortened file, or c
 from __future__ import annotations
 
 import json
-from collections.abc import Generator, Iterator, Mapping
+from collections.abc import Generator, Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property
@@ -18,10 +18,11 @@ from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, MessageDisplayScope, ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -63,21 +64,23 @@ class BusPageRow(PageIndexTable, TypedTable):
     mentions: tuple[str, ...]
     indexes = (Index(("target", "seq")), Index(("offset",)),)
 
-    def record(self, stream: BinaryIO, *, max_bytes: int | None = None) -> tuple[Mapping, int]:
+    def record(self, stream: BinaryIO, *, max_bytes: int) -> tuple[WireRecord, int]:
+        if self.offset < 0 or max_bytes <= 0:
+            raise StaleBusPageIndexError("Indexed bus row exceeds its source cut.")
         stream.seek(self.offset)
-        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
-        if max_bytes is not None and len(raw) > max_bytes:
+        raw = stream.readline(max_bytes + 1)
+        if len(raw) > max_bytes:
             raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
         try:
-            record = json.loads(raw)
+            value = FieldCodec.parse(raw)
         except ValueError as error:
             raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
-        if (
-            not isinstance(record, Mapping)
-            or int(record.get("seq", 0)) != self.seq
-            or record.get("from") != self.sender
-            or record.get("to") != self.target
-        ):
+        record = WireRecord.public_from_wire(value)
+        messages = record.messages()
+        if len(messages) != 1:
+            raise StaleBusPageIndexError("Indexed bus row is not a message.")
+        message, = messages
+        if (message.seq, message.sender, message.target) != (self.seq, self.sender, self.target):
             raise StaleBusPageIndexError("Indexed bus row changed.")
         return record, len(raw)
 
@@ -200,7 +203,7 @@ class BusPageIndex(TypedStore):
                 last_rows = BusPageRow.select(db, order_by=("seq",), descending=True, limit=1)
                 last_sequence = last_rows[0].seq if last_rows else None
                 for record, row_offset, _ in opened.rows(offset, min(size, offset + self.batch_bytes)):
-                    for message in opened.messages(record):
+                    for message in WireRecord.public_from_wire(record).messages():
                         if last_sequence is not None and message.seq <= last_sequence:
                             raise RelationViolationError("Wire sequences are not increasing.")
                         BusPageRow(message.seq, row_offset, message.sender, message.target,

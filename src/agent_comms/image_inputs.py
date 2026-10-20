@@ -4,9 +4,20 @@ from __future__ import annotations
 
 import base64
 import binascii
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
+
+from acp.schema import (
+    BlobResourceContents,
+    EmbeddedResourceContentBlock,
+    ImageContentBlock,
+    PromptRequest,
+    TextResourceContents,
+)
+from pydantic import TypeAdapter
+
+from .mro_dispatch import MroDispatch, handles
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -38,27 +49,45 @@ class ImageInput:
         return len(self.data) * 3 // 4 - (len(self.data) - len(self.data.rstrip("=")))
 
 
-def prompt_images(blocks: Sequence[object]) -> tuple[ImageInput, ...]:
-    images = []
-    for block in blocks:
-        if not isinstance(block, Mapping):
-            # ACP content blocks are protocol models; anything else is a defect.
-            block = block.model_dump(by_alias=True, exclude_none=True)
-        if block.get("type") == "image":
-            data, mime = block.get("data"), block.get("mimeType")
-        elif block.get("type") == "resource" and isinstance(block.get("resource"), Mapping):
-            resource = block["resource"]
-            mime = resource.get("mimeType")
-            if not isinstance(mime, str) or not mime.startswith("image/"):
-                continue
-            data = resource.get("blob")
-        else:
-            continue
-        if not isinstance(data, str) or not isinstance(mime, str):
-            raise ValueError("Image input requires base64 data and a MIME type.")
-        images.append(ImageInput(data, mime))
-        if len(images) > MAX_PROMPT_IMAGES:
+class PromptImages(MroDispatch):
+    """Project ACP's declared content family into bounded native images."""
+
+    def __init__(self) -> None:
+        self.images: list[ImageInput] = []
+
+    def append(self, image: ImageInput) -> None:
+        self.images.append(image)
+        if len(self.images) > MAX_PROMPT_IMAGES:
             raise ValueError("At most 8 image attachments are allowed per prompt.")
-        if sum(image.size for image in images) > MAX_IMAGE_BYTES:
+        if sum(image.size for image in self.images) > MAX_IMAGE_BYTES:
             raise ValueError("Image attachments exceed the 4 MiB prompt limit.")
-    return tuple(images)
+
+    @handles(ImageContentBlock)
+    def image(self, block: ImageContentBlock) -> None:
+        self.append(ImageInput(block.data, block.mime_type))
+
+    @handles(EmbeddedResourceContentBlock)
+    def resource(self, block: EmbeddedResourceContentBlock) -> None:
+        self.dispatch_sync(block.resource)
+
+    @handles(BlobResourceContents)
+    def blob(self, resource: BlobResourceContents) -> None:
+        if resource.mime_type and resource.mime_type.startswith("image/"):
+            self.append(ImageInput(resource.blob, resource.mime_type))
+
+    @handles(TextResourceContents)
+    def text(self, resource: TextResourceContents) -> None:
+        if resource.mime_type and resource.mime_type.startswith("image/"):
+            raise ValueError("Image input requires base64 data and a MIME type.")
+
+
+_PROMPT_CONTENT: TypeAdapter[list[object]] = TypeAdapter(
+    PromptRequest.model_fields["prompt"].rebuild_annotation()
+)
+
+
+def prompt_images(blocks: Sequence[object]) -> tuple[ImageInput, ...]:
+    images = PromptImages()
+    for block in _PROMPT_CONTENT.validate_python(list(blocks), strict=True):
+        images.dispatch_sync(block)
+    return tuple(images.images)

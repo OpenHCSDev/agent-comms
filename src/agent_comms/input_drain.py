@@ -40,7 +40,12 @@ from .drain_failures import (
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goal_attempts import GoalAttemptStore
 from .goal_waits import GoalWaits
-from .input_attempt import InputAttempt
+from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
+    InputAttempt,
+    InputDeliveryScope,
+    OwnerQueueInputDeliveryScope,
+)
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
@@ -763,19 +768,19 @@ class InputDrain(InputObservation):
         )
         return following.union(original.keys) if original is not None else following
 
-    async def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
+    async def delivery_scope(self, session_id: str) -> InputDeliveryScope:
         """Derive delivery notices from existing owner queues; never create new authority."""
         entry = (await self._own_entry(session_id)).entry
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
-            return None
+            return UNOBSERVED_DELIVERY_SCOPE
         keys = set(self.input_keys(session_id))
         keys.update(
             self.dispositions.bus_key(turn.origin, owner)
             for turn in self.state(session_id).pending_turns
             if turn.origin is not None
         )
-        return frozenset(keys)
+        return OwnerQueueInputDeliveryScope(frozenset(keys))
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""

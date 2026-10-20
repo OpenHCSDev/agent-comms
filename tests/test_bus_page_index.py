@@ -94,10 +94,16 @@ def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, openin
     with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         wanted = [message for message, _ in opened.public_records() if message.seq in (7, 150)]
     decoded = []
-    page_records = WireSnapshot.public_page_records.__func__
-    monkeypatch.setattr(WireSnapshot, 'public_page_records', classmethod(
-        lambda cls, record, size, metadata: decoded.append(record['seq'])
-        or page_records(cls, record, size, metadata)))
+    from agent_comms.wire_record import WireRecord
+
+    decode_record = WireRecord.public_from_wire.__func__
+
+    def record_decode(cls, value):
+        record = decode_record(cls, value)
+        decoded.extend(message.seq for message in record.messages())
+        return record
+
+    monkeypatch.setattr(WireRecord, 'public_from_wire', classmethod(record_decode))
     with bus.log.opened_wire_snapshot(opening=opening) as opened:
         assert type(opened) is OpenedWireSnapshot
         references = tuple(message.reference for message in wanted)

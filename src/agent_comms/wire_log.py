@@ -36,7 +36,6 @@ from .bus_projection import (
 )
 from .bus_publication import (
     CommittedDelivery,
-    has_private_wire_fields,
 )
 from .bus_source_page import AddressedPage
 from .child_process import Platform
@@ -166,16 +165,7 @@ class WireSnapshot(ObservedPath):
             lines.pop(0)
         for line in reversed(lines):
             if line.endswith(b"\n") and line.strip():
-                yield from reversed(self.messages(json.loads(line)))
-
-    @staticmethod
-    def messages(record: Mapping) -> tuple[Message, ...]:
-        from .errors import StoredHistoryUnreadable
-
-        try:
-            return WireRecord.public_from_wire(record).messages()
-        except MalformedRecord as error:
-            raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
+                yield from reversed(WireRecord.public_from_wire(json.loads(line)).messages())
 
     def messages_for_references(self, references):
         """Resolve exact public identities, including rows without a wake cohort."""
@@ -191,17 +181,6 @@ class WireSnapshot(ObservedPath):
         if any(reference not in messages for reference in references):
             raise RelationViolationError("Notification reference is not its original source")
         return tuple(messages[reference] for reference in references)
-
-    @classmethod
-    def public_page_records(cls, record: Mapping, raw_size: int,
-                            metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
-        """Silent facts consume physical bytes, never message/display budgets."""
-        for message in cls.messages(record):
-            if has_private_wire_fields(record):
-                yield message, len(json.dumps(message.to_wire()).encode()) + 1
-            else:
-                message.require_retained_claim(metadata.claimed_after_seq)
-                yield message, raw_size
 
 
 class AbsentWireSnapshot(WireSnapshot, AbsentPath):
@@ -347,11 +326,8 @@ class OpenedWireSnapshot(WireSnapshot):
         if not 0 <= before_offset <= self.boundary:
             raise RelationViolationError("Indexed read exceeds its opened wire cut")
         for row in rows:
-            (message, size), = self.public_page_records(
-                *row.record(self.stream, max_bytes=before_offset - row.offset),
-                self.metadata,
-            )
-            yield message, size
+            record, size = row.record(self.stream, max_bytes=before_offset - row.offset)
+            yield from record.page_records(size, self.metadata)
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | NoCheckpoint:
         """Validate the captured candidate only when a consumer reads this cut."""
@@ -401,7 +377,8 @@ class OpenedWireSnapshot(WireSnapshot):
         for record, raw_size in _iter_jsonl_stream(
             self.stream, boundary=boundary, label="wire snapshot"
         ):
-            yield from self.public_page_records(record, raw_size, self.metadata)
+            decoded = WireRecord.public_from_wire(record)
+            yield from decoded.page_records(raw_size, self.metadata)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationSourceWindowRequest:

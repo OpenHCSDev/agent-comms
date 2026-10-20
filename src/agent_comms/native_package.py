@@ -16,9 +16,11 @@ import json
 import os
 import stat
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Annotated, Literal
 
+from .field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text
 from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
@@ -245,12 +247,45 @@ def write_native_manifest(root: Path) -> None:
 
 
 
-def _sha256_hex(value: object) -> bool:
-    """This file runs without its package, so it cannot reach field_codec.Sha256Text."""
-    try:
-        return len(value) == 64 and bytes.fromhex(value).hex() == value  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return False
+@dataclass(frozen=True)
+class NativeSourceDeclaration:
+    """The package's source declaration, decoded before any filesystem work."""
+
+    path: Annotated[Path, PathText]
+    snapshot: Annotated[Path, PathText]
+    sha256: Annotated[str, Sha256Text]
+    byte_count: int = field(metadata={"wire_name": "bytes"})
+
+    def __post_init__(self) -> None:
+        if not self.path.is_absolute() or self.snapshot.is_absolute() or self.byte_count < 0:
+            raise NativePackageError("Native extension source declaration is invalid")
+
+    def load(self, snapshot_root: Path) -> NativeSource:
+        try:
+            snapshot_path = (snapshot_root / self.snapshot).resolve(strict=True)
+            snapshot_path.relative_to(snapshot_root)
+            content = snapshot_path.read_bytes()
+        except (OSError, ValueError) as error:
+            raise NativePackageError("Native extension source snapshot is unavailable") from error
+        if len(content) != self.byte_count or hashlib.sha256(content).hexdigest() != self.sha256:
+            raise NativePackageError(
+                "Native extension source snapshot differs from its declaration"
+            )
+        return NativeSource(self.path, content)
+
+
+@dataclass(frozen=True)
+class NativeExtensionEntry:
+    entry: str
+    sources: tuple[NativeSourceDeclaration, ...] = ()
+
+
+@dataclass(frozen=True)
+class NativeImportsManifest:
+    version: Literal[2]
+    extension_entries: tuple[NativeExtensionEntry, ...] = field(
+        metadata={"wire_name": "extensionEntries"})
+    peer_aliases: dict[str, str] = field(metadata={"wire_name": "peerAliases"})
 
 
 @dataclass(frozen=True)
@@ -259,40 +294,6 @@ class NativeSource:
 
     destination: Path
     content: bytes
-
-    @classmethod
-    def declared(cls, value: object, snapshot_root: Path) -> NativeSource:
-        if not isinstance(value, dict):
-            raise NativePackageError("Native extension source declaration is invalid")
-        path = value.get("path")
-        snapshot = value.get("snapshot")
-        digest = value.get("sha256")
-        byte_count = value.get("bytes")
-        if not isinstance(path, str) or not Path(path).is_absolute():
-            raise NativePackageError("Native extension source declaration is invalid")
-        if not isinstance(snapshot, str) or Path(snapshot).is_absolute():
-            raise NativePackageError("Native extension source declaration is invalid")
-        if not _sha256_hex(digest):
-            raise NativePackageError("Native extension source declaration is invalid")
-        if not isinstance(byte_count, int) or isinstance(byte_count, bool):
-            raise NativePackageError("Native extension source declaration is invalid")
-        if byte_count < 0:
-            raise NativePackageError("Native extension source declaration is invalid")
-        try:
-            snapshot_path = (snapshot_root / snapshot).resolve(strict=True)
-            snapshot_path.relative_to(snapshot_root)
-            content = snapshot_path.read_bytes()
-        except (OSError, ValueError) as error:
-            raise NativePackageError("Native extension source snapshot is unavailable") from error
-        if len(content) != byte_count:
-            raise NativePackageError(
-                "Native extension source snapshot differs from its declaration"
-            )
-        if hashlib.sha256(content).hexdigest() != digest:
-            raise NativePackageError(
-                "Native extension source snapshot differs from its declaration"
-            )
-        return cls(Path(path), content)
 
     def is_installed(self) -> bool:
         try:
@@ -340,24 +341,17 @@ class NativeSource:
 def install_declared_sources(root: Path, snapshot_root: Path) -> None:
     """Install the source snapshots committed by a verified native package."""
     try:
-        manifest = json.loads((root / "dist/agent-comms-imports.json").read_text())
+        manifest = FieldCodec.decode(NativeImportsManifest, FieldCodec.parse(
+            (root / "dist/agent-comms-imports.json").read_text()))
         snapshot_root = snapshot_root.resolve(strict=True)
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, MalformedRecord) as error:
         raise NativePackageError("Native extension source manifest is unavailable") from error
-    declarations = manifest.get("extensionEntries")
-    if not isinstance(declarations, list):
-        raise NativePackageError("Native extension source declarations are invalid")
 
     sources: list[NativeSource] = []
     destinations: set[Path] = set()
-    for declaration in declarations:
-        if not isinstance(declaration, dict):
-            raise NativePackageError("Native extension source declaration is invalid")
-        values = declaration.get("sources", [])
-        if not isinstance(values, list):
-            raise NativePackageError("Native extension source declaration is invalid")
-        for value in values:
-            source = NativeSource.declared(value, snapshot_root)
+    for entry in manifest.extension_entries:
+        for declaration in entry.sources:
+            source = declaration.load(snapshot_root)
             if source.destination in destinations:
                 raise NativePackageError("Native extension source destination is declared twice")
             destinations.add(source.destination)
@@ -400,9 +394,13 @@ class VerifiedNativePackage:
             for line in MANIFEST.read_text().splitlines()
             if line.startswith(TREE_PREFIX)
         ]
-        if len(pins) != 1 or not _sha256_hex(pins[0]):
+        if len(pins) != 1:
             raise NativePackageError("Pinned native package tree commitment unavailable")
-        if package_tree_digest(self.path) != pins[0]:
+        try:
+            digest = FieldCodec.decode(Annotated[str, Sha256Text], pins[0])
+        except MalformedRecord as error:
+            raise NativePackageError("Pinned native package tree commitment unavailable") from error
+        if package_tree_digest(self.path) != digest:
             raise NativePackageError("Native package tree differs from pinned artifact")
 
     @property

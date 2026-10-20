@@ -303,7 +303,8 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
         return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
             ctx.name,
             include_history=self.include_history,
-            awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
+            scope=await ctx.server.agent.inputs.delivery_scope(ctx.session_id),
+
         ))
 
 
@@ -311,7 +312,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
         result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
-            ctx.name, awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
+            ctx.name, scope=await ctx.server.agent.inputs.delivery_scope(ctx.session_id)
         ))
         await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
         return result
