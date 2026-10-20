@@ -44,6 +44,9 @@ from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
     FieldCodec,
     MalformedRecord,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
     projected,
     Argument,
     ContextSource,
@@ -91,7 +94,7 @@ from .restart_queue import (
     status as restart_status,
 )
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
-from .threads import KeptServiceTier, ModelChoice, ServiceTierChoice
+from .threads import NextTurnConfiguration
 from .transcript_events import SentTranscript
 from .todos import (
     CorrectCheckTodo,
@@ -125,7 +128,7 @@ from .task_sources import (
 )
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
-from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .plan_phases import OrderPhase
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
@@ -499,8 +502,29 @@ class CommsPinThreadTool(ToolRequest):
         return comms.views.channel_view(ChannelTarget.normalize_name(self.channel))
 
 
+class ToolSubject(SubclassUnion, affix="Subject"):
+    """The thread a tool call acts on: one it names, or the calling thread."""
+
+    @abstractmethod
+    def name(self, caller: ToolCaller) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedSubject(SingleFieldValue, ToolSubject):
+    thread: str
+
+    def name(self, caller: ToolCaller) -> str:
+        return self.thread
+
+
+@dataclass(frozen=True, slots=True)
+class CallerSubject(NullMember, ToolSubject):
+    def name(self, caller: ToolCaller) -> str:
+        return caller.own_thread()
+
+
 @dataclass(frozen=True, kw_only=True)
-class CommsModelTool(NativeOwnerCommand, ToolRequest):
+class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, ToolRequest):
     label = "Change Thread Model"
     description = (
         "Change this thread's model, or another thread's model, for its future turns. "
@@ -508,32 +532,19 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
         "from that thread's next turn."
     )
     thread: Annotated[
-        str | None,
+        ToolSubject,
         *tool_field("Thread to change (defaults to the executing thread)", binding=SubjectBinding),
-    ] = None
-    model: Annotated[str, *tool_field("Provider/model identifier")]
-    thinking_level: Annotated[
-        str, *tool_field("Optional Pi thinking level", choices=ThinkingLevel.names)
-    ] = ""
-    service_tier: Annotated[
-        ServiceTierChoice, *tool_field("Optional provider request service tier")
-    ] = KeptServiceTier()
+    ] = CallerSubject()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ModelChanged:
         """Change this thread's model or another thread's model for future turns."""
-        thread_name = caller.subject(self.thread or "")
+        thread_name = self.thread.name(caller)
         original = comms.registry.require(thread_name)
         if not caller.may_reconfigure(comms, thread_name):
             raise RelationViolationError(
                 f"{thread_name} is running; change its settings through its own session"
             )
-        thinking_level = FieldCodec.decode(ThinkingLevelField, self.thinking_level.strip() or None)
-        thread = comms.threads.set_thread_configuration(
-            original,
-            model=ModelChoice.from_text(self.model),
-            thinking_level=thinking_level,
-            service_tier=self.service_tier,
-        )
+        thread = comms.threads.set_thread_configuration(original, self)
         return ModelChanged(thread.name, thread.model, thread.thinking_level, thread.service_tier)
 
 

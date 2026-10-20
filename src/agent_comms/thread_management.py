@@ -55,9 +55,7 @@ from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import AgentThreadRole, NoThreadText, ThreadRole
 from .thread_owned_state import ThreadOwnedState
-from .threads import (
-    KeptModel, KeptServiceTier, ModelChoice, ServiceTierChoice, Thread, current_thread,
-)
+from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
@@ -408,9 +406,7 @@ class ThreadManagement:
             self.registry.heartbeat(name)
 
     def set_thread_configuration(
-        self, original: Thread, *, model: ModelChoice = KeptModel(),
-        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
-        service_tier: ServiceTierChoice = KeptServiceTier(),
+        self, original: Thread, configuration: NextTurnConfiguration,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -422,9 +418,7 @@ class ThreadManagement:
             thread = self.registry.require(original.name)
             thread.require_original_model_configuration(original)
             thread.execution.require_native()
-            updated = thread.with_model_configuration(
-                model=model, thinking_level=thinking_level, service_tier=service_tier,
-            )
+            updated = configuration.configured(thread)
             if updated != thread:
                 self.registry.register(updated, self.registry.status(thread.name))
             return updated

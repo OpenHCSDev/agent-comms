@@ -123,9 +123,7 @@ from .thread_management import (
     ThreadDeleted,
 )
 from .thread_status import ThreadStatus
-from .threads import (
-    KeptModel, KeptServiceTier, ModelChoice, ServiceTierChoice, Thread,
-)
+from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -1015,31 +1013,17 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConfigureCliCommand(CliCommand, declared_name="configure"):
+class ConfigureCliCommand(NextTurnConfiguration, CliCommand, declared_name="configure"):
     help = "Set a stopped thread's model, thinking level, or service tier for its next start"
     name: Annotated[str, Argument(flags=("--name",))]
-    model: Annotated[ModelChoice, Argument(flags=("--model",))] = KeptModel()
-    thinking: Annotated[ThinkingLevelField, Argument(flags=("--thinking",))] = (
-        NoThinkingOverride
-    )
-    service_tier: Annotated[
-        ServiceTierChoice, Argument(flags=("--service-tier",))
-    ] = KeptServiceTier()
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.name)
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
-        candidate = thread.with_model_configuration(
-            model=self.model,
-            thinking_level=self.thinking,
-            service_tier=self.service_tier,
-        )
-        asyncio.run(ConfigOptions.configured().validate(candidate))
-        updated = ctx.threads.set_thread_configuration(
-            thread, model=self.model, thinking_level=self.thinking, service_tier=self.service_tier,
-        )
+        asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))
+        updated = ctx.threads.set_thread_configuration(thread, self)
         return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
                                       updated.service_tier)
 

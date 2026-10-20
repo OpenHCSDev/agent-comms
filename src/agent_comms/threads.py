@@ -17,8 +17,8 @@ from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
 from .errors import RelationViolationError
 from .field_codec import (
-    FieldCodec, NullMember, RegistrationPolicy, SingleFieldValue, SubclassUnion, WireOmitDefault,
-    WireRequired, boundary_decoder,
+    Argument, BoundedText, Description, FieldCodec, NullMember, RegistrationPolicy,
+    SingleFieldValue, SubclassUnion, WireOmitDefault, WireRequired,
 )
 from .goals import (
     GoalDeclaration,
@@ -85,16 +85,12 @@ class KeptSetting(NextTurnSetting):
 
 
 class ModelChoice(NextTurnSetting, SubclassUnion, affix="Model"):
-    @classmethod
-    @boundary_decoder
-    def from_text(cls, text: str) -> ModelChoice:
-        """A blank model identifier keeps the thread's model."""
-        return ChosenModel(text.strip()) if text.strip() else KeptModel()
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class ChosenModel(SingleFieldValue, ModelChoice):
-    name: str
+    name: Annotated[str, BoundedText]
 
     def configured(self, thread: Thread) -> Thread:
         return replace(thread, model=self.name.strip())
@@ -120,6 +116,27 @@ class ChosenServiceTier(SingleFieldValue, ServiceTierChoice):
 @dataclass(frozen=True, slots=True)
 class KeptServiceTier(NullMember, KeptSetting, ServiceTierChoice):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class NextTurnConfiguration:
+    """The model, thinking level and service tier one request sets or keeps for the next turn."""
+
+    model: Annotated[
+        ModelChoice, Description("Provider/model identifier"), Argument(flags=("--model",))
+    ] = KeptModel()
+    thinking_level: Annotated[
+        ThinkingLevelField, Description("Optional Pi thinking level"),
+        Argument(flags=("--thinking",)),
+    ] = NoThinkingOverride
+    service_tier: Annotated[
+        ServiceTierChoice, Description("Optional provider request service tier"),
+        Argument(flags=("--service-tier",)),
+    ] = KeptServiceTier()
+
+    def configured(self, thread: Thread) -> Thread:
+        thought = replace(thread, thinking_level=self.thinking_level.applied(thread.thinking_level))
+        return self.service_tier.configured(self.model.configured(thought))
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,14 +330,6 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         ))
         if changed:
             raise RelationViolationError("Thread configuration changed before publication")
-
-    def with_model_configuration(
-        self, *, model: ModelChoice = KeptModel(),
-        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
-        service_tier: ServiceTierChoice = KeptServiceTier(),
-    ) -> Thread:
-        thought = replace(self, thinking_level=thinking_level.applied(self.thinking_level))
-        return service_tier.configured(model.configured(thought))
 
     def needs_model_observation(self) -> bool:
         """Only an unset declaration needs a saved or live model observation."""
