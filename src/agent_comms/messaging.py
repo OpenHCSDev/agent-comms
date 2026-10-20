@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .registry_store import RegistryStore
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -56,7 +57,7 @@ class Messaging:
         type.require_sendable()
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             # A sender outside any watch is not paused by the drain; the barrier refuses it here.
-            MaintenanceBarrier(self.root / "registry.json").assert_open_unlocked()
+            MaintenanceBarrier(RegistryStore.path_in(self.root)).assert_open_unlocked()
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)

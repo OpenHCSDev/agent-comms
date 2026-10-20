@@ -17,6 +17,8 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
+from .wire_log import WireLog
 import asyncio
 import json
 import os
@@ -361,12 +363,12 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        bus = MessageBus(self._comms.root / "bus.jsonl", self._comms.registry, ResponseWrites)
+        bus = MessageBus(WireLog.path_in(self._comms.root), self._comms.registry, ResponseWrites)
         def read_claim():
             with bus.log.checked_read() as source:
                 return source.marker.claimed_after_seq
         claimed_after_seq = await Coordination.run_worker(read_claim)
-        store_path = self._comms.root / "coordination.sqlite3"
+        store_path = CoordinationStore.path_in(self._comms.root)
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
         execution = SelectedExecution(

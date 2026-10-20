@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .locked_store import DurableFile, PatternFile
+
 import hashlib
 import json
 import os
@@ -101,7 +103,7 @@ def record_request_progress(root, lease, progress, native_process, *, publicatio
               "recorded_monotonic_ns": now}
     if publication is not None:
         record["publication_completed_cumulative"] = FieldCodec.encode(publication)
-    _record_request_observation(root, lease, record)
+    RequestObservations.record(root, lease, record)
 
 
 def record_acquisition_progress(root, lease, input_id, measurements):
@@ -110,25 +112,25 @@ def record_acquisition_progress(root, lease, input_id, measurements):
     The same diagnostic stream retains native and parent clocks with distinct
     keys. There is no additional phase, readiness ledger or observation store.
     """
-    _record_request_observation(root, lease, {
+    RequestObservations.record(root, lease, {
         "turn": FieldCodec.encode(lease), "input_id": input_id,
         "acquisition": FieldCodec.encode(measurements),
         "recorded_monotonic_ns": time.monotonic_ns(),
     })
 
 
-def request_observation_path(root, turn_id):
-    """Location of the original diagnostic publication, not another record."""
-    return root / "diagnostics" / f"{turn_id}.requests.jsonl"
+class RequestObservations(DurableFile, PatternFile):
+    """The original append-only request diagnostic stream and its publication."""
 
+    filename = "diagnostics/{turn_id}.requests.jsonl"
 
-def _record_request_observation(root, lease, record):
-    path = request_observation_path(root, lease.turn_id)
-    directory = path.parent
-    directory.mkdir(mode=0o700, exist_ok=True)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-    with os.fdopen(descriptor, "w") as output:
-        output.write(json.dumps(record) + "\n")
+    @classmethod
+    def record(cls, root, lease, record):
+        path = cls.path_in(root, turn_id=lease.turn_id)
+        path.parent.mkdir(mode=0o700, exist_ok=True)
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(descriptor, "w") as output:
+            output.write(json.dumps(record) + "\n")
 
 
 def terminal_failure_reason(event: dict) -> FailureReason:
@@ -182,7 +184,7 @@ def record_terminal_failure(
     if native_response is not None:
         document["native_response"] = native_response.rejection_details()
     document.update(_source_error_evidence(source_error))
-    return _write_diagnostic_document(root, turn_id, document)
+    return DiagnosticDocument.write(root, turn_id, document)
 
 
 @dataclass(frozen=True)
@@ -204,7 +206,7 @@ class NativeTerminalFailureRecord:
 
     @classmethod
     def read(cls, root: Path, input_id: str) -> NativeTerminalFailureRecord:
-        path = root / "diagnostics" / f"{input_id}.json"
+        path = DiagnosticDocument.path_in(root, name=input_id)
         record = FieldCodec.decode(cls, json.loads(path.read_text()))
         if record.turn_id != input_id or not record.raised.startswith(
             "agent_comms.native_pi.NativePiTerminalFailure: "
@@ -242,11 +244,11 @@ def record_drain_failure(
         **_source_error_evidence(source_error),
     }
     digest = hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest()
-    path = root / "diagnostics" / f"drain-{digest}.json"
+    path = DiagnosticDocument.path_in(root, name=f"drain-{digest}")
     try:
         original = path.read_text()
     except FileNotFoundError:
-        return _write_diagnostic_document(root, f"drain-{digest}", document)
+        return DiagnosticDocument.write(root, f"drain-{digest}", document)
     if original != json.dumps(document, indent=2) + "\n":
         raise ValueError("Original drain diagnostic differs from its failure document")
     return path.resolve()
@@ -265,15 +267,20 @@ def _source_error_evidence(source_error: BaseException | None) -> dict:
     return document
 
 
-def _write_diagnostic_document(root: Path, name: str, document: dict) -> Path:
-    directory = root / "diagnostics"
-    directory.mkdir(mode=0o700, exist_ok=True)
-    if os.name == "posix":
-        fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-    path = directory / f"{name}.json"
-    _atomic_write_text(path, json.dumps(document, indent=2) + "\n", fsync_parent=True)
-    return path.resolve()
+class DiagnosticDocument(DurableFile, PatternFile):
+    """Publish diagnostic documents through their single declared location."""
+
+    filename = "diagnostics/{name}.json"
+
+    @classmethod
+    def write(cls, root: Path, name: str, document: dict) -> Path:
+        path = cls.path_in(root, name=name)
+        path.parent.mkdir(mode=0o700, exist_ok=True)
+        if os.name == "posix":
+            fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        _atomic_write_text(path, json.dumps(document, indent=2) + "\n", fsync_parent=True)
+        return path.resolve()

@@ -7,6 +7,7 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
+from .wire_log import WireLog
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
@@ -15,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
-from .locked_store import LockedStore, RootFile
+from .locked_store import DurableFile, LockedStore
 from .field_codec import FieldCodec, NullMember, SubclassUnion
 from .store_files import SharedLock
 from .private_path import ObservedPath
@@ -124,7 +125,7 @@ class ReadDocument:
         )
 
 
-class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
+class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     filename = "read_ledger.json"
 
     record_type = ReadDocument
@@ -165,7 +166,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         )
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
-        if not displayed.bus_identity.matches(ObservedPath.at(self.path.with_name("bus.jsonl"))):
+        if not displayed.bus_identity.matches(ObservedPath.at(WireLog.path_in(self.path.parent))):
             raise DMScopeChanged("Display bus changed; refresh the displayed page.")
         if viewer != displayed.viewer:
             raise DMScopeChanged("Display belongs to a different viewer.")
@@ -191,7 +192,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> ReadCursor:
         document = self.read() if document is None else document
-        return document.cursor(viewer, snapshot, ObservedPath.at(self.path.with_name("bus.jsonl")))
+        return document.cursor(viewer, snapshot, ObservedPath.at(WireLog.path_in(self.path.parent)))
 
     def displayed_recipient(
         self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
@@ -226,7 +227,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         document = (self.read_conversation(incarnation.name, conversation, snapshot)
                     if document is None else document)
         if message.seq in document.for_conversation(
-            incarnation.name, conversation, snapshot, ObservedPath.at(self.path.with_name("bus.jsonl"))
+            incarnation.name, conversation, snapshot, ObservedPath.at(WireLog.path_in(self.path.parent))
         ):
             return (incarnation,)
         return ()

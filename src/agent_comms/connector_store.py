@@ -12,7 +12,7 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from .locked_store import LockedStore, RootFile
+from .locked_store import DurableFile, LockedStore
 
 ACCESS_SECONDS = 3600
 CODE_SECONDS = 300
@@ -84,7 +84,7 @@ class ConnectorGrants:
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectorStore(RootFile, LockedStore[ConnectorGrants]):
+class ConnectorStore(DurableFile, LockedStore[ConnectorGrants]):
     filename: ClassVar[str] = "grants.json"
 
     @classmethod

@@ -7,6 +7,7 @@ Shell is not a filesystem sandbox; shell work must respect the injected claims.
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
@@ -67,7 +68,7 @@ class CodingToolOwner(ABC):
 
         reservation = await self.reserve_room(call)
         async with reservation.checking(), self.check_lock:
-            await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+            await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
     @abstractmethod

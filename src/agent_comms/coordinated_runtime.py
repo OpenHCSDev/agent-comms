@@ -7,6 +7,7 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -143,7 +144,7 @@ class SelectedExecution(NativeExecution):
         # Wait for the blocking check before claiming any input.
         await Coordination.run_worker(self.validate)
         comms = Comms(self.root)
-        with Coordination(str(self.root / "coordination.sqlite3")) as store:
+        with Coordination(str(CoordinationStore.path_in(self.root))) as store:
             while True:
                 async with SelectedParticipant.select(
                     comms,

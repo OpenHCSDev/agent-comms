@@ -7,6 +7,8 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+from .registry_store import RegistryStore
+from .locked_store import DurableFile
 import asyncio
 import calendar
 import json
@@ -941,17 +943,14 @@ class MergedProgress(FoundProgress):
         return (todo,)
 
 
-class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
+class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
     """The fleet's next install: one time for the bus and the unit that runs it, set by the
     commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
     carries it as its own deadline. Install, maintenance and carry work is the installer's.
     Each live install by ``tools/upgrade_bus.py`` plans the next one a cadence later."""
 
+    filename: ClassVar[str] = "install-deadline.json"
     cadence: ClassVar[int] = 30 * 60
-
-    @staticmethod
-    def path_in(root: Path) -> Path:
-        return root / "install-deadline.json"
 
     @classmethod
     def read(cls, root: Path) -> InstallDeadline:
@@ -982,7 +981,7 @@ class UnplannedInstallDeadline(InstallDeadline):
 
 @dataclass(frozen=True)
 class PlannedInstallDeadline(InstallDeadline):
-    at: RecordedEventTime
+    at: RecordedEventTime = field()
     installer: str
 
     @classmethod
@@ -2886,7 +2885,7 @@ class TodoStore(TypedStore):
         self, *, check_same_thread: bool = True
     ) -> Iterator[sqlite3.Connection]:
         with (
-            MaintenanceBarrier(self.root / "registry.json").allow_input(),
+            MaintenanceBarrier(RegistryStore.path_in(self.root)).allow_input(),
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection

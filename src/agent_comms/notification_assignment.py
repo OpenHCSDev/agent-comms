@@ -260,7 +260,7 @@ class NotificationAssignment(NotificationSource):
         from .wire_log import WireLog
 
         originals = {original.message.reference: original for original in sources}
-        with WireLog(root / "bus.jsonl").checked_read() as source:
+        with WireLog(WireLog.path_in(root)).checked_read() as source:
             # Capture under the lock; decoding runs after it is released.
             captured = source.replies(tuple({row.assignment.source for row in eligible}))
         replies: dict[MessageReference, list[CommittedDelivery]] = {}

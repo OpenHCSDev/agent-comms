@@ -274,7 +274,7 @@ class WakeCandidateIndex(TypedStore):
     rows = tuple(TypedTable.members_with(CandidateTable))
 
     def __init__(self, log: WireLog):
-        if log.path.name != "bus.jsonl":
+        if log.path.name != log.filename:
             raise ValueError("candidate index requires the canonical wire log")
         self.log = log
 

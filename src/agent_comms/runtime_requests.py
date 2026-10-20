@@ -7,6 +7,7 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import asyncio
 import json
 from abc import abstractmethod
@@ -510,7 +511,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
 
         segment = await self.selected_segment(ctx)
         labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
-            ctx.server.agent._comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(ctx.server.agent._comms.root),
             segment, self.classifier))
         return AnnotationsReply(labels)
 

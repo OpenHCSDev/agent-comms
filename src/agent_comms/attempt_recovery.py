@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
+from .registry_store import RegistryStore
 import os
 import shutil
 import time
@@ -77,7 +79,7 @@ class VerifiedOwnerLoss:
         from agent_comms.comms import Comms
         from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
 
-        if store.session.path.name != "coordination.sqlite3":
+        if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
         with store.session.boundary(comms.bus) as boundary:
@@ -222,13 +224,13 @@ class RecoveryMonitorCapability:
         evidence together without copying a store or replaying an input.
         """
         uncertain = False
-        if (root / "coordination.sqlite3").is_file():
-            with Coordination(str(root / "coordination.sqlite3")) as store:
+        if (CoordinationStore.path_in(root)).is_file():
+            with Coordination(str(CoordinationStore.path_in(root))) as store:
                 uncertain = any(attempt.lifecycle.preserve_check
                                 for attempt in AttemptRecord.select(store.session._connection))
         inputs = InputDispositions(root)
         if inputs.path.is_file():
-            names = frozenset(Registration(root / "registry.json").snapshot().threads)
+            names = frozenset(Registration(RegistryStore.path_in(root)).snapshot().threads)
             uncertain = uncertain or bool(inputs.unresolved(names).rows)
         if uncertain:
             destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")
@@ -243,7 +245,7 @@ class RecoveryMonitorCapability:
         """An explicit stop retires only the exited owner's original local attempt."""
         from .comms import Comms
 
-        if not (root / "coordination.sqlite3").exists():
+        if not (CoordinationStore.path_in(root)).exists():
             return  # No native coordinator, hence no selected attempt claims.
         acknowledgement = Comms(root).owners.releases.get(owner.name)
         if not acknowledgement.matches(owner):
@@ -256,7 +258,7 @@ class RecoveryMonitorCapability:
         from .coordination_response import PublicationAppendDispatches
         from .coordination_tables.executions import CurrentExecutions
 
-        path = root / "coordination.sqlite3"
+        path = CoordinationStore.path_in(root)
         if not path.exists():
             return
         with Coordination(str(path)) as store:

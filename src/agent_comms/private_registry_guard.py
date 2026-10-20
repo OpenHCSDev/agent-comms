@@ -16,6 +16,8 @@ next write reuses the abandoned slot.
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
+from .locked_store import DurableFile
 import hashlib
 import json
 import os
@@ -124,14 +126,16 @@ class PublicRegistry(RegistryPrivacy):
         """A public bus has no coordinator identities for restored threads."""
 
 
-class PrivateRegistryGuard(RegistryPrivacy):
+class PrivateRegistryGuard(DurableFile, RegistryPrivacy):
+    filename = ".registry-owner-guard"
+
     def __init__(self, registry_path: Path, wire_root_id: str):
         try:
             Id128Text.decode(wire_root_id)
         except MalformedRecord:
             _reject("root ID is invalid")
         self.registry_path = registry_path
-        self.path = registry_path.parent / ".registry-owner-guard"
+        self.path = self.path_in(registry_path.parent)
         self.root_id = bytes.fromhex(wire_root_id)
 
     def _trusted_root(self) -> None:
@@ -262,7 +266,7 @@ class PrivateRegistryGuard(RegistryPrivacy):
     def register_restored(self, threads: Iterable[Thread]) -> None:
         """Stopped subscribers still belong to frozen audiences; their coordinator identities
         must exist before any cohort can be accepted."""
-        with Coordination(str(self.registry_path.parent / "coordination.sqlite3")) as store:
+        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             for thread in threads:
                 store.participants.register(
                     thread.incarnation.require_recorded().lookup, thread.name, thread.name,

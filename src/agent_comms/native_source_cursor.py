@@ -1,6 +1,7 @@
 """Current-owner source cursor; captured state owns incremental proof and publication."""
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -27,7 +28,7 @@ class NativeSourceCursor:
     @classmethod
     async def read_async(cls, bus, *, wire_root_id, owner_name, source_reads):
         return await Coordination.run_read_async(
-            bus.log.path.parent / 'coordination.sqlite3',
+            CoordinationStore.path_in(bus.log.path.parent),
             partial(cls._read_owned, bus, wire_root_id, owner_name, source_reads),
         )
 
@@ -39,7 +40,7 @@ class NativeSourceCursor:
     async def advance_async(cls, bus, *, wire_root_id, owner, owner_claimed_generation,
                             owner_generation, committed_input_id, source_reads):
         return await Coordination.run_async(
-            bus.log.path.parent / 'coordination.sqlite3',
+            CoordinationStore.path_in(bus.log.path.parent),
             partial(cls._advance_owned, bus, wire_root_id, owner, owner_claimed_generation,
                     owner_generation, committed_input_id, source_reads=source_reads),
         )
@@ -54,7 +55,7 @@ class NativeSourceCursor:
     @classmethod
     async def refresh_async(cls, bus, *, wire_root_id, owner_name, source_reads):
         return await Coordination.run_async(
-            bus.log.path.parent / 'coordination.sqlite3',
+            CoordinationStore.path_in(bus.log.path.parent),
             partial(cls._refresh_owned, bus, wire_root_id, owner_name, source_reads),
         )
 

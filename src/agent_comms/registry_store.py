@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .wire_metadata import WireMetadata
 import json
 import os
 import threading
@@ -15,7 +16,7 @@ from typing import Any, ClassVar
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .locked_store import DocumentConversion, LockedStore
+from .locked_store import DocumentConversion, DurableFile, LockedStore
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
@@ -168,18 +169,14 @@ class RegistryGoalConversion(DocumentConversion):
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(LockedStore[RegistryDocument]):
+class RegistryStore(DurableFile, LockedStore[RegistryDocument]):
+    filename = "registry.json"
     json_indent = 2
     conversion = RegistryGoalConversion
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
-
-    @classmethod
-    def at(cls, root: Path) -> RegistryStore:
-        """The registry of the bus at ``root``."""
-        return cls(root / "registry.json")
 
     record_type = RegistryDocument
 
@@ -252,7 +249,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
 
     @property
     def guard_path(self) -> Path:
-        return self.path.parent / ".registry-owner-guard"
+        return PrivateRegistryGuard.path_in(self.path.parent)
 
     @property
     def written(self) -> tuple[Path, Path]:
@@ -325,7 +322,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         without its committed guard (or a guard without a marker) is an
         uncertain migration, never an invitation to bootstrap old metadata.
         """
-        marker_path = self.path.parent / "bus_meta.json"
+        marker_path = WireMetadata.path_in(self.path.parent)
         guard_path = self.guard_path
         key = (
             _link_revision(self.path.parent),
@@ -348,7 +345,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
             return PublicRegistry()
         from .wire_log import WireLog
 
-        marker = WireLog(self.path.with_name("bus.jsonl")).read_metadata_unlocked(required=True)
+        marker = WireLog(WireLog.path_in(self.path.parent)).read_metadata_unlocked(required=True)
         if not marker.private:
             if guard_present:
                 raise RelationViolationError("Private registry guard marker is absent")

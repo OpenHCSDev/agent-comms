@@ -436,7 +436,7 @@ class AssignedTranscriptSource(TranscriptSource):
         """Open only the recorded wire, without current registry or SQL authority."""
         root = Path(identity.root)
         return identity.recipient.recorded_or(
-            lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
+            lambda recorded: cls(root, recorded, WireLog(WireLog.path_in(root))),
             TranscriptSource,
         )
 

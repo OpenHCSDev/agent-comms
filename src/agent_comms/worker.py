@@ -1,5 +1,6 @@
 """Persistent owner for a forked thread; idle turns consume no model process."""
 
+from .coordination_database import CoordinationStore
 import asyncio
 import argparse
 import os
@@ -24,7 +25,7 @@ async def run() -> None:
     comms = wire()
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
-    async with Coordination.worker(comms.root / "coordination.sqlite3"):
+    async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         await run_owner(comms)
 
 

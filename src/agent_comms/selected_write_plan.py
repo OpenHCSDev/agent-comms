@@ -8,6 +8,9 @@ an interceptor for Pi/shell/edit writes or a filesystem security boundary.
 
 from __future__ import annotations
 
+from .locked_store import DurableFile, PatternFile
+
+from .coordination_database import CoordinationStore
 import base64
 import hashlib
 import json
@@ -110,16 +113,14 @@ class AppliedWriteIntent(SelectedWriteIntent, declared_name="applied"):
     pass
 
 
-class SelectedWritePlans:
+class SelectedWritePlans(DurableFile, PatternFile):
+    filename = "{source_seq}-{lookup}.json"
+    root_directory = "selected-write-plans"
+
     def __init__(self, comms: Comms, root_id: str):
         self.comms = comms
         self.root_id = root_id
-        self.directory = comms.root / "selected-write-plans"
-
-    def _path(self, source_seq: int, lookup: str) -> Path:
-        if type(source_seq) is not int or source_seq <= 0:
-            raise IdentityConflict("Selected write requires a positive source sequence")
-        return self.directory / f"{source_seq}-{lookup}.json"
+        self.directory = comms.root / self.root_directory
 
     def _prepare_dir(self) -> None:
         with suppress(FileExistsError):
@@ -172,6 +173,8 @@ class SelectedWritePlans:
         contents: str,
     ) -> SelectedWriteAcceptedUpdate:
         """Persist exactly one predispatch operator intent; no native/model call."""
+        if type(source_seq) is not int or source_seq <= 0:
+            raise IdentityConflict("Selected write requires a positive source sequence")
         try:
             FieldCodec.decode(str, source_message_id)
             FieldCodec.decode(str, resource)
@@ -195,7 +198,7 @@ class SelectedWritePlans:
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = owner.incarnation.lookup
-            with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(CoordinationStore.path_in(self.comms.root))) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
                 selected = [
                     assignment
@@ -208,7 +211,7 @@ class SelectedWritePlans:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
             path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))
             self._prepare_dir()
-            record_path = self._path(source_seq, lookup)
+            record_path = self.path_in(self.directory, source_seq=str(source_seq), lookup=lookup)
             operation_id = Id128Text.mint()
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
@@ -244,7 +247,7 @@ class SelectedWritePlans:
         self, assignment: WakeAssignment, owner: Thread, claimed_generation: int
     ) -> PlannedWrite | None:
         lookup = owner.incarnation.lookup
-        path = self._path(assignment.wire_seq, lookup)
+        path = self.path_in(self.directory, source_seq=str(assignment.wire_seq), lookup=lookup)
         row = self._read(path)
         if row is None:
             return None
@@ -258,7 +261,8 @@ class SelectedWritePlans:
         return row.planned(owner.worktree)
 
     def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
-        path = self._path(assignment.wire_seq, owner.incarnation.lookup)
+        path = self.path_in(self.directory, source_seq=str(assignment.wire_seq),
+                            lookup=owner.incarnation.lookup)
         row = self._read(path)
         if row is None:
             raise IdentityConflict("Selected write intent is missing")

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from .native_entries import ImportedSessionWriter
+
+from .coordination_database import CoordinationStore
 import asyncio
 import os
 import re
@@ -174,7 +177,7 @@ class ThreadManagement:
         project = Path(directory).expanduser().resolve()
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
-        session_path = self.root / "imported_sessions" / f"{uuid4().hex}.jsonl"
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
         thread = self.registry.new_thread(
             name,
             tags,
@@ -550,7 +553,7 @@ class PrivateOwnerRename(ThreadRename):
         root, registry = self.threads.root, self.threads.registry
         before, new_name = self.before, self.new_name
         _require_no_private_owner_rename(root)
-        coordinator = root / "coordination.sqlite3"
+        coordinator = CoordinationStore.path_in(root)
         if not coordinator.exists() or before.name == new_name:
             return self.registry_renamed()
         # Validate every deterministic registry/SQL name refusal *before* advancing a committed

@@ -7,6 +7,7 @@ review. No credentials or owner environment are written to the queue.
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import asyncio
 import fcntl
 import json
@@ -386,7 +387,7 @@ async def run(comms: Comms) -> None:
         async for _ in WireWatch.observations(
             WatchSource.file(comms.registry.store.path),
             WatchSource.file(comms.registry.store.guard_path),
-            WatchSource.file(comms.root / "coordination.sqlite3"),
+            WatchSource.file(CoordinationStore.path_in(comms.root)),
             WatchSource.file(comms.root / "coordination.sqlite3-wal"),
             DirectoryWatchSource(queue.active_directory),
         ):

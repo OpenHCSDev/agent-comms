@@ -30,7 +30,7 @@ from typing import (
     get_type_hints,
 )
 
-from .locked_store import RootFile
+from .locked_store import DurableFile, SQLiteFile
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
@@ -768,7 +768,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreWriter(RootFile):
+class StoreWriter(DurableFile, SQLiteFile):
     """A transaction capability shared by stores and their turn-owned writers."""
 
     def __init__(self, path: Path) -> None:
@@ -782,6 +782,10 @@ class StoreWriter(RootFile):
     def store(self) -> StoreWriter:
         """The store whose committed row changes this writer publishes."""
         return self
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        return super().files_in(root) | frozenset(cls._source_paths(cls.path_in(root)))
 
     @staticmethod
     def _source_paths(path: Path) -> tuple[Path, ...]:

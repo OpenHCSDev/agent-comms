@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
+from .goal_attempts import GoalAttemptStore
+from .private_bus_checkpoint import WritableCheckpoint
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import field, dataclass, replace
@@ -88,16 +91,14 @@ class TickRevision:
         return TickRevisionPaths(
             registry=(registry, registry_guard),
             coordination=(
-                root / "coordination.sqlite3",
+                CoordinationStore.path_in(root),
                 root / "coordination.sqlite3-wal",
             ),
             bus=(bus, bus_marker),
-            checkpoint=root / "private_bus_checkpoint.sqlite3",
+            checkpoint=WritableCheckpoint.path_in(root),
             goal_waits=GoalWaits.path_in(root),
-            goal_attempts=(
-                root / "goal-private" / "goal_attempts.sqlite3",
-                root / "goal-private" / "goal_attempts.sqlite3-wal",
-            ),
+            goal_attempts=GoalAttemptStore.files(
+                GoalAttemptStore.path_in(root / GoalAttemptStore.root_directory)),
             auth=auth,
             maintenance=MaintenanceBarrier(registry).witness_paths,
         )
@@ -522,7 +523,7 @@ class InputObservation:
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
         return await Coordination.run_read_async(
-            self.comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(self.comms.root),
             partial(self._private_observation_revision, session_id, root_id, wire, entry),
         )
 

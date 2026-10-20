@@ -6,6 +6,7 @@ write boundary must repeat current authority checks before touching the file.
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import os
 import stat
 from collections.abc import Callable, Iterator
@@ -124,7 +125,7 @@ def _selected_claim_boundary(
     mode: LockMode = ExclusiveLock(),
 ) -> Iterator[tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
     """One wire/bus/registry boundary for selected claim acquisition."""
-    if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+    if store.session.path.resolve() != (CoordinationStore.path_in(comms.root)).resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
     bus = comms.bus
     with (

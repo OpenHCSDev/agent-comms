@@ -6,6 +6,7 @@ the durable cursor. Every observation reads NativeSourceCursor's original proof.
 
 from __future__ import annotations
 
+from .wire_log import WireLog
 import asyncio
 from dataclasses import dataclass, field
 from functools import partial
@@ -158,7 +159,7 @@ class CursorPublication:
         if not scope.matches_session(session_id):
             return unavailable
         try:
-            bus = MessageBus(self.comms.root / "bus.jsonl", self.comms.registry, ResponseWrites)
+            bus = MessageBus(WireLog.path_in(self.comms.root), self.comms.registry, ResponseWrites)
             read_cursor = (
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )

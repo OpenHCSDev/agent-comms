@@ -7,6 +7,7 @@ import json
 import os
 import stat
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
-from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner
+from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path
 
 T = TypeVar("T")
 
@@ -135,10 +136,16 @@ class RootFile:
 
     __slots__ = ()
     filename: ClassVar[str]
+    root_directory: ClassVar[str] = "."
 
     @classmethod
-    def path_in(cls, root: Path | str) -> Path:
-        return Path(root) / cls.filename
+    def path_in(cls, root: Path | str, **parts: str) -> Path:
+        return Path(root) / cls.filename.format(**parts)
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        path = cls.path_in(root)
+        return frozenset((path, store_lock_path(path)))
 
     @classmethod
     def at(cls, root: Path | str, *args, **kwargs):
@@ -146,19 +153,51 @@ class RootFile:
 
     @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
-        declared, pending = set(), [cls]
+        declared, pending, visited = set(), [cls], set()
         while pending:
             family = pending.pop()
+            if family in visited:
+                continue
+            visited.add(family)
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
-                declared.add(family.path_in(root))
+                declared.update(family.files_in(root / family.root_directory))
         return frozenset(declared)
+
+
+class PatternFile(RootFile):
+    """Enumerate an owner's declared parameterized names, never the bus directory."""
+
+    __slots__ = ()
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        pattern = Path(cls.filename.format_map(defaultdict(lambda: "*")))
+        return frozenset(
+            path for name in (pattern, store_lock_path(pattern))
+            for path in root.glob(str(name)) if path.is_file()
+        )
 
 
 class DurableFile(RootFile):
     """Bus state retained across installations, with conversion owned by its store."""
 
     __slots__ = ()
+
+
+class SQLiteFile(RootFile):
+    """A database and SQLite's companion files share their existing file owner."""
+
+    __slots__ = ()
+
+    @staticmethod
+    def files(path: Path) -> tuple[Path, ...]:
+        companions = ("-wal", "-shm", "-journal")
+        return (path, *(path.with_name(path.name + suffix) for suffix in companions))
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        return super().files_in(root) | frozenset(cls.files(cls.path_in(root)))
 
 
 class RuntimeFile(RootFile):

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .locked_store import DurableFile
 from .field_codec import Id128Text
 
 if TYPE_CHECKING:
@@ -74,7 +75,8 @@ class ArchivedAccess(WireAccess):
 
 
 @dataclass
-class WireMetadata:
+class WireMetadata(DurableFile):
+    filename: ClassVar[str] = "bus_meta.json"
     last_seq: int = 0
     claimed_after_seq: int = field(default=0, metadata={"wire_name": 'admission_after_seq', "wire_required": True})
     access: WireAccess = field(default_factory=WritableAccess, metadata={"wire_required": True})

@@ -6,6 +6,7 @@ birth identity and input generation; the registry resolves its name before compa
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
@@ -352,7 +353,7 @@ class DeliveredInput(QueuedInput):
             document = inputs.dispositions.read(tuple(
                 InputDispositions.bus_key(source.message, owner) for source, _ in accepted
             ))
-            with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(CoordinationStore.path_in(inputs.comms.root))) as store:
                 for source, assignment in accepted:
                     message = source.message
                     key = InputDispositions.bus_key(message, owner)
@@ -442,7 +443,7 @@ class DeliveredInput(QueuedInput):
             }
             if not rows:
                 return 0  # Without work, no SQLite connection is needed, let alone a writer.
-            path = str(comms.root / "coordination.sqlite3")
+            path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
                     owner.incarnation.lookup, frozenset(rows),
@@ -473,7 +474,7 @@ class DeliveredInput(QueuedInput):
         # A turn takes later inputs once its first one is in.
         if inbox is None or not inputs.state(session_id).turn_started():
             return
-        store_path = inputs.comms.root / "coordination.sqlite3"
+        store_path = CoordinationStore.path_in(inputs.comms.root)
         lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
@@ -519,7 +520,7 @@ class DeliveredInput(QueuedInput):
 
     async def settle(self, inputs: InputDrain, state) -> None:
         await Coordination.run_async(
-            inputs.comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(inputs.comms.root),
             lambda store: store.assignments.transition_preengagement(
                 self.assignment.assignment_id, state,
                 expected_revision=self.assignment.revision,

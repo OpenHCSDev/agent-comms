@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..registry_store import RegistryStore
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -61,7 +62,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
     @classmethod
     def record(cls, root: Path, sender: str, target: str, error: ToolRefusedError) -> None:
         with guard_original_root_write(root), _store_lock(root / "wire", mode=SharedLock()):
-            MaintenanceBarrier(root / "registry.json").assert_open_unlocked()
+            MaintenanceBarrier(RegistryStore.path_in(root)).assert_open_unlocked()
             with (
                 CoordinationSession(str(CoordinationStore.path_in(root))) as store,
                 store.writing() as db,

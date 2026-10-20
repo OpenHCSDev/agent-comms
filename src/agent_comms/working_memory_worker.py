@@ -1,6 +1,7 @@
 """Runtime-owned annotation work borrows original observations after commit."""
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import asyncio
 import os
 from functools import partial
@@ -45,7 +46,7 @@ class AnnotationWorker:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def store(self, operation):
-        return await Coordination.run_async(self.comms.root / "coordination.sqlite3",
+        return await Coordination.run_async(CoordinationStore.path_in(self.comms.root),
                                             lambda store: operation(store.annotations))
 
     async def answer(self, policy, manifest, segment, span, question):
@@ -54,7 +55,7 @@ class AnnotationWorker:
         grant.require_segment(segment)
         version = QuestionVersion.current(question, rules)
         rows = await Coordination.run_worker(partial(WorkingMemoryAnnotations.labels,
-            self.comms.root / "coordination.sqlite3", span, version, grant.classifier))
+            CoordinationStore.path_in(self.comms.root), span, version, grant.classifier))
         if rows:
             from .coordination_tables.annotations import SpanAnnotationsRow
 

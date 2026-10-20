@@ -347,7 +347,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
         if source_runtime is not None and source_runtime != runtime.read_key:
             raise TranscriptChanged()
         root = Path(source.root)
-        log = WireLog(root / "bus.jsonl")
+        log = WireLog(WireLog.path_in(root))
         records = runtime.history_source(root, thread.incarnation)
         return PageSource(thread, runtime, False, root,
                           log, TranscriptRoutes(root), records,
@@ -379,7 +379,7 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root):
-        with CoordinationStore.observed(root / "coordination.sqlite3").observing(cls) as db:
+        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls) as db:
             yield db
 
     @classmethod

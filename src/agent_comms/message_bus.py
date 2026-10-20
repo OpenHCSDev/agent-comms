@@ -25,6 +25,7 @@ from .message_page import (
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
+from .locked_store import RuntimeFile
 from .messages import Message
 from .read_basis import (
     AnonymousViewer,
@@ -49,11 +50,12 @@ from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
-class MessageBus[Writes: Publisher](StoreLockOwner):
+class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
+    filename = "wire"
 
     @property
     def path(self) -> Path:
-        return self.log.path.parent / "wire"
+        return self.path_in(self.log.path.parent)
 
     def __init__(
         self,

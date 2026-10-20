@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .registry_store import RegistryStore
 import json
 from abc import ABC, abstractmethod
 from collections import deque
@@ -12,7 +13,7 @@ from pathlib import Path
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .locked_store import RootFile
+from .locked_store import DurableFile
 from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
 from .errors import UnregisteredThreadError
@@ -40,7 +41,7 @@ from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
 from .revision_views import BusSourceView
 from .wire_log import WireLog
-from .wire_metadata import ArchivedAccess
+from .wire_metadata import ArchivedAccess, WireMetadata
 
 if TYPE_CHECKING:
     from .presentation import BusPresentation, WireRevision
@@ -243,8 +244,8 @@ class HistorySource:
     def validate(self) -> None:
         root = Path(self.root)
         if (
-            FileRevision.capture(root / "bus.jsonl") != self.snapshot_bus_revision
-            or FileRevision.capture(root / "registry.json") != self.snapshot_registry_revision
+            FileRevision.capture(WireLog.path_in(root)) != self.snapshot_bus_revision
+            or FileRevision.capture(RegistryStore.path_in(root)) != self.snapshot_registry_revision
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
 
@@ -259,7 +260,7 @@ class HistorySource:
         if self.root != str(root) or self.original_root != str(root):
             raise ValueError("Recorded provenance belongs to another original source")
         self.validate()
-        log = WireLog(root / "bus.jsonl")
+        log = WireLog(WireLog.path_in(root))
         info = log.path.stat()
         if (log.read_metadata_unlocked(required=True).root_id != self.wire_root_id
                 or not self.bus_identity.matches(PresentPath(FileIdentity.from_stat(info)))
@@ -284,7 +285,7 @@ class HistorySource:
             raise HistoricalSourceChanged("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
-            WireLog(root / "bus.jsonl"), references,
+            WireLog(WireLog.path_in(root)), references,
             partial(MessageNotification.recorded_delivery_window, root, self.provenance),
         )
         self.validate()
@@ -362,7 +363,7 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
-class HistoryArchive(RootFile):
+class HistoryArchive(DurableFile):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"
@@ -426,20 +427,20 @@ class HistoryArchive(RootFile):
                 paths = [
                     source_root / name
                     for name in (
-                        "bus.jsonl",
-                        "registry.json",
+                        WireLog.filename,
+                        RegistryStore.filename,
                         ChannelCatalog.filename,
-                        "bus_meta.json",
+                        WireMetadata.filename,
                     )
                 ]
                 revisions = tuple(FileRevision.capture(path) for path in paths)
                 if source_read is None:
-                    with Registration(source_root / "registry.json").store.reading() as original:
+                    with Registration(RegistryStore.path_in(source_root)).store.reading() as original:
                         provenance = RegistryProvenance.capture(original)
                 else:
                     source_read.require_original(source_root)
                     provenance = source_read.provenance
-                archived = WireLog(stage / "bus.jsonl")
+                archived = WireLog(WireLog.path_in(stage))
                 # Lock the empty stage before copying its marker. Once marked,
                 # ordinary reads correctly require the not-yet-built index.
                 with archived.locked():
@@ -459,7 +460,7 @@ class HistoryArchive(RootFile):
                     marker.access = ArchivedAccess()
                     marker.checkpoint_version = None
                     marker.checkpoint_seal = None
-                    guard = PrivateRegistryGuard(stage / "registry.json", marker.root_id)
+                    guard = PrivateRegistryGuard(RegistryStore.path_in(stage), marker.root_id)
                     guard.create_pending()
                     archived.write_metadata_unlocked(marker)
                     # The installer borrows this real stage lock; it never opens
@@ -470,17 +471,17 @@ class HistoryArchive(RootFile):
                     str(stage.resolve()),
                     str(source_root),
                     marker.root_id,
-                    RecordedBusIdentity.capture(source_root / "bus.jsonl"),
+                    RecordedBusIdentity.capture(WireLog.path_in(source_root)),
                     bus_info.st_size if bus_info else 0,
-                    FileRevision.capture(stage / "bus.jsonl"),
-                    FileRevision.capture(stage / "registry.json"),
+                    FileRevision.capture(WireLog.path_in(stage)),
+                    FileRevision.capture(RegistryStore.path_in(stage)),
                     provenance,
                 )
                 declarations = source.provenance.threads
                 from .wire_log import WireSnapshot
 
                 previous = 0
-                for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
+                for record, size in _iter_jsonl_records(WireLog.path_in(stage)):
                     for message, _ in WireSnapshot.public_page_records(record, size, marker):
                         if message.seq <= previous:
                             raise ValueError("Historical source has nonascending sequences")
@@ -513,7 +514,7 @@ class HistoryArchive(RootFile):
             request = view.page_request(view.capture(snapshot), current)
             current_snapshot = presentation.registry.snapshot()
             document = presentation.bus.reads.read()
-            with WireLog(Path(source.root) / "bus.jsonl").opened_wire_snapshot() as opened:
+            with WireLog(WireLog.path_in(Path(source.root))).opened_wire_snapshot() as opened:
                 def read(page_index):
                     raw = request.indexed(page_index, opened)
                     projected = replace(raw, messages=tuple(

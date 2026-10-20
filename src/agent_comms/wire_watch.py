@@ -7,6 +7,9 @@ notification is unavailable.
 
 from __future__ import annotations
 
+from .registry_store import RegistryStore
+from .wire_log import WireLog
+
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -37,8 +40,8 @@ _MASK = (
 )
 _HEADER = struct.Struct("=iIII")
 _AUTHORITY_FILES = frozenset({
-    b"bus.jsonl",
-    b"registry.json",
+    WireLog.filename.encode(),
+    RegistryStore.filename.encode(),
     b".registry-owner-guard",
     GoalWaits.filename.encode(),
 })

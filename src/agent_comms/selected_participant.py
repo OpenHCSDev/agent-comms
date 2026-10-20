@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .wire_log import WireLog
 import secrets
 from collections.abc import Awaitable, Callable, Generator, Sequence
 from contextlib import asynccontextmanager
@@ -140,7 +141,7 @@ class SelectedParticipant(MroDispatch):
     @classmethod
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, cursor_delivery: CursorDelivery, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
-        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, ParticipantPublisher)
+        bus = MessageBus(WireLog.path_in(comms.root), comms.registry, ParticipantPublisher)
         with cursor_delivery.measurements.operation("claim_prepare"):
             owner, participant, pending, sent_outcomes = await Coordination.run_async(
                 store.session.path,

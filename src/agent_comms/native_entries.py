@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .locked_store import DurableFile, PatternFile
+
 import json
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
@@ -171,7 +173,8 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
 
 
 @dataclass
-class ImportedSessionWriter:
+class ImportedSessionWriter(DurableFile, PatternFile):
+    filename = "imported_sessions/{session_id}.jsonl"
     stream: TextIO
     parent: NativeEntry
 

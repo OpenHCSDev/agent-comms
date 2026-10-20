@@ -124,12 +124,6 @@ class CoordinationStore(StoreWriter):
     writer_timeout = 5.0
     header = b"SQLite format 3\0"
 
-    @staticmethod
-    def files(path: Path) -> tuple[Path, ...]:
-        """The database and the companion files SQLite keeps beside it: together, one store."""
-        companions = ("-wal", "-shm", "-journal")
-        return (path, *(path.with_name(path.name + suffix) for suffix in companions))
-
     @classmethod
     def is_database(cls, path: Path) -> bool:
         with path.open("rb") as stream:

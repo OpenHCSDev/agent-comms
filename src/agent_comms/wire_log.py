@@ -43,6 +43,7 @@ from .errors import (
 )
 from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
+from .locked_store import DurableFile
 from .messages import Message
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
@@ -549,7 +550,8 @@ class CheckedWireStoreLock(WireStoreLock):
             yield source
 
 
-class WireLog(StoreLockOwner):
+class WireLog(DurableFile, StoreLockOwner):
+    filename = "bus.jsonl"
     lock_type = WireStoreLock
     page_index_type = BusPageIndex
 
@@ -946,7 +948,7 @@ class WireLog(StoreLockOwner):
 
     @property
     def metadata_path(self) -> Path:
-        return self.path.with_name("bus_meta.json")
+        return WireMetadata.path_in(self.path.parent)
 
     def read_metadata_unlocked(self, *, required: bool = False) -> WireMetadata:
         """Read one marker inode under its leaf lock, independently of registry reads.

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .activity import ObservedActivity
 from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion
-from .locked_store import JsonDocument
+from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
@@ -294,19 +294,22 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_name=None):
+class StoredTurnRecord(DurableFile, PatternFile, JsonDocument[ActiveTurn],
+                       StoredTurnReference, declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
     identity: TurnIdentity = field(metadata={"wire_transient": True})
     registry_path: Path = field(repr=False, compare=False, metadata={"wire_transient": True})
 
     record_type = ActiveTurn
+    filename = "turns/{lookup}-{generation}.json"
 
     @property
     def path(self) -> Path:  # type: ignore[override]  # Derived from its registry.
         identity = self.identity
-        name = f"{identity.incarnation.require_recorded().lookup}-{identity.generation}.json"
-        return self.registry_path.parent / "turns" / name
+        return self.path_in(self.registry_path.parent,
+                            lookup=identity.incarnation.require_recorded().lookup,
+                            generation=str(identity.generation))
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity)

@@ -217,7 +217,7 @@ class OptionalAwarenessProjection:
         if page.has_more:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
-        path = self.index.log.path.with_name("coordination.sqlite3")
+        path = CoordinationStore.path_in(self.index.log.path.parent)
         with CoordinationStore.observing(path) as db:
             self._verify_schema_and_owner(db, initial, assignment, owner)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)

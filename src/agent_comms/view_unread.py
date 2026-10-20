@@ -19,6 +19,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileRevision
+from .locked_store import RuntimeFile, SQLiteFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
 from .store_files import SharedLock, _store_lock
@@ -392,12 +393,14 @@ class TranscriptReadKeys:
         })
 
 
-class TranscriptReadState(ThreadOwnedState):
+class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
     """Index only replies after read marks, capped from the newest records.
 
     One disposable suffix index owns reply offsets and scan coverage. No worker
     finishes an irrelevant prefix; source replacement discards its projection.
     """
+
+    filename = f"transcript_reply_index.v{_INDEX_VERSION}.sqlite3"
 
     def __init__(self, path: Path):
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
@@ -407,7 +410,7 @@ class TranscriptReadState(ThreadOwnedState):
         self._source_resources = ExitStack()
         self.path = ReadLedger.path_in(path.parent)
         self.reads = ReadLedger(self.path)
-        self.index_path = path.with_name(f"transcript_reply_index.v{_INDEX_VERSION}.sqlite3")
+        self.index_path = self.path_in(path.parent)
         self._connection: sqlite3.Connection | None = None
         self._database_inode: int | None = None
         self._lock = RLock()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .coordination_database import CoordinationStore
 import hashlib
 import json
 from collections.abc import Callable, Sequence
@@ -254,7 +255,7 @@ class InitialWrites(PrivateWrites):
             _atomic_write_text(self.log.path, "".join(rows), fsync_parent=True)
 
         # The public marker must never advertise a root whose runtime cannot wake.
-        with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
+        with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
             store.install_private_runtime()
         root_id = Id128Text.mint()
 
@@ -371,7 +372,7 @@ class InitialWrites(PrivateWrites):
             # Every frozen subscriber needs an identity, including stopped
             # observers. Register from this authoritative registry snapshot,
             # before publishing; an inbox must never invent owners from a row.
-            with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
+            with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
                 sender_thread.role.register_sender(store.participants, sender_lookup, sender)
                 for thread, lookup in zip(selected, lookups, strict=True):
                     store.participants.register(lookup, thread.name, thread.name, committed=True)

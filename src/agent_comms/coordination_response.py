@@ -15,6 +15,7 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
+from .registry_store import RegistryStore
 import hashlib
 import json
 import sqlite3
@@ -371,9 +372,9 @@ class LiveResponseOwner(RegistryOwner):
 
 def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
     if (
-        store.session.path.name != "coordination.sqlite3"
+        store.session.path.name != store.session.filename
         or Path(bus.log.path.parent).absolute() != Path(store.session.path.parent).absolute()
-        or bus._registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
+        or bus._registry.store.path.absolute() != (RegistryStore.path_in(bus.log.path.parent)).absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
 
