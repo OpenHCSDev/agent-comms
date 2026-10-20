@@ -29,7 +29,8 @@ def enforce_storage(ctx: Commander, thread: str, call: CodingCall) -> None:
         for todo in ctx.held_by(thread)[:1]:
             ctx.strike(thread, todo.id,
                          f'{todo.id} broke the storage rule at a tool call: {violation}; '
-                         'storage waste is banned outright', 'tool_watch at tool call',
+                         f'storage waste is banned outright ({todo.order.checked().owner.to_wire()})',
+                         'tool_watch at tool call',
                          kind=StorageStrikeTodo)
 
 

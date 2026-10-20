@@ -428,7 +428,8 @@ class Commander(CommanderContext):
             # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
             # Done here so the commander cannot send work back and forget either.
             verdict = document.prose.strip()
-            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
+            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict} '
+                        f'({order.owner.to_wire()})')
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Core replaces a wrong check of an open order. The new check must already pass on main, so a
