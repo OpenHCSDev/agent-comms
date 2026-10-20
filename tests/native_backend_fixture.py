@@ -5,7 +5,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from functools import partial
 from unittest.mock import patch
 
@@ -17,8 +17,6 @@ from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
-from agent_comms.pi_native_backend import PersistentPiSession
-from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput
 from agent_comms.storage_rules import StorageRule
@@ -112,6 +110,20 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             await agent.shutdown()
             assert not agent.turns.turn_tasks and not any(state.inbox for state in agent.inputs.drained.values())
             assert not agent.turns.persistent_backends
+
+    @contextmanager
+    def record_events(self, native):
+        """Observe the real owner's stream without assembling another launch."""
+        observed = []
+        original = native.run_turn
+
+        async def record(*args, **kwargs):
+            async for event in original(*args, **kwargs):
+                observed.append(event)
+                yield event
+
+        with patch.object(native, 'run_turn', record):
+            yield observed
 
     @asynccontextmanager
     async def original_input(self, agent, session_id, text):
