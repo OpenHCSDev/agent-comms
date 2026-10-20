@@ -31,6 +31,7 @@ class StoryCase(LifecycleCase):
             created.held(),
             "story-review",
             StrikeReason(cls.back_reason),
+            evidence=(created.order.checked().owner,),
         )
         run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
         document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))
@@ -42,7 +43,8 @@ class StoryCase(LifecycleCase):
             clean=True,
             replaces=sent_back.messages[-1].message_id,
         )
-        run.commander.strike(run.worker, created.id, cls.strike_reason)
+        run.commander.strike(run.worker, created.id, cls.strike_reason,
+                             evidence=(created.order.checked().owner,))
         saved = run.commander.comms.goals.todos.get(created.id)
         run.commander.call(
             CommsTodoCreateTool(

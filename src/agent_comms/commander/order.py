@@ -431,7 +431,8 @@ class Commander(CommanderContext):
             # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
             # Done here so the commander cannot send work back and forget either.
             verdict = document.prose.strip()
-            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
+            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}',
+                        evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Core replaces a wrong check of an open order. The new check must already pass on main, so a
@@ -517,7 +518,7 @@ class Commander(CommanderContext):
             raise
 
     def strike(self, unit: str, task: str, why: str, caught: str = 'review', *,
-               kind: type[StrikeTodo] = StrikeTodo,
+               evidence: tuple[FileLine, ...], kind: type[StrikeTodo] = StrikeTodo,
                answers: tuple[MessageReference, ...] = ()) -> None:
         """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
         failure stays private and none is described in words that hide what happened."""
@@ -530,7 +531,8 @@ class Commander(CommanderContext):
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
         self.recorded(unit, todo, kind(todo.revision, self.incarnation, todo.held(),
-                                      f'{why} (caught by {caught})'), answers)
+                                      f'{why} (caught by {caught})',
+                                      evidence=evidence), answers)
 
     def recorded(self, unit: str, todo: Todo, strike: StrikeTodo,
                  answers: tuple[MessageReference, ...] = ()) -> None:
@@ -587,9 +589,6 @@ class Commander(CommanderContext):
             claim = WorkingClaim(evidence.artifact())
         else:
             delivered_commit = revision(repo, sha)
-            if subprocess.run(['git', '-C', repo, 'merge-base', '--is-ancestor',
-                               delivered_commit, 'HEAD']).returncode:
-                sys.exit(f'Refused: {delivered_commit} is not in {repo} HEAD.')
             delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
                                       delivered_commit=delivered_commit, evidence=evidence)
             claim = MergedClaim(delivery.delivered)
@@ -775,14 +774,14 @@ class SendVerb(OrderVerb, DirectiveVerb):
 class StrikeVerb(OrderVerb, DirectiveVerb):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
+    pid: str = option("pid", help="the struck problem")
+    where: str = option("where", help="the source file:line that explains the strike")
     why: str = option("--why")
     caught: str = option("--caught", default='review', help='"WHO at STAGE"; stage is review/install/live/user')
 
     def run(self, ctx: Commander) -> None:
-        references = set(re.findall(r'\bP\d+\b', self.why))
-        if len(references) != 1:
-            sys.exit('Refused: name exactly one problem in --why; strikes count per problem.')
-        ctx.strike(self.unit, references.pop(), self.why, self.caught,
+        ctx.strike(self.unit, self.pid, self.why, self.caught,
+                   evidence=(FileLine.from_wire(self.where),),
                    answers=self.answer_references(ctx))
 
 

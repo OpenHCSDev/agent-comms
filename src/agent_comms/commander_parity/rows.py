@@ -23,6 +23,7 @@ from .lifecycle import (
 from .load import LoadComparison
 from .measurements import StorageComparison, measured_load
 from .story import StoryCase
+from agent_comms.commander_parity.verdicts import VerdictComparison
 
 
 class CreateProblemParityRow(ParityRow):
@@ -93,9 +94,10 @@ class StrikeLimitParityRow(ParityRow):
 class VerdictParityRow(ParityRow):
     number = 8
     capability = "Verdicts on a unit's tool calls"
-    current = "`judge.py ok`, `back`; `verdicts.jsonl`"
+    current = "`judge.py ok`, `back`; both invoke `CommsVerdictTool`"
     native = "Order `Verdict`; send-back revises the Goal and records its strike atomically"
     phases = (RecordPlanePhase,)
+    comparison = VerdictComparison.read
 
 
 class PlainWordsParityRow(ParityRow):
