@@ -182,20 +182,24 @@ class LifecycleRun:
             )
             yield cls(commander, worker.name, decisions, document, root / "application.json")
 
+    @staticmethod
+    def python_environment() -> dict[str, str]:
+        return {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+
     @classmethod
     def invoke(cls, program: str, *arguments: str) -> ChildResult:
-        return cls.invoke_command((sys.executable, "-c", program, *arguments))
+        return cls.invoke_command(
+            (sys.executable, "-c", program, *arguments), env=cls.python_environment()
+        )
 
     @staticmethod
-    def invoke_command(command: tuple[str, ...]) -> ChildResult:
-        source = str(Path(__file__).resolve().parents[2])
-        return asyncio.run(
-            BoundedRun.run(
-                command,
-                timeout=120,
-                env={**os.environ, "PYTHONPATH": source},
-            )
-        )
+    def invoke_command(
+        command: tuple[str, ...],
+        *,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+    ) -> ChildResult:
+        return asyncio.run(BoundedRun.run(command, timeout=120, cwd=cwd, env=env))
 
     @property
     def due(self) -> str:
