@@ -57,7 +57,7 @@
 | 24 | Reassigning past two owners needs the commander's trace | scratch `order.py send --reassign --traced` | Transfer reads Todo owner history and requires traced source location | `record_plane` |
 | 25 | Unit wording gets a correction, not a strike | scratch `vibe_watch.py` | `PlainText` for commander verdicts/strikes; unit wording gets correction | `record_plane` |
 | 26 | Alerts carry only decisions | none; every line interrupts | `messages.AlertKind.require_publishable`, `tools.CommsDecisionTool` | `control_plane` |
-| 27 | Momentum prediction per unit, compared with the outcome | none | Prediction record and later outcome on commander page; `CommitMomentum` is a partial candidate | `commander_page` |
+| 27 | Momentum prediction per unit, compared with the outcome | none | Todo retains the latest heartbeat distance forecast and actual closure; OrderProgress shows both, with numeric error only for a measured falling count | `commander_page` |
 | 28 | Measured load and self-report | `capacity.py` unit count | `commander.capacity.Load.of` reports orders, overdue, edits and forks; self-report comparison unverified | `control_plane` |
 | 29 | No handoff of finished, checked work | none; scratch transfer moved P507 after its fix was pushed and checked | Transfer refuses delivered checked work; that owner merges; check is reused | `record_plane` |
 | 30 | A proof is bound to the build it ran on | none; screenshots and logs are bare paths | Build run records runtime and Core/Toad revisions; close requires delivered commit | `record_plane` |

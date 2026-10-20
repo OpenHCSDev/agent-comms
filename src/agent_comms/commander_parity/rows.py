@@ -20,6 +20,7 @@ from .lifecycle import (
     verify_order_progress,
 )
 from .load import LoadComparison
+from .prediction import PredictionCase
 from .measurements import RuleComparison, StorageComparison, measured_load
 
 
@@ -258,10 +259,11 @@ class MomentumParityRow(ParityRow):
     capability = "Momentum prediction per unit, compared with the outcome"
     current = "none"
     native = (
-        "Prediction record and later outcome on commander page; "
-        "`CommitMomentum` is a partial candidate"
+        "Todo retains the latest heartbeat distance forecast and actual closure; "
+        "OrderProgress shows both, with numeric error only for a measured falling count"
     )
     phases = (CommanderPagePhase,)
+    comparison = PredictionCase.read
 
 
 class MeasuredLoadParityRow(ParityRow):

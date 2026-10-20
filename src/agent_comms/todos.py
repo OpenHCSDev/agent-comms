@@ -532,8 +532,8 @@ class FinishPrediction(DeclaredFamily, affix="FinishPrediction"):
     """The order's unreviewed, reviewed, or closed forecast, retained on its Todo."""
 
     @property
-    def line(self) -> str:
-        return ""
+    @abstractmethod
+    def line(self) -> str: ...
 
     def error(self, actual: float) -> str:
         return ""
@@ -541,11 +541,25 @@ class FinishPrediction(DeclaredFamily, affix="FinishPrediction"):
     def closed(self, actual: float) -> FinishPrediction:
         return FinishedPrediction(self, actual)
 
+    def for_order(self, order_id: str) -> FinishPrediction:
+        return self
+
+
+@dataclass(frozen=True)
+class UnreviewedPrediction(FinishPrediction):
+    @property
+    def line(self) -> str:
+        return ""
+
 
 @dataclass(frozen=True)
 class ReviewedPrediction(FinishPrediction):
+    order_id: str
     at: float
     trend: DistanceTrend
+
+    def for_order(self, order_id: str) -> FinishPrediction:
+        return self if order_id == self.order_id else UnreviewedPrediction()
 
     @property
     def line(self) -> str:
@@ -696,7 +710,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     Never stored: the checkout and GitHub are its owners. The finish view is the
     prediction already recorded on the Todo, not a new estimate on every read."""
 
-    finish: FinishPrediction = field(default_factory=FinishPrediction, kw_only=True, compare=False)
+    finish: FinishPrediction = field(default_factory=UnreviewedPrediction, kw_only=True, compare=False)
 
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
@@ -721,8 +735,8 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def line(self) -> str:
         return self.state + self.distance_readings().trend.projection + self.finish.line
 
-    def forecast(self, at: float) -> FinishPrediction:
-        return ReviewedPrediction(at, self.distance_readings().trend)
+    def forecast(self, order_id: str, at: float) -> FinishPrediction:
+        return ReviewedPrediction(order_id, at, self.distance_readings().trend)
 
     def distance_readings(self) -> DistanceReadings:
         """The order's distance readings; progress that read no commit has none."""
@@ -2051,8 +2065,9 @@ class AssignTodo(TodoOperation):
             self.order.require_writable()
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
+        forecast = current.predicted_finish.for_order(self.order.id)
         assigned = replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
-                           revision=current.revision + 1)
+                           predicted_finish=forecast, revision=current.revision + 1)
         return self.actor.assigned(current, assigned)
 
     @property
@@ -2459,7 +2474,7 @@ class Todo(TypedTable):
     verdicts: tuple[OrderVerdict, ...] = ()
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
-    predicted_finish: FinishPrediction = field(default_factory=FinishPrediction)
+    predicted_finish: FinishPrediction = field(default_factory=UnreviewedPrediction)
 
     unrequested_goal: ClassVar[GoalReference] = NoGoalReference()
 
@@ -2725,7 +2740,7 @@ class TodoStore(TypedStore):
                 raise ValueError(f'{problem} is already held by {target.holder}')
             replace(target, order=target.order.linked(source.order), assignment=source.held(),
                     goal=source.goal, deadline=source.deadline, messages=source.messages,
-                    revision=target.revision + 1).upsert(db)
+                    predicted_finish=UnreviewedPrediction(), revision=target.revision + 1).upsert(db)
 
     def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         """Rows in creation order; an absent store has none, and a read never creates one."""
@@ -2770,8 +2785,8 @@ class TodoStore(TypedStore):
         """
         held = self.held_for_commander(commander)
         pulls = PullRequests(held)
-        observed = tuple((todo, OrderProgress.read(todo, storage, pulls).forecast(at))
-                         for todo in held)
+        observed = tuple((todo, OrderProgress.read(todo, storage, pulls).forecast(
+            todo.order.checked().id, at)) for todo in held)
         saved = []
         if observed:
             with self.writing() as db:
