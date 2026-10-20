@@ -5,12 +5,14 @@ import shlex
 
 import pytest
 
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+
 DOCUMENTED = [
     ("order", "send worker 23:59 order.txt --clean --reassign 'missed two deadlines' --fork f1",
      {"unit": "worker", "due": "23:59", "body_file": "order.txt", "clean": True,
-      "reassign": "missed two deadlines", "fork": "f1"}),
+      "reassign": "missed two deadlines", "fork": ThreadCaller("f1")}),
     ("order", "strike worker --why 'P1 late' --caught 'lead at install'",
-     {"unit": "worker", "why": "P1 late", "caught": "lead at install", "fork": None}),
+     {"unit": "worker", "why": "P1 late", "caught": "lead at install", "fork": NoThreadCaller()}),
     ("order", "strike worker --why 'P1 late'",
      {"unit": "worker", "why": "P1 late", "caught": "review"}),
     ("order", "done worker m1 --sha abc123 --seen proof.txt", {"unit": "worker", "message": "m1", "sha": "abc123", "seen": "proof.txt"}),
@@ -41,7 +43,7 @@ DOCUMENTED = [
     ("judge", "alarm", {}),
     ("judge", "ok 0123456789:ab --msg m1 --serves 'the words' --line one --line two --why why --fork f1",
      {"ids": ("0123456789:ab",), "msg": "m1", "serves": "the words", "lines": ("one", "two"), "why": "why",
-      "fork": "f1"}),
+      "fork": ThreadCaller("f1")}),
     ("judge", "ok 0123456789:ab --msg m1 --serves 'the words' --line one --why why --no-owner proof",
      {"serves": "the words", "no_owner": "proof"}),
     ("judge", "back 0123456789:ab --msg m1 --line one --why why --roast r --fix f --slop IDEN-5"

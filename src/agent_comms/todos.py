@@ -1314,6 +1314,7 @@ class LocatedProblemFinding(ProblemFinding):
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
+    accepted: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
@@ -1333,6 +1334,13 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     def checked(self) -> CheckedProblemOrder:
         raise ValueError("This problem has no checked order.")
+
+    @property
+    def phase(self) -> type[OrderPhase]:
+        return UnplannedPhase
+
+    def for_phase(self, phase: type[OrderPhase]) -> ProblemOrder:
+        raise ValueError("Only a checked order can declare a plan phase.")
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
@@ -1423,6 +1431,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                                 f"{last[0].reason.text}")
         check = json.dumps(FieldCodec.encode(self.check)).replace("|", "&#124;")
         return f"{self.owner.to_wire()} | {owner} | {self.id} | {todo.deadline.clock()} | {check}"
+
+    @property
+    def phase(self) -> type[OrderPhase]:
+        return self.serves
+
+    def for_phase(self, phase: type[OrderPhase]) -> CheckedProblemOrder:
+        return replace(self, serves=phase)
 
     def __post_init__(self):
         problems = []
@@ -1617,6 +1632,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 class InstalledProblemOrder(DeliveredProblemOrder):
     works: str
     artifact: str
+    accepted: ClassVar[bool] = True
     line: ClassVar[str] = "Installed"
 
     def __post_init__(self):
@@ -1880,14 +1896,14 @@ class DoneTodoState(TodoState):
 
 
 @dataclass(frozen=True)
-class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
+class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     expected_revision: int
 
     def __post_init__(self) -> None:
         if FieldCodec.decode(int, self.expected_revision) <= 0:
             raise TodoError("Todo operation requires a positive exact revision")
 
-    def prepare(self, goals, current):
+    def prepare(self, goals: Goals, current: Todo) -> Self:
         return self
 
     def record(self, goals: Goals, problem: str) -> Todo:
@@ -1896,6 +1912,10 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
 
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
+
+
+class TodoOperation(TodoCommand, declared_name=None):
+    """Commands the ordinary commander's tools accept."""
 
 
 @dataclass(frozen=True)
@@ -1973,12 +1993,11 @@ class VerdictAudience:
 
 
 @dataclass(frozen=True)
-class OrderVerdict(TodoOperation, declared_name=None):
+class OrderVerdict(TodoCommand, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
-    tool_call_id: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
 
     @abstractmethod
@@ -1990,17 +2009,39 @@ class OrderVerdict(TodoOperation, declared_name=None):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
         current.require_assignment(self.previous)
-        _text(self.tool_call_id, "Judged tool call ID", 200)
         judged = self.judged(current)
         return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
-class AcceptedVerdict(OrderVerdict):
-    """The tool call carries out the order clause it quotes."""
+class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
+    tool_call_id: str
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_commander(self.actor)
+        _text(self.tool_call_id, "Judged tool call ID", 200)
+        return super().apply(current)
+
+
+@dataclass(frozen=True)
+class QuotedVerdict(OrderVerdict, declared_name=None):
     quote: str
+
+    def require_quote(self, text: str) -> None:
+        quoted = " ".join(self.quote.split())
+        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
+            raise ValueError("Quote 4+ words of the order this verdict carries out.")
+
+    def judged(self, current: Todo) -> Todo:
+        self.require_quote(current.order.instructions(current))
+        return current
+
+
+@dataclass(frozen=True)
+class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
+    """The tool call carries out the order clause it quotes."""
+    line = "Accepted"
 
     @classmethod
     def require_branches(cls, added: int, no_owner: str | None) -> None:
@@ -2009,16 +2050,36 @@ class AcceptedVerdict(OrderVerdict):
         if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
                 and re.search(r'/\S+:\d+', no_owner)):
             raise ValueError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
-    line = "Accepted"
 
-    def require_quote(self, text: str) -> None:
-        quoted = " ".join(self.quote.split())
-        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise ValueError("Quote 4+ words of the order this tool call carries out.")
 
-    def judged(self, current: Todo) -> Todo:
-        self.require_quote(current.order.instructions(current))
-        return current
+@dataclass(frozen=True)
+class ReviewedHeadVerdict(QuotedVerdict):
+    """The connector reviewer accepts this immutable commit, never an inferred checkout head."""
+    context: ClassVar[str] = "agent-comms/review"
+    head: str
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        GitCommitText.decode(self.head)
+
+    @property
+    def line(self) -> str:
+        return f"Reviewed head {self.head}"
+
+    def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
+        if self.actor != reviewer:
+            raise TodoError("The verdict actor must be the connector reviewer recording it.")
+        current = goals.todos.get(problem)
+        recorded = self.prepare(goals, current).record(goals, problem)
+        posted = subprocess.run(
+            ("gh", "api", "--method", "POST", f"repos/{recorded.repo}/statuses/{self.head}",
+             "-f", "state=success", "-f", f"context={self.context}",
+             "-f", f"description=Accepted by {reviewer.name} on {problem}"),
+            capture_output=True, text=True, timeout=60,
+        )
+        if posted.returncode:
+            raise TodoError(posted.stderr.strip() or f"Review status on {self.head} failed.")
+        return recorded
 
 
 @dataclass(frozen=True)
@@ -2044,7 +2105,7 @@ class PeerAcceptedVerdict(AcceptedVerdict):
 
 
 @dataclass(frozen=True)
-class SupersededVerdict(OrderVerdict):
+class SupersededVerdict(ToolCallVerdict):
     replacement: str
     reason: str
     line = "Superseded"
@@ -2065,7 +2126,7 @@ class SupersededVerdict(OrderVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(OrderVerdict):
+class SendBackVerdict(ToolCallVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
@@ -2169,7 +2230,7 @@ class ServeTodo(TodoOperation):
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(current, order=replace(current.order, serves=self.serves),
+        return replace(current, order=current.order.for_phase(self.serves),
                        revision=current.revision + 1)
 
 
@@ -2692,7 +2753,7 @@ class TodoStore(TypedStore):
             current.require_assignment(proposed.assignment)
             return current
 
-    def apply(self, todo_id: str, command: TodoOperation) -> Todo:
+    def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
             current = self._current(db, todo_id)
             result = command.apply(current)

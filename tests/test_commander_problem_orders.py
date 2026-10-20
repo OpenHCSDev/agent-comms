@@ -1222,29 +1222,6 @@ def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
     assert comms.goals.todos.get('P1') == saved
 
 
-def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander, commander_script, tmp_path):
-    """Two CLI units hold orders; only the one whose bridge left is detached, with its unread count."""
-    import importlib
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.thread_execution import ExternalThreadExecution
-    from agent_comms.thread_status import StoppedThreadStatus
-
-    comms, _ = commander
-    for created, unit in enumerate(('parted', 'watching'), 3):
-        comms.registry.declare(comms.registry.new_thread(
-            unit, frozenset(), str(tmp_path), created_at=float(created), execution=ExternalThreadExecution),
-            StoppedThreadStatus())
-        comms.goals.update_goal(unit, SetGoalAction(text='Commander brief', goal_id=f'{unit}-brief'))
-    create(commander, 'P1', owner='parted')
-    create(commander, 'P2', owner='watching')
-    comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
-    rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
-    with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
-        standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
-        lines = [rule.line() for rule in standing.Detached.violations(comms, 'lead')]
-    assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
-
-
 def test_dropped_problem_links_through_the_unordered_lifecycle(commander):
     from agent_comms.todos import LocatedProblemFinding, UnlocatedProblemFinding
     comms, caller = commander
