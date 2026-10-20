@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass, field, fields, replace
 from contextlib import contextmanager
 from functools import partial
@@ -68,8 +68,21 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     def mark_read(self, reads, viewer, runtime: RuntimeLocation) -> None: ...
 
     def contains(self, other: TranscriptCursor) -> bool:
-        return (self.session_file == other.session_file and other.offset <= self.offset
-                and other.wire.within(self.wire))
+        return other.within(self)
+
+    def same_position(self, other: TranscriptCursor) -> bool:
+        return self == other
+
+    def accepts_source(self, other: TranscriptCursor) -> bool:
+        return self.session_file == other.session_file
+
+    def within(self, other: TranscriptCursor) -> bool:
+        return (self.accepts_source(other) and self.offset <= other.offset
+                and self.wire.within(other.wire))
+
+    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
+                        **bounds: object) -> TranscriptPage:
+        return await loader(**bounds, through=self)
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
@@ -88,6 +101,36 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
 
     def with_prefix(self, prefix: TranscriptCursor) -> TranscriptCursor:
         return self.at_offset(prefix.offset)
+
+
+@dataclass(frozen=True, slots=True)
+class UnreadTranscriptCursor(TranscriptCursor):
+    """No source has been read; this is not a source position or a read mark."""
+
+    def contains(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def within(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def same_position(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def accepts_source(self, other: TranscriptCursor) -> bool:
+        return True
+
+    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
+                        **bounds: object) -> TranscriptPage:
+        return await loader()
+
+    def at_offset(self, offset: int) -> TranscriptCursor:
+        return self
+
+    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
+        return self
+
+    def mark_read(self, reads: object, viewer: object, runtime: RuntimeLocation) -> None:
+        """Nothing has been drawn, so there is nothing to acknowledge."""
 
 
 @dataclass(frozen=True, slots=True)
