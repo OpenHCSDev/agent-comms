@@ -366,11 +366,20 @@ class CarryChain:
         known = {}
         parents = carry_parents(git(repo, "show", f"{revision}:{STEPS}/carry.py"))
         tree = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
-        for path in tree:
-            if path.startswith("carry_") and path.endswith(".py"):
-                name = path.removesuffix(".py")
-                known[name] = Step.declared(
-                    name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision, parents)
+        pending = {
+            path.removesuffix(".py"): git(repo, "show", f"{revision}:{STEPS}/{path}")
+            for path in tree if path.startswith("carry_") and path.endswith(".py")
+        }
+        while pending:
+            declared = {
+                name: Step.declared(name, source, revision, parents)
+                for name, source in pending.items() if Step.holds_carry(source, parents)
+            }
+            if not declared:
+                raise ValueError(f"{sorted(pending)} holds no Carry step; every carry_* module is a step of the chain")
+            known.update(declared)
+            parents.update({step.declaration: step.family for step in declared.values()})
+            pending = {name: source for name, source in pending.items() if name not in declared}
         retired = cls.retired_at(repo, revision, known)
         retired_columns = frozenset(
             column for name in retired
