@@ -664,7 +664,7 @@ class ThreadView(ThreadRecord):
         return ordinary
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        if self.thread.turn_record.read().executing:
+        if self.thread.turn_record.executing:
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 

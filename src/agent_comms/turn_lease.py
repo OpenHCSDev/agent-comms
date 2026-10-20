@@ -248,8 +248,8 @@ class TurnRecord(SubclassUnion, affix=""):
     def read(self) -> TurnDeclaration: ...
 
     @property
-    def executing(self) -> bool:
-        return self.read().executing
+    @abstractmethod
+    def executing(self) -> bool: ...
 
     @abstractmethod
     def without_claim(self) -> None: ...
@@ -261,6 +261,8 @@ class TurnRecord(SubclassUnion, affix=""):
 
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
+    executing = False
+
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> NoTurnRecord:
         return self
 
@@ -278,6 +280,10 @@ class NoTurnRecord(NullMember, TurnRecord):
 @dataclass(frozen=True)
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
+
+    @property
+    def executing(self) -> bool:
+        raise RelationViolationError("Turn reference must be bound by its registry")
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         return StoredTurnRecord.for_identity(registry_path, identity)
@@ -302,6 +308,7 @@ class StoredTurnRecord(DurableFile, PatternFile, JsonDocument[ActiveTurn],
     registry_path: Path = field(repr=False, compare=False, metadata={"wire_transient": True})
 
     record_type = ActiveTurn
+    executing = True
     filename = "turns/{lookup}-{generation}.json"
 
     @property
