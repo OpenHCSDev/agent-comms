@@ -8,7 +8,7 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from contextlib import closing, contextmanager, suppress
+from contextlib import AbstractContextManager, closing, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
@@ -271,7 +271,7 @@ class CoordinationStore(StoreWriter):
         self, path: str | os.PathLike[str],
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
-        self.path = Path(path)
+        super().__init__(Path(path))
         self._prepare_private_file()
         self._connection = self._open_connection(contention)
         try:
@@ -358,7 +358,7 @@ class CoordinationStore(StoreWriter):
             else:
                 SchemaMeta.require_current(self._connection, version)
 
-    def writing(self):
+    def writing(self) -> AbstractContextManager[sqlite3.Connection]:
         return StoreWriter.transaction(self, self._connection)
 
     def _empty_schema(self, version: int) -> bool:

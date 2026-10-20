@@ -42,7 +42,10 @@ class CoordinationSession(CoordinationStore):
             raise ValueError("coordinator clock must return a nonnegative integer millisecond")
         return max(now, floor)
 
-    def transaction(self, connection: sqlite3.Connection | None = None):
+    @contextmanager
+    def transaction(
+        self, connection: sqlite3.Connection | None = None
+    ) -> Iterator[sqlite3.Connection]:
         """Allow a rollback-journal writer only after existing readers retire.
 
         ``BEGIN IMMEDIATE`` lets new work proceed before old readers release,
@@ -51,7 +54,8 @@ class CoordinationSession(CoordinationStore):
         before changing state, so contention is handled before writing and
         a successfully authorized transaction owns its complete commit lifetime.
         """
-        return super().transaction(self._connection if connection is None else connection)
+        with super().transaction(self._connection if connection is None else connection) as db:
+            yield db
 
     def _begin_transaction(self, connection: sqlite3.Connection) -> None:
         if connection.in_transaction:

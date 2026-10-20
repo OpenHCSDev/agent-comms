@@ -3,7 +3,8 @@
 import hashlib
 import os
 import sqlite3
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -110,7 +111,7 @@ class TranscriptRoutes(StoreWriter):
     filename = "transcript_routes.sqlite3"
 
     def __init__(self, root: Path):
-        self.path = self.path_in(root)
+        super().__init__(self.path_in(root))
         self._initialized = False
 
     def revision(self) -> FileRevision | None:
@@ -150,6 +151,17 @@ class TranscriptRoutes(StoreWriter):
         self._initialized = True
         return True
 
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        self._ensure_database(create=True)
+        with (
+            _store_lock(self.path),
+            closing(CoordinationStore.writer(self.path)) as connection,
+        ):
+            connection.execute("PRAGMA synchronous=FULL")
+            with self.transaction(connection):
+                yield connection
+
     def for_session(self, session_file: str) -> _SessionRoutes:
         path = self.path if self._ensure_database() else None
         return _SessionRoutes(path, session_file)
@@ -168,15 +180,9 @@ class TranscriptRoutes(StoreWriter):
     def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return
-        self._ensure_database(create=True)
-        with (
-            _store_lock(self.path),
-            closing(CoordinationStore.writer(self.path)) as connection,
-        ):
-            connection.execute("PRAGMA synchronous=FULL")
-            with self.transaction(connection):
-                for entry_id in entry_ids:
-                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
+        with self.writing() as connection:
+            for entry_id in entry_ids:
+                TranscriptRoute(session_file, entry_id, routing).upsert(connection)
 
     def record_turn_publication(self, registry, log, lease, checkpoint, routing, published):
         """Join a completed native producer to its original committed wire rows.
@@ -233,21 +239,16 @@ class TranscriptRoutes(StoreWriter):
             self._record_publication(thread.runtime.read_key, ids, final.entry.id, routing, published)
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):
-        self._ensure_database(create=True)
-        with _store_lock(self.path), closing(
-            CoordinationStore.writer(self.path)
-        ) as connection:
-            connection.execute("PRAGMA synchronous=FULL")
-            with self.transaction(connection):
-                final_routing = replace(routing, publications=published)
-                previous = TranscriptRoute.one(connection, session_file=session_file, entry_id=final_id)
-                if previous is not None:
-                    previous.require_publication(final_routing)
-                for entry_id in entry_ids:
-                    if entry_id == final_id:
-                        continue
-                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
-                TranscriptRoute(session_file, final_id, final_routing).upsert(connection)
+        with self.writing() as connection:
+            final_routing = replace(routing, publications=published)
+            previous = TranscriptRoute.one(connection, session_file=session_file, entry_id=final_id)
+            if previous is not None:
+                previous.require_publication(final_routing)
+            for entry_id in entry_ids:
+                if entry_id == final_id:
+                    continue
+                TranscriptRoute(session_file, entry_id, routing).upsert(connection)
+            TranscriptRoute(session_file, final_id, final_routing).upsert(connection)
 
     def record_input_display(
         self,
@@ -263,25 +264,19 @@ class TranscriptRoutes(StoreWriter):
         digest = (
             hashlib.sha256(sent_text.encode("utf-8")).hexdigest() if sent_text is not None else None
         )
-        self._ensure_database(create=True)
-        with (
-            _store_lock(self.path),
-            closing(CoordinationStore.writer(self.path)) as connection,
-        ):
-            connection.execute("PRAGMA synchronous=FULL")
-            with self.transaction(connection):
-                previous = InputDisplay.one(connection, native_id=native_id)
-                if previous is None:
-                    InputDisplay(native_id, display_text, routing, digest).insert(connection)
-                elif digest is not None:
-                    if previous.sent_text_digest is not None:
-                        if (previous.sent_text_digest, previous.routing) != (digest, routing):
-                            raise RelationViolationError("Native input routing cannot be rebound.")
-                    else:
-                        InputDisplay.update(
-                            connection,
-                            where="native_id=?",
-                            parameters=(native_id,),
-                            routing=routing,
-                            sent_text_digest=digest,
-                        )
+        with self.writing() as connection:
+            previous = InputDisplay.one(connection, native_id=native_id)
+            if previous is None:
+                InputDisplay(native_id, display_text, routing, digest).insert(connection)
+            elif digest is not None:
+                if previous.sent_text_digest is not None:
+                    if (previous.sent_text_digest, previous.routing) != (digest, routing):
+                        raise RelationViolationError("Native input routing cannot be rebound.")
+                else:
+                    InputDisplay.update(
+                        connection,
+                        where="native_id=?",
+                        parameters=(native_id,),
+                        routing=routing,
+                        sent_text_digest=digest,
+                    )

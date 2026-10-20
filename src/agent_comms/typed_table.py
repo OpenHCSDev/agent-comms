@@ -1,8 +1,8 @@
 """SQLite representation and access derived from frozen row declarations.
 
-The connection and its transaction belong to the caller. This module neither
-commits nor upgrades a store: installation creates the declared schema on a
-fresh store, and readers accept exactly the declared columns and field types.
+StoreWriter owns transaction completion and committed-change publication.
+TypedStore installs the declared schema on a fresh store; readers accept exactly
+the declared columns and field types without upgrading existing storage.
 """
 
 from __future__ import annotations
@@ -771,7 +771,12 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 class StoreWriter(RootFile):
     """A transaction capability shared by stores and their turn-owned writers."""
 
-    path: Path
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    @property
+    def path(self) -> Path:
+        return self._path
 
     @property
     def store(self) -> StoreWriter:
@@ -805,7 +810,7 @@ class StoreWriter(RootFile):
             self._source_paths(self.store.path)[0].write_bytes(b'')
 
     @abstractmethod
-    def writing(self):
+    def writing(self) -> AbstractContextManager[sqlite3.Connection]:
         """Borrow one committed write transaction from this lifetime owner."""
 
 

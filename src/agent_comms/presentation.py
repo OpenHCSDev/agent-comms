@@ -37,7 +37,6 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import Message
-from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
@@ -51,6 +50,7 @@ from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsVi
                              NotificationsView, RegistrationsView, RevisionView,
                              SidebarView, StoresView)
 from .runtime_info import RuntimeInfo
+from .storage_room import RoomLedger
 from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import (
@@ -800,8 +800,8 @@ class WireRevision(ReadState):
     runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,),
         *STATUS_SOURCE)
     work_room: tuple[FileRevision, ...] = revision_source(
-        lambda views: views.registry.storage_rule.room_ledger.source_paths(
-            views.registry.storage_rule.room_ledger.root), *STATUS_SOURCE)
+        lambda views: RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root),
+        *STATUS_SOURCE)
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,),
         *STATUS_SOURCE, NotificationsView)
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,),

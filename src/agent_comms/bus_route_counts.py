@@ -10,8 +10,8 @@ import json
 import sqlite3
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
-from contextlib import closing
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, NoReturn
@@ -24,7 +24,15 @@ from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
-from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, StoreWriter, TypedRow, TypedTable
+from .typed_table import (
+    Column,
+    ForeignKey,
+    Index,
+    SQLiteJournalMode,
+    StoreWriter,
+    TypedRow,
+    TypedTable,
+)
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -340,7 +348,7 @@ class BusRouteCounts(StoreWriter):
 
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
-        self.path = self.path_in(bus_path.parent)
+        super().__init__(self.path_in(bus_path.parent))
 
     def __enter__(self) -> BusRouteCounts:
         """Open one committed WAL snapshot without taking the writer lock.
@@ -382,6 +390,16 @@ class BusRouteCounts(StoreWriter):
         """Create the writer-owned WAL store after its publication lock releases."""
         self._initialize()
 
+    @contextmanager
+    def writing(self, *, blocking: bool = True) -> Iterator[sqlite3.Connection]:
+        with (
+            _store_lock(self.path, blocking=blocking),
+            closing(CoordinationStore.writer(self.path)) as connection,
+        ):
+            connection.execute("PRAGMA synchronous=FULL")
+            with self.transaction(connection):
+                yield connection
+
     def sync(
         self, source: WireSnapshot,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
@@ -408,24 +426,19 @@ class BusRouteCounts(StoreWriter):
         through = source.position
 
         try:
-            with (
-                _store_lock(self.path, blocking=blocking),
-                closing(CoordinationStore.writer(self.path)) as connection,
-            ):
-                connection.execute("PRAGMA synchronous=FULL")
-                with self.transaction(connection):
-                    current = RouteSourceRow.current(connection)
-                    if current != recorded:
-                        return (RouteIndexReady() if current.through >= size
-                                else RouteIndexBehind(current.through, size))
-                    if rebuild:
-                        for owner in TypedTable.members_with(RouteTable):
-                            owner.delete(connection)
-                    for row in rows:
-                        RouteEntryRow.record(connection, row)
-                    RecordedRouteSourceRow.delete(connection)
-                    if through:
-                        RecordedRouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
+            with self.writing(blocking=blocking) as connection:
+                current = RouteSourceRow.current(connection)
+                if current != recorded:
+                    return (RouteIndexReady() if current.through >= size
+                            else RouteIndexBehind(current.through, size))
+                if rebuild:
+                    for owner in TypedTable.members_with(RouteTable):
+                        owner.delete(connection)
+                for row in rows:
+                    RouteEntryRow.record(connection, row)
+                RecordedRouteSourceRow.delete(connection)
+                if through:
+                    RecordedRouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
         except BlockingIOError:
             return RouteIndexBlocked()
         return RouteIndexReady() if through == size else RouteIndexBehind(through, size)

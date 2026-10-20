@@ -344,7 +344,9 @@ class NotificationAssignment(NotificationSource):
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore
 
-        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls, sources) as result:
+        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
+            cls, sources
+        ) as result:
             return result
 
     @classmethod
