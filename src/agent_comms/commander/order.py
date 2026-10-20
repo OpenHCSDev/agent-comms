@@ -659,10 +659,11 @@ class Commander(CommanderContext):
         todo = self.comms.goals.todos.get(pid)
         todo.order.require_withdrawal()
         refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
+        previous = todo.holder_state.previous_assignment()
         self.call(CommsChangeProblemTool(problem=pid, operation=WithdrawTodo(
-            todo.revision, self.incarnation, todo.held(), why,
+            todo.revision, self.incarnation, previous, why,
             superseded_by)))
-        unit = todo.held().owner
+        unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
                   VerdictAudience.of(unit, todo.goal))
