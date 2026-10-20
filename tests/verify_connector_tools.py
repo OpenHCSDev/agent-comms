@@ -407,7 +407,6 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                     (output / "timings.json").write_text(json.dumps(rows, indent=2) + "\n")
                     print(json.dumps(row), flush=True)
                     if name == "comms_send" and status == "200" and not row["isError"]:
-                        from agent_comms.rule_reviews import NoRuleReview, RuleReviews
                         from agent_comms.wire_record import WireRecord
 
                         saved = [
@@ -416,7 +415,6 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                             for message in WireRecord.public_from_wire(json.loads(line)).messages()
                         ]
                         assert any(message.body == args["body"] for message in saved)
-                        assert isinstance(RuleReviews(root).review("claude-ai"), NoRuleReview)
             finally:
                 service.terminate()
                 service.communicate(timeout=15)

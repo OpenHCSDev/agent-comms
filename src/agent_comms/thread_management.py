@@ -51,7 +51,6 @@ from .private_registry_guard import (
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
-from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import AgentThreadRole, NoThreadText, ThreadRole
 from .thread_owned_state import ThreadOwnedState
@@ -424,7 +423,6 @@ class ThreadManagement:
             transcript_read_state(self.bus.reads.path),
             GoalWaits.at(self.root),
             RelationshipStore.at(self.root),
-            RuleReviews(self.root),
         )
         ThreadOwnedState.require_complete(states)
         return states

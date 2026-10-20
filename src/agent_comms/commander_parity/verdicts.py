@@ -15,8 +15,6 @@ from uuid import uuid4
 
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.commander.judge import BackVerb, Edit, OkVerb, VerdictVerb
-from agent_comms.commander.rules import AnswerVerb, ReviewVerb
-from agent_comms.rule_reviews import DrawnRule, RuleReviews
 from agent_comms.todos import AcceptedVerdict, SendBackVerdict, Todo, ToolCallVerdict
 from agent_comms.tools import CommsVerdictTool, TodoChanged
 from agent_comms.turn_context import GoalSegment
@@ -80,20 +78,6 @@ class VerdictCase(ABC):
         cls, call_id: str, invoke: Callable[[LifecycleRun, VerdictVerb, Todo, Edit], object]
     ) -> VerdictObservation:
         with LifecycleRun.open() as run, contextlib.redirect_stdout(io.StringIO()):
-            # Satisfy the actual gate in this copy, without transferring original authority.
-            ReviewVerb().apply(run.commander)
-            with RuleReviews(run.commander.root).snapshot() as db:
-                drawn = DrawnRule.select(db, reviewer=run.commander.commander, order_by=("n",))
-            for rule in drawn:
-                AnswerVerb(
-                    n=rule.n,
-                    text=(
-                        f'"{rule.rule}" This isolated comparison keeps verdict mutation in '
-                        "its existing native owner, preserves original sessions, and checks "
-                        "the actual stored Goal and strike rather than a second state store: "
-                        f"{Path(__file__).resolve()}:1"
-                    ),
-                ).apply(run.commander)
             before = run.create()
             worker = run.commander.comms.registry.require(run.worker)
             goal = worker.goal.require()

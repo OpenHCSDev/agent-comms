@@ -160,7 +160,7 @@ class StandingRulesParityRow(ParityRow):
 class RuleReviewParityRow(ParityRow):
     number = 16
     capability = "Rule review"
-    current = "`rules.py`; `rules.jsonl`; maximum age"
+    current = "`rules.py review` prints every rule; the session hook rereads them in full"
     native = "Rule instruction segments in the commander's turn context, with provenance"
     phases = (ControlPlanePhase,)
 
