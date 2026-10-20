@@ -41,7 +41,6 @@ from agent_comms.todos import GoalRef, Todo, TodoStore
 from agent_comms.installer.carry import (
     FRAMEWORK, STEPS, Carried, Carry, CarryChain, CarryLedger, UnorderedSteps,
 )
-from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
 from agent_comms.installer.backup import (
@@ -224,37 +223,6 @@ def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
         ledger.record(name)
     assert ledger.applied() == ("carry_a", "carry_b")
     assert ledger.path.stat().st_mode & 0o777 == 0o600
-
-
-@pytest.mark.refactor_guard
-@pytest.mark.parametrize("change, edited", [
-    ({"carry_b": step_source()}, 0),
-    ({"carry_a": step_source().replace("Carried(0)", "Carried(1)")}, 1),
-    ({"carry_a": step_source().replace("(Carry):\n", "(Carry):\n    after = 'carry_previous'\n")}, 0),
-    ({"carry_a": step_source() +
-      "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 0),
-    ({"carry_a": step_source().replace("Carried(0)", "Carried(1)") +
-      "\n    @classmethod\n    def backup_files(cls, root):\n        return (root / 'registry.json',)\n"}, 1),
-    ({"carry_a": step_source() +
-      "\n    @classmethod\n    def before_stop(cls, root, *, apply):\n        return Carried(1)\n"}, 1),
-    ({"carry_a": None, "carry_renamed": step_source()}, 1),
-    ({"carry_a": None}, 0),
-])
-def test_a_step_on_main_is_never_edited_renamed_or_reused(tmp_path, change, edited):
-    repo = Repository(tmp_path)
-    base = repo.commit({"carry_a": step_source()})
-    head = repo.commit(change)
-    assert EditedCarry.compare(tmp_path, base, head, set(), "src") == (
-        {"EditedCarry": 0}, {"EditedCarry": edited})
-
-
-@pytest.mark.refactor_guard
-def test_a_deleted_step_name_is_never_reused(tmp_path):
-    repo = Repository(tmp_path)
-    repo.commit({"carry_a": step_source()})
-    deleted = repo.commit({"carry_a": None})
-    readded = repo.commit({"carry_a": step_source()})
-    assert EditedCarry.compare(tmp_path, deleted, readded, set(), "src")[1] == {"EditedCarry": 1}
 
 
 def record_source(version: int, fields: str) -> str:

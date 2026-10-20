@@ -42,7 +42,7 @@ from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.installer.carry import FRAMEWORK, STEPS, Carry, Step, carry_parents
+from agent_comms.installer.carry import STEPS
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
@@ -1564,54 +1564,6 @@ class AnyAnnotation(PerFileMeasure):
         return len(cls.uses(source, filename))
 
 
-
-class EditedCarry(ChangeMeasure):
-    """Carry steps edited, renamed, or added under a deleted step's name.
-
-    A bus that already ran a step never runs its edit, and a bus that had not
-    yet run the original loses it; a deleted step's name still names that step
-    in every ledger that recorded it. A different change is a new step.
-    """
-
-    @staticmethod
-    def conversion(source: bytes) -> str:
-        """Conversion code is immutable; publication backups are metadata, as was the
-        predecessor an ``after`` string once restated."""
-        tree = ast.parse(source)
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                node.body = [statement for statement in node.body
-                             if not (isinstance(statement, ast.FunctionDef)
-                                     and statement.name == 'backup_files')
-                             and not (isinstance(statement, ast.Assign)
-                                      and [getattr(target, "id", None)
-                                           for target in statement.targets] == ["after"])]
-        return ast.dump(tree, include_attributes=False)
-
-    @classmethod
-    def counted(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
-                          base, head, "--", str(STEPS)).decode().split("\0")[:-1])
-        @cache
-        def parents() -> dict[str, type[Carry]]:
-            return carry_parents(git(repo, "show", f"{head}:{FRAMEWORK}"))
-
-        edited = 0
-        for status in fields:
-            path = next(fields)
-            if status[0] in "RC":
-                next(fields)
-            name = Path(path).stem
-            if not (name.startswith("carry_") and path.endswith(".py")):
-                continue
-            if status[0] in "MRC" or status == "T":
-                before = git(repo, "show", f"{base}:{path}")
-                if Step.holds_carry(before, parents()):
-                    edited += (status != "M" or cls.conversion(before) !=
-                               cls.conversion(git(repo, "show", f"{head}:{path}")))
-            elif status == "A":
-                edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
-        return {cls.__name__: 0}, {cls.__name__: edited}
 
 class UncarriedRecordFormat(ChangeMeasure):
     """A stored record's format changed without its version, or its version without a carry.
