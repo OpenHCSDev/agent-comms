@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.pi_payloads import RequestId
 
 from . import pi_commands as commands
 from . import turn_failure as failures
@@ -76,7 +77,7 @@ class PendingAttestation(NativeAttestation):
     expected: NativeSessionIdentity | None = None
     request: commands.GetState = field(
         default_factory=lambda: commands.GetState(
-            id=f"agent-comms-preflight-{secrets.token_hex(16)}"
+            id=RequestId(f"agent-comms-preflight-{secrets.token_hex(16)}")
         )
     )
 
