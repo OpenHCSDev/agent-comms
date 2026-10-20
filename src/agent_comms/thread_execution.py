@@ -5,15 +5,15 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from .declared_family import DeclaredFamily
 from .child_process import ProcessState
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_status import NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
-    from .threads import Thread
     from .registry_document import RegistrySnapshot
-    from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
+    from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .threads import Thread
 
 
 class ThreadCommandAvailability:

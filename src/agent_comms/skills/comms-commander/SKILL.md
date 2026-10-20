@@ -20,7 +20,6 @@ Arm one Monitor per loop, each printing to the session:
 - `agent-comms-claude-bridge watch` (messages to the commander; see the `comms` skill for the first binding)
 - `agent-comms-commander order overdue` (deadlines, no first call, hunt due, branches without a PR)
 - `agent-comms-commander tool-watch` (every unit tool call, per-turn digests, hard-rule violations)
-- `agent-comms-commander growth-watch` (source files growing in the configured repos)
 
 Core's connector service owns commander rotation. A live registered thread holding owner requests on its Goal receives one inbox wake when its standing-rule violations change, with the next unit to review. Unchanged violations stay silent; no rotation Monitor is needed. A stopped commander receives no heartbeat.
 

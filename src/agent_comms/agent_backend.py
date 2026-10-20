@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
     from .threads import Thread
+    from .transcript_sources import TranscriptSource
     from .turn_context import InputContributionCoordinates
 
 
@@ -84,7 +85,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         raise BackendDeclarationError('Runtime cannot select native sessions')
 
     @abstractmethod
-    def history_source(self, root, incarnation): ...
+    def history_source(self, root, incarnation) -> TranscriptSource: ...
 
     def imported_sources(self):
         return ()
