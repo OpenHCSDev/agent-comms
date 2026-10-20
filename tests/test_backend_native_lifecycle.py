@@ -23,6 +23,26 @@ from stored_inputs import stored_inputs
 
 from native_backend_fixture import wait_for
 
+async def test_actual_native_attested_identity_owns_retention_and_reopen(native_backend):
+    owner = native_backend
+    first = await owner.run("retained original", followup="retained followup")
+    assert first[-1].ok, first[-1]
+    child = owner.persistent.child_state.child.proc
+    assert child.alive() and owner.persistent.child_state.idle().current
+    assert [row[0] for row in owner.starts] == [None, "queued"]
+
+    second = await owner.run("warm original")
+    assert second[-1].ok, second[-1]
+    assert owner.persistent.child_state.child.proc is child
+    await owner.force_reopen()
+    assert not child.alive()
+    third = await owner.run("saved original")
+    assert third[-1].ok, third[-1]
+    assert owner.persistent.child_state.child.proc is not child
+    assert owner.persistent.child_state.idle().current
+    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 4
+
+
 async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(native_backend):
     owner = native_backend
     first = await owner.run("first", followup="queued followup")

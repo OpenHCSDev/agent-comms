@@ -12,6 +12,7 @@ from agent_comms.input_drain import DrainedSession, NoPrivateObservation
 from agent_comms.native_child import NoInputForwarder
 from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
 from agent_comms.native_session_reopen import SessionRetention
+from agent_comms.pi_commands import GetState
 from agent_comms.turn_input_source import SelectedOriginalInput
 
 
@@ -118,3 +119,11 @@ def test_source_reference_owns_missing_trace_without_changing_file_line_wire():
     location = FileLine("source.py", 17)
     assert SourceReference.from_optional(location).require("not missing") is location
     assert FieldCodec.encode(location) == "source.py:17"
+
+
+def test_optional_rpc_id_is_refused_when_an_input_requires_correlation():
+    command = GetState(id=None)
+    assert "id" not in command.to_rpc()
+    with pytest.raises(ValueError, match="requires its command ID"):
+        command.require_id()
+    assert GetState(id="correlated").require_id() == "correlated"

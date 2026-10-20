@@ -382,7 +382,9 @@ class Commander(CommanderContext):
                     if replacing:
                         listed[pid].require_replacement(replaces)
                     if pid in listed:
-                        listed[pid].holder_state.require_trace(unit, SourceReference.from_optional(trace))
+                        listed[pid].holder_state.require_trace(
+                            unit, SourceReference.from_optional(trace),
+                        )
             except MalformedRecord as error:
                 problems.append(str(error))
         if replaces and not replacing:

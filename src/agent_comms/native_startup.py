@@ -82,7 +82,9 @@ class NativeStartupPolicy:
         Missing/unreadable sessions retain the ten-second base bound.
         """
         extra_steps = session_load.extra_steps(self.readiness_step_bytes)
-        return min(self.readiness_max_seconds, base_seconds + extra_steps * self.readiness_step_seconds)
+        return min(
+            self.readiness_max_seconds, base_seconds + extra_steps * self.readiness_step_seconds,
+        )
 
 
 NATIVE_STARTUP_POLICY = NativeStartupPolicy()
