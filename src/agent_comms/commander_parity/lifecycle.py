@@ -26,7 +26,6 @@ from ..commander.request import RequestAddVerb
 from ..comms import Comms
 from ..field_codec import FieldCodec
 from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from ..registry_document import RosterVisibility
 from ..todos import (
     ApplicationOrderRun,
     MergedProgress,
@@ -109,18 +108,14 @@ class LifecycleRun:
             config.commander
         )
         caller = source.registry.require(actor)
-        candidates = tuple(
-            thread
-            for thread in source.registry.snapshot().visible_threads(RosterVisibility())
-            if thread.parent == config.commander and thread.name != config.commander
-        )
-        if not candidates:
-            raise ValueError("Lifecycle comparison requires an existing registered unit")
-        worker = (
-            caller
-            if actor != config.commander
-            else sorted(candidates, key=lambda thread: thread.name)[0]
-        )
+        if actor == config.commander:
+            authority = MeasuredCommander(config=config)
+            held = source.goals.todos.held_for_commander(authority.incarnation)
+            if not held:
+                raise ValueError("Lifecycle comparison requires an existing native order holder")
+            worker = source.registry.require(held[-1].held().owner)
+        else:
+            worker = caller
         directory = caller.storage_roots.scratch / "commander-parity" / uuid4().hex
         with CheckRoot(source, (config.commander, worker.name), directory).open() as copied:
             root = copied.root
