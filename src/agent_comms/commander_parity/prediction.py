@@ -24,21 +24,21 @@ class PredictionCase(LifecycleCase):
     additional_owners = (CommsProblemCloseTool,)
 
     @staticmethod
-    def git(checkout: Path, *arguments: str, at: float | None = None) -> str:
-        environment = dict(os.environ)
-        if at is not None:
-            date = f"@{int(at)} +0000"
-            environment.update(GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
+    def git(checkout: Path, *arguments: str, **environment: str) -> str:
         return subprocess.check_output(
-            ("git", "-C", str(checkout), *arguments), env=environment,
-            text=True, stderr=subprocess.PIPE, timeout=30,
+            ("git", "-C", str(checkout), *arguments),
+            env=os.environ | environment,
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=30,
         ).strip()
 
     @classmethod
     def record_check(cls, check: OrderCheck, checkout: Path) -> None:
         result = asyncio.run(check.run())
         CheckedCommit(check.command, result.outcome, result.stdout.decode()).store(
-            str(checkout), cls.git(checkout, "rev-parse", "HEAD"))
+            str(checkout), cls.git(checkout, "rev-parse", "HEAD")
+        )
 
     @classmethod
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
@@ -63,7 +63,15 @@ class PredictionCase(LifecycleCase):
         source.write_text("100")
         cls.git(checkout, "add", source.name)
         ordered = created.order.checked().at.recorded_at("The copied order")
-        cls.git(checkout, "commit", "-qm", "Retained base", at=ordered - 1)
+        base_date = f"@{int(ordered - 1)} +0000"
+        cls.git(
+            checkout,
+            "commit",
+            "-qm",
+            "Retained base",
+            GIT_AUTHOR_DATE=base_date,
+            GIT_COMMITTER_DATE=base_date,
+        )
         cls.git(checkout, "push", "-q", "origin", "main")
         cls.git(checkout, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         check = created.order.checked().check
@@ -76,7 +84,15 @@ class PredictionCase(LifecycleCase):
         for offset, remaining in ((2, 60), (4, 20)):
             source.write_text(str(remaining))
             cls.git(checkout, "add", source.name)
-            cls.git(checkout, "commit", "-qm", f"{remaining} decisions remain", at=ordered + offset)
+            date = f"@{int(ordered + offset)} +0000"
+            cls.git(
+                checkout,
+                "commit",
+                "-qm",
+                f"{remaining} decisions remain",
+                GIT_AUTHOR_DATE=date,
+                GIT_COMMITTER_DATE=date,
+            )
             run.decisions.write_text(json.dumps(["unfinished"] * remaining))
             cls.record_check(check, checkout)
             heartbeat.wake(comms, run.worker, commander)
@@ -100,8 +116,9 @@ class PredictionCase(LifecycleCase):
         return tuple(rows)
 
     @classmethod
-    def checks(cls, run: LifecycleRun, rows: tuple[Todo, ...],
-               native: tuple[ToolResult, ...], output: str) -> tuple[tuple[str, bool], ...]:
+    def checks(
+        cls, run: LifecycleRun, rows: tuple[Todo, ...], native: tuple[ToolResult, ...], output: str
+    ) -> tuple[tuple[str, bool], ...]:
         reads = tuple(result for result in native if isinstance(result, TodoList))
         if len(rows) != 4 or len(reads) < 3:
             return (("two native reviews and closing observed", False),)
@@ -116,15 +133,21 @@ class PredictionCase(LifecycleCase):
         board = run.commander.board.read_text()
         messages = run.commander.comms.bus.inbox(run.commander.commander)
         return (
-            ("both reviews derive numeric measured slopes",
-             isinstance(first.trend, MovingTrend) and isinstance(last.trend, MovingTrend)),
+            (
+                "both reviews derive numeric measured slopes",
+                isinstance(first.trend, MovingTrend) and isinstance(last.trend, MovingTrend),
+            ),
             ("second review replaces first", first != last and rows[1].revision < rows[2].revision),
             ("closure retains last prediction", closed.forecast == last),
             ("actual finish recorded", closed.actual >= last.at),
-            ("native row actually closed",
-             not rows[-1].state.open and pid in {t.id for t in reads[-1].closed}),
+            (
+                "native row actually closed",
+                not rows[-1].state.open and pid in {t.id for t in reads[-1].closed},
+            ),
             ("board shows predicted against actual", closed.line in board),
             ("comparison shows signed error", "actual minus predicted" in closed.line),
-            ("heartbeat shows its saved forecast",
-             any("predicted finish" in message.body for message in messages)),
+            (
+                "heartbeat shows its saved forecast",
+                any("predicted finish" in message.body for message in messages),
+            ),
         )

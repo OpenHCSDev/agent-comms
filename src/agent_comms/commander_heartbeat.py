@@ -23,12 +23,15 @@ class CommanderReview:
     def wake(self, comms: Comms, sender: str, commander: Thread) -> None:
         rules = StandingRule.broken(comms, commander.name)
         reviewed = comms.goals.todos.review_predictions(
-            commander.incarnation, comms.registry.storage_rule, time.time())
+            commander.incarnation, comms.registry.storage_rule, time.time()
+        )
         found = frozenset(rules)
         if found == self.violations:
             return
-        lines = ["COMMANDER HEARTBEAT: standing-rule violations changed.",
-                 *(f"{todo.id} @{todo.holder}{todo.predicted_finish.line}" for todo in reviewed)]
+        lines = [
+            "COMMANDER HEARTBEAT: standing-rule violations changed.",
+            *(f"{todo.id} @{todo.holder}{todo.predicted_finish.line}" for todo in reviewed),
+        ]
         owed = comms.goals.todos.held_for_commander(commander.incarnation)
         units = sorted({todo.held().owner for todo in owed})
         if units:

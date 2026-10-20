@@ -2741,7 +2741,8 @@ class TodoStore(TypedStore):
                 raise ValueError(f'{problem} is already held by {target.holder}')
             replace(target, order=target.order.linked(source.order), assignment=source.held(),
                     goal=source.goal, deadline=source.deadline, messages=source.messages,
-                    predicted_finish=UnreviewedPrediction(), revision=target.revision + 1).upsert(db)
+                    predicted_finish=UnreviewedPrediction(),
+                    revision=target.revision + 1).upsert(db)
 
     def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         """Rows in creation order; an absent store has none, and a read never creates one."""
@@ -2804,10 +2805,9 @@ class TodoStore(TypedStore):
                                     limit: int = 50) -> tuple[Todo, ...]:
         """The bounded outcome tail shown beside the open fleet, never all history."""
         with self.snapshot() as db:
-            return tuple(Todo.read(db.execute(
-                "SELECT * FROM todo WHERE creator=? AND creator_created=? AND state=? "
-                "ORDER BY rowid DESC LIMIT ?",
-                (commander.name, commander.wire_birth, DoneTodoState.declared_name, limit))))
+            return tuple(Todo.select(
+                db, creator=commander.name, creator_created=commander.wire_birth,
+                state=DoneTodoState, order_by=("rowid",), descending=True, limit=limit))
 
     def stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
         """Observe active held orders without changing owners, strikes or releases."""

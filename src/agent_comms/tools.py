@@ -828,7 +828,8 @@ class CommsTodoListTool(ThreadReadTool):
         closed = comms.goals.todos.recent_closed_for_commander(actor)
         pulls, storage = PullRequests(listed), comms.registry.storage_rule
         return TodoList(listed, {todo.id: todo.state.progress(todo, storage, pulls)
-                                 for todo in (*listed, *closed) if todo.holder or not todo.state.open},
+                                 for todo in (*listed, *closed)
+                                 if todo.holder or not todo.state.open},
                         closed)
 
 

@@ -20,8 +20,8 @@ from .lifecycle import (
     verify_order_progress,
 )
 from .load import LoadComparison
-from .prediction import PredictionCase
 from .measurements import RuleComparison, StorageComparison, measured_load
+from .prediction import PredictionCase
 
 
 class CreateProblemParityRow(ParityRow):
