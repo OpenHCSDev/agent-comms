@@ -448,7 +448,7 @@ def main() -> None:
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse), indent=2))
     except UpgradeRefused as error:
-        raise SystemExit(f"upgrade-bus: {error}")
+        raise SystemExit(error.output)
 
 
 if __name__ == "__main__":

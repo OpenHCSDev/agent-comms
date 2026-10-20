@@ -27,13 +27,17 @@ from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from itertools import islice
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self
 
+from cutover.backup import UpgradeRefused
 from install_snapshot import SnapshotHome
 
-from agent_comms.active_route import ActiveRoute
+from agent_comms.active_route import ActiveRoute, CommsRoute
+from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import Platform
+from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
     FieldCodec,
@@ -233,6 +237,43 @@ def affected(repo: Path, base: str, head: str) -> list[str]:
     )
 
 
+@dataclass(frozen=True)
+class PracticeCopy:
+    """A real retained tail, native session tails and the production indexes they build."""
+
+    source: Comms
+    into: Path
+    max_bytes: ClassVar[int] = 3 * 1024**3
+
+    @contextmanager
+    def open(self) -> Iterator[Comms]:
+        roster = self.source.registry.snapshot()
+        with self.source.bus.log.opened_wire_snapshot() as source:
+            names = tuple(
+                dict.fromkeys(
+                    sender
+                    for message in islice(
+                        source.newest_messages(CheckRoot.max_bytes), CheckRoot.max_records
+                    )
+                    if (sender := roster.canonical_name(message.sender)) in roster.threads
+                )
+            )
+        if not names:
+            raise GateError("The retained bus tail has no registered participants")
+        self.into.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if shutil.disk_usage(self.into.parent).free < storage_floor():
+            raise GateError("Insufficient free space before building the retained-tail copy")
+        with CheckRoot(self.source, names, self.into).open() as copied:
+            size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
+            if size > self.max_bytes:
+                raise GateError(
+                    f"Retained-tail copy is {size} bytes, over its {self.max_bytes} cap"
+                )
+            if shutil.disk_usage(self.into.parent).free < 2 * size + storage_floor():
+                raise GateError(f"Insufficient free space for rehearsal of {size} copied bytes")
+            yield copied
+
+
 class SnapshotCopy(SnapshotHome):
     def place(self, home: Path, bus: Path) -> Path:
         original, source_home = Path(self.root), Path(self.home)
@@ -350,6 +391,12 @@ def prepare_home(home: Path, bus: Path, context: SnapshotCopy) -> Path:
     source_route = bus.parent / "active-route.json"
     bus = context.place(home, bus)
     context.route(source_route, home, bus)
+    prepare_runtime_home(home)
+    return bus
+
+
+def prepare_runtime_home(home: Path) -> None:
+    home.mkdir(mode=0o700, parents=True, exist_ok=True)
     pointer = home / ".local/share/agent-comms/current"
     pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     pointer.unlink(missing_ok=True)
@@ -361,7 +408,6 @@ def prepare_home(home: Path, bus: Path, context: SnapshotCopy) -> Path:
     cache = Path(run("npm", "config", "get", "cache"))
     if not (home / ".npm").exists() and cache.is_dir():
         shutil.copytree(cache, home / ".npm", symlinks=True)
-    return bus
 
 
 @contextmanager
@@ -460,7 +506,8 @@ def rehearse(
         launch.verify()
         outcome = asyncio.run(process.wait())
     if not outcome.successful:
-        raise GateError(f"Rehearsal {outcome.summary}; see {log}")
+        reason = UpgradeRefused.public_message(log.read_text(errors="replace"))
+        raise GateError(f"Rehearsal {outcome.summary}: {reason}")
     try:
         return FieldCodec.decode(InstallerAnswer, FieldCodec.parse(answer.read_text())).rehearsal
     except MalformedRecord as error:
@@ -599,6 +646,10 @@ class MachineResult(DeclaredFamily, affix="MachineResult"):
     @abstractmethod
     def successful(self) -> bool: ...
 
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class PassedMachineResult(MachineResult):
@@ -624,8 +675,16 @@ class FailedMachineResult(MachineResult):
     def successful(self) -> bool:
         return False
 
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return (self.error,)
+
 
 class GateResult(DeclaredFamily, affix="GateResult"):
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return (self.description,)
+
     @property
     @abstractmethod
     def successful(self) -> bool: ...
@@ -655,6 +714,14 @@ class MachinesGateResult(GateResult):
     machines: dict[str, MachineResult]
 
     @property
+    def failures(self) -> tuple[str, ...]:
+        return tuple(
+            f"{name}: {reason}"
+            for name, result in self.machines.items()
+            for reason in result.failures
+        )
+
+    @property
     def successful(self) -> bool:
         return len(self.machines) == 2 and all(
             result.successful for result in self.machines.values()
@@ -670,6 +737,19 @@ class MachinesGateResult(GateResult):
 
 
 @dataclass(frozen=True)
+class PracticeGateResult(GateResult):
+    rehearsal: CompletedRehearsal
+
+    @property
+    def successful(self) -> bool:
+        return True
+
+    @property
+    def description(self) -> str:
+        return "Retained-tail practice install passed"
+
+
+@dataclass(frozen=True)
 class UnfinishedGateResult(MachinesGateResult):
     @property
     def successful(self) -> bool:
@@ -679,6 +759,10 @@ class UnfinishedGateResult(MachinesGateResult):
 @dataclass(frozen=True)
 class InterruptedGateResult(MachinesGateResult):
     error: str
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return (self.error, *super().failures)
 
     @property
     def successful(self) -> bool:
@@ -777,6 +861,11 @@ class GateCommand(DeclaredFamily, affix="GateCommand"):
 
 
 class CheckGateCommand(GateCommand):
+    def run(
+        self, args: GateArguments, target: Target, report: Path, results: dict[str, MachineResult]
+    ) -> GateResult:
+        return MachinesGateResult(run_machines(args, target, report, results))
+
     @abstractmethod
     def target(self, args: GateArguments, repository: str) -> Target: ...
 
@@ -793,7 +882,7 @@ class CheckGateCommand(GateCommand):
             result = (
                 OutsideInstallGateResult()
                 if target.outside(changed)
-                else MachinesGateResult(run_machines(args, target, report_path, results))
+                else self.run(args, target, report_path, results)
             )
         except (
             GateError,
@@ -856,6 +945,39 @@ class RevisionGateCommand(CheckGateCommand):
     def target(self, args: GateArguments, repository: str) -> Target:
         head = run("git", "rev-parse", f"{self.revision}^{{commit}}", cwd=args.repo)
         return Target(head, args.base.resolve(args.repo, head))
+
+
+@dataclass(frozen=True)
+class PracticeGateCommand(RevisionGateCommand):
+    def run(
+        self, args: GateArguments, target: Target, report: Path, results: dict[str, MachineResult]
+    ) -> GateResult:
+        with tempfile.TemporaryDirectory(dir=args.scratch, prefix="practice-") as directory:
+            private = Path(directory)
+            home = private / "home"
+            with PracticeCopy(
+                Comms(CommsRoute.current().root), home / ".agent-comms"
+            ).open() as copied:
+                prepare_runtime_home(home)
+                with tempfile.TemporaryDirectory(
+                    dir=Path.home() / "wt", prefix="practice-source-"
+                ) as source:
+                    work = Path(source)
+                    with (
+                        checkout(args.repo, target.base, work / "base") as previous,
+                        checkout(args.repo, target.head, work / "target") as tree,
+                    ):
+                        completed = rehearse(
+                            tree,
+                            previous,
+                            target.head,
+                            copied.root,
+                            home,
+                            args.python,
+                            report.with_suffix(".log"),
+                            work,
+                        )
+                return PracticeGateResult(completed)
 
 
 @dataclass(frozen=True)
@@ -929,6 +1051,7 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--pr", dest="command", type=PrGateCommand.argument)
     mode.add_argument("--revision", dest="command", type=RevisionGateCommand)
+    mode.add_argument("--practice", dest="command", type=PracticeGateCommand)
     mode.add_argument(
         "--require-status", dest="command", action="store_const", const=ConfigureGateCommand()
     )
