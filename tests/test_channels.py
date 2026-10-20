@@ -180,8 +180,11 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
                   if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
-    choices = next(field.choices for field in await action.prepare_fields()
-                   if field.name == 'disposition')
+    from agent_comms.launch_root import LaunchRoot
+
+    with LaunchRoot.from_path(comms.root).selected():
+        choices = next(field.choices for field in await action.prepare_fields()
+                       if field.name == 'disposition')
     assert (disposition.label, editor_value) in choices
     edited = action.edited({'disposition': editor_value})
     assert edited.bound[0].disposition == disposition
