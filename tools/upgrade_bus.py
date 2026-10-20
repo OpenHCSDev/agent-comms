@@ -11,8 +11,10 @@ worktree of the target revision, the dependency set the stack project resolves
 launcher and skill link reads through ``current``; nothing runs a checkout, so ``--repo``
 is only where revisions come from.
 
-Every run builds that runtime (a runtime the same inputs built is reused), then
-rehearses on a copy of the bus. The ledger (``carries.json``) names the carry steps
+Every run builds that runtime (a runtime the same inputs built is reused). When its
+dependency export and native pin match the installed runtime, the environment is copied
+with reflinks and only Core and Toad are reinstalled. A live run switches first, then
+rehearses and checks on a copy of the bus. The ledger (``carries.json``) names the carry steps
 still pending; each runs from the revision that declares it (``tools/cutover/carry.py``)
 under the new runtime's Python and the wire lock, and every file it does not name as
 rewritten must be byte-identical. Then ``who``, ``threads`` and ``history`` read the
@@ -25,9 +27,8 @@ itself on the copy: a new thread answers a DM while Toad shows it
 A live run never waits for owners. It backs the bus up (tar plus a hash of every file)
 while no writer can change it, carries it, reads it back, moves every link and then
 ``current`` to the new runtime and restarts the host services onto it. Each running
-owner is then queued to restart onto the new runtime when its own turn ends
-(``agent_comms.restart_queue``); the report names each queued restart, and
-``comms_restart_queue`` shows how each settled. Runtimes no process uses, other than the
+owner is queued to restart after its own turn ends; active declarations whose process
+died are started after the services restart. The report records both operations. Runtimes no process uses, other than the
 new and the previous one, are removed. A failure after the backup holds maintenance and
 preserves the bus, the previous runtime and the backup for forward repair. Nothing is
 sent and no input is replayed.
@@ -39,6 +40,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import sqlite3
@@ -55,6 +57,8 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import ClassVar
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src of the runtime being replaced.
@@ -84,6 +88,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOpera
 from agent_comms.messages import Message
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_lifecycle import OwnerStartResult
 from agent_comms.registry_store import RegistryStore
 from agent_comms.restart_queue import QueuedRestart
 from agent_comms.storage_rules import StorageRule
@@ -261,6 +266,30 @@ class Runtime:
             NativeArguments.binary_key: str(self.python.with_name("pi-comms-native")),
         }
 
+    def relocate_programs(self) -> None:
+        """A copied environment must not execute or activate another runtime's Python."""
+        prefix = re.compile(rb"/[^\s'\"\x00:=]+/runtimes/[^/\s'\"\x00:;]+")
+        destination = os.fsencode(self.path.resolve(strict=True))
+        for program in (self.path / 'bin').rglob('*'):
+            if program.is_symlink():
+                original = os.fsencode(program.readlink())
+            elif program.is_file():
+                original = program.read_bytes()
+            else:
+                continue
+            relocated = prefix.sub(destination, original)
+            if relocated != original:
+                if program.is_symlink():
+                    program.unlink()
+                    program.symlink_to(os.fsdecode(relocated))
+                elif b'\0' in original:
+                    raise UpgradeRefused(f'Cannot relocate binary program {program}')
+                else:
+                    program.write_bytes(relocated)
+            remaining = os.fsencode(program.readlink()) if program.is_symlink() else program.read_bytes()
+            if any(found != destination for found in prefix.findall(remaining)):
+                raise UpgradeRefused(f'Program still names another runtime: {program}')
+
     def report(self, code: str, *arguments: str | Path) -> str:
         """One answer the runtime gives about itself, from its own packages only."""
         return run(self.python, "-I", "-c", code, *arguments, env=self.environment()).strip()
@@ -316,6 +345,20 @@ class Runtime:
                 root,
             ).split()
         )
+
+    def start_dead(self, root: Path) -> tuple[OwnerStartResult, ...]:
+        """Recover active declarations whose process died; preserve every live owner."""
+        names = self.report(
+            'import sys; from pathlib import Path; from agent_comms.comms import wire; '
+            'snapshot = wire(Path(sys.argv[1])).registry.snapshot(); '
+            'print(*(candidate.name for thread in snapshot.threads.values() '
+            'if snapshot.statuses[thread.name].active and not thread.process_alive '
+            'for candidate in thread.role.executor(thread)))', root,
+        ).split()
+        with ThreadPoolExecutor(max_workers=max(1, len(names))) as requests:
+            return tuple(requests.map(
+                lambda name: self.read(root, OwnerStartResult, 'start', '--name', name), names,
+            ))
 
     def queue_restart(self, root: Path, name: str) -> QueuedRestart:
         """Restart this owner onto this runtime when its own turn ends; never interrupts it."""
@@ -393,6 +436,37 @@ class RuntimeBuild:
 
     tree: Path
     runtimes: Path = RUNTIMES
+    baseline: Runtime = field(default_factory=Runtime.current)
+
+    @staticmethod
+    def dependencies(export: str) -> tuple[str, ...]:
+        """Compare the active dependency graph, excluding the two packages we replace."""
+        selected = []
+        for line in export.splitlines():
+            if not line.strip() or line.startswith('#'):
+                continue
+            requirement = Requirement(line)
+            if canonicalize_name(requirement.name) in ('agent-comms', 'batrachian-toad'):
+                continue
+            if requirement.marker is None or requirement.marker.evaluate():
+                requirement.name = canonicalize_name(requirement.name)
+                requirement.marker = None
+                selected.append(str(requirement))
+        return tuple(sorted(selected))
+
+    def environment(self, runtime: Runtime, requirements: str, pin: str) -> None:
+        """The installed graph and native manifest decide reuse, not an installer flag."""
+        installed_pin = self.baseline.report(
+            'import hashlib; from agent_comms.native_package import MANIFEST; '
+            'print(hashlib.sha256(MANIFEST.read_bytes()).hexdigest())'
+        )
+        exported = run(UV, 'pip', 'freeze', '--python', self.baseline.python)
+        if installed_pin == pin and self.dependencies(exported) == self.dependencies(requirements):
+            run('cp', '-a', '--reflink=auto', self.baseline.path, runtime.path)
+            for name in (Runtime.record_name, 'acceptance.json'):
+                (runtime.path / name).unlink(missing_ok=True)
+        else:
+            run(UV, 'venv', '--python', '3.14', runtime.path)
 
     def requirements(self) -> str:
         """OpenHCSDev packages track their mains; the lock only records this resolution."""
@@ -406,6 +480,7 @@ class RuntimeBuild:
             "--no-dev",
             "--no-header",
             "--no-annotate",
+            "--no-hashes",
             "--no-emit-project",
             "--no-emit-package",
             "agent-comms",
@@ -431,7 +506,7 @@ class RuntimeBuild:
             run(UV, "build", "--wheel", "--out-dir", wheels, self.tree)
             (wheel,) = wheels.glob("*.whl")
             (wheels / "requirements.txt").write_text(requirements)
-            run(UV, "venv", "--python", "3.14", runtime.path)
+            self.environment(runtime, requirements, pin)
             run(
                 UV,
                 "pip",
@@ -439,6 +514,8 @@ class RuntimeBuild:
                 "--python",
                 runtime.python,
                 "--no-deps",
+                "--reinstall-package", "agent-comms",
+                "--reinstall-package", "batrachian-toad",
                 "-r",
                 wheels / "requirements.txt",
                 wheel,
@@ -454,6 +531,7 @@ class RuntimeBuild:
                 "--no-fund",
                 cwd=package,
             )
+        runtime.relocate_programs()
         run(UV, "pip", "check", "--python", runtime.python)
         self.native(runtime)
         run(runtime.path / "bin/toad", "--version")
@@ -469,10 +547,11 @@ class RuntimeBuild:
 
     def native(self, runtime: Runtime) -> None:
         """The revision's own preparation builds native Pi; the runtime keeps the result."""
-        run(self.tree / "stack/bin/prepare-pi-native", "--python", runtime.python, cwd=self.tree)
         built = runtime.native_package().parents[2]
-        built.parent.mkdir(parents=True, exist_ok=True)
-        os.rename(self.tree / "stack" / built.name, built)
+        if not built.is_dir():
+            run(self.tree / "stack/bin/prepare-pi-native", "--python", runtime.python, cwd=self.tree)
+            built.parent.mkdir(parents=True, exist_ok=True)
+            os.rename(self.tree / "stack" / built.name, built)
         runtime.report(
             "from agent_comms.native_package import pinned_native_package, "
             "verify_native_package; verify_native_package(pinned_native_package())"
@@ -982,6 +1061,7 @@ class Publication:
     ``current``, so the last replace moves every program and skill at once."""
 
     runtime: Runtime
+    operator: ClassVar[MaintenanceOperator] = MaintenanceOperator('upgrade-bus')
 
     def links(self) -> Mapping[Path, Path]:
         """The runtime's own programs and skills, as its own Core declares them."""
@@ -993,13 +1073,19 @@ class Publication:
                 "for link, target in installation_links(Path.home()).items()}))"
             )
         )
-        return {Path(link): Path(target) for link, target in listed.items()}
+        return {Path(link): Path(target).resolve(strict=True) for link, target in listed.items()}
 
-    def publish(self, previous: Runtime) -> None:
+    def publish(self, previous: Runtime, root: Path) -> tuple[str, ...]:
+        maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
+        hold = maintenance.begin(self.operator)
+        # A failure keeps the hold: do not admit inputs into a partial publication.
         for link, target in self.links().items():
-            replace_link(link, CURRENT / target.relative_to(self.runtime.path))
+            replace_link(link, CURRENT / target.relative_to(self.runtime.path.resolve(strict=True)))
         self.move_extensions(previous)
         replace_link(CURRENT, self.runtime.path)
+        services = HostService.restart_running(self.runtime.python, self.runtime.path.parent)
+        maintenance.clear(hold)
+        return services
 
     def move_extensions(self, previous: Runtime) -> None:
         """Pi loads global extensions by path; one inside the previous runtime's native
@@ -1098,6 +1184,7 @@ class Skipped(Outcome):
 class Installed(Outcome):
     passed: Passed
     queued: tuple[QueuedRestart, ...]
+    started: tuple[OwnerStartResult, ...]
     services: tuple[str, ...]
     backup: str
     pruned: Pruned
@@ -1131,18 +1218,19 @@ def upgrade(repo: Path, root: Path, target: str, installer: str, rehearse_only: 
         revisions = Revisions(repo, Path(scratch))
         try:
             tree = revisions.tree(target)
-            runtime = RuntimeBuild(tree).build()
+            runtime = RuntimeBuild(tree, baseline=installed).build()
             install = Install.of(
                 root, pending, installed, runtime, revisions, installer, RuntimeCheck(runtime, REPO)
             )
-            report = Upgrade(
+            installed_result = Skipped() if rehearse_only else install.live()
+            return Upgrade(
                 str(installed.path),
                 str(runtime.path),
                 target,
                 tuple(step.name for step in pending),
                 install.rehearsal(),
+                installed_result,
             )
-            return report if rehearse_only else replace(report, live=install.live())
         finally:
             revisions.close()
 
@@ -1222,13 +1310,12 @@ def live(
         )
     try:
         passed = carry_and_read(root, pending, runtime, revisions, steps)
-        Publication(runtime).publish(installed)
-        services = HostService.restart_running(runtime.python)
+        services = Publication(runtime).publish(installed, root)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
     except BaseException as error:
         maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
         state = maintenance.read()
-        state.phase.hold_for(maintenance, state, MaintenanceOperator("upgrade-bus"))
+        state.phase.hold_for(maintenance, state, Publication.operator)
         print(
             f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
             f"maintenance held, bus and {installed.path} preserved; backup: {backup.path}",
@@ -1236,8 +1323,9 @@ def live(
         )
         raise
     queued = runtime.queue_restarts(root)
+    started = runtime.start_dead(root)
     return Installed(
-        passed, queued, services, str(backup.path), prune({runtime.path, installed.path})
+        passed, queued, started, services, str(backup.path), prune({runtime.path, installed.path})
     )
 
 
