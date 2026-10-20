@@ -41,7 +41,7 @@ from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import OrderCheck, ProblemGoalOrder
 from ..message_reference import MessageReference
 from ..native_tool_call import SelectedToolDenied
-from ..plan_phases import OrderPhase
+from ..plan_phases import OrderPhase, PlanPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..repo import Repo
@@ -179,6 +179,7 @@ class OrderFile:
     order: PendingProblemOrder
     defect: str
     why_stupid: str
+    unplanned_reason: str = ""
     problems: tuple[str, ...] = ()
     slop: tuple[Slop, ...] = ()
 
@@ -191,7 +192,8 @@ class OrderFile:
 
     @property
     def prose(self) -> str:
-        return f'{self.defect}\n{self.why_stupid}'
+        reason = f'\nUnplanned reason: {self.unplanned_reason}' if self.unplanned_reason else ''
+        return f'{self.defect}\n{self.why_stupid}{reason}'
 
     def problems_found(self, clean: bool) -> list[str]:
         problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
@@ -323,6 +325,19 @@ class Commander(CommanderContext):
             problems.append('due: fix: supply HH:MM local time (00:00 through 23:59)')
         group = [new[0]] if new else list(document.problems)
         listed = {t.id: t for t in self.todos()}
+        history = self.comms.goals.todos.history_for_commander(self.incarnation)
+        problems.extend(order.serves.order_refusals(history, document.unplanned_reason))
+        held = tuple(todo for todo in listed.values() if todo.holder)
+        busy = tuple(todo for plan in PlanPhase.members_with(PlanPhase)
+                     for todo in plan.serving(held) if todo.holder == unit and todo.id not in group)
+        if busy:
+            snapshot = self.comms.registry.snapshot()
+            occupied = {todo.holder for todo in held} | {self.commander} | self.parked
+            idle = sorted(thread.name for thread in snapshot.threads.values()
+                          if thread.name not in occupied and thread.role.executor(thread)
+                          and snapshot.statuses[thread.name].active)
+            problems.append(f'{unit} already holds plan orders {", ".join(todo.id for todo in busy)}; '
+                            f'running units holding no order: {", ".join(idle) or "none"}')
         if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
         if new and document.problems:
@@ -804,6 +819,21 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
         return cls.member_named(args.command).from_arguments(args)
 
 
+class StaleOrderGate(CommanderVerb):
+    """All directive verbs read the configured commander's same retained board."""
+
+    def gate(self, ctx: Commander) -> None:
+        super().gate(ctx)
+        stale = tuple(todo for todo in ctx.held_orders() if todo.overdue(time.time() - 30 * 60))
+        if stale:
+            lines = (f'{todo.id}: holder {todo.holder}, deadline '
+                     f'{time.strftime("%Y-%m-%d %H:%M", time.localtime(todo.deadline.recorded_at("An order deadline")))}'
+                     for todo in stale)
+            sys.exit('REFUSED, nothing recorded: orders more than 30 minutes overdue:\n  '
+                     + '\n  '.join(lines)
+                     + '\nMove their deadlines or withdraw them before sending more work.')
+
+
 class RuledVerb(CommanderVerb):
     """HARD RULE: no commander action, mine or a fork's, on rules not re-read in 20 min."""
 
@@ -857,7 +887,7 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, DirectiveVerb):
+class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
@@ -876,7 +906,7 @@ class SendVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, DirectiveVerb):
+class StrikeVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
     why: str = option("--why")
@@ -1000,7 +1030,7 @@ class ServeVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SayVerb(OrderVerb, DirectiveVerb):
+class SayVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "a non-order message; refused if it orders work"
     units: str = option("units", metavar="UNIT[,UNIT]")
     body_file: str = option("body_file", metavar="BODYFILE")
@@ -1010,7 +1040,7 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, DirectiveVerb):
+class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "Core records the problem with its order, or nothing"
     order: str = option("order", metavar="ORDER.json")
     to: str = option("--to")
