@@ -54,12 +54,12 @@ class TranscriptReplay:
             ObservationProcess.awaited(self.comms.route)
         )
 
-    async def replay(self, session_id: str, name: str, client: SocketClient | None = None) -> None:
-        snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), name))
+    async def replay(self, session_id: str, client: SocketClient | None = None) -> None:
+        snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), session_id))
         await self._publish(session_id, snapshot, client)
 
-    async def subscribe(self, session_id: str, name: str, client: SocketClient) -> None:
-        snapshot = await self.reads.read(SubscribeTranscript(str(self.comms.root), name))
+    async def subscribe(self, session_id: str, client: SocketClient) -> None:
+        snapshot = await self.reads.read(SubscribeTranscript(str(self.comms.root), session_id))
         await self._publish(session_id, snapshot, client)
 
     async def _publish(

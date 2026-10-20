@@ -334,7 +334,8 @@ class TestHandlers:
                 "child_retired": not turn.native.proc.alive()}), flush=True)
         assert native.provider.posts == 1
 
-    async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path):
+    @pytest.mark.parametrize("renamed", [False, True])
+    async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path, renamed):
         agent = self._agent(tmp_path)
         await agent.initialize(1, {})
         await agent.new_session("/wt/proj")
@@ -356,6 +357,8 @@ class TestHandlers:
         ]
         path.write_text("".join(json.dumps(record) + "\n" for record in records))
         agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require("proj")), str(path), process=attachment_owner.process_identity)
+        if renamed:
+            agent._comms.threads.rename_managed_thread("proj", "renamed", owner_pid=os.getpid())
         sent = []
 
         class Client:
@@ -363,9 +366,12 @@ class TestHandlers:
                 sent.append(kwargs["update"])
 
         try:
-            await agent.sessions.transcript.replay("proj", "proj", client=Client())
+            await agent.sessions.transcript.replay("proj", client=Client())
             assert len(sent) == 1
-            page = facts(sent[0].field_meta, TranscriptSnapshotUpdate)[0].page
+            update = facts(sent[0].field_meta, TranscriptSnapshotUpdate)[0]
+            assert update.identity.requested_name == "proj"
+            assert update.identity.thread.incarnation == agent._comms.registry.require("proj").incarnation
+            page = update.page
             events = page.events
             assert len(events) == 20
             assert events[-1].text == "99"

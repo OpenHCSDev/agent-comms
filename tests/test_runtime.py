@@ -76,6 +76,59 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
     assert rebased.envelope.revision == fact.envelope.revision
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("request_original", [False, True])
+async def test_subscription_replay_uses_requested_alias(tmp_path, request_original):
+    from agent_comms.coordinator import Coordination
+    from agent_comms.launch_root import LaunchRoot
+
+    comms = wire(tmp_path / "wire")
+    LaunchRoot.from_path(comms.root).install()
+    owner = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
+    client = canonical_agent(comms, auto_wake=False)
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append((session_id, update))
+
+    client.on_connect(Client())
+    proxy = None
+    try:
+        response = await owner.new_session(str(tmp_path))
+        original = response.session_id
+        timestamp = "2026-10-20T00:00:00.000Z"
+        journal = tmp_path / "history.jsonl"
+        journal.write_text("".join(json.dumps(record) + "\n" for record in (
+            {"type": "session", "version": 3, "id": "saved", "timestamp": timestamp},
+            {"type": "message", "id": "answer", "parentId": None, "timestamp": timestamp,
+             "message": {"role": "assistant", "content": [
+                 {"type": "text", "text": "An original saved answer"}]}},
+        )))
+        thread = comms.registry.require(original)
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+            store.install_private_runtime()
+            store.participants.register(thread.incarnation.lookup, original, original, committed=True)
+        comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
+        comms.threads.rename_managed_thread(original, "renamed", owner_pid=os.getpid())
+        requested = original if request_original else "renamed"
+        proxy = RuntimeProxy(client, requested, socket_path(comms.root, os.getpid()))
+        await proxy.subscribe()
+        snapshots = [(session, fact) for session, update in updates
+                     for fact in decode_updates(update.get("_meta"))
+                     if isinstance(fact, TranscriptSnapshotUpdate)]
+        assert len(snapshots) == 1
+        session, snapshot = snapshots[0]
+        assert session == requested == snapshot.identity.requested_name
+        assert snapshot.identity.thread.incarnation == comms.registry.require("renamed").incarnation
+        assert [event.text for event in snapshot.page.events] == ["An original saved answer"]
+    finally:
+        if proxy is not None:
+            await proxy.close()
+        await client.shutdown()
+        await owner.shutdown()
+
+
 async def until(predicate, timeout=10):
     async with asyncio.timeout(timeout):
         while not predicate():

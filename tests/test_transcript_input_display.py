@@ -109,7 +109,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             updates.append(kwargs["update"])
 
     try:
-        await agent.sessions.transcript.replay("worker", "worker", client=Client())
+        await agent.sessions.transcript.replay("worker", client=Client())
         facts = decode_updates(updates[0].field_meta)
         snapshot, = (fact for fact in facts if isinstance(fact, TranscriptSnapshotUpdate))
         events = snapshot.page.events
