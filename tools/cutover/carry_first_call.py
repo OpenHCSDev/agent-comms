@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import get_args, get_origin, get_type_hints
 
-from agent_comms.todos import Todo
+from agent_comms.todos import ProblemOrder, Todo
 from agent_comms.typed_table import TypedRow
 
 from . import carry
@@ -32,12 +32,14 @@ class FirstCalls(carry.TodoRows):
     def converted(cls, db: sqlite3.Connection) -> Mapping[str, int]:
         changed = 0
         hints = get_type_hints(Todo)
-        order_type = hints["order"]
         for field in Todo._fields():
             declared = hints[field.name]
             if not (
-                declared is order_type
-                or (get_origin(declared) is tuple and issubclass(get_args(declared)[0], order_type))
+                declared is ProblemOrder
+                or (
+                    get_origin(declared) is tuple
+                    and issubclass(get_args(declared)[0], ProblemOrder)
+                )
             ):
                 continue
             column = field.wire_name

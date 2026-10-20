@@ -231,12 +231,12 @@ class TodoRows(StoreCarry):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
+        counts: Mapping[str, int] = {}
         with cls.store_transaction(root, apply=apply) as db:
-            if db is None:
-                return cls.carried(root, 0, {}, apply=apply)
-            counts = cls.converted(db)
-            for _row in Todo.stream(db):
-                pass
+            if db is not None:
+                counts = cls.converted(db)
+                for _row in Todo.stream(db):
+                    pass
         return cls.carried(root, sum(counts.values()), dict(counts), apply=apply)
 
     @classmethod
