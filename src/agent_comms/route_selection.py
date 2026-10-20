@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from .active_route import CommsRoute, guard_default_route_write, resolve_comms_route
+from .launch_runtime import LaunchRoot
 
 
 class RouteChanged(ValueError):
@@ -36,32 +37,19 @@ def root_is_current(root: str | Path) -> bool:
 
 def implicit_root() -> bool:
     """Whether this process's requests select the managed default route."""
-    return "AGENT_COMMS_ROOT" not in os.environ
+    return LaunchRoot.current() is None
 
 
 def child_root(env: Mapping[str, str], cwd: str | Path) -> Path:
-    """Resolve a child's wire; never mistake the parent's route for another HOME."""
-    if "AGENT_COMMS_ROOT" not in env:
-        home_key = "USERPROFILE" if os.name == "nt" else "HOME"
-        home = env.get(home_key)
-        if (not home or not Path(home).is_absolute()
-                or home != str(Path.home())
-                or "AGENT_COMMS_ROOT" in os.environ):
-            raise ValueError(
-                "ACP default route requires the client process HOME and no parent "
-                "root override; set an explicit child AGENT_COMMS_ROOT"
-            )
-        return current_root()
-    text = env["AGENT_COMMS_ROOT"]
-    if text == "~" or text.startswith("~/"):
-        home = env.get("HOME") if os.name != "nt" else env.get("USERPROFILE")
-        if not home or not Path(home).is_absolute():
-            raise ValueError("ACP home for maintenance claim_scope is unknown")
-        text = str(Path(home) / text[2:]) if text != "~" else home
-    elif text.startswith("~"):
-        raise ValueError("Unsupported ACP home expansion during maintenance claim_scope")
-    raw = Path(text)
-    return (raw if raw.is_absolute() else Path(cwd) / raw).resolve()
+    """The launch record selects the child; another HOME cannot imply a route."""
+    launch = LaunchRoot.current()
+    if launch is not None:
+        return launch.path.resolve()
+    home_key = "USERPROFILE" if os.name == "nt" else "HOME"
+    home = env.get(home_key)
+    if not home or not Path(home).is_absolute() or home != str(Path.home()):
+        raise ValueError("ACP default route requires the client process HOME or a launch root")
+    return current_root()
 
 
 @dataclass(frozen=True)
@@ -82,7 +70,7 @@ class RouteSelection:
     def for_child(cls, env: Mapping[str, str], cwd: str | Path) -> RouteSelection:
         """Capture selection before projecting a root into a child environment."""
         root = child_root(env, cwd)
-        implicit = "AGENT_COMMS_ROOT" not in env
+        implicit = implicit_root()
         route = resolve_comms_route() if implicit else resolve_comms_route(root)
         if route.observe_root() != root:
             raise RouteChanged("ACP route changed while selecting its child")

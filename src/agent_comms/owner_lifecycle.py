@@ -22,7 +22,7 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRoot, LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .active_route import resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
@@ -448,7 +448,6 @@ class OwnerLifecycle:
         agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
-        env["AGENT_COMMS_ROOT"] = str(self.launch_authority.child_root)
         if agent_args is not None:
             env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
@@ -460,7 +459,8 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker"),
+                (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+                 *LaunchRoot(self.launch_authority.child_root).arguments()),
                 env=env,
                 cwd=thread.worktree,
                 output=output,

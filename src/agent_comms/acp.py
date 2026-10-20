@@ -53,6 +53,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .agent_event_updates import AcpEventConsumer
+from .launch_runtime import LaunchRoot
 from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
@@ -491,6 +492,7 @@ class CommsClient(CommsAgent):
 def main() -> int:
     from .active_route import resolve_comms_route
 
+    LaunchRoot.startup(sys.argv)
     with resolve_comms_route().hold_client_route():
         if "--login" in sys.argv[1:]:
             from .login import run_login
