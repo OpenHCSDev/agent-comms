@@ -45,7 +45,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, option
 from agent_comms.launch_runtime import LaunchRecord
 from agent_comms.message_reference import MessageReference
-from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.read_basis import ExplicitWatchAcknowledgment, WatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, TypedTable
@@ -515,7 +515,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
                 str(record.runtime.interpreter.with_name('agent-comms')), *arguments,
                 '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
                 '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-                '--acknowledgment', ExplicitWatchAcknowledgment.declared_name),
+                '--acknowledgment', FieldCodec.encode(
+                    ExplicitWatchAcknowledgment, type[WatchAcknowledgment])),
                 stdio=StreamingChildStdio(input_enabled=False), runtime=record.runtime,
                 pass_fds=arguments.pass_fds)
         try:
