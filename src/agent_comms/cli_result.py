@@ -31,3 +31,4 @@ class ToolCatalogResult(CliResult):
 @dataclass(frozen=True)
 class ThreadToolCatalogResult(ToolCatalogResult):
     service_tier: ServiceTier
+    launch_arguments: tuple[str, ...]

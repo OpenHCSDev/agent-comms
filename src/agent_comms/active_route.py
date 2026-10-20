@@ -146,10 +146,7 @@ def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRou
         return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
-    launch = LaunchRoot.current()
-    if launch is not None:
-        return LocalRoute(launch.path.expanduser().absolute())
-    return CommsRoute.current()
+    return LocalRoute(LaunchRoot.current().path)
 
 
 class RoutePublicationUnknownError(RelationViolationError):

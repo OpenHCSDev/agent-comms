@@ -35,21 +35,9 @@ def root_is_current(root: str | Path) -> bool:
     return current_root() == Path(root).expanduser().resolve()
 
 
-def implicit_root() -> bool:
-    """Whether this process's requests select the managed default route."""
-    return LaunchRoot.current() is None
-
-
 def child_root(env: Mapping[str, str], cwd: str | Path) -> Path:
-    """The launch record selects the child; another HOME cannot imply a route."""
-    launch = LaunchRoot.current()
-    if launch is not None:
-        return launch.path.resolve()
-    home_key = "USERPROFILE" if os.name == "nt" else "HOME"
-    home = env.get(home_key)
-    if not home or not Path(home).is_absolute() or home != str(Path.home()):
-        raise ValueError("ACP default route requires the client process HOME or a launch root")
-    return current_root()
+    """The explicit process launch selects its child; HOME never supplies a route."""
+    return LaunchRoot.current().path
 
 
 @dataclass(frozen=True)
@@ -61,20 +49,16 @@ class RouteSelection:
     @classmethod
     def capture(cls, source: str | Path | None = None) -> RouteSelection:
         route = resolve_comms_route()
-        selection = cls(route, route.observe_root(), implicit_root())
+        selection = cls(route, route.observe_root(), False)
         if source is not None and Path(source).expanduser().resolve() != selection.root:
             raise RouteChanged("Comms route changed; reopen this view")
         return selection
 
     @classmethod
     def for_child(cls, env: Mapping[str, str], cwd: str | Path) -> RouteSelection:
-        """Capture selection before projecting a root into a child environment."""
+        """Capture the explicit process selection before launching its child."""
         root = child_root(env, cwd)
-        implicit = implicit_root()
-        route = resolve_comms_route() if implicit else resolve_comms_route(root)
-        if route.observe_root() != root:
-            raise RouteChanged("ACP route changed while selecting its child")
-        return cls(route, root, implicit)
+        return cls(resolve_comms_route(root), root, False)
 
 
 @contextmanager
