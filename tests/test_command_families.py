@@ -10,19 +10,24 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
+from agent_comms.history_result import (
+    ChannelHistoryPageResult,
+    DmHistoryPageResult,
+    EverythingHistoryPageResult,
+)
 from agent_comms.messages import InfoKind
-from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
+from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
     RuntimeRequest,
 )
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
@@ -228,15 +233,15 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
 
 
 @pytest.mark.parametrize(
-    "arguments,key",
+    "arguments,result_type,per_root",
     [
-        (["history", "--channel", "#team"], "messages"),
-        (["history", "--everything"], "everything"),
-        (["history", "--with", "alice", "--as", "bob"], "dm"),
+        (["history", "--target", "#team"], ChannelHistoryPageResult, 1),
+        (["history", "--target", "#any"], EverythingHistoryPageResult, 2),
+        (["history", "--target", "@alice", "--as", "bob"], DmHistoryPageResult, 1),
     ],
 )
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
-    tmp_path, capsys, monkeypatch, arguments, key
+    tmp_path, capsys, monkeypatch, arguments, result_type, per_root
 ):
     old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
@@ -250,10 +255,10 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     source = live.views.attach_history(old.root)
     live_bus = (live.root / "bus.jsonl").read_bytes()
     assert main(["--root", str(live.root), *arguments]) == 0
-    rows = json.loads(capsys.readouterr().out)[key]
+    rows = json.loads(capsys.readouterr().out)[result_type.messages_key]
     historical = [row for row in rows if "history" in row]
     current = [row for row in rows if "history" not in row]
-    assert len(historical) == len(current) == (2 if key == "everything" else 1)
+    assert len(historical) == len(current) == per_root
     assert all(row["text"].startswith("old ") for row in historical)
     assert all(row["history"]["source"] == str(old.root) for row in historical)
     assert all(row["history"]["wire_root_id"] == source.wire_root_id for row in historical)

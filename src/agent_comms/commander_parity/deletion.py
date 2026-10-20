@@ -16,12 +16,12 @@ from pathlib import Path
 from ..change_report import FileLine
 from ..child_process import CountPrinted, ExitedOutcome
 from ..commander.order import OrderFile
-from ..recorded_time import RecordedEventTime
 from ..field_codec import FieldCodec
 from ..goal_actions import CreateProblemGoalAction
 from ..goals import CountCheckResult, OrderCheck
 from ..plan_phases import RecordPlanePhase
 from ..progress_claims import MergedClaim
+from ..recorded_time import RecordedEventTime
 from ..repo import Repo
 from ..todos import (
     CheckedCommitDelivery,
