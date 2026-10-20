@@ -40,7 +40,7 @@ from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
-from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
+from cutover.backup import Backup, RestoreSpace, SavedFile, UpgradeRefused, bus_files, transcripts_held
 from upgrade_bus import (
     Revisions,
     Stack,
@@ -514,14 +514,11 @@ def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, t
     carried_bus = []
 
     class Installed(Stack):
+        def running_owners(self, root):
+            assert not calls  # Never rediscover a possibly changed owner set.
+            return names
+
         def cli(self, root, *arguments):
-            if arguments == ("threads",):
-                assert not calls  # Never rediscover a possibly changed owner set.
-                return {"threads": [
-                    *({"name": name, "role": "agent", "status": "running"} for name in names),
-                    {"name": "idle", "role": "agent", "status": "stopped"},
-                    {"name": "human", "role": "human", "status": "running"},
-                ]}
             command, flag, name = arguments
             assert flag == "--name" and name in names
             if command == "stop":
@@ -559,6 +556,62 @@ def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, t
     assert sorted(calls) == sorted((command, name) for command in ("stop", "start") for name in names)
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
     assert commands[0] == ("git", "-C", stack.checkout, "merge", "--ff-only", "-q", "new")
+
+
+def test_restart_selection_uses_receiving_declaration_with_a_connected_cli_inbox(comms):
+    from agent_comms.child_process import ProcessIdentity
+
+    process = ProcessIdentity.capture(os.getpid())
+    native = comms.registry.declare(replace(comms.registry.new_thread(
+        "native-copy", frozenset(), str(comms.root)), process_identity=process))
+    external = comms.registry.declare(comms.registry.new_thread(
+        "cli-inbox-copy", frozenset(), str(comms.root), execution=ExternalThreadExecution))
+    with comms.registry.external_process(external.name, process):
+        selected = Stack(REPO).running_owners(comms.root)
+        assert selected == [native.name]
+        native.execution.require_native()
+        with pytest.raises(ValueError, match="no native prompt transport"):
+            external.execution.require_native()
+
+
+def test_restore_space_refuses_before_any_conversion_or_owner_stop(comms, monkeypatch):
+    from types import SimpleNamespace
+    import upgrade_bus
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Touched conversion or owner control before space admission")
+
+    monkeypatch.setattr(upgrade_bus.shutil, "disk_usage", lambda root: SimpleNamespace(free=1))
+    monkeypatch.setattr(upgrade_bus, "before_stop", forbidden)
+    monkeypatch.setattr(upgrade_bus.Stack, "running_owners", forbidden)
+    measured = RestoreSpace.measure(comms.root)
+    assert measured.needed >= 1024**3
+    with pytest.raises(UpgradeRefused, match="Full bus restore needs"):
+        upgrade_bus.live(REPO, comms.root, "old", "new", (), Stack(REPO), Stack(REPO),
+                         None, "worker", comms.root.parent)
+    assert not MaintenanceBarrier(comms.root / "registry.json").marker_path.exists()
+
+
+def test_bus_files_reads_metadata_and_detects_same_size_replacement(tmp_path, monkeypatch):
+    datum = tmp_path / "saved.txt"
+    datum.write_text("original")
+    before = bus_files(tmp_path)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Read file contents during metadata comparison")
+
+    monkeypatch.setattr(Path, "read_bytes", forbidden)
+    monkeypatch.setattr(CoordinationStore, "digest", forbidden)
+    assert bus_files(tmp_path) == before
+    replacement = tmp_path / "replacement"
+    replacement.write_text("replaced")
+    stamp = datum.stat()
+    os.utime(replacement, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    replacement.replace(datum)
+    after = bus_files(tmp_path)
+    assert after[datum.name].size == before[datum.name].size
+    assert after[datum.name].mtime_ns == before[datum.name].mtime_ns
+    assert after[datum.name].inode != before[datum.name].inode
 
 
 def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path):
@@ -618,9 +671,8 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
     commands = []
 
     class Installed(Stack):
-        def cli(self, root, *arguments):
-            assert arguments == ("threads",)
-            return {"threads": []}
+        def running_owners(self, root):
+            return []
 
         def relock(self):
             pass
@@ -684,7 +736,7 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
     assert bridge_publishes(comms.root) == "wrote"
     name = str(ExternalTranscript.path_in(comms.root).relative_to(comms.root))
     assert backup.files() == before
-    assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
+    assert SavedFile.at(ExternalTranscript.path_in(failed)) == before[name]
 
 
 def test_practice_preserves_old_maintenance_format_until_before_stop(tmp_path):
@@ -774,8 +826,8 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
         return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
 
     class Installed(Stack):
-        def cli(self, root, *arguments):
-            return {"threads": []}
+        def running_owners(self, root):
+            return []
 
         def relock(self):
             pass
