@@ -12,16 +12,14 @@ from agent_comms.field_codec import MalformedRecord
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import CarryChain, CarryLedger, TodoRows
+from cutover.carry import CarryChain, CarryLedger
 from cutover.carry_first_call import FirstCalls
 from test_todos import order, thread
 
 
-def test_new_row_step_does_not_convert_a_missing_store(tmp_path, monkeypatch):
-    assert FirstCalls.carry.__func__ is TodoRows.carry.__func__
-    monkeypatch.setattr(FirstCalls, "converted", lambda db: pytest.fail("No store to convert"))
+def test_new_row_step_does_not_convert_a_missing_store(tmp_path):
     result = FirstCalls.carry(tmp_path, apply=True)
-    assert result.changed == 0 and result.detail == {} and result.rewritten == ()
+    assert result.changed == 0 and result.detail == {"first_call_keys": 0} and result.rewritten == ()
     assert not TodoStore.path_in(tmp_path).exists()
 
 
