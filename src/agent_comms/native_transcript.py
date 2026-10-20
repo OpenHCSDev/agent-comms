@@ -7,6 +7,7 @@ from collections import defaultdict
 from collections.abc import Generator
 from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass
+from math import inf
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -185,12 +186,12 @@ class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
 
-    def _tool_call_times(self, since: float | None = None) -> Generator[float]:
+    def _tool_call_times(self, since: float = -inf) -> Generator[float]:
         try:
             with closing(self.tail()) as entries:
                 for entry in entries:
                     timestamp = entry.timestamp.at.timestamp()
-                    if since is not None and timestamp < since:
+                    if timestamp < since:
                         return
                     if any(message.assistant and message.tool_calls
                            for message in entry.messages):
