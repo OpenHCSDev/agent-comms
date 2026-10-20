@@ -36,6 +36,7 @@ class VerdictEffect:
     progress: str
     native_calls: int
     native_result_retained: bool
+    strike_matches_verdict_event: bool
 
 
 class VerdictCase(ABC):
@@ -98,12 +99,15 @@ class VerdictCase(ABC):
             worker = run.commander.comms.registry.require(run.worker)
             after = worker.goal.require()
             native = tuple(
-                item
+                (item.request, item.result)
                 for item in run.commander.invocations
                 if isinstance(item.request, CommsVerdictTool)
             )
+            if len(native) != 1 or native[0][0].operation.tool_call_id != call_id:
+                raise ValueError("The native verdict must judge this one original copied tool call")
+            request, result = native[0]
             return VerdictEffect(
-                call_id,
+                request.operation.tool_call_id,
                 len(saved.verdicts) - len(before.verdicts),
                 saved.revision - before.revision,
                 saved.strike_count - before.strike_count,
@@ -113,7 +117,13 @@ class VerdictCase(ABC):
                 after.state == goal.state,
                 GoalSegment.capture(worker, after, run.commander.comms.goals).progress,
                 len(native),
-                len(native) == 1 and native[0].result == TodoChanged(saved, saved.strike_count),
+                result == TodoChanged(saved, saved.strike_count)
+                and request.operation in saved.verdicts,
+                all(
+                    strike.at == request.operation.at
+                    and strike.previous == request.operation.previous
+                    for strike in saved.strikes[len(before.strikes) :]
+                ),
             )
 
     @classmethod
@@ -124,6 +134,7 @@ class VerdictCase(ABC):
             and effect.goal_retained
             and effect.goal_state_retained
             and effect.native_result_retained
+            and effect.strike_matches_verdict_event
         )
 
 
