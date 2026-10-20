@@ -41,8 +41,10 @@ from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
+    NoThreadText,
     ThreadProvenance,
     ThreadRole,
+    ThreadText,
     TurnFence,
     TurnId,
     TurnIdentity,
@@ -69,7 +71,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     tags: frozenset[str] = field(kw_only=False, metadata={"registration_inheritance": InheritEmpty})
     worktree: str = field(kw_only=False)
     parent: str | None = None
-    task: str | None = None
+    task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
     session_file: str | None = field(
         default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
@@ -101,7 +103,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         default=False,
         metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
     )
-    title: str | None = field(default=None, kw_only=True,
+    title: ThreadText = field(default_factory=NoThreadText, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: type[ThreadRole] = field(
         default=AgentThreadRole, metadata={"registration_inheritance": InheritPrevious}
@@ -199,7 +201,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """The launch environment this thread's owner process carries."""
         from .launch_runtime import ThreadLaunch
 
-        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
+        return ThreadLaunch.from_thread(self)
 
     def native_session_directory(self, root: Path) -> Path:
         return self.path_in(root, lookup=self.incarnation.require_recorded().lookup, name="")
@@ -444,7 +446,7 @@ def current_thread(registry) -> Thread:
         tags=launch.tags,
         worktree=launch.worktree,
         parent=launch.parent,
-        task=launch.task,
+        task=NoThreadText.from_input(launch.task),
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
 

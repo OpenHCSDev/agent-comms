@@ -17,13 +17,16 @@ from .registration_change import RegistrationChange
 from .registry_document import RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
+from .storage_rules import StorageProjection, StorageRule
 from .store_files import SharedLock, _store_lock
-from .thread_identity import GenerationCounter, TurnId
+from .thread_identity import NO_THREAD_TEXT, GenerationCounter, ThreadText, TurnId
 from .thread_status import (
-    ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
+    ConnectedThreadStatus,
+    NoBridgeThreadStatus,
+    RunningThreadStatus,
+    ThreadStatus,
 )
 from .threads import Thread
-from .storage_rules import StorageProjection, StorageRule
 from .turn_lease import TurnCompletion, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
@@ -176,9 +179,14 @@ class Registration:
             history.commit(intent)
         return change
 
-    def new_thread(self, name, tags, worktree, *args, kind: type[Thread] = Thread, **values) -> Thread:
-        return kind(name, tags, worktree, *args,
-                      storage_roots=self.storage_rule.initial_roots(name), **values)
+    def new_thread(
+        self, name, tags, worktree, *, kind: type[Thread] = Thread,
+        task: ThreadText = NO_THREAD_TEXT, title: ThreadText = NO_THREAD_TEXT, **values,
+    ) -> Thread:
+        return kind(
+            name, tags, worktree, task=task, title=title,
+            storage_roots=self.storage_rule.initial_roots(name), **values,
+        )
 
     def decide_storage(self, name, effects):
         projection = StorageProjection(self.storage_rule, self.require(name))
