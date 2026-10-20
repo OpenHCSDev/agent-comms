@@ -6,6 +6,7 @@ import asyncio
 import json
 import multiprocessing as mp
 import os
+import signal
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -31,7 +32,7 @@ from cutover.carry_maintenance_identity import MaintenanceIdentity
 from test_todos import order, thread
 
 
-def _hold(root: Path, phase: type[MaintenancePhase], ready, finish) -> None:
+def _hold(root: Path, phase: type[MaintenancePhase], ready) -> None:
     barrier = MaintenanceBarrier(root / "registry.json")
     held = barrier.begin(MaintenanceOperator.current())
     for successor in (PausedPhase, InstallingPhase):
@@ -40,14 +41,13 @@ def _hold(root: Path, phase: type[MaintenancePhase], ready, finish) -> None:
         held = barrier.advance(held, successor)
     ready.send(json.dumps(FieldCodec.encode(held)))
     ready.close()
-    finish.wait(20)
+    signal.pause()
 
 
 @contextmanager
 def real_holder(root: Path, phase: type[MaintenancePhase] = DrainingPhase):
     receive, send = mp.Pipe(duplex=False)
-    finish = mp.Event()
-    child = mp.Process(target=_hold, args=(root, phase, send, finish))
+    child = mp.Process(target=_hold, args=(root, phase, send), daemon=True)
     child.start()
     send.close()
     try:
@@ -56,7 +56,6 @@ def real_holder(root: Path, phase: type[MaintenancePhase] = DrainingPhase):
         assert held.operator.pid == child.pid and held.operator.alive()
         yield child, held
     finally:
-        finish.set()
         if child.is_alive():
             child.kill()
         child.join(5)
