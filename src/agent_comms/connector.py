@@ -22,6 +22,7 @@ import base64
 import hashlib
 import html
 import json
+import logging
 import secrets
 import sys
 import time
@@ -287,14 +288,15 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
     async def result(self, connector: Connector) -> ToolsCallResult:
         tool = Connector.exposed().get(self.params.name)
         if tool is None:
-            return ToolsCallResult.refused(
+            return ToolsCallResult.failed(
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except ToolRefusedError as error:
-            return ToolsCallResult.refused(error)
-        return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+            return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+        except Exception as error:
+            logging.exception("Connector tool %s failed", self.params.name)
+            return ToolsCallResult.failed(error)
 
 
 @dataclass(frozen=True)
@@ -305,7 +307,7 @@ class TextContent:
 
 @dataclass(frozen=True)
 class ToolsCallResult:
-    """A tool's encoded reply, or the refusal standing in its place."""
+    """A tool's encoded reply, or its failed call encoded as an MCP error result."""
 
     content: tuple[TextContent, ...]
     is_error: bool = field(metadata={"wire_name": "isError"})
@@ -315,7 +317,7 @@ class ToolsCallResult:
     )
 
     @classmethod
-    def refused(cls, error: ToolRefusedError) -> ToolsCallResult:
+    def failed(cls, error: Exception) -> ToolsCallResult:
         return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
 
 
@@ -583,7 +585,7 @@ class RoundTripVerb(ConnectorVerb):
         if running != self.runtime:
             return f"The connector service runs {running}, not the installed {self.runtime}"
         if reply.is_error:
-            return f"The connector round trip was refused: {reply.content[0].text}"
+            return f"The connector round trip failed: {reply.content[0].text}"
         with client_wire(self.root) as comms:
             if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
                 return f"The service on port {self.port} reads another bus than {self.root}"
