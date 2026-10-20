@@ -3,8 +3,10 @@ from agent_comms.native_package import pinned_native_package
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
+import asyncio
 import os
 import tempfile
+from collections.abc import Awaitable
 from contextlib import AsyncExitStack
 from pathlib import Path
 
@@ -34,6 +36,20 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_TASK",
     "PI_WORKTREE",
 })
+
+
+async def await_event_or_task(event: Awaitable[object], task: asyncio.Task) -> object:
+    """A producer failure ends its event wait with the original exception."""
+    observed = asyncio.ensure_future(event)
+    try:
+        done, _ = await asyncio.wait((observed, task), return_when=asyncio.FIRST_COMPLETED)
+        if task in done:
+            await task
+        assert observed.done(), 'Producer finished without the expected event'
+        return observed.result()
+    finally:
+        observed.cancel()
+        await asyncio.gather(observed, return_exceptions=True)
 
 
 def reader(root: Path) -> Comms:

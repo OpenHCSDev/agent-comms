@@ -26,7 +26,7 @@ async def test_native_settlement_selects_only_original_goal(native_backend, repl
         class ChangeAtOriginalProviderRequest:
             async def wait(self):
                 current = await Coordination.run_worker(comms.registry.snapshot)
-                assert current.require(session).active_turn.executing
+                assert current.require(session).turn_record.executing
                 assert not changed
                 changed.append(await Coordination.run_worker(lambda: comms.goals.update_goal(
                     session,
@@ -49,7 +49,7 @@ async def test_native_settlement_selects_only_original_goal(native_backend, repl
         assert len(changed) == 1
         current = comms.registry.require(session)
         assert current.goal == changed[0]
-        assert not current.active_turn.executing
+        assert not current.turn_record.executing
         assert native.provider.posts == 1
         assert len(native.saved_inputs()) == 2  # Original SDK seed + one actual native input.
         assert native.session.read_bytes().startswith(history)

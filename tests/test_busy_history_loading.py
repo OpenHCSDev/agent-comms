@@ -17,6 +17,7 @@ from agent_comms.ui_model.observation import (
     ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
+from conftest import await_event_or_task
 
 
 def saved_history(tmp_path):
@@ -81,7 +82,7 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
     assert session.read_bytes() == original
 
 
-async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
+async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path, monkeypatch):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
     agent = CommsAgent(comms)
@@ -91,16 +92,20 @@ async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
+    read_started = asyncio.Event()
+    read = ObservationProcess.read
+
+    async def observed_read(process, request):
+        read_started.set()
+        return await read(process, request)
+
+    monkeypatch.setattr(ObservationProcess, 'read', observed_read)
     task = None
     try:
         with held_source(comms):
             task = asyncio.create_task(agent.sessions.transcript.replay("saved", "saved", client=Client()))
             async with asyncio.timeout(15):
-                while "reads" not in agent.sessions.transcript.__dict__:
-                    await asyncio.sleep(0.01)
-                process = agent.sessions.transcript.reads
-                while not process.reads:
-                    await asyncio.sleep(0.01)
+                await await_event_or_task(read_started.wait(), task)
             await asyncio.sleep(0.15)
             assert not task.done()
             assert updates == []  # Not an empty-history update or delivery/resend error.

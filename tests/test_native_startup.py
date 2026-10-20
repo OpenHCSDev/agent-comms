@@ -4,11 +4,14 @@ import asyncio
 import json
 import os
 import sys
+from contextlib import aclosing
 
 import pytest
 
 from agent_comms.native_startup import NativeStartupPolicy
 from pi_session_turn import one_turn_events
+from agent_comms.wire_watch import WatchSource, WireWatch
+from conftest import await_event_or_task
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 
@@ -69,11 +72,16 @@ async def test_cancel_during_extended_preflight_reaps_child(
             )
         ]
 
+    async def pid_written():
+        async with aclosing(WireWatch.observations(WatchSource.modified_file(pid_file))) as changes:
+            async for _ in changes:
+                if pid_file.exists():
+                    return
+
     task = asyncio.create_task(consume())
     try:
         async with asyncio.timeout(2):
-            while not pid_file.exists():
-                await asyncio.sleep(0.005)
+            await await_event_or_task(pid_written(), task)
         await asyncio.sleep(0.1)
         assert not task.done()  # The size-aware budget has not expired.
         pid = int(pid_file.read_text())
