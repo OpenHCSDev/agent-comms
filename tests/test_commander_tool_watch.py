@@ -8,7 +8,7 @@ import json
 import pytest
 
 from agent_comms.native_tool_call import CodingCall
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.pi_payloads import AssistantMessage, StorageDenialToolDetails, ToolCallContent
 from agent_comms.todos import StorageStrikeTodo
 from test_commander_problem_orders import create
 
@@ -67,11 +67,11 @@ def test_storage_watch_judges_only_core_units(tool_watch, commander, commander_s
     judged = []
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
                         lambda self, thread, effects: judged.append(thread))
-    call = CodingCall.decode('write-1', 'write', {'path': 'a.py', 'content': 'body'})
-    tool_watch.enforce_storage(commander_script[0], 'lead', call)
+    denial = StorageDenialToolDetails('StorageRule: foreign scratch destination was refused before execution')
+    tool_watch.enforce_storage(commander_script[0], 'lead', 'write-1', denial)
     assert judged == []
-    tool_watch.enforce_storage(commander_script[0], 'worker', call)
-    assert judged == ['worker']
+    tool_watch.enforce_storage(commander_script[0], 'worker', 'write-1', denial)
+    assert judged == []
 
 
 def test_storage_watch_reports_refused_call_without_judging(tool_watch, commander, commander_script, monkeypatch, capsys):
@@ -81,10 +81,12 @@ def test_storage_watch_reports_refused_call_without_judging(tool_watch, commande
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
                         lambda self, thread, effects: judged.append(thread))
     call = CodingCall.decode('refused-1', 'write', {'path': 'a.py'})
-    tool_watch.enforce_storage(commander_script[0], 'worker', call)
+    tool_watch.walk(commander_script[0], collections.defaultdict(list), 'worker',
+                    AssistantMessage(content=(ToolCallContent(
+                        'refused-1', 'write', {'path': 'a.py'}),)))
     assert judged == []
     assert capsys.readouterr().out == ''
-    assert call.digest() == 'REFUSED write: Missing required fields for WriteTool: content'
+    assert call.digest() == 'REFUSED write: content: Missing required fields for WriteTool: content; fix: supply {"type": "string"}'
 
 
 def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, commander, commander_script, monkeypatch):
@@ -107,7 +109,7 @@ def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, co
     turns = collections.defaultdict(list)
     tool_watch.follow(commander_script[0], turns, 'worker', (line + '\n').encode())
     assert seen == ['write', 'write']
-    assert turns['worker'] == ['REFUSED write: Missing required fields for WriteTool: content', 'write b.py: body']
+    assert turns['worker'] == ['REFUSED write: content: Missing required fields for WriteTool: content; fix: supply {"type": "string"}', 'write b.py: body']
 
 
 def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, commander, commander_script, monkeypatch):
@@ -116,15 +118,21 @@ def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, comma
     announcements = []
     monkeypatch.setattr(type(commander_script[0]), 'on_record', lambda *args: announcements.append(args))
 
-    def deny(self, thread, effects):
-        raise SelectedToolDenied('The write creates a file outside the declared scratch directory')
+    def forbidden(*args):
+        raise AssertionError('watcher re-ran storage preflight')
 
-    monkeypatch.setattr(comms.registry.__class__, 'decide_storage', deny)
-    call = CodingCall.decode('write-1', 'write', {'path': 'a.py', 'content': 'body'})
-    tool_watch.enforce_storage(commander_script[0], 'worker', call)
-    tool_watch.enforce_storage(commander_script[0], 'worker', call)
+    monkeypatch.setattr(comms.registry.__class__, 'decide_storage', forbidden)
+    denial = StorageDenialToolDetails('StorageRule: the write creates a file outside the declared scratch directory')
+    from agent_comms.field_codec import FieldCodec
+    line = (json.dumps({'type': 'message', 'id': 'storage-denial',
+                        'timestamp': '2026-10-19T22:50:00Z', 'message': {
+                            'role': 'toolResult', 'toolCallId': 'write-1', 'toolName': 'write',
+                            'isError': True, 'details': FieldCodec.encode(denial), 'content': []}}) + '\n').encode()
+    turns = collections.defaultdict(list)
+    tool_watch.follow(commander_script[0], turns, 'worker', line)
+    tool_watch.follow(commander_script[0], turns, 'worker', line)
     restarted = importlib.reload(tool_watch)
-    restarted.enforce_storage(commander_script[0], 'worker', call)
+    restarted.follow(commander_script[0], turns, 'worker', line)
     after = comms.goals.todos.get('P1')
     assert after.revision == before.revision + 1
     assert len(after.live_strikes('worker')) == 1

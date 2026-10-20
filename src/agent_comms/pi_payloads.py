@@ -557,6 +557,9 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         """The tool calls this message makes, in the order it makes them."""
         return tuple(call for part in self.parts for call in part.tool_calls())
 
+    def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
+        return ()
+
     @property
     def unread_reply(self) -> bool:
         return False
@@ -771,6 +774,11 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     tool_name: str = wire_field("toolName", "tool")
     is_error: bool = wire_field("isError", False)
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
+
+    def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
+        if not self.is_error:
+            return ()
+        return tuple((self.tool_call_id, denial) for denial in self.details.storage_refusals())
 
     def transcript_events(self, context, timestamp: float):
         from .tool_declaration import ToolDeclaration
@@ -1205,6 +1213,19 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
 
     def sent_message(self):
         return None
+
+    def storage_refusals(self) -> tuple[StorageDenialToolDetails, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class StorageDenialToolDetails(NativeToolDetails):
+    """The owner preflight's refusal, carried in the actual native tool result."""
+
+    reason: str
+
+    def storage_refusals(self) -> tuple[StorageDenialToolDetails, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True, kw_only=True)

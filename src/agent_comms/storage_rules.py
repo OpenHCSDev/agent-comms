@@ -122,7 +122,7 @@ class StorageRule(RoomAllocation):
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
-        raise SelectedToolDenied(f'StorageRule: {reason}')
+        raise StorageDenied(f'StorageRule: {reason}')
 
     def free_gib(self):
         return shutil.disk_usage(self.volume).free / 2**30
@@ -295,6 +295,10 @@ class ShellProgram:
                      for effect in decode(self, args, cwd))
 
 
+class StorageDenied(SelectedToolDenied):
+    """The storage preflight refused an operation before it executed."""
+
+
 class StorageEffect:
     """Preflight one actual operation and declare its measured work, if any."""
     work: ClassVar[tuple] = ()
@@ -359,7 +363,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
 
 def physical_path(value, cwd):
     if '$' in value or '`' in value:
-        raise SelectedToolDenied('StorageRule: use a literal storage destination')
+        raise StorageDenied('StorageRule: use a literal storage destination')
     path = Path(value).expanduser()
     return (path if path.is_absolute() else cwd / path).resolve()
 
@@ -444,7 +448,7 @@ class AddsCheckout(ShellProgram):
         while tail and tail[0].startswith('-'):
             tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
         if not tail:
-            raise SelectedToolDenied('StorageRule: worktree destination is missing')
+            raise StorageDenied('StorageRule: worktree destination is missing')
         return (CheckoutStorageEffect(physical_path(tail[0], cwd)),)
 
 
@@ -469,7 +473,7 @@ class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTr
     def effects(self, args, cwd):
         while args and args[0] in ('-C', '-c', '--git-dir', '--work-tree'):
             if len(args) < 2:
-                raise SelectedToolDenied('StorageRule: incomplete git option')
+                raise StorageDenied('StorageRule: incomplete git option')
             if args[0] == '-C':
                 cwd = physical_path(args[1], cwd)
             args = args[2:]

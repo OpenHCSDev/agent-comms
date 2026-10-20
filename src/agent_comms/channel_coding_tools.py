@@ -33,6 +33,8 @@ from .selected_tool_broker import (
     verify_sent_full_input,
 )
 from .storage_room import NoRoomNeeded, RoomReservation
+from .storage_rules import StorageDenied
+from .pi_payloads import StorageDenialToolDetails
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -174,6 +176,13 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             await asyncio.gather(*tuple(self.completions))
         for call in self.calls.values():
             await asyncio.to_thread(call.progress.room.abandon)
+
+    async def handle_request(self, raw: bytes) -> dict[str, object]:
+        try:
+            return await super().handle_request(raw)
+        except StorageDenied as denial:
+            return {"ok": False, "error": str(denial),
+                    "details": FieldCodec.encode(StorageDenialToolDetails(str(denial)))}
 
     @staticmethod
     def failure_response(error: Exception) -> dict[str, object]:
