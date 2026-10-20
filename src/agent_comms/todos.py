@@ -3093,6 +3093,15 @@ class TodoStore(TypedStore):
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
+    def overdue_for_commander(self, commander: ThreadIncarnation, storage: StorageRule,
+                              now: float) -> tuple[Todo, ...]:
+        """Past-due held work, excluding merged work owned by the install schedule."""
+        held = self.held_for_commander(commander)
+        pulls = PullRequests(held)
+        return tuple(todo for todo in held if todo.overdue(now)
+                     and not todo.order.waiting_on_install(
+                         todo, {todo.id: OrderProgress.read(todo, storage, pulls)}))
+
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth))

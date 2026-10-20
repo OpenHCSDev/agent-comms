@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .plan_phases import PlanPhase
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .recorded_time import EventTime, RecordedEventTime
 from .repo import Repo
 from .rule_reviews import RuleReviews
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goals import RequestDirective
     from .storage_rules import MemoryUse, StorageRule
-    from .todos import PullRequests, Todo
+    from .todos import Todo
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
@@ -134,17 +134,12 @@ class HeldOrderDue(DatedStandingRule, declared_name=None):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        from .todos import PullRequests
-
-        todos, now = cls.todos(comms, commander), time.time()
-        pulls = PullRequests(todos)
         return tuple(cls(todo.id, todo.held().owner, todo.order.checked().id, due)
-                     for todo in todos
-                     if (due := cls.due(comms, todo, now, pulls)).before(now))
+                     for todo, due in cls.conditions(comms, commander))
 
     @classmethod
     @abstractmethod
-    def due(cls, comms: Comms, todo: Todo, now: float, pulls: PullRequests) -> EventTime: ...
+    def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]: ...
 
     def began(self) -> float:
         return self.since.recorded_at("An order alarm")
@@ -152,15 +147,10 @@ class HeldOrderDue(DatedStandingRule, declared_name=None):
 
 class OrderOverdue(HeldOrderDue):
     @classmethod
-    def due(cls, comms: Comms, todo: Todo, now: float, pulls: PullRequests) -> EventTime:
-        from .todos import OrderProgress
-
-        if not todo.overdue(now):
-            return UnrecordedEventTime()
-        progress = OrderProgress.read(todo, comms.registry.storage_rule, pulls)
-        if todo.order.waiting_on_install(todo, {todo.id: progress}):
-            return UnrecordedEventTime()
-        return todo.deadline
+    def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]:
+        actor = comms.registry.require(commander).incarnation
+        return ((todo, todo.deadline) for todo in comms.goals.todos.overdue_for_commander(
+            actor, comms.registry.storage_rule, time.time()))
 
     def line(self) -> str:
         return (f"ORDER OVERDUE {self.problem} {self.holder}, due {self.since.clock()}, "
@@ -169,17 +159,18 @@ class OrderOverdue(HeldOrderDue):
 
 class FirstCallMissing(HeldOrderDue):
     @classmethod
-    def due(cls, comms: Comms, todo: Todo, now: float, pulls: PullRequests) -> EventTime:
-        if not todo.pending:
-            return UnrecordedEventTime()
-        order = todo.order.checked()
-        if not order.first_call_deadline.before(now):
-            return UnrecordedEventTime()
-        thread = comms.registry.require(todo.held().owner)
-        last = thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call()
-        if last.since(order.at.recorded_at("An order")):
-            return UnrecordedEventTime()
-        return order.first_call_deadline
+    def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]:
+        now = time.time()
+        for todo in cls.todos(comms, commander):
+            if not todo.pending:
+                continue
+            order = todo.order.checked()
+            if not order.first_call_deadline.before(now):
+                continue
+            thread = comms.registry.require(todo.held().owner)
+            last = thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call()
+            if not last.since(order.at.recorded_at("An order")):
+                yield todo, order.first_call_deadline
 
     def line(self) -> str:
         return (f"FIRST CALL MISSING {self.problem} {self.holder}, due {self.since.clock()}, "
@@ -196,7 +187,8 @@ class OwnerIdle(DatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         now = time.time()
         threads = (comms.registry.require(holder)
-                   for holder in sorted({todo.held().owner for todo in cls.todos(comms, commander)}))
+                   for holder in sorted({todo.held().owner
+                                         for todo in cls.todos(comms, commander)}))
         calls = (
             (thread.name,
              thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call())
@@ -216,7 +208,6 @@ class OwnerIdle(DatedStandingRule):
 @dataclass(frozen=True)
 class HuntDue(ReasonedStandingRule, DatedStandingRule):
     since: float
-    where: str | None = field(compare=False)
     seconds: ClassVar[int] = 900
 
     @classmethod
@@ -231,21 +222,22 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
         return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
 
     @classmethod
-    def found(cls, why: str, comms: Comms, commander: str) -> Self:
-        return cls(why, cls.hunted(comms, commander) + cls.seconds,
-                   cls.next_hunt(comms, commander))
+    def found(cls, why: str, comms: Comms, commander: str) -> HuntDue:
+        since = cls.hunted(comms, commander) + cls.seconds
+        return next((LocatedHuntDue(why, since, path)
+                     for path in cls.next_hunt(comms, commander)), cls(why, since))
 
     @classmethod
-    def next_hunt(cls, comms: Comms, commander: str) -> str | None:
+    def next_hunt(cls, comms: Comms, commander: str) -> tuple[str, ...]:
         """Least recently hunted hot file in the held orders' declared check repositories."""
         actor = comms.registry.require(commander).incarnation
-        hunted = {}
+        hunted: dict[str, float] = {}
         for hunt in comms.goals.todos.hunts_for_commander(actor):
             hunted[hunt.where.file] = max(hunted.get(hunt.where.file, 0),
                                           hunt.at.recorded_at("A hunt"))
         repos = {Repo(checkout=Path(todo.order.checked().check.directory), github=todo.repo)
                  for todo in cls.todos(comms, commander)}
-        candidates = []
+        candidates: list[str] = []
         for repo in repos:
             log = subprocess.run(
                 ['git', '-C', str(repo.checkout), 'log', 'origin/main', '--since=7.days',
@@ -254,14 +246,22 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
                             for name in log.stdout.splitlines()
                             if name.endswith('.py') and (repo.checkout / name).is_file())
             candidates.extend(path for path, _ in churn.most_common(15))
-        return min(candidates, key=lambda path: (hunted.get(path, 0), path)) if candidates else None
+        return tuple(sorted(set(candidates), key=lambda path: (hunted.get(path, 0), path)))[:1]
 
     def line(self) -> str:
-        source = self.where or "a held order's production source (no hot file found)"
-        return f"HUNT DUE: read {source} and order the fix this wake"
+        return ("HUNT DUE: read a held order's production source (no hot file found) "
+                "and order the fix this wake")
 
     def began(self) -> float:
         return self.since
+
+
+@dataclass(frozen=True)
+class LocatedHuntDue(HuntDue, declared_name=None):
+    where: str
+
+    def line(self) -> str:
+        return f"HUNT DUE: read {self.where} and order the fix this wake"
 
 
 @dataclass(frozen=True)

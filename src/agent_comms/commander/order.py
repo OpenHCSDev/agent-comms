@@ -1010,7 +1010,8 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
     help = "print the next place to hunt"
 
     def run(self, ctx: Commander) -> None:
-        print(HuntDue.next_hunt(ctx.comms, ctx.commander))
+        for path in HuntDue.next_hunt(ctx.comms, ctx.commander):
+            print(path)
 
 
 class PeerSyncVerb(OrderVerb, declared_name=PeerSync.verb):

@@ -132,7 +132,7 @@ def test_hunt_due_until_a_hunt_is_recorded(commander, commander_script):
     with comms.goals.todos.writing() as db:
         replace(todo, order=replace(todo.order,
             check=replace(todo.order.check, directory=str(repo)))).upsert(db)
-    assert HuntDue.next_hunt(comms, 'lead') == str(hot)
+    assert HuntDue.next_hunt(comms, 'lead') == (str(hot),)
     assert lines(comms, HuntDue) == [f'HUNT DUE: read {hot} and order the fix this wake']
     hunt = CleanHunt(FileLine(__file__, 1), "This source reads the same rows on every event "
                      "without changing any owned fact.", RecordedEventTime(time.time()))
