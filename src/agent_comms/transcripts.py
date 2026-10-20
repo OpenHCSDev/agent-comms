@@ -61,6 +61,8 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     session_file: ClassVar[str | None] = None
     offset: ClassVar[int] = 0
     wire: ClassVar[WireFrontier] = NoWireFrontier()
+    # A read position bounds a page; nothing read is no position.
+    bounds_page: ClassVar[bool] = True
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return replace(self, offset=offset)
@@ -88,8 +90,12 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
                 and self.wire.within(other.wire))
 
     async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
-                        **bounds: object) -> TranscriptPage:
-        return await loader(**bounds, through=self)
+                        **bounds: TranscriptCursor) -> TranscriptPage:
+        return await loader(**self.page_bounds(bounds), through=self)
+
+    @staticmethod
+    def page_bounds(bounds: dict[str, TranscriptCursor]) -> dict[str, TranscriptCursor]:
+        return {name: cursor for name, cursor in bounds.items() if cursor.bounds_page}
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
@@ -126,10 +132,12 @@ class UnreadTranscriptCursor(TranscriptCursor):
     def accepts_source(self, other: TranscriptCursor) -> bool:
         return True
 
+    bounds_page: ClassVar[bool] = False
+
     async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
-                        **bounds: object) -> TranscriptPage:
+                        **bounds: TranscriptCursor) -> TranscriptPage:
         # Nothing read pins no source window; the page's own bounds still apply.
-        return await loader(**bounds)
+        return await loader(**self.page_bounds(bounds))
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return self
