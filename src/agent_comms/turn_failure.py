@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
@@ -23,6 +23,9 @@ class TurnFailure(DeclaredFamily):
     input_uncertain: ClassVar[bool] = False
     # A failure of the model request itself; Pi re-sending that request ends it.
     ends_with_request_retry: ClassVar[bool] = False
+
+    def with_text(self, text: str) -> TurnFailure:
+        return replace(self, text=text)
 
     def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
         return self
@@ -51,7 +54,7 @@ class TurnFailure(DeclaredFamily):
 
 class InputIdUnavailable(TurnFailure):
     def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
-        return type(self)(self.text + "\nBackend startup reported:\n" + stderr)
+        return self.with_text(self.text + "\nBackend startup reported:\n" + stderr)
 
     code = FailureReason.INPUT_ID_UNAVAILABLE
     precedence = 100

@@ -66,7 +66,7 @@ class TurnOutput:
 
     def record_failure(self, failure: failures.TurnFailure) -> None:
         if failure.supersedes(self.failure):
-            self.failure = failure
+            self.failure = failure.with_text(self.redact(failure.text))
 
     def request_retried(self) -> None:
         """Pi re-sends the refused request; that refusal no longer decides the turn."""
