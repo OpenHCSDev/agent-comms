@@ -172,7 +172,7 @@ class CheckRoot:
         if not command or "{root}" not in command:
             raise ValueError("check-root needs -- COMMAND with an explicit {root} argument")
         record = LaunchRecord.current()
-        environment = record.runtime.environment(os.environ, configuration=record.configuration)
+        environment = record.environment(os.environ)
         with self.open() as copied:
             arguments = tuple(argument.replace("{root}", str(copied.root)) for argument in command)
             return CheckRootResult(

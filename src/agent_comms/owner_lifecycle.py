@@ -418,11 +418,22 @@ class OwnerLifecycle:
         initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] = os.environ,
     ) -> Thread:
-        # Callers hold the wire lock; a phase change takes wire then registry.
+        return self._spawn_owner_unlocked(
+            thread, record, initial_input=initial_input,
+            environment=record.environment(environment),
+        )
+
+    def _spawn_owner_unlocked(
+        self,
+        thread: Thread,
+        record: LaunchRecord,
+        *,
+        environment: Mapping[str, str],
+        initial_input: LaunchInput = LaunchInput(),
+    ) -> Thread:
+        # Prepared and acquired environments meet only at process launch.
         self.maintenance.assert_open_unlocked()
         record.runtime.require_available()
-        env = record.runtime.environment(environment,
-                                         configuration=record.configuration)
         agent_bin = self.require_launch_authority().prepare_owner(
             thread, record.agent_bin, record.runtime
         )
@@ -440,7 +451,7 @@ class OwnerLifecycle:
         with owner_process_output(self.root, thread) as output, record.arguments() as arguments:
             ParentedProcess.launch(
                 (str(record.runtime.interpreter), "-m", "agent_comms.worker", *arguments),
-                env=env,
+                env=environment,
                 cwd=thread.worktree,
                 output=output,
                 before_start=reserve,

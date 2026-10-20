@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
-from .launch_runtime import LaunchRuntime
+from .launch_runtime import LaunchRecord, LaunchRuntime
 from .native_session_reopen import NativeSessionIdentity
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
 
@@ -71,7 +71,7 @@ class RuntimeForkHelper(ForkSessionHelper):
     def launch(cls, request, environment):
         return ((str(request.runtime.interpreter), "-I", "-c",
                  "from agent_comms.native_fork import main; main()", request.package),
-                request.runtime.environment(environment))
+                replace(LaunchRecord.current(), runtime=request.runtime).environment(environment))
 
 
 def main():

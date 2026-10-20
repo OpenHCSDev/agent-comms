@@ -43,7 +43,7 @@ class PiChild:
         record: LaunchRecord, cwd: Path, source: Mapping[str, str],
     ) -> dict[str, str]:
         """Translate the held record only at the unchanged Node environment boundary."""
-        return (record.runtime.environment(source, configuration=record.configuration)
+        return (record.environment(source)
                 | record.configuration.encode_native() | record.native_values(cwd))
 
     @classmethod

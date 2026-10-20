@@ -42,7 +42,7 @@ class LaunchRuntime:
     interpreter: Annotated[Path, PathText]
 
     @classmethod
-    def running(cls) -> LaunchRuntime:
+    def running(cls) -> Self:
         return cls(Path(sys.executable))
 
     @property
@@ -58,11 +58,6 @@ class LaunchRuntime:
             configuration, virtual_env=SpecifiedEnvironmentValue(str(self.prefix))
         ).for_interpreter(self.interpreter)
 
-    def environment(
-        self, source: Mapping[str, str], *, configuration: RestartEnvironment
-    ) -> dict[str, str]:
-        return self.project(configuration).apply_runtime(source)
-
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
             raise ValueError("Target interpreter is unavailable")
@@ -71,9 +66,7 @@ class LaunchRuntime:
 class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its acquired import environment."""
 
-    def environment(
-        self, source: Mapping[str, str], *, configuration: RestartEnvironment | None = None,
-    ) -> dict[str, str]:
+    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         return dict(source)
 
 
@@ -378,6 +371,9 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
             agent_bin=self.agent_bin if agent_bin is None else agent_bin,
             agent_args=self.agent_args if agent_args is None else tuple(agent_args),
         )
+
+    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
+        return self.runtime.project(self.configuration).apply_runtime(source)
 
     @classmethod
     def current(cls) -> LaunchRecord:
