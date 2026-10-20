@@ -255,10 +255,10 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
         )
         try:
             await wait_for(lambda: native.provider.posts == 1)
-            message = await Coordination.run_worker(partial(
+            message = (await Coordination.run_worker(partial(
                 Comms(native.root).messaging.send,
                 "sender", session, "are you still on the parser?",
-            ))
+            ))).message
             native.provider.response_gate = None
             # The owner's own observation hands the message to the turn.
             await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 2)
@@ -346,19 +346,19 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 store.participants.register(lookup, session, session, committed=True)
 
         await Coordination.run_worker(prepare)
-        initial = await Coordination.run_worker(partial(
+        initial = (await Coordination.run_worker(partial(
             Comms(native.root).messaging.send,
             "sender", session, "first",
-        ))
+        ))).message
         try:
             await asyncio.wait_for(opened.wait(), 30)
             # Pi has recorded the tool call and is inside its deliberately slow
             # implementation while Core still has not opened following input.
             await wait_for(lambda: b'"id":"local-tool-once"' in native.session.read_bytes())
-            message = await Coordination.run_worker(partial(
+            message = (await Coordination.run_worker(partial(
                 Comms(native.root).messaging.send,
                 "sender", session, "deliver as soon as following input opens",
-            ))
+            ))).message
             await wait_for(lambda: owner.inputs.state(session).idle_revision is not None)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications_for_references((message.reference,))[key]
@@ -438,7 +438,7 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
             sender = Comms(native.root).messaging
             for body in ("first question", "second question"):
                 await Coordination.run_worker(partial(
-                    sender.send_message, "sender", session, body
+                    sender.send, "sender", session, body
                 ))
             native.provider.response_gate = None
             await owner.set_config_option(

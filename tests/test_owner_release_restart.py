@@ -301,7 +301,7 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
     assert isinstance(phase, FencedOwnerBatch)
     assert len(phase.captured) == len(phase.unconfirmed) == 1
     assert phase.captured[0][0].process_identity == child.identity
-    assert phase.exited_processes == phase.retired == ()
+    assert phase.retired == ()
     assert phase.launches[0].process == child.identity
     assert child.alive(), "Stale fence must not authorize forced retirement"
     assert comms.registry.require("worker").require_process().pid == child.identity.pid

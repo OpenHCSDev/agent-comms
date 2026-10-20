@@ -126,6 +126,8 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     with pytest.raises(RelationViolationError, match="original source"):
         comms.messaging.pin_user_constraint(owner.name,
             replace(subject.reference, message_id="foreign-original"), worktree=owner.worktree)
+    from conftest import declare_test_bus
+    declare_test_bus(comms, channels=("team",))
     with pytest.raises(RelationViolationError, match="original recipient"):
         comms.messaging.send_user_message("#team", "wrong audience", worktree=owner.worktree, task=pin.task)
     assert (comms.root / "bus.jsonl").read_bytes() == before

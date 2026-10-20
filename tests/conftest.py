@@ -299,6 +299,15 @@ def root(tmp_path: Path) -> Path:
     return tmp_path / "comms"
 
 
+def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
+    """Declare exactly the test's named channels and members, never inferred ones."""
+    for channel in channels:
+        comms.channels.create_tag(channel)
+    for thread in threads:
+        comms.registry.declare(thread)
+    return comms
+
+
 @pytest.fixture
 def comms(root: Path) -> Comms:
     return Comms(root)
@@ -315,8 +324,10 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order: ())
 
-    for created, name in enumerate(("lead", "worker"), 1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))
+    declare_test_bus(comms, channels=("comms",), threads=(
+        comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created))
+        for created, name in enumerate(("lead", "worker"), 1)
+    ))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     from agent_comms.commander.config import CommanderConfig
@@ -375,11 +386,10 @@ def thread_registration(tmp_path_factory):
 @pytest.fixture
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
-    comms.registry.declare(comms.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'))
-    comms.registry.declare(
-        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent='PR111', task='fix auth')
-    )
-    return comms
+    return declare_test_bus(comms, channels=("base", "auth"), threads=(
+        comms.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'),
+        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent='PR111', task='fix auth'),
+    ))
 
 
 @pytest.fixture

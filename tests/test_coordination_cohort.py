@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bus_history import read_history
-from conftest import publish_initial
+from conftest import declare_test_bus, publish_initial
 import hashlib
 import json
 import sqlite3
@@ -65,12 +65,14 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         "Bob": (17003.0, {"team"}),
         "Charlie": (17004.0, {"other"}),
     }
-    lookups: dict[str, str] = {}
-    for name, (created_at, tags) in people.items():
-        comms.registry.register(
-            comms.registry.new_thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
-        )
-        lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
+    declare_test_bus(comms, channels=("team", "other"), threads=(
+        comms.registry.new_thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
+        for name, (created_at, tags) in people.items()
+    ))
+    lookups = {
+        name: RecordedThreadIncarnation("fixture", created_at).lookup
+        for name, (created_at, _tags) in people.items()
+    }
     coordinator = Coordination(str(root / "coordinator.sqlite"), clock_ms=lambda: 4723)
     install_private_cohort_schema(coordinator)
     for name in ("Alice", "Bob", "Charlie"):
