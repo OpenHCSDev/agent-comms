@@ -36,10 +36,10 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, ModuleDeletion, NoOrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (VerdictAudience, OrderMessage, OrderDeletion, ModuleDeletion, NoOrderDeletion, GoalRef, CleanHunt, CommitDelivery, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
-    LateObservedFirstCall, OperationDelivery, OrderedHunt,
-    NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
+    OperationDelivery, OrderedHunt,
+    PendingProblemOrder,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo, Slop, DeclarationDerivation)
 from agent_comms.turn_context import GoalSegment
@@ -246,20 +246,6 @@ def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(co
     assert closed.order.delivery.at.at > 0
     artifact.unlink()
     assert comms.goals.todos.get('P1') == closed
-
-
-def test_first_call_state_retains_observation_and_prior_alarm(commander):
-    comms, caller = commander
-    todo = create(commander, 'P1')
-    assert isinstance(todo.order.first_call, AwaitingFirstCall)
-    for event in (NotifiedFirstCallEvent, ObservedFirstCallEvent):
-        todo = comms.goals.todos.get('P1')
-        CommsChangeProblemTool(problem='P1', operation=RecordFirstCallTodo(todo.revision,
-            comms.registry.require('lead').incarnation, event)).apply(comms, caller)
-    call = comms.goals.todos.get('P1').order.first_call
-    assert isinstance(call, LateObservedFirstCall)
-    assert FieldCodec.decode(FirstCall, FieldCodec.encode(call)) == call
-    assert call.observe() == call and call.notify() == call
 
 
 def test_commit_delivery_records_the_actual_clean_commit_time(commander):
