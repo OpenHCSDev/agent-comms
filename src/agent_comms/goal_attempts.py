@@ -31,8 +31,6 @@ from uuid import uuid4
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
-from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import PiUsage
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -55,9 +53,11 @@ from .goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+from .locked_store import DurableFile, SQLiteFile
 from .ordinary_turn_rules import OrdinaryGoalGrantCheck
-
+from .pi_counts import PiCount, UnreportedCount
+from .pi_payloads import PiUsage
+from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -705,7 +705,7 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore:
+class GoalAttemptStore(DurableFile, SQLiteFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a
@@ -717,9 +717,12 @@ class GoalAttemptStore:
     post-COMMIT row whose fsync failed is never authority on its own.
     """
 
+    filename = "goal_attempts.sqlite3"
+    root_directory = "goal-private"
+
     def __init__(self, root: str | Path):
         self.root = Path(root)
-        self.path = self.root / "goal_attempts.sqlite3"
+        self.path = self.path_in(self.root)
         self._require_root()
         if not self.path.is_file():
             raise StorageUncertainError("Goal attempt store is not initialized.")
@@ -741,7 +744,7 @@ class GoalAttemptStore:
             os.name == "posix" and stat.S_IMODE(directory.stat().st_mode) != 0o700
         ):
             raise StorageUncertainError("An existing owner-0700 directory is required.")
-        path = directory / "goal_attempts.sqlite3"
+        path = cls.path_in(directory)
         if path.exists():
             # Existing state never recreates a process-local launch capability.
             return cls(directory)

@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .launch_root import LaunchRoot
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .route_selection import RouteChanged, RouteSelection, child_root
 
@@ -49,7 +50,7 @@ class AcpIngress:
         if self.attached is not None:
             attached = Path(self.attached).expanduser()
             roots.add(attached if attached.is_absolute() else self.cwd / attached)
-        return sorted({root.resolve() / "registry.json" for root in roots})
+        return sorted({RegistryFile.path_in(root.resolve()) for root in roots})
 
     def _lock_roots(self, locks: ExitStack) -> None:
         """Hold shared root locks; maintenance takes them exclusively."""

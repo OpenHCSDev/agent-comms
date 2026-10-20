@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .catalog_document import CatalogDocument
-from .locked_store import LockedStore, RootFile
+from .locked_store import DurableFile, LockedStore
 from .private_path import FileRevision
 from .thread_owned_state import ThreadOwnedState
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelCatalog(RootFile, ThreadOwnedState, LockedStore[CatalogDocument]):
+class ChannelCatalog(DurableFile, ThreadOwnedState, LockedStore[CatalogDocument]):
     filename: ClassVar[str] = "catalog.json"
     json_indent = 2
 

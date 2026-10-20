@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
-from dataclasses import field, dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
@@ -18,6 +18,7 @@ from acp import RequestError
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .coordination_cohort import pending_sealed_assignments
+from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
@@ -352,7 +353,7 @@ class DeliveredInput(QueuedInput):
             document = inputs.dispositions.read(tuple(
                 InputDispositions.bus_key(source.message, owner) for source, _ in accepted
             ))
-            with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(CoordinationStore.path_in(inputs.comms.root))) as store:
                 for source, assignment in accepted:
                     message = source.message
                     key = InputDispositions.bus_key(message, owner)
@@ -442,7 +443,7 @@ class DeliveredInput(QueuedInput):
             }
             if not rows:
                 return 0  # Without work, no SQLite connection is needed, let alone a writer.
-            path = str(comms.root / "coordination.sqlite3")
+            path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
                     owner.incarnation.lookup, frozenset(rows),
@@ -473,7 +474,7 @@ class DeliveredInput(QueuedInput):
         # A turn takes later inputs once its first one is in.
         if inbox is None or not inputs.state(session_id).turn_started():
             return
-        store_path = inputs.comms.root / "coordination.sqlite3"
+        store_path = CoordinationStore.path_in(inputs.comms.root)
         lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
@@ -519,7 +520,7 @@ class DeliveredInput(QueuedInput):
 
     async def settle(self, inputs: InputDrain, state) -> None:
         await Coordination.run_async(
-            inputs.comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(inputs.comms.root),
             lambda store: store.assignments.transition_preengagement(
                 self.assignment.assignment_id, state,
                 expected_revision=self.assignment.revision,

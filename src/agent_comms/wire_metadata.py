@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import Id128Text
+from .locked_store import DurableFile
 
 if TYPE_CHECKING:
     import sqlite3
@@ -61,7 +62,7 @@ class ArchivedAccess(WireAccess):
         return _connect(path, readonly=True)
 
     def verify_checkpoint(self, bus, marker, db, stream, path, *, mode):
-        from .private_bus_checkpoint import CheckedRead, CheckedPrefix, _tail
+        from .private_bus_checkpoint import CheckedPrefix, CheckedRead, _tail
 
         # The saved check binds the bus bytes and index file, not
         # the current writer's disposable index membership. No recovery writes
@@ -74,7 +75,8 @@ class ArchivedAccess(WireAccess):
 
 
 @dataclass
-class WireMetadata:
+class WireMetadata(DurableFile):
+    filename: ClassVar[str] = "bus_meta.json"
     last_seq: int = 0
     claimed_after_seq: int = field(default=0, metadata={"wire_name": 'admission_after_seq', "wire_required": True})
     access: WireAccess = field(default_factory=WritableAccess, metadata={"wire_required": True})

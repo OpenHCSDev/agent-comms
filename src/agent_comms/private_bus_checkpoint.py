@@ -19,40 +19,53 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Callable, Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
-from .envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
-    ResourceClaim, UnclaimedResource,
-)
 from .coordination_tables.publications import PublicationIntents
+from .envelope_claim_transitions import (
+    ClaimOwner,
+    ClaimProjection,
+    ClaimTransition,
+    ClaimTransitionError,
+    ResourceClaim,
+    UnclaimedResource,
+)
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
-from .private_path import FileIdentity, FileRevision
-from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
+from .locked_store import DurableFile, SQLiteFile
 from .message_reference import MessageReference
 from .messages import Message
-from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
-from .wire_metadata import WireMetadata
-from .wire_record import WireRecord
+from .private_path import FileIdentity, FileRevision
+from .store_files import ExclusiveLock, LockMode, SharedLock
 from .thread_identity import ThreadIncarnation
 from .turn_context import ContextEntryManifest, RecordedContextManifest
+from .typed_table import (
+    Column,
+    ForeignKey,
+    Index,
+    SQLiteSchemaObject,
+    SqlStorage,
+    SqlValue,
+    TypedTable,
+)
+from .wire_metadata import WireMetadata
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .wire_log import WireLog, WireSnapshot
-    from .retained_task_facts import ExactTaskFact
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .retained_task_facts import ExactTaskFact
     from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
+    from .wire_log import WireLog, WireSnapshot
 
 OriginalSource = TypeVar("OriginalSource")
 
@@ -243,7 +256,7 @@ class CheckedRead:
         """
         if self.stream.closed:
             raise RelationViolationError("checked source read has left its lock lifetime.")
-        self.marker.seal.check_final(self.witness, _path(self.path))
+        self.marker.seal.check_final(self.witness, WritableCheckpoint.path_in(self.path.parent))
         if (
             FileRevision.from_stat(os.fstat(self.stream.fileno())) != self.witness.revision
             or FileRevision.from_stat(self.path.stat()) != self.witness.revision
@@ -1150,7 +1163,7 @@ class Addressed(CheckpointTable, TypedTable):
         This observation grants no delivery authority. Concurrent publication
         makes it stale instead of making an absent row authoritative.
         """
-        path = _path(bus.path)
+        path = WritableCheckpoint.path_in(bus.path.parent)
 
         def require_captured_sources() -> None:
             if (
@@ -1205,7 +1218,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         an old required seal throughout carry makes an interrupted replacement
         unreadable instead of allowing an unsealed full-scan fallback.
         """
-        path = _path(bus.path)
+        path = WritableCheckpoint.path_in(bus.path.parent)
         _directory_sync(bus.path)
         with tempfile.TemporaryDirectory(prefix=".checkpoint-install-", dir=path.parent) as stage:
             staged = Path(stage) / path.name
@@ -1258,7 +1271,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         A failed publish leaves a refused seal, never an unproved index.
         """
         marker = bus.private_marker_unlocked()
-        path = _path(bus.path)
+        path = WritableCheckpoint.path_in(bus.path.parent)
         with closing(_connect(path, readonly=True)) as db:
             witness = cls.read_witness(db)
         witness.require_marker(marker)
@@ -1319,7 +1332,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
                     prior: PrefixWitness, expected: PrefixWitness,
                     additions: list[tuple[int, bytes, WireRecord]]) -> PrefixWitness:
         """Commit one chunk through the same intent as an ordinary append."""
-        path = _path(bus.path)
+        path = WritableCheckpoint.path_in(bus.path.parent)
         marker.seal.require_rebuilt(prior, expected)
         marker.seal_with(PendingSeal.capture(prior, expected, path))
         bus.write_metadata_unlocked(marker)
@@ -1335,10 +1348,6 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         marker.seal_with(FinalSeal.capture(expected, path))
         bus.write_metadata_unlocked(marker)
         return expected
-
-
-def _path(bus_path: Path) -> Path:
-    return bus_path.with_name("private_bus_checkpoint.sqlite3")
 
 
 def _tail(stream, offset: int) -> str:
@@ -1409,7 +1418,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
     has an uncertain outcome after publication, keep the index file but refuse
     reads until the marker and index have been checked together.
     """
-    if bus.path.name != "bus.jsonl":
+    if bus.path.name != bus.filename:
         raise ValueError("Canonical private WireLog required")
     with nullcontext() if _bus_locked else bus.locked():
         marker = bus.private_marker_unlocked()
@@ -1417,7 +1426,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
             raise RelationViolationError(
                 "Checkpoint installation needs a claim-enabled private root."
             )
-        path = _path(bus.path)
+        path = WritableCheckpoint.path_in(bus.path.parent)
         if path.exists() or path.is_symlink() or marker.checkpoint_seal is not None:
             raise RelationViolationError("Private bus checkpoint is already installed.")
         if not bus.path.exists():
@@ -1436,7 +1445,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
 
 
 def checked_prefix_exists(bus_path: Path) -> bool:
-    path = _path(bus_path)
+    path = WritableCheckpoint.path_in(bus_path.parent)
     return path.exists() or path.is_symlink()
 
 
@@ -1451,9 +1460,10 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
 
 
 @dataclass(frozen=True)
-class WritableCheckpoint:
+class WritableCheckpoint(DurableFile, SQLiteFile):
     """A writable bus's checkpoint; the lock mode chooses how its holder reads it."""
 
+    filename = "private_bus_checkpoint.sqlite3"
     path: Path
 
     def open_read_only(self) -> sqlite3.Connection:
@@ -1492,7 +1502,7 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *,
     read-only and raises CheckpointNeedsRepairError where an exclusive holder would
     repair the checkpoint.
     """
-    path = _path(bus.path)
+    path = WritableCheckpoint.path_in(bus.path.parent)
     with ExitStack() as resources:
         try:
             db = resources.enter_context(closing(marker.access.open_checkpoint(path, mode=mode)))
@@ -1521,7 +1531,7 @@ def append_private_bus_checkpoint_unlocked(
     record: WireRecord,
 ) -> PrefixWitness:
     """Index one appended row only after flushing the bus and its parent directory."""
-    path = _path(bus.path)
+    path = WritableCheckpoint.path_in(bus.path.parent)
     # WireLog owns UNKNOWN classification: it performed the bus fsync and is
     # this operation's sole production caller. Preserve the actual failure here.
     with closing(_connect(path)) as db, bus.path.open("rb") as stream:
@@ -1559,7 +1569,7 @@ def addressed_source_pointers_unlocked(
     seal-checked emptiness is the address fact the tick consumes.
     Frozen audience membership includes unmentioned NoWake observers.
     """
-    path = _path(bus.path)
+    path = WritableCheckpoint.path_in(bus.path.parent)
     with closing(_connect(path, readonly=True)) as db:
         saved = _saved(db)
         marker.seal.check_final(saved, path)

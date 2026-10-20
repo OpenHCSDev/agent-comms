@@ -21,6 +21,7 @@ from typing import Literal
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord
 from .goals import GoalDeclaration, NoGoal
+from .locked_store import DurableFile, SQLiteFile
 from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTable
 
 
@@ -65,18 +66,15 @@ class GoalHistoryEntry(TypedTable):
         return FieldCodec.encode_record(self.recorded())
 
 
-class GoalHistoryStore:
+class GoalHistoryStore(DurableFile, SQLiteFile):
     """One journal per registry root; callers hold the registry file lock."""
+
+    filename = "goal_history.sqlite3"
 
     def __init__(self, registry_path: Path):
         self.registry_path = registry_path
-        self.path = self.path_for(registry_path)
+        self.path = self.path_in(registry_path.parent)
         self._initialize()
-
-    @classmethod
-    def path_for(cls, registry_path: Path) -> Path:
-        """The journal shares its registry's directory."""
-        return registry_path.with_name("goal_history.sqlite3")
 
     @classmethod
     def acquire_read_only(cls, registry_path: Path) -> tuple[GoalHistoryEntry, ...]:
@@ -86,7 +84,7 @@ class GoalHistoryStore:
         current goals or reconciles pending writes. Missing/foreign storage is a
         refusal, not permission to manufacture a history baseline.
         """
-        path = cls.path_for(registry_path)
+        path = cls.path_in(registry_path.parent)
         try:
             before = path.lstat()
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()

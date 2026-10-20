@@ -19,6 +19,9 @@ from agent_comms.coordination_errors import (
     IntegrityViolationError,
 )
 
+from .locked_store import RegistryFile
+from .wire_log import WireLog
+
 if TYPE_CHECKING:
     from .message_bus import MessageBus
 
@@ -114,8 +117,8 @@ class NativeCoordinationSession(CoordinationSession):
         from . import message_bus, publisher, registration
 
         return message_bus.MessageBus(
-            self.path.parent / "bus.jsonl",
-            registration.Registration(self.path.parent / "registry.json"),
+            WireLog.path_in(self.path.parent),
+            registration.Registration(RegistryFile.path_in(self.path.parent)),
             publisher.ClaimWrites,
         )
 

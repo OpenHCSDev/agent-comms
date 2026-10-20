@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import math
 import os
 import sqlite3
@@ -17,22 +17,30 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from io import DEFAULT_BUFFER_SIZE
 from pathlib import Path
-from typing import BinaryIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 
 from .audience_manifest import MAX_WIRE_SEQ
-from .child_process import Platform
+from .bus_page_index import BusPageIndex, BusPageRow
+from .bus_projection import (
+    AppendCheckpoint,
+    BusAppendIndex,
+    Checkpoint,
+    CompleteWirePrefix,
+    EmptyWirePrefix,
+    NoCheckpoint,
+    WirePrefix,
+)
 from .bus_publication import (
     CommittedDelivery,
     has_private_wire_fields,
 )
 from .bus_source_page import AddressedPage
-from .bus_page_index import BusPageIndex, BusPageRow
-from .bus_projection import (AppendCheckpoint, BusAppendIndex, Checkpoint, NoCheckpoint,
-                             WirePrefix, EmptyWirePrefix, CompleteWirePrefix)
+from .child_process import Platform
+from .coordination_errors import StaleRevision
 from .envelope_claim_transitions import (
     ClaimProjection,
 )
@@ -41,21 +49,21 @@ from .errors import (
     RelationViolationError,
     StoredHistoryUnreadable,
 )
-from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
+from .locked_store import DurableFile, WireWakeFile
 from .messages import Message
-from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
-from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
 from .private_bus_checkpoint import CheckedRead, RecordedContextManifestSources
+from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .store_files import (
+    UNBOUNDED_STORE_READ,
     ExclusiveLock,
     LockMode,
     SharedLock,
     StoreLock,
-    StoreLockOwner,
-    StoreLockContention,
     StoreLockAcquisition,
-    UNBOUNDED_STORE_READ,
+    StoreLockContention,
+    StoreLockOwner,
     _atomic_write_text,
     _iter_jsonl_stream,
     _store_lock,
@@ -549,7 +557,8 @@ class CheckedWireStoreLock(WireStoreLock):
             yield source
 
 
-class WireLog(StoreLockOwner):
+class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
+    filename = "bus.jsonl"
     lock_type = WireStoreLock
     page_index_type = BusPageIndex
 
@@ -946,7 +955,7 @@ class WireLog(StoreLockOwner):
 
     @property
     def metadata_path(self) -> Path:
-        return self.path.with_name("bus_meta.json")
+        return WireMetadata.path_in(self.path.parent)
 
     def read_metadata_unlocked(self, *, required: bool = False) -> WireMetadata:
         """Read one marker inode under its leaf lock, independently of registry reads.

@@ -37,27 +37,31 @@ from .child_process import ProcessIdentity
 from .cohort_schema import (
     COHORT_SCHEMA_VERSION,
     AwarenessClaimGenerations,
-    ClaimBatchMembers,
     ClaimBatchAcknowledgements,
+    ClaimBatchMembers,
     CohortDeliveryReceipts,
     assert_cohort_schema,
     assert_optional_awareness_schema,
 )
+from .context_segments.optional_awareness import (
+    CompleteAwareness,
+    OmittedAwareness,
+    OptionalAwarenessResult,
+    _OpenObligation,
+    _SelectedDecision,
+)
 from .coordination_cohort import _claim_record
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
+from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
-from .typed_table import SQLiteUserVersion, TypedRow
-from .field_codec import FieldCodec
-from .message_reference import MessageReference
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
+from .typed_table import SQLiteUserVersion, TypedRow
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
-from .context_segments.optional_awareness import (
-    _SelectedDecision, _OpenObligation, OptionalAwarenessResult, OmittedAwareness, CompleteAwareness,
-)
 
 
 @dataclass(frozen=True)
@@ -217,7 +221,7 @@ class OptionalAwarenessProjection:
         if page.has_more:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
-        path = self.index.log.path.with_name("coordination.sqlite3")
+        path = CoordinationStore.path_in(self.index.log.path.parent)
         with CoordinationStore.observing(path) as db:
             self._verify_schema_and_owner(db, initial, assignment, owner)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)

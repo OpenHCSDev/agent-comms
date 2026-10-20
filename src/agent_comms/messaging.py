@@ -6,16 +6,16 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .active_route import guard_original_root_write
-from .registration import Registration
-
 from .bus_publication import AgentOrigin, HumanOrigin
 from .change_report import ChangeReport
 from .errors import RelationViolationError, UnregisteredThreadError
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .publisher import InitialWrites, OwnerPublisher
+from .registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .store_files import SharedLock, _store_lock
 from .task_sources import (
@@ -56,7 +56,7 @@ class Messaging:
         type.require_sendable()
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             # A sender outside any watch is not paused by the drain; the barrier refuses it here.
-            MaintenanceBarrier(self.root / "registry.json").assert_open_unlocked()
+            MaintenanceBarrier(RegistryFile.path_in(self.root)).assert_open_unlocked()
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)

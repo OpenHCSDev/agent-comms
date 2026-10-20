@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from dataclasses import field, dataclass, replace
 from contextlib import aclosing
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -13,34 +13,41 @@ from typing import Any
 from acp.schema import PromptResponse
 
 from .acp_extension import (
-    PromptRequest,
     InputDeliveryChangedUpdate,
-    QueueChangedUpdate,
     LiveQueueScope,
-    QueueScope,
     NoQueueScope,
+    PromptRequest,
+    QueueChangedUpdate,
     QueueProjection,
+    QueueScope,
     encode_updates,
 )
-from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
-from .comms import Comms
-from .coordination_errors import IdentityConflict
-from .drain_failures import (
-    DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures, record_drain_failure,
-)
 from .activity import FailedWakeDiagnostic
+from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
+from .child_process import join_retirement
+from .comms import Comms
 from .coordination_cohort import next_sealed_assignment
+from .coordination_database import CoordinationStore
+from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
-from .child_process import join_retirement
-from .native_input_owner import RegistryOwner
+from .drain_failures import (
+    DEFERRED_DRAIN_ERRORS,
+    UNAVAILABLE_DRAIN_ERRORS,
+    drain_failures,
+    record_drain_failure,
+)
+from .errors import RelationViolationError, UnregisteredThreadError
+from .goal_attempts import GoalAttemptStore
+from .goal_waits import GoalWaits
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
 from .input_effects import InputEffects
-from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
-from .private_bus_checkpoint import Addressed
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
+from .native_input_owner import RegistryOwner
+from .private_bus_checkpoint import Addressed, WritableCheckpoint
 from .private_path import FileRevision
+from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
@@ -50,12 +57,10 @@ from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
-from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
+from .turn_context import TurnContext, UserFollowupSegment
+from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
-from .goal_waits import GoalWaits
-from .errors import RelationViolationError, UnregisteredThreadError
-from .turn_context import TurnContext, UserFollowupSegment
 
 AGENT_PREFIX = "!agent "
 
@@ -88,16 +93,14 @@ class TickRevision:
         return TickRevisionPaths(
             registry=(registry, registry_guard),
             coordination=(
-                root / "coordination.sqlite3",
+                CoordinationStore.path_in(root),
                 root / "coordination.sqlite3-wal",
             ),
             bus=(bus, bus_marker),
-            checkpoint=root / "private_bus_checkpoint.sqlite3",
+            checkpoint=WritableCheckpoint.path_in(root),
             goal_waits=GoalWaits.path_in(root),
-            goal_attempts=(
-                root / "goal-private" / "goal_attempts.sqlite3",
-                root / "goal-private" / "goal_attempts.sqlite3-wal",
-            ),
+            goal_attempts=GoalAttemptStore.files(
+                GoalAttemptStore.path_in(root / GoalAttemptStore.root_directory)),
             auth=auth,
             maintenance=MaintenanceBarrier(registry).witness_paths,
         )
@@ -515,7 +518,7 @@ class InputObservation:
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
         return await Coordination.run_read_async(
-            self.comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(self.comms.root),
             partial(self._private_observation_revision, session_id, root_id, wire, entry),
         )
 

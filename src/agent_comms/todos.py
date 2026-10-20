@@ -28,13 +28,17 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
-from .change_report import FileLine
 from .bus_publication import AgentOrigin
+from .change_report import FileLine
 from .channel_targets import CommandTarget
 from .child_process import (
-    BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
+    BoundedRun,
+    CheckPrinted,
+    ChildResult,
+    ExitedOutcome,
+    NoIntegerPrinted,
+    OrderCheckFailedError,
 )
-from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -49,7 +53,9 @@ from .field_codec import (
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from .locked_store import DurableFile, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
+from .messages import InfoKind, Message
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
@@ -943,17 +949,14 @@ class MergedProgress(FoundProgress):
         return (todo,)
 
 
-class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
+class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
     """The fleet's next install: one time for the bus and the unit that runs it, set by the
     commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
     carries it as its own deadline. Install, maintenance and carry work is the installer's.
     Each live install by ``tools/upgrade_bus.py`` plans the next one a cadence later."""
 
+    filename: ClassVar[str] = "install-deadline.json"
     cadence: ClassVar[int] = 30 * 60
-
-    @staticmethod
-    def path_in(root: Path) -> Path:
-        return root / "install-deadline.json"
 
     @classmethod
     def read(cls, root: Path) -> InstallDeadline:
@@ -2962,7 +2965,7 @@ class TodoStore(TypedStore):
         self, *, check_same_thread: bool = True
     ) -> Iterator[sqlite3.Connection]:
         with (
-            MaintenanceBarrier(self.root / "registry.json").allow_input(),
+            MaintenanceBarrier(RegistryFile.path_in(self.root)).allow_input(),
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection
