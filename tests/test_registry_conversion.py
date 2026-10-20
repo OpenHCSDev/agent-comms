@@ -14,7 +14,8 @@ def old_registry(tmp_path):
     registration.register(registration.new_thread("worker", frozenset(), str(tmp_path)))
     store = registration.store
     raw = json.loads(store.path.read_text())
-    raw["version"] = 1
+    raw.pop("version")
+    raw["threads"]["worker"]["goal"] = {}
     store.path.write_text(json.dumps(raw))
     return store, raw
 
@@ -33,6 +34,7 @@ def test_reads_and_lock_acquisition_never_convert(tmp_path):
     assert store.convert_format()
     after = json.loads(store.path.read_text())
     expected = {**raw, "version": store.empty().version}
+    expected["threads"]["worker"]["goal"] = None
     assert after == expected
     assert store.read().entry("worker").thread.goal.to_wire() is None
     assert store.read_entry("worker").entry.thread.name == "worker"
@@ -89,7 +91,6 @@ def test_conversion_keeps_the_private_guard_authoritative(tmp_path):
 def test_current_version_still_requires_the_whole_valid_document(tmp_path):
     store, raw = old_registry(tmp_path)
     raw["version"] = store.empty().version
-    raw["threads"]["worker"]["goal"] = {"unrecognized": True}
     store.path.write_text(json.dumps(raw))
     before = store.path.read_bytes()
     with pytest.raises(RelationViolationError):

@@ -133,9 +133,11 @@ class RegistryNeedsConversion(RelationViolationError):
 
 
 class RegistryGoalConversion(DocumentConversion):
-    """The sole previous-to-current registry transformation."""
+    """The sole unversioned-to-current registry transformation."""
 
-    source_version = 1
+    source_version = 0
+    source_fingerprints = frozenset({
+        "3bef5bd6411c7028a599e2a9bd66cb8662ca2a8e24a4ff4f265cb171bd2d5bbd"})
 
     @classmethod
     def target_version(cls) -> int:
@@ -158,10 +160,11 @@ class RegistryGoalConversion(DocumentConversion):
     def converted(cls, raw: dict) -> dict:
         if cls.version(raw) == cls.target_version():
             return raw
-        document = RegistryDocument.from_wire({**raw, "version": cls.target_version()})
-        for name, status in tuple(document.statuses.items()):
-            document.set_status(name, status)
-        return FieldCodec.encode_record(document)
+        threads = {name: dict(thread) for name, thread in raw["threads"].items()}
+        for thread in threads.values():
+            if thread.get("goal") == {}:
+                thread["goal"] = None
+        return {**raw, "version": cls.target_version(), "threads": threads}
 
 
 @dataclass(frozen=True, slots=True)
