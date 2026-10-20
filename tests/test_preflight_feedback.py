@@ -16,7 +16,10 @@ def test_preflight_diagnostics_keep_original_phase(reason):
     output = TurnOutput(sensitive=True, preflight_failure=reason)
     output.record_failure(InputIdUnavailable('Private phase'))
     output.startup_error('private image bytes')
-    assert output.failure_text == 'Private phase'
+    assert output.failure_text == 'Image prompt failed; backend diagnostics withheld.'
+    assert output.preflight_failure is reason
+    assert 'Private phase' not in repr(output)
+    assert 'private image bytes' not in repr(output)
     ordinary = TurnOutput(failure=PromptSendFailed('Transport cause'))
     ordinary.startup_error('unrelated startup text')
     assert ordinary.failure_text == 'Transport cause'
