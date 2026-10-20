@@ -193,14 +193,14 @@ class Revisions:
 
 
 def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> Carried:
-    """Run one step from the revision that declares it, with that revision's src and
+    """Run one step with the src of the revision its family names, and
     ``stack``'s Python: the target's staged stack, never the installed one."""
     if step.columns:
         if "--before-stop" in flags:
             return TodoColumnCarry.before_stop(root, apply=True)
         return TodoColumnCarry.carry_step(
             root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
-    tree = revisions.tree(step.written)
+    tree = revisions.tree(step.family.source_revision(step))
     environment = stack.environment(tree / "src", tree / "tools")
     worker = (
         "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "

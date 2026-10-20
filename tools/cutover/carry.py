@@ -120,6 +120,11 @@ class Carry(ABC):
         return False
 
     @classmethod
+    def source_revision(cls, step: Step) -> str:
+        """The revision whose src runs ``step``: the main-line revision that last wrote it."""
+        return step.written
+
+    @classmethod
     def module(cls) -> Path:
         return Path(inspect.getfile(cls)).resolve()
 
@@ -212,6 +217,12 @@ class TodoRows(StoreCarry):
     """Re-read the declared todo rows before the shared store transaction commits."""
 
     store = TodoStore
+
+    @classmethod
+    def source_revision(cls, step: Step) -> str:
+        """Every column step runs before a row reader, so rows decode only as the chain's
+        own Todo; an older tree's Todo lacks the columns added since it was written."""
+        return step.revision
 
     @classmethod
     @contextmanager
@@ -320,7 +331,8 @@ def carry_parents(source: bytes) -> dict[str, type[Carry]]:
             continue
         methods: list[ast.stmt] = [
             method for method in node.body
-            if isinstance(method, ast.FunctionDef) and method.name == Carry.precedes.__name__
+            if isinstance(method, ast.FunctionDef)
+            and method.name in {Carry.precedes.__name__, Carry.source_revision.__name__}
         ]
         if node.name == Carry.__name__:
             if not methods:
