@@ -164,7 +164,7 @@ class ClaimWrites(PrivateWrites):
 
     def _publish_acquisition_unlocked(
         self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, owner: Thread,
-        resource: str, claim: ClaimScope, *, activity: ActivityClocks,
+        resource: str, claim: RecordedScope, *, activity: ActivityClocks,
     ) -> ClaimOwner:
         def publish() -> ClaimOwner:
             transition = self._publish_claim_transition_unlocked(
