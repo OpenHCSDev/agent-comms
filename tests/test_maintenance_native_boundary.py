@@ -13,7 +13,7 @@ import pytest
 
 import agent_comms.coordinated_runtime as runtime
 import agent_comms.native_pi as native_pi
-from agent_comms.maintenance_barrier import MaintenancePhase
+from agent_comms.maintenance_barrier import DeadHolderReleasedPhase, MaintenanceHeldError
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -77,11 +77,20 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path,
             opt_in=True,
             cursor_delivery=cursor_delivery,
         ).run()
-    assert comms.owners.maintenance.read().phase == MaintenancePhase.member_named("paused")
     writes = [json.loads(line) for line in received.read_text().splitlines()]
     assert [item["type"] for item in writes] == ["get_state"]
+    holder_pid = int(child_pid.read_text())
     with pytest.raises(ProcessLookupError):
-        ProcessIdentity.capture(int(child_pid.read_text()))
+        ProcessIdentity.capture(holder_pid)
+    # The raw prompt was refused while its RPC holder was alive. Retirement
+    # killed that holder, so the detecting read refuses once and releases it.
+    with pytest.raises(MaintenanceHeldError, match=f"released dead holder pid={holder_pid} "):
+        comms.owners.maintenance.read()
+    released = comms.owners.maintenance.read()
+    assert released.phase is DeadHolderReleasedPhase
+    assert released.operator.pid == holder_pid and released.operator.start_time > 0
+    with comms.owners.maintenance.allow_input():
+        pass
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
