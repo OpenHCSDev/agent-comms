@@ -149,6 +149,16 @@ def test_launch_root_and_cli_root_each_work_without_a_published_route(tmp_path, 
     assert main([LaunchRoot.argument, str(tmp_path / 'wrong'), '--root', str(root), 'threads']) == 0
 
 
+def test_launch_option_after_command_still_chooses_explicit_root(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    root = tmp_path / 'explicit'
+    comms = Comms(root)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    assert main(['threads', LaunchRoot.argument, str(root)]) == 0
+    assert LaunchRoot.current().path == root
+
+
 def test_rootless_real_cli_child_fails_without_published_route(tmp_path):
     environment = {**os.environ, 'HOME': str(tmp_path), 'AGENT_COMMS_ROOT': '/live'}
     environment = LaunchRuntime(Path(sys.executable)).environment(environment)

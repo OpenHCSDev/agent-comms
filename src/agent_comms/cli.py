@@ -54,7 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         arguments = list(argv) if isinstance(argv, Sequence) else sys.argv[1:]
         args, unknown = build_parser().parse_known_args(arguments, namespace=SendArguments())
-        if unknown:
+        if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
             raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
         LaunchRoot.startup(
             arguments,
