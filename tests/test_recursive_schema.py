@@ -9,7 +9,7 @@ from typing import Annotated
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, MalformedRecord, WiredValue, WireForm, WireSnapshot
+from agent_comms.field_codec import FieldCodec, MalformedRecord, WireForm
 from agent_comms.todos import ProblemOrder
 
 
@@ -128,14 +128,19 @@ if (!refused) throw new Error('invalid nested value accepted');
     assert result.returncode == 0, result.stderr
 
 
-def test_read_only_wire_values_decode_to_json_snapshots_not_live_objects():
-    annotation = Annotated[WiredValue, WireForm]
-    original = {'thread': 'parent', 'nested': [None, True, 3]}
-    snapshot = FieldCodec.decode(annotation, original)
-    assert isinstance(snapshot, WireSnapshot)
-    assert FieldCodec.encode(snapshot, annotation) == original
-    original['nested'].append('later mutation')
-    assert snapshot.to_wire() == {'thread': 'parent', 'nested': [None, True, 3]}
-    for invalid in ({1: 'non-string key'}, {'value': float('nan')}, object()):
+def test_thread_listing_view_rejects_unknown_keys_and_wrong_activity(comms):
+    from agent_comms.cli_commands import ThreadsCliCommand
+    from agent_comms.presentation import ThreadRecord
+    from agent_comms.tool_caller import ThreadListing
+
+    comms.registry.declare(comms.registry.new_thread('visible', frozenset(), str(comms.root), created_at=1.0))
+    records = ThreadsCliCommand().apply(comms).threads
+    reply = FieldCodec.encode(ThreadListing(records, ()))
+    decoded = FieldCodec.decode(ThreadListing, reply)
+    assert not isinstance(decoded.threads[0], ThreadRecord)
+    assert type(decoded.threads[0]) is FieldCodec.view_type(ThreadRecord, 'presence')
+    assert FieldCodec.encode(decoded) == reply
+    for change in ({'unexpected': True}, {'activity': 'not-a-declared-activity'}):
+        invalid = {**reply, 'threads': [{**reply['threads'][0], **change}]}
         with pytest.raises(MalformedRecord):
-            FieldCodec.decode(annotation, invalid)
+            FieldCodec.decode(ThreadListing, invalid)

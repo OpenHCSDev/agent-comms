@@ -18,7 +18,7 @@ from enum import Enum
 from functools import cache, cached_property, lru_cache, reduce
 from operator import or_
 from pathlib import Path
-from pydantic import JsonValue
+from threading import RLock
 from typing_extensions import TypeAliasType
 from uuid import uuid4
 from urllib.parse import quote
@@ -191,6 +191,24 @@ class FieldPlan:
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
+    def view_fields(self, view: str):
+        if not self.setting(f"{view}_exclude", False):
+            yield from self.projected_fields(view)
+
+    def projected_fields(self, view: str):
+        annotation = FieldCodec.view_annotation(self.annotation, view)
+        metadata = dict(self.declared.metadata)
+        metadata.pop("wire_inline", None)
+        metadata["wire_name"] = self.setting(f"{view}_name", self.key)
+        default = self.view_default(view, annotation)
+        yield self.name, annotation, field(default_factory=default, metadata=metadata)
+
+    def view_default(self, view: str, annotation: object):
+        if not self.setting("wire_omit_default", False):
+            return MISSING
+        return lambda: FieldCodec.decode(annotation, FieldCodec.project(
+            self.default(), view, self.annotation))
+
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
         metadata = declared.metadata
@@ -281,6 +299,9 @@ class MissingNoneFieldPlan(DeclaredFieldPlan):
 
     metadata_flag = "wire_absent_none"
 
+    def view_default(self, view: str, annotation: object):
+        return lambda: None
+
     def omitted(self, value: object) -> bool:
         return value is None or super().omitted(value)
 
@@ -290,6 +311,9 @@ class MissingNoneFieldPlan(DeclaredFieldPlan):
 
 class ContextFieldPlan(DeclaredFieldPlan):
     """A constructor value supplied by the caller, never by wire data."""
+
+    def projected_fields(self, view: str):
+        return ()
 
     metadata_flag = "wire_context"
 
@@ -330,6 +354,9 @@ class InlineFieldPlan(DeclaredFieldPlan):
     """An InlineRecord type's or ``wire_inline`` field's keys, written beside its parent's."""
 
     metadata_flag = "wire_inline"
+
+    def projected_fields(self, view: str):
+        return FieldCodec.view_fields(self.inlined, view)
 
     @cached_property
     def inlined(self) -> type:
@@ -401,6 +428,18 @@ class FieldRepresentation(ABC):
     def decode(cls, value: object) -> object: ...
 
     @classmethod
+    def decode_as(cls, target: object, value: object) -> object:
+        return cls.decode(value)
+
+    @classmethod
+    def schema_declaration(cls, target: object) -> type:
+        return cls
+
+    @classmethod
+    def schema_as(cls, target: object) -> dict[str, Any]:
+        return cls.schema()
+
+    @classmethod
     def schema(cls) -> dict[str, Any]:
         raise TypeError(f"{cls.__name__} has no JSON schema")
 
@@ -409,23 +448,36 @@ class WiredValue(Protocol):
     def to_wire(self) -> object: ...
 
 
-class WireForm(FieldRepresentation):
-    """A projected value crosses the boundary as JSON, not as its live source object."""
+class _WireEncoding(FieldRepresentation):
+    """Both projected views and invertible values publish their owned wire form."""
 
     @classmethod
     def encode(cls, value: object) -> object:
         return FieldCodec.encode(cast(WiredValue, value).to_wire())
 
-    @classmethod
-    def decode(cls, value: object) -> WireSnapshot:
-        return WireSnapshot.from_wire(value)
+
+class WireForm(_WireEncoding):
+    """A projected value crosses the boundary as JSON, not as its live source object."""
 
     @classmethod
-    def schema(cls) -> dict[str, Any]:
-        return WireSnapshot.schema()
+    def schema_declaration(cls, target: object) -> type:
+        record = cast(type, target)
+        return FieldCodec.view_type(record, record.wire_view)
+
+    @classmethod
+    def decode_as(cls, target: object, value: object) -> object:
+        return FieldCodec.decode(cls.schema_declaration(target), value)
+
+    @classmethod
+    def schema_as(cls, target: object) -> dict[str, Any]:
+        return FieldCodec.record_schema(cls.schema_declaration(target))
+
+    @classmethod
+    def decode(cls, value: object) -> object:
+        raise TypeError("A wire view must name its declaring record")
 
 
-class WireValue(WireForm):
+class WireValue(_WireEncoding):
     """A value supplies its representation to the single field boundary."""
 
     __slots__ = ()
@@ -465,13 +517,6 @@ class SingleFieldValue(WireValue):
     def to_wire(self):
         entry = self.wire_field()
         return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
-
-
-@dataclass(frozen=True)
-class WireSnapshot(SingleFieldValue):
-    """A received wire value carries no authority to reconstruct its live producer."""
-
-    value: JsonValue
 
 
 class SubclassUnion(DeclaredFamily, WireValue):
@@ -1123,7 +1168,8 @@ class FieldCodec(Sealed):
         annotation, representation = cls._representation(annotation)
         definitions = cls._SchemaDefinitions.current.get()
         if representation is not None:
-            schema = definitions.declared(representation, representation.schema)
+            schema = definitions.declared(representation.schema_declaration(annotation),
+                                          lambda: representation.schema_as(annotation))
             if type(None) in get_args(annotation):
                 return cls.alternatives_schema("anyOf", [schema, {"type": "null"}])
             return schema
@@ -1160,6 +1206,61 @@ class FieldCodec(Sealed):
         if isinstance(annotation, type) and is_dataclass(annotation):
             return definitions.declared(annotation, lambda: cls.record_schema(annotation))
         raise TypeError(f"No declared JSON schema for {annotation}")
+
+    _views: ClassVar[dict[tuple[type, str], type]] = {}
+    _view_lock: ClassVar[RLock] = RLock()
+
+    @classmethod
+    def view_annotation(cls, annotation: object, view: str) -> object:
+        target, representation = cls._representation(annotation)
+        if representation is not None:
+            return annotation
+        origin, args = get_origin(target), get_args(target)
+        if origin in (Union, types.UnionType):
+            return Union[tuple(cls.view_annotation(item, view) for item in args)]
+        if origin in (list, tuple, frozenset, dict):
+            projected = tuple(item if item is Ellipsis else cls.view_annotation(item, view)
+                              for item in args)
+            return origin[projected]
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            members = tuple(cls.view_type(member, view) for member in target.members_with(target))
+            return Union[members] if members else target
+        if isinstance(target, type) and is_dataclass(target):
+            return cls.view_type(target, view)
+        return annotation
+
+    @classmethod
+    def view_fields(cls, record: type, view: str):
+        if issubclass(record, DeclaredFamily) and record.decodes_tagged_records():
+            yield record.family_discriminator, Literal[record.declared_name], field()
+        for entry in cls._record_plan(record).bindings:
+            yield from entry.view_fields(view)
+        for name, member in cls._projections(record, view).items():
+            annotation = get_type_hints(member.fget, include_extras=True)["return"]
+            yield name, cls.view_annotation(annotation, view), field(
+                metadata={"wire_name": member.wire_name})
+
+    @classmethod
+    def view_type(cls, record: type, view: str) -> type:
+        """A public view is a declaration-derived record, never a live producer."""
+        with cls._view_lock:
+            key = record, view
+            if key in cls._views:
+                return cls._views[key]
+            previous = frozenset(cls._views)
+            result = type(f"{record.__name__}_{view}_view", (RecordMember,),
+                          {"__module__": record.__module__})
+            cls._views[key] = result
+            try:
+                declared = tuple(cls.view_fields(record, view))
+                result.__annotations__ = {name: annotation for name, annotation, _ in declared}
+                for name, _, declaration in declared:
+                    setattr(result, name, declaration)
+                return dataclass(frozen=True, kw_only=True)(result)
+            except BaseException:
+                for added in cls._views.keys() - previous:
+                    del cls._views[added]
+                raise
 
     @classmethod
     def project(cls, value: object, view: str, annotation: object = None) -> Any:
@@ -1468,7 +1569,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
                 # of the family's public name decoder. Children validate once;
                 # WireValue's pre-validation would traverse each subtree again.
                 return representation.from_wire(data)
-            return representation.decode(data)
+            return representation.decode_as(self.structural.target, data)
 
 class _JsonValueRepresentation(FieldRepresentation):
     """An opaque JSON declaration validates JSON, not Python object representations."""

@@ -335,6 +335,8 @@ class Message:
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
+    wire_view: ClassVar[str] = "wire"
+
     sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
     target: str = field(metadata={"wire_name": "to", "wire_order": 3})
     body: str = field(metadata={"wire_name": "text", "wire_order": 6})
