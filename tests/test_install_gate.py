@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
@@ -26,6 +27,8 @@ from install_gate import (
     GateError,
     GateReport,
     InstallSurface,
+    Laptop,
+    Desktop,
     Machine,
     MalformedRecord,
     MissingProtection,
@@ -44,6 +47,13 @@ from install_gate import (
     prepare_home,
     rehearse,
 )
+
+
+@dataclass(frozen=True)
+class IsolatedMachine(Machine):
+    name: str
+    root: str
+    transport: tuple[str, ...] = ()
 
 
 class InstallGateTests(unittest.TestCase):
@@ -94,7 +104,7 @@ class InstallGateTests(unittest.TestCase):
             if path.is_file()
         }
         destination = self.root / "snapshot"
-        Machine("local-test", str(bus)).capture(destination, self.root / "snapshot.log")
+        IsolatedMachine("local-test", str(bus)).capture(destination, self.root / "snapshot.log")
         after = {
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in bus.iterdir()
@@ -108,6 +118,31 @@ class InstallGateTests(unittest.TestCase):
             self.assertEqual(copy.execute("PRAGMA integrity_check").fetchone(), ("ok",))
         with closing(sqlite3.connect(destination / "bus/closed.sqlite3")) as copy:
             self.assertEqual(copy.execute("SELECT * FROM records").fetchall(), [])
+
+    def test_declared_hosts_use_the_local_leg_without_ssh(self):
+        for local, remote in ((Desktop(), Laptop()), (Laptop(), Desktop())):
+            with (
+                self.subTest(host=local.name),
+                patch("install_gate.socket.gethostname", return_value=local.hostname),
+            ):
+                self.assertEqual(
+                    local.command("printf", "%s", "two words"), ("printf", "%s", "two words")
+                )
+                self.assertEqual(remote.transport[-1], remote.address)
+                self.assertEqual(
+                    remote.command("printf", "%s", "two words")[-1], "printf %s 'two words'"
+                )
+
+    def test_laptop_root_comes_from_its_selected_route(self):
+        route = '{"root":"/actual/laptop/bus","version":2,"wire_root_id":"00000000000000000000000000000000"}'
+        with (
+            patch("install_gate.socket.gethostname", return_value="desktop"),
+            patch("install_gate.run", return_value=route) as read,
+        ):
+            self.assertEqual(Laptop().root, "/actual/laptop/bus")
+            self.assertEqual(read.call_args.args[0], "ssh")
+            self.assertIn(Laptop.address, read.call_args.args)
+            self.assertIn("active-route.json", read.call_args.args[-1])
 
     def test_sandbox_rejects_writes(self):
         target = self.root / "must-not-exist"
@@ -135,14 +170,16 @@ class InstallGateTests(unittest.TestCase):
 
     def test_unreachable_desktop_and_symlinks_are_failures(self):
         with self.assertRaises(GateError):
-            Machine("desktop", "/unused", ("false",)).capture(
+            IsolatedMachine("desktop", "/unused", ("false",)).capture(
                 self.root / "unreachable", self.root / "unreachable.log"
             )
         bus = self.root / "source"
         bus.mkdir()
         (bus / "unsafe").symlink_to(self.root)
         with self.assertRaises(GateError):
-            Machine("local-test", str(bus)).capture(self.root / "linked", self.root / "linked.log")
+            IsolatedMachine("local-test", str(bus)).capture(
+                self.root / "linked", self.root / "linked.log"
+            )
 
     def test_rehearsal_requires_completed_result_not_just_exit_zero(self):
         target = self.root / "target"
