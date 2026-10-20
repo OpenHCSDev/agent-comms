@@ -23,7 +23,7 @@ from uuid import uuid4
 from agent_comms.change_report import FileLine
 from agent_comms.cli_commands import DeclaredOptions, option
 from agent_comms.commander import rotate
-from agent_comms.commander.config import CommanderConfig, Repo
+from agent_comms.commander.config import CommanderConfig
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
@@ -33,6 +33,7 @@ from agent_comms.messages import Message
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
