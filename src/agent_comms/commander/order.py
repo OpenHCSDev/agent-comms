@@ -782,7 +782,9 @@ class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     unit: str = option("unit")
     body_file: str = option("body_file", metavar="ORDER.json")
     due: EventTime = option("--due", type=RecordedEventTime.from_clock,
-                            normalize=FieldCodec.encode, default=UnrecordedEventTime(),
+                            normalize=FieldCodec.encode, default_factory=UnrecordedEventTime,
+                            parser_default_factory=UnrecordedEventTime,
+                            choices=None, metavar="HH:MM",
                             help="HH:MM local time; default measured from deliveries")
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
@@ -945,7 +947,9 @@ class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     order: str = option("order", metavar="ORDER.json")
     to: str = option("--to")
     due: EventTime = option("--due", type=RecordedEventTime.from_clock,
-                            normalize=FieldCodec.encode, default=UnrecordedEventTime(),
+                            normalize=FieldCodec.encode, default_factory=UnrecordedEventTime,
+                            parser_default_factory=UnrecordedEventTime,
+                            choices=None, metavar="HH:MM",
                             help="HH:MM local time; default measured from deliveries")
     where: str = option("--where", help="the actual file:line where this problem occurs")
     disk: bool = option("--disk", default=False)
