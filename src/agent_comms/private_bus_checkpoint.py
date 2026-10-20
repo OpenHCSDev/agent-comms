@@ -157,10 +157,13 @@ class PrefixWitness(PrefixSeal):
         self.require_prefix(bus, info)
         empty = PrefixWitness.empty(self.root_id, info)
         marker.seal_with(PendingSeal.capture(empty, self, path))
+        # The emptied index is committed with its own prefix record before indexing, so a bus
+        # with nothing to index is sealed over the file as written, with the record it names.
         with db:
             for table in reversed(TypedTable.members_with(CheckpointTable)):
                 table.delete(db)
-            return empty.index_tail(bus, marker, db, path, info)
+            CheckedPrefix.from_witness(empty).upsert(db)
+        return empty.index_tail(bus, marker, db, path, info)
 
     def index_tail(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                    path: Path, info: os.stat_result) -> PrefixWitness:
@@ -274,11 +277,11 @@ class CheckedRead:
         self.require_current()
         if bus.path.resolve() == self.path.resolve():
             raise RelationViolationError("Carry destination must differ from its source")
-        expected = replace(self.marker, checkpoint_version=None, checkpoint_seal=None)
+        expected = self.marker.unsealed()
         with bus.locked() as lock:
             prior = lock.checked_read
             prior.require_current_on(bus)
-            if replace(prior.marker, checkpoint_version=None, checkpoint_seal=None) != expected:
+            if prior.marker.unsealed() != expected:
                 raise RelationViolationError("Carry changed destination marker facts")
             with tempfile.TemporaryDirectory(prefix=".checkpoint-carry-", dir=bus.path.parent) as stage:
                 staged = Path(stage) / bus.path.name
@@ -1124,7 +1127,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
                 "Checkpoint installation needs a claim-enabled private root."
             )
         path = WritableCheckpoint.path_in(bus.path.parent)
-        if path.exists() or path.is_symlink() or marker.checkpoint_seal is not None:
+        if path.exists() or path.is_symlink() or marker.requires_checkpoint:
             raise RelationViolationError("Private bus checkpoint is already installed.")
         if not bus.path.exists():
             if marker.last_seq != 0:

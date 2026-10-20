@@ -98,7 +98,7 @@ class DurableTurn(MroDispatch):
     @handles(pi.MessageUpdate)
     def response_output(self, event):
         delta = event.assistant_message_event
-        if delta is not None and delta.response_progress and delta.progress:
+        if delta.response_progress and delta.progress:
             self.record_response_fact(ReplayFact.ASSISTANT_OUTPUT)
 
     @handles(pi.ToolExecutionStart)

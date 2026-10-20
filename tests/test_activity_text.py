@@ -1,5 +1,6 @@
 """New status text is bounded by activity; saved text is never repaired on read."""
 
+from agent_comms.pi_payloads import ReportedText
 import os
 from dataclasses import replace
 
@@ -65,7 +66,7 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
         phase = ModelWaitPhase()
         for index in range(2):
             title = f"tool_{index}_" + "x" * Activity.detail_limit
-            phase = ToolExecutionStart(tool_call_id=str(index), tool_name=title).on(phase)
+            phase = ToolExecutionStart(tool_call_id=ReportedText(str(index)), tool_name=ReportedText(title)).on(phase)
             comms.agents.observe_native_phase(lease, phase)
             activity = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
             assert activity.state is ActivityState.WORKING

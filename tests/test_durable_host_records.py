@@ -3,6 +3,7 @@ import asyncio
 import json
 
 import pytest
+from agent_comms.pi_payloads import ReportedText, RequestId
 from agent_comms.field_codec import MalformedRecord
 
 from agent_comms.agent_backend import (
@@ -77,7 +78,7 @@ def test_missing_delta_and_unknown_result_fields_fail_at_ingress():
 def test_result_kind_is_bound_to_its_pending_command():
     async def journey():
         channel = PiRpcChannel(asyncio.StreamReader(), event_type=DurablePiEvent)
-        command = CompactDurable(id='9')
+        command = CompactDurable(id=RequestId('9'))
         future = channel.track(command)
         with pytest.raises((TypeError, ValueError)):
             decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
@@ -86,7 +87,7 @@ def test_result_kind_is_bound_to_its_pending_command():
         error = decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
                         'success': False, 'error': 'failed'})
         assert channel.correlate(error) == command
-        assert (await future).error == 'failed'
+        assert (await future).error == ReportedText('failed')
         with pytest.raises(MalformedRecord):
             channel.correlate(error)
     asyncio.run(journey())

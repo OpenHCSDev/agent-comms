@@ -195,15 +195,13 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             # prefix record. Live old-schema ownership remains a separate cutover.
             with bus.locked():
                 marker = bus.read_metadata_unlocked()
-                before = replace(marker, checkpoint_version=None, checkpoint_seal=None)
+                before = marker.unsealed()
                 source = bus.path.read_bytes()
                 checkpoint = lifecycle.root / "private_bus_checkpoint.sqlite3"
                 checkpoint.rename(checkpoint.with_suffix(".retained-original"))
                 bus.write_metadata_unlocked(before)
                 install_private_bus_checkpoint(bus, _bus_locked=True)
-                assert replace(
-                    bus.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None
-                ) == before
+                assert bus.read_metadata_unlocked().unsealed() == before
                 assert bus.path.read_bytes() == source
 
     cutover = RebuildFixtureCheckpoint()

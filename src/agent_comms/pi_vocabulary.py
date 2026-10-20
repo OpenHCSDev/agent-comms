@@ -68,7 +68,7 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     def declared_failure(cls, message):
         from .turn_failure import ModelRequestFailed
 
-        text = (message.error_message or "").strip() or cls.tracked_failure
+        text = message.error_message.value_or("").strip() or cls.tracked_failure
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
 
     @classmethod
@@ -119,7 +119,7 @@ class FailedPiStop(FinishedPiStop):
 
     @classmethod
     def error_notice(cls, message) -> str:
-        return (message.error_message or "").strip()
+        return message.error_message.value_or("").strip()
 
     @classmethod
     async def apply(cls, session, message):
@@ -166,7 +166,7 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
         for diagnostic in message.diagnostics:
             session.watchdog.phase = diagnostic.turn_phase(session.watchdog.phase)
         error = session.output.error(
-            (message.error_message or "").strip() or f"Model request {cls.declared_name}",
+            message.error_message.value_or("").strip() or f"Model request {cls.declared_name}",
             message.diagnostics, source=session.output.native_failure_source,
         )
         if not cls.interrupted(session):

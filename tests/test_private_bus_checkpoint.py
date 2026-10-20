@@ -78,9 +78,8 @@ def test_human_duplicate_check_includes_retained_rows_without_delivery_pointers(
     # owner. PublicWireRecord deliberately publishes no DeliverySources row.
     with _store_lock(comms.root / 'wire'), comms.bus.log.locked():
         comms.bus.log.path.write_text(json.dumps(original.to_wire()) + '\n')
-        comms.bus.log.write_metadata_unlocked(WireMetadata(
-            last_seq=1, claimed_after_seq=1, writer_protocol_version=1,
-            wire_root_id=root_id, claim_envelopes_version=1))
+        comms.bus.log.write_metadata_unlocked(WireMetadata.private_root(
+            root_id, claims=True, last_seq=1, claimed_after_seq=1))
         # Replace only this fixture's derived empty prefix record, as for the
         # original offline retained cutover. No retained bus is discarded.
         (comms.root / 'private_bus_checkpoint.sqlite3').unlink()

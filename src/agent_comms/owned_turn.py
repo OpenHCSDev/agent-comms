@@ -170,7 +170,7 @@ class OwnedTurn:
                             origin, aliases=snapshot.aliases
                         ).prompt,
                         origin=WireInputOrigin(
-                            metadata.wire_root_id,
+                            metadata.root_id,
                             origin.reference,
                         ),
                     )

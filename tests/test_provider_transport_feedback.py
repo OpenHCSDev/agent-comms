@@ -14,7 +14,7 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
 from agent_comms.pi_payloads import (
     AfterMessageStreamStartStage, CodedProviderDiagnosticError,
-    CodelessProviderDiagnosticError, UnrecognizedTransportStage,
+    CodelessProviderDiagnosticError, RequestBytes, UnrecognizedTransportStage,
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
@@ -36,10 +36,10 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert type(diagnostic.error) is CodedProviderDiagnosticError
     assert diagnostic.error.name == "WebSocketCloseError"
     assert diagnostic.error.code == 1011
-    assert diagnostic.details.request_bytes == 159312
+    assert diagnostic.details.request_bytes == RequestBytes(159312)
     assert isinstance(diagnostic.details.phase, AfterMessageStreamStartStage)
     failure = ACPFailure.from_detail(
-        -32603, event.message.error_message, diagnostics=event.message.diagnostics
+        -32603, event.message.error_message.value_or(""), diagnostics=event.message.diagnostics
     )
     assert isinstance(failure, ProviderConnectionFailure)
     assert "code 1011" in failure.description
@@ -88,7 +88,7 @@ def test_unrecognized_phase_is_a_typed_observation_not_a_send_decision():
     (diagnostic,) = event.message.diagnostics
     assert isinstance(diagnostic.details.phase, UnrecognizedTransportStage)
     failure = ACPFailure.from_detail(
-        -32603, event.message.error_message, diagnostics=event.message.diagnostics
+        -32603, event.message.error_message.value_or(""), diagnostics=event.message.diagnostics
     )
     assert "provider stage: future_native_stage" in failure.description
     assert failure.input_state is None
@@ -108,7 +108,7 @@ def test_native_1006_decodes_code_without_parsing_error_prose():
     diagnostic, = event.message.diagnostics
     assert diagnostic.error.code == 1006
     failure = ModelRequestFailed.from_diagnostics(
-        event.message.error_message, event.message.diagnostics
+        event.message.error_message.value_or(""), event.message.diagnostics
     )
     assert isinstance(failure, ProviderTransportFailed)
     assert isinstance(failure, RetryableProviderFailure)
@@ -153,7 +153,7 @@ def test_native_1012_with_empty_thinking_reaches_provider_feedback():
     event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
     assert event.message.stop_reason is ErrorStopReason
     failure = ACPFailure.from_error(
-        RequestError(-32603, event.message.error_message, {
+        RequestError(-32603, event.message.error_message.value_or(""), {
             "inputStatus": "started", "diagnostics": message["diagnostics"],
         }),
     )

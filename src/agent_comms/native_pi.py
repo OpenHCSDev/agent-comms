@@ -960,7 +960,7 @@ def read_tracked_input_commitment(
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
         evidence.observe()
         try:
-            return CommittedInput(evidence.tracked(input_id).message.input_digest)
+            return CommittedInput(evidence.tracked(input_id).message.input_digest.require())
         except NativeInputUncommitted:
             return UncommittedInput()
 

@@ -1,5 +1,6 @@
 """Real native tool errors complete their call; they do not fail the input."""
 
+from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import asyncio
 import json
 import os
@@ -37,12 +38,14 @@ async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, re
     if request_first:
         await asyncio.sleep(0)
     socket.announce((ToolCallContent(id="bad", name="bash", arguments=args),))
-    socket.tool_started(ToolExecutionStart(tool_call_id="bad", tool_name="bash", args=args))
+    socket.tool_started(ToolExecutionStart(tool_call_id=ReportedText("bad"), tool_name=ReportedText("bash"), args=args))
     with pytest.raises(SelectedToolDenied) as denied:
         await (pending if pending is not None else socket.handle_request(raw))
     assert "received bool" in socket.failure_response(denied.value)["error"]
     assert isinstance(socket.calls.require(0, "bad").progress.claim_scope, ArgumentRefusal)
-    socket.tool_finished(ToolExecutionEnd(tool_call_id="bad", tool_name="bash", is_error=True), "b" * 32)
+    socket.tool_finished(ToolExecutionEnd(
+        tool_call_id=ReportedText("bad"), tool_name=ReportedText("bash"), is_error=ReportedFlag(True)
+    ), "b" * 32)
     socket.assert_complete()
     assert not (tmp_path / "selected-tool-ledger").exists()
 

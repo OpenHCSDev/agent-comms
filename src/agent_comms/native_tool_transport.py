@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .child_process import join_retirement
-from .field_codec import MalformedRecord, Token256Text
+from .field_codec import FieldCodec, MalformedRecord, Token256Text
 from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
@@ -298,7 +298,10 @@ class ToolTransport(Generic[Call]):
         self.calls.announce(round)
 
     def tool_started(self, event: ToolExecutionStart) -> None:
-        candidate = self.decode_call(event.tool_call_id, event.tool_name, event.args)
+        # The call decoders validate the call's fields as Pi sent them.
+        candidate = self.decode_call(
+            FieldCodec.encode(event.tool_call_id), FieldCodec.encode(event.tool_name), event.args
+        )
         _, call = self.calls.require_current(
             candidate.call_id, "Native tool start has no declared call"
         )
@@ -307,10 +310,11 @@ class ToolTransport(Generic[Call]):
 
     def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
         identity, call = self.calls.require_current(
-            event.tool_call_id, "Native tool terminal has no declared call"
+            FieldCodec.encode(event.tool_call_id), "Native tool terminal has no declared call"
         )
         call.finish(
-            event.tool_name, event.is_error, self.listener.path.parent, input_id,
+            FieldCodec.encode(event.tool_name), FieldCodec.encode(event.is_error),
+            self.listener.path.parent, input_id,
             identity.round_number,
         )
 

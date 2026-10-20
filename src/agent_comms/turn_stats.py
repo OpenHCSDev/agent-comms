@@ -8,6 +8,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.pi_payloads import RequestId
+
 from . import agent_events as events
 from . import pi_commands as commands
 from . import turn_phase as phases
@@ -30,14 +32,14 @@ class StatsRequest:
     @property
     def complete(self) -> bool:
         return self.requested and all(
-            future.done() and not future.cancelled() and future.result().success is True
+            future.done() and not future.cancelled() and future.result().succeeded
             for future in self._pending
         )
 
     @property
     def failed(self) -> bool:
         return any(
-            future.cancelled() or future.done() and future.result().success is not True
+            future.cancelled() or future.done() and not future.result().succeeded
             for future in self._pending
         )
 
@@ -56,8 +58,10 @@ class StatsRequest:
         self.generation = session.inputs.generation
         self.settlement_count = session.settlement_count
         requests = (
-            commands.GetState(id=f"agent-comms-stats-state-{secrets.token_hex(16)}"),
-            commands.GetSessionStats(id=f"agent-comms-stats-usage-{secrets.token_hex(16)}"),
+            commands.GetState(id=RequestId(f"agent-comms-stats-state-{secrets.token_hex(16)}")),
+            commands.GetSessionStats(
+                id=RequestId(f"agent-comms-stats-usage-{secrets.token_hex(16)}")
+            ),
         )
         self._pending = tuple(session.native.reader.track(command) for command in requests)
         for command in requests:
