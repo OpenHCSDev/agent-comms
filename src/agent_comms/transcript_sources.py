@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from .native_transcript import NativeRecord
+    from .sent_message import PublishedSentMessage
     from .transcript_events import TranscriptEvent
     from .turn_digests import TurnBound
-    from .sent_message import PublishedSentMessage
 
 from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
@@ -76,10 +76,12 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
     def resolve_sent(self, messages):
         return tuple(messages)
 
-    def resolve_sent_messages(self, reports: Iterable[SentTranscript]) -> dict[int, SentTranscript | PublishedSentMessage]:
+    def resolve_sent_messages(
+        self, reports: Iterable[SentTranscript],
+    ) -> dict[int, SentTranscript | PublishedSentMessage]:
         """Index these exact reports using this source's publication evidence."""
         reports = tuple(reports)
-        return dict(zip(map(id, reports), self.resolve_sent(reports)))
+        return dict(zip(map(id, reports), self.resolve_sent(reports), strict=True))
 
 
 @dataclass(frozen=True)
