@@ -346,7 +346,10 @@ class ThreadLaunch(EnvironmentRecord):
     @boundary_decoder
     def from_thread(cls, thread: Thread) -> ThreadLaunch:
         return cls(
-            thread.name, thread.worktree, frozenset(thread.tags), thread.parent,
+            thread.name,
+            thread.worktree,
+            frozenset(thread.tags),
+            thread.parent,
             cast(str | None, FieldCodec.encode(thread.task)),
         )
 
