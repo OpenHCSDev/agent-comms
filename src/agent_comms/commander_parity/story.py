@@ -31,6 +31,7 @@ class StoryCase(LifecycleCase):
             created.held(),
             "story-review",
             StrikeReason(cls.back_reason),
+            evidence=(created.order.checked().owner,),
         )
         run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
         document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))

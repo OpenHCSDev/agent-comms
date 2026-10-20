@@ -2210,8 +2210,9 @@ class CitedStrike(TodoOperation, declared_name=None):
     def prepare(self, goals: Goals, current: Todo) -> Self:
         if not self.evidence:
             raise ValueError("A strike needs a checkable file:line, not a board row or goal text.")
+        root = Path(current.order.checked().check.directory)
         for cited in self.evidence:
-            cited.require_exists()
+            cited.require_exists(root)
         return self
 
 

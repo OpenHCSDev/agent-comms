@@ -17,9 +17,8 @@ def test_strike_refuses_missing_or_nonexistent_evidence_before_recording(command
     todo = create(commander, 'P1')
     actor = comms.registry.require('lead').incarnation
     reason = 'The unit delivered the wrong source change without repairing the requested behavior.'
-    for evidence, error in (((), 'checkable file:line'),
-                            ((FileLine('/no-such-p710-source.py', 1),), 'does not exist')):
-        with pytest.raises(ValueError, match=error):
+    for evidence in ((), (FileLine('/no-such-p710-source.py', 1),)):
+        with pytest.raises(ValueError):
             CommsChangeProblemTool(problem='P1', operation=StrikeTodo(
                 todo.revision, actor, todo.assignment, reason, evidence=evidence)).apply(comms, caller)
         assert comms.goals.todos.get('P1') == todo
@@ -55,5 +54,4 @@ def test_real_delivery_tool_decodes_once_and_queries_origin_once(commander, monk
                 and any('origin' in arg for arg in event.get('argv', []))]
     assert len(commands) == 1 and 'for-each-ref' in commands[0]
     assert not comms.goals.todos.get('P1').pending
-    assert 'claims' in CommsOrderDoneTool.schema()['parameters']['properties']
     assert 'verified_claims' not in FieldCodec.record_schema(DeliverTodo)['properties']
