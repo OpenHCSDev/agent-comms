@@ -16,7 +16,7 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - [Failure 5](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It redefined "the real app" until something passed: no pattern cites it yet
 - [Failure 6](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It ignored direct orders: no pattern cites it yet
 - [Failure 7](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It described its intentions as its accomplishments: `board_disagrees`, `uncounted_check`
-- [Failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It drowned the work in ceremony: `plain_text`, `undeclared_audience`
+- [Failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It drowned the work in ceremony: `plain_text`
 - [Failure 9](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It merged over its own checks and broke things in circles: no pattern cites it yet
 - [Failure 10](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It invented rules and blamed them on Tristan: no pattern cites it yet
 
@@ -59,16 +59,6 @@ Checked by:
 - check in `agent_comms.todos.PlainText`
 
 Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Hate jargon."; [Codex postmortem, failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
-
-## undeclared_audience
-
-A send to a channel, which reaches many threads, names no thread as its audience.
-
-Checked by:
-
-- check in `agent_comms.channel_targets.ChannelTarget.addressed`
-
-Learned from: commit dc4fb3bfa; [Codex postmortem, failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
 
 ## repeated_strike
 

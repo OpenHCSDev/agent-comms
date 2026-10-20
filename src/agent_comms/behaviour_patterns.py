@@ -13,7 +13,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .channel_targets import ChannelTarget
 from .child_process import CountPrinted, NoIntegerPrinted
 from .commander.send_guard import TacticalCommand
 from .declared_family import DeclaredFamily
@@ -243,12 +242,6 @@ class PlainTextPattern(BehaviourPattern):
     )
     checks = (CallableCheck(PlainText),)
     sources = (CommanderRule("Hate jargon."), CeremonyFailure())
-
-
-class UndeclaredAudiencePattern(BehaviourPattern):
-    signature = "A send to a channel, which reaches many threads, names no thread as its audience."
-    checks = (CallableCheck(ChannelTarget.addressed),)
-    sources = (Commit("dc4fb3bfa"), CeremonyFailure())
 
 
 class RepeatedStrikePattern(BehaviourPattern):
