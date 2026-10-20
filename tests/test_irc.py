@@ -7,7 +7,7 @@ import pytest
 from agent_comms.registration import Registration
 from agent_comms.channels import AllChannel
 from agent_comms.comms import wire
-from agent_comms.errors import UnregisteredThreadError
+from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from bus_history import read_history
@@ -60,6 +60,12 @@ class TestChannelTargets:
 
 
 class TestChannelDelivery:
+    def test_undeclared_channel_is_refused_without_creation(self, chat):
+        with pytest.raises(UnknownChannelError, match="Unknown channel"):
+            chat.messaging.send("PR111", "#undeclared", "must not create a channel")
+        assert "#undeclared" not in chat.channels.channels()
+        assert chat.bus.pending_count("fixer") == 0
+
     def test_tag_channel_reaches_tagged_threads_only(self, chat):
         chat.messaging.send("PR111", "#ci", "ci flaked again").message.message_id
         assert chat.bus.pending_count("fixer") == 1  # carries tag 'ci'
