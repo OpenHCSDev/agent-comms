@@ -385,19 +385,47 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
     git("init", "-q", "-b", "main")
     git("remote", "add", "origin", str(origin))
     git("commit", "-q", "--allow-empty", "-m", "base")
-    for branch, grown in (("big", 41), ("small", 40)):
+    for branch, files in (
+        ("big", {"src/big.py": 41}),
+        ("small", {"src/small.py": 40}),
+        ("odd", {"src/odd\tname\ncafé.py": 2}),
+        ("mixed", {"src/mixed.py": 4, "tests/mixed.py": 1}),
+        ("docs", {"README.md": 1}),
+    ):
         git("checkout", "-q", "-b", branch, "main")
-        (checkout / "src").mkdir(exist_ok=True)
-        (checkout / "src" / f"{branch}.py").write_text("x = 1\n" * grown)
+        for name, grown in files.items():
+            path = checkout / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x = 1\n" * grown)
         git("add", "-A")
         git("commit", "-q", "-m", f"{branch} work")
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
+    # Read the captured tracking ref even when the remote is unavailable.
+    git("remote", "set-url", "origin", str(tmp_path / "absent-remote"))
     config = CommanderConfig.read_root(comms.root).model_copy(update={"repos": (
         Repo(checkout=checkout, github="fleet/growth"),)})
     config.write(tmp_path / 'growth-home')
-    big = git("rev-parse", "main~1")[:9]
+    actual_git, commands = Repo.git, []
+
+    def read_git(directory, *args):
+        commands.append(args)
+        return actual_git(directory, *args)
+
+    monkeypatch.setattr(Repo, "git", staticmethod(read_git))
+    growth = tuple(module.MergeGrowth.merges(config.repos[0]))
+    assert len(commands) == 1 and commands[0][0] == "log"
+    assert {item.subject: (item.src, item.tests) for item in growth} == {
+        "Merge big": ((41, 0), (0, 0)),
+        "Merge small": ((40, 0), (0, 0)),
+        "Merge odd": ((2, 0), (0, 0)),
+        "Merge mixed": ((4, 0), (1, 0)),
+        "Merge docs": ((0, 0), (0, 0)),
+        "base": ((0, 0), (0, 0)),
+    }
+    big, = (item for item in growth if item.subject == "Merge big")
     assert lines(comms, module.MergeGrowth) == [
-        f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "
+        f"GROWTH fleet/growth {big.sha[:9]} src +41/-0 (net +41) tests +0/-0: Merge big "
         "-> justify or send back the owner with a deletion order"]
+    assert len(commands) == 2  # One local process for each independent read.

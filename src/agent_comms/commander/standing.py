@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
+from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
@@ -220,21 +221,35 @@ class MergeGrowth(DatedStandingRule):
 
     @classmethod
     def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
-        """Read first-parent growth from one captured, already-fetched Git history.
+        """Read first-parent growth in one local Git stream; updates own fetching.
 
-        Fetch belongs to the checkout's update owner, not a standing-rule read.
-        Git emits each commit's first-parent diff in this same process.
+        Keep every first-parent commit, including zero-growth commits, rather
+        than letting a path filter simplify the merge history.
         """
         log = repo.git(
-            repo.checkout, "log", "--first-parent", f"--since={cls.window}",
-            "--format=%x1e%H%x00%ct%x00%s", "--numstat", "--no-renames",
-            "--diff-merges=first-parent", "origin/main", "--", repo.source, "tests",
+            repo.checkout,
+            "log",
+            "--first-parent",
+            f"--since={cls.window}",
+            "--format=%H%x00%ct%x00%s",
+            "--numstat",
+            "-z",
+            "--no-renames",
+            "--diff-merges=first-parent",
+            "origin/main",
         )
-        for record in log.split("\x1e")[1:]:
-            header, _, diff = record.partition("\n")
-            sha, at, subject = header.split("\x00", 2)
+        # -z keeps paths intact, including quoted names, tabs and newlines.
+        # A header starts with its SHA; each numstat row starts with two counts
+        # separated by tabs. Consume header fields before inspecting diff rows.
+        records = deque(log.split("\x00"))
+        while records:
+            sha = records.popleft().lstrip("\n")
+            if not sha:
+                continue
+            at, subject = records.popleft(), records.popleft()
             src, tests = [0, 0], [0, 0]
-            for row in diff.splitlines():
+            while records and (not records[0] or "\t" in records[0]):
+                row = records.popleft().lstrip("\n")
                 if not row:
                     continue
                 added, deleted, path = row.split("\t", 2)
