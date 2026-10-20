@@ -24,7 +24,7 @@ from pathlib import Path
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .launch_root import LaunchRoot
 from .maintenance_barrier import MaintenanceBarrier
-from .route_selection import RouteSelection, child_root
+from .route_selection import RouteChanged, RouteSelection, child_root
 
 
 def _release_abandoned(task: asyncio.Future[ExitStack]) -> None:
@@ -92,12 +92,9 @@ class AcpIngress:
         with await self._acquire(self._lock_prompt):
             yield
 
-    def _project_launch(self) -> LaunchRoot:
-        """Carry the captured root in arguments only after acquiring the locks."""
-        return LaunchRoot.from_path(self.selection.root)
-
     async def spawn(
         self, argv: tuple[str, ...], *, env: Mapping[str, str],
+        accepts_launch_root: bool = True,
         pass_fds: tuple[int, ...] = (), stdio: ChildStdio = StreamingChildStdio(),
     ) -> AttachedChild:
         """Hold route and wire locks until the asynchronous spawn settles.
@@ -132,10 +129,12 @@ class AcpIngress:
                 # route EX -> private-root preflight order.
                 with self.selection.route.hold_client_route(), ExitStack() as locks:
                     self._lock_roots(locks)
-                    launch = self._project_launch()
+                    launch = LaunchRoot.current()
+                    if launch.path.resolve() != self.selection.root:
+                        raise RouteChanged("ACP child launch root differs from selected route")
                     process = asyncio.run_coroutine_threadsafe(
                         AttachedChild.start(
-                            (*argv, *launch.arguments()),
+                            (*argv, *(launch.arguments() if accepts_launch_root else ())),
                             env=child_env, cwd=cwd, pass_fds=pass_fds, stdio=stdio,
                         ), loop,
                     ).result()
