@@ -124,6 +124,14 @@ def test_cli_root_wins_without_published_route(tmp_path, monkeypatch, joined):
     assert not (tmp_path / '.local/state/agent-comms/active-route.json').exists()
 
 
+def test_unrecognized_cli_option_does_not_start_against_a_published_bus(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    publish_route(tmp_path)
+    assert main(['threads', '--unknown-option']) == 1
+    with pytest.raises(RelationViolationError, match='did not select a root at startup'):
+        LaunchRoot.current()
+
+
 def test_generic_startup_does_not_parse_the_cli_root_flag(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
     root = publish_route(tmp_path)

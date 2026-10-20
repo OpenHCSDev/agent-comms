@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Explicit Comms root directory (otherwise uses the published active route)",
     )
-    # Admit the generic launch option before parsing; LaunchRoot owns its consumption.
+    # Parse the launch option without deciding its root; LaunchRoot owns that choice.
     parser.add_argument(LaunchRoot.argument, help=argparse.SUPPRESS)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
