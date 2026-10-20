@@ -108,14 +108,14 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
         check = order.check
         for each in (check, *order.deletes.checks):
             await self.require_source(each)
-            each.result.require(await self.checked(each))
+            each.result.require(await self.checked(each, registry.storage_rule.checkout_base))
         return replace(self, at=await self.delivery_time(check))
 
     @abstractmethod
     async def require_source(self, check): ...
 
     @abstractmethod
-    async def checked(self, check: OrderCheck) -> ChildResult: ...
+    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult: ...
 
     @abstractmethod
     async def delivery_time(self, check): ...
@@ -162,8 +162,8 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
 
-    async def checked(self, check: OrderCheck) -> ChildResult:
-        return await asyncio.to_thread(check.at, self.commit, check.directory)
+    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
+        return await asyncio.to_thread(check.at, self.commit, check.directory, checkout_base)
 
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
@@ -294,7 +294,7 @@ class OperationDelivery(OrderDelivery):
     async def require_source(self, check):
         pass
 
-    async def checked(self, check: OrderCheck) -> ChildResult:
+    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
         return await check.run()
 
     async def delivery_time(self, check):
