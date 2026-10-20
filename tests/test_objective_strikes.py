@@ -82,8 +82,8 @@ def test_objective_family_records_once_posts_minutes_and_uses_existing_takeaway(
             check=OrderCheck(str(repo), 'cat count.txt', CountCheckResult(0)))).upsert(db)
     done.apply(comms, caller)
     delivered = store.get('P2')
-    assert not delivered.pending and delivered.holder is None
-    assert len(delivered.strikes) == 2 and len(delivered.released) == 1 and len(lines()) == 4
+    assert not delivered.pending and delivered.holder == 'worker'
+    assert len(delivered.strikes) == 1 and delivered.released == () and len(lines()) == 3
 
     # A subsequent late done must not create a second copy of the watcher's deadline failure.
     third = create(commander, 'P3', deadline=now - 60)
@@ -96,4 +96,4 @@ def test_objective_family_records_once_posts_minutes_and_uses_existing_takeaway(
     CommsOrderDoneTool(problem='P3', order_id=third.order.id,
         delivery=CommitDelivery(commit=sha, delivered_commit=sha), claims=working(comms)).apply(comms, caller)
     assert not store.get('P3').pending and len(store.get('P3').strikes) == 1
-    assert len(lines()) == 5
+    assert len(lines()) == 4
