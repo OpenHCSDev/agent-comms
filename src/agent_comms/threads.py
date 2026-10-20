@@ -171,7 +171,6 @@ class Thread(ThreadProvenance):
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         return {
             **replace(self.launch(), worktree=worktree, managed=True).encode(),
-            "AGENT_COMMS_ROOT": str(root),
             **project.environment(root),
         }
 

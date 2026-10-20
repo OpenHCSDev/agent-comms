@@ -21,6 +21,7 @@ from pathlib import Path
 
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .maintenance_barrier import MaintenanceBarrier
+from .launch_runtime import LaunchRoot
 from .route_selection import RouteSelection, child_root, selected_write
 
 
@@ -88,14 +89,14 @@ class AcpIngress:
         with await self._acquire(self._lock_prompt):
             yield
 
-    def _project_launch(self, child_env: dict[str, str]) -> None:
-        """Publish the captured root into the child only after acquiring the locks."""
+    def _project_launch(self) -> LaunchRoot:
+        """Carry the captured root in arguments only after acquiring the locks."""
         from .active_route import read_active_route
 
-        child_env["AGENT_COMMS_ROOT"] = str(self.selection.root)
         # The child derives its launch from this root; only the route must not move.
         if self.selection.implicit and read_active_route() not in (None, self.selection.route):
             raise ValueError("ACP root changed before private launch")
+        return LaunchRoot(self.selection.root)
 
     async def spawn(
         self, argv: tuple[str, ...], *, env: Mapping[str, str],
@@ -110,7 +111,7 @@ class AcpIngress:
         maintenance pause from completing; there is no bounded deadline.
         """
         loop = asyncio.get_running_loop()
-        child_env = dict(env)
+        child_env = LaunchRoot.environment(env)
         cwd = str(self.cwd)
         process_ready: concurrent.futures.Future[AttachedChild] = concurrent.futures.Future()
         decision: concurrent.futures.Future[bool] = concurrent.futures.Future()
@@ -133,10 +134,11 @@ class AcpIngress:
                 # route EX -> private-root preflight order.
                 with self.selection.route.hold_client_route(), ExitStack() as locks:
                     self._lock_roots(locks)
-                    self._project_launch(child_env)
+                    launch = self._project_launch()
                     process = asyncio.run_coroutine_threadsafe(
                         AttachedChild.start(
-                            argv, env=child_env, cwd=cwd, pass_fds=pass_fds, stdio=stdio,
+                            (*argv, *launch.arguments()),
+                            env=child_env, cwd=cwd, pass_fds=pass_fds, stdio=stdio,
                         ), loop,
                     ).result()
                     process_ready.set_result(process)

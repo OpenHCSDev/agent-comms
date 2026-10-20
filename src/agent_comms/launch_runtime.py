@@ -19,6 +19,41 @@ class CallingThreadUnavailable(RelationViolationError):
 
 
 @dataclass(frozen=True)
+class LaunchRoot:
+    """A process's selected root travels in its arguments, never its environment."""
+
+    path: Annotated[Path, PathText]
+    argument: ClassVar[str] = "--comms-root"
+    environment_name: ClassVar[str] = "AGENT_COMMS_ROOT"
+    _current: ClassVar[LaunchRoot | None] = None
+
+    @classmethod
+    def current(cls) -> LaunchRoot | None:
+        return cls._current
+
+    def install(self) -> None:
+        LaunchRoot._current = self
+
+    def arguments(self) -> tuple[str, str]:
+        return self.argument, str(self.path)
+
+    @classmethod
+    def startup(cls, arguments: list[str]) -> None:
+        if cls.argument in arguments:
+            index = arguments.index(cls.argument)
+            if index + 1 == len(arguments):
+                raise ValueError(f"{cls.argument} requires a root")
+            record = FieldCodec.decode(cls, {"path": arguments[index + 1]})
+            record.install()
+            del arguments[index:index + 2]
+
+    @classmethod
+    def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
+        """Construct child inheritance without granting an implicit root override."""
+        return {name: value for name, value in source.items() if name != cls.environment_name}
+
+
+@dataclass(frozen=True)
 class LaunchRuntime:
     """One selected installation for a worker and its native executable."""
 
@@ -80,7 +115,8 @@ class EnvironmentRecord:
 
     @classmethod
     def inherited(cls, environment: Mapping[str, str]) -> dict[str, str]:
-        names = (FieldCodec.wire_key(declaration) for declaration in fields(cls))
+        names = (FieldCodec.wire_key(declaration) for declaration in fields(cls)
+                 if declaration.metadata.get("environment", True))
         return {name: environment[name] for name in names if name in environment}
 
     @classmethod
@@ -95,7 +131,9 @@ class EnvironmentRecord:
 
     def encode(self) -> dict[str, str]:
         encoded: dict[str, str] = FieldCodec.encode(self)
-        return encoded
+        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+                for declaration in fields(self) if declaration.metadata.get("environment", True)
+                and FieldCodec.wire_key(declaration) in encoded}
 
 
 @dataclass(frozen=True)
@@ -125,7 +163,8 @@ class RestartEnvironment(EnvironmentRecord):
     )
     root: str | None = field(
         default=None,
-        metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_ROOT", "runtime": True},
+        metadata={"wire_omit_default": True, "wire_name": LaunchRoot.environment_name,
+                  "environment": False},
     )
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
     native_config: Annotated[Path, PathText] = field(
@@ -148,6 +187,9 @@ class RestartEnvironment(EnvironmentRecord):
     @classmethod
     def inherit(cls, environment: Mapping[str, str]):
         values = cls.inherited(environment)
+        launch = LaunchRoot.current()
+        if launch is not None:
+            values[cls.variable("root")] = str(launch.path)
         native_name, agent_name = cls.variable("native_config"), cls.variable("agent_directory")
         values[native_name] = values.get(native_name) or values.get(agent_name) or str(cls.default_agent_directory)
         return FieldCodec.decode(cls, values)
@@ -180,7 +222,7 @@ class RestartEnvironment(EnvironmentRecord):
 
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
         """Preserve source credentials/settings; replace the declared runtime fields."""
-        result = dict(source)
+        result = LaunchRoot.environment(source)
         encoded = self.encode()
         for declaration in fields(self):
             if declaration.metadata.get("runtime"):
