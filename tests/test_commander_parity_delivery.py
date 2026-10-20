@@ -23,7 +23,7 @@ def test_check_uses_configured_persistent_checkout_and_retains_real_result(tmp_p
     commit = repository.git("rev-parse", "HEAD")
     first = check.at(commit, str(repository.path), checkout_base)
     assert check.at(commit, str(repository.path), checkout_base) == first
-    actual, = marker.read_text().splitlines()
+    (actual,) = marker.read_text().splitlines()
     assert actual.startswith(str(checkout_base) + "/order-check-")
     assert not tuple(checkout_base.iterdir())
     assert len(check.recorded(commit, str(repository.path))) == 1
