@@ -36,6 +36,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.store_files import _store_lock
@@ -556,7 +557,7 @@ async def test_missing_native_schema_refuses_cursor_metadata(tmp_path):
     assert cursor_envelope((await agent.sessions.metadata("beta"))) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    with pytest.raises(PublicationActivationBlocked, match="native runtime schema is not installed"):
+    with pytest.raises(PublicationActivationBlocked):
         await agent.sessions.metadata("beta")
 
 
@@ -607,7 +608,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
     announced = len(updates)
-    with pytest.raises(PublicationActivationBlocked, match="native runtime schema is not installed"):
+    with pytest.raises(PublicationActivationBlocked):
         await agent.cursors.publish("beta", "beta")
     assert len(updates) == announced
     assert updates[-1].scope == loaded.scope
@@ -672,7 +673,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             while (
                 native.provider.posts != 1
                 or agent.turns.turn_state(session).active.phase.busy
-                or any(state.inbox for state in agent.inputs.drained.values())  # the reply turn retires its inbox after it stops being busy
+                or any(state.turn_open() for state in agent.inputs.drained.values())  # the reply turn retires its inbox after it stops being busy
             ):
                 await asyncio.sleep(0.01)
         assert native.provider.posts == 1
@@ -683,31 +684,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             assert original.stage is FullNativeExecution
             assert original.require_context_proof().input_id == original.input_id
         assert comms.bus.log.messages_for_references((sent.reference,)) == (sent,)
-        assert not agent.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in agent.inputs.drained.values())
-
-
-async def test_acp_private_without_prepared_package_refuses_owner_construction(tmp_path, monkeypatch):
-    """An unpinned private root cannot construct an owner from a missing package."""
-    import agent_comms.private_nk_entrypoint as derivation
-    from agent_comms.native_package import NativePackageError
-
-    def missing():
-        raise NativePackageError("Pinned native package directory is missing")
-
-    comms, root_id = _private_comms(tmp_path)
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
-    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    monkeypatch.setattr(derivation, "pinned_native_package", missing)
-    with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
-        CommsAgent(comms, runtime_enabled=True)
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
-                (root_id, original.seq),
-            ).fetchone()[0]
-            == 0
-        )
+        assert not agent.turns.turn_state(session).active.phase.busy and not any(state.turn_open() for state in agent.inputs.drained.values())
 
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):

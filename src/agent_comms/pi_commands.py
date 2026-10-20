@@ -14,7 +14,7 @@ from uuid import uuid4
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, boundary_decoder
 from .image_inputs import ImageInput
 from .native_session_reopen import NativeSessionIdentity
 from .native_turn_context import NativeContextData
@@ -68,6 +68,13 @@ class PiCommand(DeclaredFamily):
     id: str | None = field(
         default_factory=lambda: uuid4().hex, metadata={"wire_absent_none": True}
     )
+
+    @boundary_decoder
+    def require_id(self) -> str:
+        """Operations that correlate an input require the command's actual ID."""
+        if self.id is None:
+            raise ValueError("A correlated native input requires its command ID")
+        return self.id
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -210,8 +217,6 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
                 if not session.native.attestation.uncertain:
                     context.context_window.update_size(session.usage)
             yield session.context_info()
-            if session.persistent_session is None:
-                session.finish_request()
 
 
 CATALOG_TIMEOUT = 10  # seconds for one metadata child to start and answer

@@ -43,6 +43,7 @@ from .config_options import (
     ModelConfigOption,
     ThinkingLevelConfigOption,
 )
+from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
@@ -1617,9 +1618,9 @@ class ContextCliCommand(CliCommand):
         return (DiffContextCliCommand if args.diff else cls)(thread=args.thread)
 
     def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
-        cursor = None
+        cursor: ContextManifestCursor = LATEST_CONTEXT
         while True:
-            page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
+            page = ctx.contexts.page(self.thread, ctx.registry, cursor=cursor)
             yield from (resource.value for resource in reversed(page.resources))
             if not page.has_older():
                 return

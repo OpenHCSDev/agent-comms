@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .assignment_states import (
     AssignmentState,
@@ -13,10 +13,14 @@ from .assignment_states import (
     EngagedAssignment,
     FailedAssignment,
 )
-from .coordination_errors import IntegrityViolationError
+from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .coordination_errors import ResponseClaimBlocked
+
+
+if TYPE_CHECKING:
+    from .coordination_snapshot import RecoverySnapshot
 
 
 @dataclass(frozen=True)
@@ -33,6 +37,16 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     @property
     def current_attempt_ordinal(self) -> int | None:
         return None
+
+    @property
+    def next_attempt_ordinal(self) -> int:
+        return 1
+
+    def require_attempt_start(self) -> None:
+        raise IdentityConflict("execution cannot start an attempt")
+
+    def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
+        pass
 
     @classmethod
     @abstractmethod
@@ -93,8 +107,14 @@ class QueuedExecution(UnstartedExecution):
         return PendingExecution, FailedExecution
 
 
-class PendingExecution(UnstartedExecution):
+class StartsAttempt:
     starts_attempt = True
+
+    def require_attempt_start(self) -> None:
+        pass
+
+
+class PendingExecution(StartsAttempt, UnstartedExecution):
 
     @classmethod
     def successors(cls):
@@ -109,6 +129,10 @@ class AttemptReference:
     @property
     def current_attempt_ordinal(self) -> int | None:
         return self.ordinal
+
+    @property
+    def next_attempt_ordinal(self) -> int:
+        return (self.ordinal or 0) + 1
 
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
@@ -179,9 +203,11 @@ class InterruptedExecution(AttemptReference, ExecutionState):
         return phase.failed
 
 
-class DeferredExecution(InterruptedExecution):
-    starts_attempt = True
+class DeferredExecution(StartsAttempt, InterruptedExecution):
     retry = True
+
+    def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
+        snapshot.previous_attempt.require_retry(snapshot)
 
     @classmethod
     def assignment_state(cls) -> type[AssignmentState]:

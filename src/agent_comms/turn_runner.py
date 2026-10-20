@@ -18,7 +18,7 @@ from .following_inputs import OwnerFollowingInputs
 from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from .agent_backend import AgentBackend, TurnInbox
+from .agent_backend import AgentBackend
 from .channels import AllChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -50,7 +50,7 @@ from .turn_phase import CancellingPhase, TurnPhase
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .coordinated_runtime import SelectedExecution
-    from .input_drain import InputDrain
+    from .input_drain import DrainTurn, InputDrain
     from .session_lifecycle import SessionLifecycle
 
 
@@ -365,9 +365,9 @@ class TurnRunner:
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
-    async def active_backend_inbox(self, session_id: str) -> TurnInbox | None:
+    async def active_backend_turn(self, session_id: str) -> DrainTurn:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
-        return self.inputs.state(session_id).inbox if state.active.phase.accepts_followup else None
+        return self.inputs.state(session_id).turn.for_phase(state.active.phase)
 
     async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
         async with self.idle_backend(session_id, thread) as persistent:

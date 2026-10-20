@@ -128,7 +128,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
     )
     try:
         await asyncio.wait_for(entered.wait(), 30)
-        assert owner.turns.turn_state(session).active.phase.busy and owner.inputs.state(session).inbox is not None
+        assert owner.turns.turn_state(session).active.phase.busy and owner.inputs.state(session).turn_open()
         results = await asyncio.gather(
             *(
                 proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
@@ -169,7 +169,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             await asyncio.wait_for(settled.wait(), 30)
             # Native settlement alone is not permission to overlap a still-open stream.
             assert (
-                owner.turns.turn_state(session).active.phase.busy and owner.inputs.state(session).inbox is not None
+                owner.turns.turn_state(session).active.phase.busy and owner.inputs.state(session).turn_open()
             )
             await owner.turns.goals.schedule_goal(session)
             assert len(calls) == 1 and not owner.inputs.state(session).pending_turns
@@ -241,5 +241,5 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backe
                 assert not owner.inputs.state(session).pending_turns
             finally:
                 await proxy.close()
-        assert not owner.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in owner.inputs.drained.values())
+        assert not owner.turns.turn_state(session).active.phase.busy and not any(state.turn_open() for state in owner.inputs.drained.values())
     assert native.provider.posts == 0

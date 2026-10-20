@@ -18,6 +18,7 @@ from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
 from .command import Command
+from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
@@ -26,7 +27,6 @@ from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
-from .private_bus_checkpoint import ContextManifestReference
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import LiveThreadOwnerBinding
 from .tool_result import DeclaredReply
@@ -468,7 +468,7 @@ class RecordedContextRuntimeRequest(ResultRuntimeRequest):
 
     def read_manifest(self, ctx):
         comms = ctx.server.agent._comms
-        manifest = self.record.read(comms.bus.log, ctx.name, comms.registry)
+        manifest = self.record.read(comms.contexts, ctx.name, comms.registry)
         return ContextManifest.for_request((manifest,), self.turn, self.request_id)
 
     async def manifest(self, ctx):

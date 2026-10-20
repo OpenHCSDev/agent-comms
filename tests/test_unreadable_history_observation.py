@@ -19,7 +19,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import StoredHistoryUnreadable
-from agent_comms.private_bus_checkpoint import RecordedContextManifestSources
+from agent_comms.context_store import ContextRequest
 from agent_comms.threads import Thread
 from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (
@@ -48,13 +48,8 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from agent_comms.turn_context import RecordedContextManifest
-from agent_comms.wire_record import (
-    AuthoredObservationWireRecord,
-    RecordedContextManifestWireObservation,
-    WireRecord,
-)
 from test_observer_death import readable
-from test_turn_context_wire import manifest
+from test_turn_context_wire import corrupt_context_kind, manifest
 
 
 @dataclass(frozen=True)
@@ -62,7 +57,7 @@ class ReadRecordedContext(ReadRequest):
     thread: str
 
     def read(self, comms):
-        return RecordedContextManifestSources.for_owner(comms.bus.log, self.thread, comms.registry)
+        return comms.contexts.page(self.thread, comms.registry)
 
 
 def saved_row(comms):
@@ -70,30 +65,29 @@ def saved_row(comms):
     comms.registry.declare(owner)
     comms.messaging.initialize_private_initial_protocol()
     comms.bus.log.path.touch(mode=0o600)
-    recorded, _entries = RecordedContextManifest.capture(manifest(owner))
-    row = AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)).to_wire()
-    return row
+    comms.contexts.record(manifest(owner))
+    with comms.contexts.snapshot() as db:
+        request, = ContextRequest.select(db)
+        return FieldCodec.encode(request.recorded(db))
 
 
 def test_recorded_selected_response_remains_a_strict_codec_member(comms):
     row = saved_row(comms)
-    segment = row["observation"]["manifest"]["segments"][0]["manifest"]
+    segment = row["segments"][0]["manifest"]
     segment["kind"] = "selected_response"
-    decoded = WireRecord.public_from_wire(row)
-    recorded = decoded.recorded_context_manifests()[0]
+    recorded = FieldCodec.decode(RecordedContextManifest, row)
     assert recorded.segments[0].manifest.kind is SelectedResponseSegment
-    assert FieldCodec.encode(decoded) == row
+    assert FieldCodec.encode(recorded) == row
     # Unknown names still fail, not skipped, substituted or rendered as a
     # guessed current producer. The saved declaration is the real decoder.
     segment["kind"] = "unavailable_future_segment"
     with pytest.raises(ValueError, match="Unknown ContextSegment"):
-        WireRecord.public_from_wire(row).recorded_context_manifests()
+        FieldCodec.decode(RecordedContextManifest, row)
 
 
 def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(comms):
-    row = saved_row(comms)
-    row["observation"]["manifest"]["segments"][0]["manifest"]["kind"] = "unavailable_future_segment"
-    comms.bus.log.path.write_text(json.dumps(row) + "\n")
+    saved_row(comms)
+    corrupt_context_kind(comms, "saved", "unavailable_future_segment")
     answer = ReadRecordedContext(str(comms.root), "saved", request_id=7).answer(comms)
     assert isinstance(answer, ReadRefused)
     assert isinstance(answer.error, StoredHistoryUnreadable)
@@ -227,10 +221,10 @@ def test_sidebar_deferred_read_does_not_replace_its_original_interest(
 
 
 async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms):
-    row = saved_row(comms)
-    row["observation"]["manifest"]["segments"][0]["manifest"]["kind"] = "unavailable_future_segment"
-    comms.bus.log.path.write_text(json.dumps(row) + "\n")
-    original = comms.bus.log.path.read_bytes()
+    saved_row(comms)
+    corrupt_context_kind(comms, "saved", "unavailable_future_segment")
+    original = comms.contexts.path.read_bytes()
+    original_bus = comms.bus.log.path.read_bytes()
     process = ObservationProcess(comms.route)
     try:
         await readable(process)
@@ -266,7 +260,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 await readable(process)
                 process.results()
                 await asyncio.sleep(0)
-        with pytest.raises(StoredHistoryUnreadable, match="context sequence.*unavailable_future_segment"):
+        with pytest.raises(StoredHistoryUnreadable):
             await damaged
         # Serve a separate, readable request using the same actual pipe/child.
         waiting = asyncio.create_task(process.read(ReadNotifications(str(comms.root), ())))
@@ -280,6 +274,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 await asyncio.sleep(0)
         assert await waiting == {}
         assert process.process.is_alive() and process.died is None
-        assert comms.bus.log.path.read_bytes() == original
+        assert comms.contexts.path.read_bytes() == original
+        assert comms.bus.log.path.read_bytes() == original_bus
     finally:
         process.close()

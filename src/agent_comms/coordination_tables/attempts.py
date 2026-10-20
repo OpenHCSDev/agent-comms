@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from enum import IntFlag
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_contracts import (
@@ -16,7 +17,12 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    IntegrityViolationError,
+    RecoveryBlocked,
+    StaleFence,
+)
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.field_codec import projected
@@ -26,6 +32,9 @@ from agent_comms.typed_table import (
     ForeignKey,
     TypedTable,
 )
+
+if TYPE_CHECKING:
+    from agent_comms.coordination_snapshot import RecoverySnapshot
 
 
 class ReplayFact(IntFlag):
@@ -45,8 +54,43 @@ class ReplayFact(IntFlag):
 APPROVED_REPLAY_FACT_MASK: Final = sum(fact.value for fact in ReplayFact)
 
 
+class PreviousAttempt(ABC):
+    """Start policy consumes an attempt capability, not the snapshot's optional SQL row."""
+
+    @abstractmethod
+    def require_attempt(self) -> AttemptRecord: ...
+
+    @abstractmethod
+    def require_retry(self, snapshot: RecoverySnapshot) -> None: ...
+
+    @abstractmethod
+    def require_newer_owner(self, generation: int) -> None: ...
+
+
+class NoPreviousAttempt(PreviousAttempt):
+    def require_newer_owner(self, generation: int) -> None:
+        pass
+
+    def require_attempt(self) -> AttemptRecord:
+        raise StaleFence("execution has no authorized attempt")
+
+    def require_retry(self, snapshot: RecoverySnapshot) -> None:
+        raise RecoveryBlocked("frozen v2 cannot resume an unstarted deferral")
+
+
 @dataclass(frozen=True, slots=True)
-class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
+class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
+    def require_attempt(self) -> AttemptRecord:
+        return self
+
+    def require_retry(self, snapshot: RecoverySnapshot) -> None:
+        if not snapshot.can_retry:
+            raise RecoveryBlocked("retry requires final death, replay proof, and budget")
+
+    def require_newer_owner(self, generation: int) -> None:
+        if generation <= self.owner_generation:
+            raise StaleFence("retry must use a strictly newer owner generation")
+
     def advance(
         self,
         session,

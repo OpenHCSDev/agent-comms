@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import sys
 import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
+from importlib.metadata import distribution
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -44,7 +46,7 @@ def replace_link(link: Path, target: Path) -> None:
 
 
 def merge_json(path: Path, merge) -> None:
-    """Rewrite a harness's own JSON config with one addition, keeping everything else it holds."""
+    """Rewrite a harness's JSON config through its owner, keeping unrelated settings."""
     document = json.loads(path.read_text()) if path.exists() else {}
     merge(document)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,15 +112,28 @@ class ClaudeCodeHarness(Harness):
     def configure(self) -> tuple[Path, ...]:
         settings = self.home / '.claude/settings.json'
 
-        def add_hooks(document: dict) -> None:
+        def reconcile_hooks(document: dict) -> None:
+            scripts = {point.name for point in distribution('agent-comms').entry_points.select(
+                group='console_scripts')}
+            events = document.setdefault('hooks', {})
+            for event, entries in events.items():
+                retained_entries = []
+                for entry in entries:
+                    hooks = entry.get('hooks', ())
+                    retained = []
+                    for hook in hooks:
+                        arguments = shlex.split(hook.get('command', ''))
+                        if not arguments or Path(arguments[0]).name not in scripts:
+                            retained.append(hook)
+                    if retained or not hooks:
+                        if len(retained) != len(hooks):
+                            entry.update(hooks=retained)
+                        retained_entries.append(entry)
+                events[event] = retained_entries
             for program in ClaudeHookProgram.members():
                 for event in program.events:
-                    hooks = document.setdefault('hooks', {}).setdefault(event, [])
-                    commands = {hook.get('command') for entry in hooks
-                                for hook in entry.get('hooks', ())}
-                    if program.command() not in commands:
-                        hooks.append(program.entry())
-        merge_json(settings, add_hooks)
+                    events.setdefault(event, []).append(program.entry())
+        merge_json(settings, reconcile_hooks)
         return (settings,)
 
 

@@ -15,7 +15,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -24,12 +24,12 @@ from importlib.resources import files
 from math import ceil
 from pathlib import Path
 from statistics import median
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
 from .bus_publication import AgentOrigin
-from .change_report import FileLine
+from .change_report import FileLine, SourceReference
 from .channel_targets import CommandTarget
 from .child_process import (
     BoundedRun,
@@ -39,6 +39,7 @@ from .child_process import (
     NoIntegerPrinted,
     OrderCheckFailedError,
 )
+from .progress_claims import MergedClaim, ProgressClaim
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -50,6 +51,7 @@ from .field_codec import (
     RecordMember,
     SubclassUnion,
     WireValue,
+    boundary_decoder,
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
@@ -59,7 +61,7 @@ from .messages import InfoKind, Message
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .recorded_time import EventTime, RecordedEventSeconds, RecordedEventTime, UnrecordedEventTime
 from .repo import Repo
 from .repository_name import RepositoryName
 from .standing_rules import UndatedStandingRule
@@ -121,7 +123,13 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
+    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return claims
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
         order = todo.order.checked()
         check = order.check
@@ -210,20 +218,24 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
             raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
                              "first pushed commit that answers the order.")
-        pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
-                                "--list", "origin/*")
-        if not pushed.strip():
-            raise ValueError(
-                f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
-    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
-        verified = await super().verified(todo, registry)
-        merge = await self.merge_state(todo, registry)
+    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return (*claims, MergedClaim(self.delivered))
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> OrderDelivery:
+        branches = verified_claims[MergedClaim(self.delivered)]
+        verified = await super().verified(todo, registry, verified_claims)
+        merge = await self.merge_state(todo, registry, branches)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
                                      at=verified.at, evidence=self.evidence, merge=merge,
                                      proof_build=verified.proof_build)
 
-    async def merge_state(self, todo: Todo, registry: Registration) -> DeliveryMerge:
+    async def merge_state(
+        self, todo: Todo, registry: Registration, branches: tuple[str, ...],
+    ) -> DeliveryMerge:
         """Observe integration, not merely publication, at the time of completion.
 
         Git proves ordinary merges to main. The order's merged PR also proves squash merges
@@ -231,9 +243,6 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         whose owner is WorkBranches, not a second branch policy in the delivery tool.
         """
         check = todo.order.checked().check
-        branches = (await self.run(
-            check, "git", "for-each-ref", f"--contains={self.delivered}",
-            "--format=%(refname:strip=3)", "refs/remotes/origin/")).splitlines()
         if WorkBranches.main in branches:
             return MainDeliveryMerge()
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
@@ -963,8 +972,7 @@ class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
         path = cls.path_in(root)
         if not path.exists():
             return UnplannedInstallDeadline()
-        record = json.loads(path.read_text())
-        return PlannedInstallDeadline(RecordedEventTime(record.pop("at")), **record)
+        return FieldCodec.decode_document(PlannedInstallDeadline, json.loads(path.read_text()))
 
     @abstractmethod
     def overdue(self, now: float) -> tuple[str, ...]:
@@ -978,7 +986,7 @@ class UnplannedInstallDeadline(InstallDeadline):
 
 @dataclass(frozen=True)
 class PlannedInstallDeadline(InstallDeadline):
-    at: RecordedEventTime
+    at: Annotated[RecordedEventTime, RecordedEventSeconds]
     installer: str
 
     @classmethod
@@ -992,7 +1000,7 @@ class PlannedInstallDeadline(InstallDeadline):
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
         staged = path.with_suffix(".tmp")
-        staged.write_text(json.dumps({"at": self.at.at, "installer": self.installer}))
+        staged.write_text(json.dumps(FieldCodec.encode_document(self, PlannedInstallDeadline)))
         staged.replace(path)
 
 
@@ -1964,8 +1972,41 @@ class GoalRef(RecordMember, GoalReference):
         return self.goal_id
 
 
+class TodoHolder(ABC):
+    """Current, released and absent holders own their assignment behaviour."""
+
+    def held(self, current: Todo) -> Assignment:
+        raise TodoError(f"{current.id} has no open order.")
+
+    @abstractmethod
+    def previous_assignment(self) -> Assignment: ...
+
+    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
+        return False
+
+    def proposed_assignment(self, proposed: Assignment) -> Assignment:
+        return proposed
+
+    @abstractmethod
+    def require_trace(self, owner: str, traced: SourceReference) -> None: ...
+
+    def successor(self, proposed: Assignment, current: Todo) -> Assignment:
+        return proposed
+
+    def current_assignments(self) -> tuple[Assignment, ...]:
+        return ()
+
+
+class NoTodoHolder(TodoHolder):
+    def previous_assignment(self) -> Assignment:
+        raise TodoError("Problem has no previous holder.")
+
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
+        pass
+
+
 @dataclass(frozen=True, slots=True)
-class Assignment:
+class Assignment(TodoHolder):
     owner: str
     owner_created: float
     parent: str
@@ -1996,14 +2037,23 @@ class Assignment:
         """Who made the assignment: the order's commander, or Core's stall watcher."""
         return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
-    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
+    def held(self, current: Todo) -> Assignment:
+        return self
+
+    def proposed_assignment(self, proposed: Assignment) -> Assignment:
+        return replace(proposed, previous_owners=self.previous_owners)
+
+    def current_assignments(self) -> tuple[Assignment, ...]:
+        return (self,)
+
+    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
 
-    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
         owners = {self.owner, *(previous.name for previous in self.previous_owners)}
-        if owner != self.owner and len(owners) >= 2 and traced is None:
-            raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
-                             "and pass --traced PATH:LINE.")
+        if owner != self.owner and len(owners) >= 2:
+            traced.require(f"This problem has had {sorted(owners)}; read the failing path "
+                           "and pass --traced PATH:LINE.")
 
     def previous_assignment(self) -> Assignment:
         """The current holder supplies its own assignment for retirement."""
@@ -2153,7 +2203,21 @@ class AssignTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(TodoOperation, StoryEvent):
+class CitedStrike(TodoOperation, declared_name=None):
+    evidence: tuple[FileLine, ...] = field(default=(), kw_only=True,
+                                         metadata={"wire_omit_default": True})
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        if not self.evidence:
+            raise ValueError("A strike needs a checkable file:line, not a board row or goal text.")
+        root = Path(current.order.checked().check.directory)
+        for cited in self.evidence:
+            cited.require_exists(root)
+        return self
+
+
+@dataclass(frozen=True)
+class StrikeTodo(CitedStrike, StoryEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -2193,7 +2257,7 @@ class StallStrike(StrikeTodo):
     def make(cls, todo: Todo, actor: ThreadIncarnation, at: EventTime) -> Self:
         return cls(todo.revision, actor, todo.held(),
                    f"{todo.holder} stopped making progress on {todo.id}; "
-                   "Core struck the order.", at)
+                   "Core struck the order.", at, evidence=(todo.order.checked().owner,))
 
     @classmethod
     def ensure(cls, todo: Todo, actor: ThreadIncarnation, at: EventTime) -> Todo:
@@ -2214,7 +2278,8 @@ class ObjectiveStrike(StrikeTodo, declared_name=None):
     @classmethod
     def make(cls, todo: Todo, now: float, reason: str) -> Self:
         return cls(todo.revision, StallWatcherIncarnation.watcher(), todo.held(), reason,
-                   RecordedEventTime(now), order_id=todo.order.checked().id)
+                   RecordedEventTime(now), order_id=todo.order.checked().id,
+                   evidence=(todo.order.checked().owner,))
 
     @classmethod
     def observe(cls, goals: Goals, todo: Todo, now: float,
@@ -2458,7 +2523,7 @@ class SupersededVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(ToolCallVerdict):
+class SendBackVerdict(ToolCallVerdict, CitedStrike):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
@@ -2468,7 +2533,7 @@ class SendBackVerdict(ToolCallVerdict):
 
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
         return (StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                           self.at),)
+                           self.at, evidence=self.evidence),)
 
     def story_text(self) -> str:
         return f"{super().story_text()} (strike recorded)"
@@ -2504,12 +2569,18 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 
 
 @dataclass(frozen=True)
-class ReleaseTodo(TodoOperation, StoryEvent):
+class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
 
     def previous_assignment(self) -> Assignment:
         """The release keeps the assignment of the holder it removed."""
         return self.previous
+
+    def proposed_assignment(self, proposed: Assignment) -> Assignment:
+        return self.previous.handed_to(proposed)
+
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
+        self.previous.require_trace(owner, traced)
 
     def story_text(self) -> str:
         return f"{self.actor.name} released {self.previous.owner}: {self.reason.text}"
@@ -2588,13 +2659,17 @@ class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
     order_id: str
+    verified_claims: dict[ProgressClaim, tuple[str, ...]] = field(
+        default_factory=dict, kw_only=True, repr=False, compare=False,
+        metadata={"wire_transient": True},
+    )
 
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        verified = self.delivery.verified(current, goals.registry)
+        verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         try:
             delivered = asyncio.run(verified)
         except OrderCheckFailedError as error:
@@ -2774,18 +2849,19 @@ class Todo(TypedTable):
     @property
     def holder(self) -> str | None:
         """The unit holding this problem; None once it is closed or released."""
-        return None if self.assignment is None else self.assignment.owner
+        return next((held.owner for held in self.holder_state.current_assignments()), None)
 
     @property
-    def holder_state(self) -> Assignment | ReleaseTodo:
-        """An ordered problem's current holder, or the release that removed it."""
-        return self.assignment or self.released[-1]
+    @boundary_decoder
+    def holder_state(self) -> TodoHolder:
+        """Decode the stored optional assignment once into its behaviour owner."""
+        if self.assignment is not None:
+            return self.assignment
+        return self.released[-1] if self.released else NoTodoHolder()
 
     def held(self) -> Assignment:
         """The open order's assignment; a problem nobody holds has no order work."""
-        if self.assignment is None:
-            raise TodoError(f"{self.id} has no open order.")
-        return self.assignment
+        return self.holder_state.held(self)
 
     @property
     def strike_count(self) -> int:
@@ -2821,24 +2897,19 @@ class Todo(TypedTable):
         if self.assignment != expected:
             raise TodoConflict(self)
 
+    @boundary_decoder
     def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
-        if self.assignment is None or not self.assignment.owned_by(actor, generation):
+        if generation is None or not self.holder_state.owned_by(actor, generation):
             raise TodoConflict(self)
 
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
-        if self.assignment is not None:
-            return replace(proposed, previous_owners=self.assignment.previous_owners)
-        if self.released:  # the released owner joins the next owner's history
-            return self.released[-1].previous.handed_to(proposed)
-        return proposed
+        return self.holder_state.proposed_assignment(proposed)
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
         self.order.require_transfer(self)
-        if self.assignment is not None:
-            self.assignment.require_trace(proposed.owner, traced)
-            proposed = self.assignment.successor(proposed, self)
-        elif self.released:
-            self.released[-1].previous.require_trace(proposed.owner, traced)
+        holder = self.holder_state
+        holder.require_trace(proposed.owner, SourceReference.from_optional(traced))
+        proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
@@ -2852,7 +2923,7 @@ class Todo(TypedTable):
                        revision=released.revision + 1)
 
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
-        if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
+        if self.holder_state.owned_by(owner, goal_id):
             raise TodoConflict(self)
 
     def sent_in(self, message_id: str) -> bool:
@@ -3165,8 +3236,8 @@ class TodoStore(TypedStore):
         problems."""
         return frozenset(
             assignment.owner for todo in self.history_for_commander(commander)
-            for assignment in (todo.assignment, *(release.previous for release in todo.released))
-            if assignment)
+            for assignment in (*todo.holder_state.current_assignments(),
+                               *(release.previous for release in todo.released)))
 
     def _open(self, where: str, parameters: tuple,
               state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
@@ -3227,10 +3298,10 @@ class TodoStore(TypedStore):
         """Release every open problem the unit holds from this commander in one write; each
         records the same reason, and its order and strikes stay."""
         with self.writing() as db:
-            held = tuple((todo, assignment) for todo in self._rows(
+            held = tuple((todo, todo.held()) for todo in self._rows(
                 db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
                 (unit, actor.name, actor.wire_birth))
-                if todo.state.open and (assignment := todo.assignment))
+                if todo.state.open)
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)

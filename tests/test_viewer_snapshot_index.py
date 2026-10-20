@@ -293,8 +293,9 @@ def test_route_index_write_is_a_sidebar_revision(tmp_path):
     index = BusRouteCounts(comms.bus.log.path)
     index.prepare()
     before = WireRevision.capture(comms.views, expiry_tick=0)
-    with closing(CoordinationStore.writer(index.path)) as writer, writer:
+    with index.writing() as writer:
         writer.execute('CREATE TABLE p730_revision_probe (id INTEGER)')
+        writer.execute('INSERT INTO p730_revision_probe VALUES (1)')
     after = WireRevision.capture(comms.views, expiry_tick=0)
     assert before.bus_log == after.bus_log
     assert after.changed_since(SidebarView(), before)
@@ -662,7 +663,7 @@ def test_checked_display_retains_original_cut_and_persists_changed_scope(tmp_pat
 
     comms, _ = _root(tmp_path)
     first = publish_initial(comms, 'sender', '#team', '@Alice first')
-    comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
+    comms.contexts.record(manifest(comms.registry.require('Alice')))
     with comms.views.presentation.snapshot(viewer=NamedViewer('Alice')) as (_, source):
         assert isinstance(source, OpenedWireSnapshot)
         # Original lock has ended. A genuine later publication cannot broaden
@@ -689,13 +690,11 @@ def test_checked_display_retains_original_cut_and_persists_changed_scope(tmp_pat
                 if scope['channel'] == '#team') == FieldCodec.encode(expected_scope)
 
 
-def test_unchecked_opened_cut_still_rejects_unknown_observation(tmp_path, *, thread_registration):
-    from agent_comms.turn_context import RecordedContextManifest
-    from agent_comms.wire_log import OpenedWireSnapshot, WireLog
-    from agent_comms.wire_record import (
-        AuthoredObservationWireRecord,
-        RecordedContextManifestWireObservation,
-    )
+@pytest.mark.parametrize('kind', ['recorded_context_manifest', 'unknown'])
+def test_opened_cut_rejects_context_and_unknown_observations(tmp_path, kind, *, thread_registration):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.context_store import AbsentContext
+    from agent_comms.wire_log import WireLog
     from test_turn_context_wire import manifest
 
     tmp_path.chmod(0o700)
@@ -703,14 +702,10 @@ def test_unchecked_opened_cut_still_rejects_unknown_observation(tmp_path, *, thr
     from agent_comms.wire_metadata import WireMetadata
     log.write_metadata_unlocked(WireMetadata(writer_protocol_version=1, wire_root_id='0' * 32))
     owner = thread_registration.new_thread('author', frozenset(), str(tmp_path), created_at=17003.0)
-    recorded, _entries = RecordedContextManifest.capture(manifest(owner))
-    row = AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded))
-    log.path.write_text(json.dumps(row.to_wire()) + '\n')
+    recorded, _entries = AbsentContext().capture(manifest(owner))
+    row = {'observation': {'kind': kind, 'manifest': FieldCodec.encode(recorded)}}
+    log.path.write_text(json.dumps(row) + '\n')
     log.path.chmod(0o600)
-    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-        assert type(source) is OpenedWireSnapshot
-        assert list(source.public_records()) == []
-    log.path.write_text(json.dumps({'observation': {'kind': 'unknown'}}) + '\n')
     with pytest.raises(StoredHistoryUnreadable, match='Stored bus history cannot be decoded'):
         with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()):
             pytest.fail('Unknown observations must be rejected before exposing a history cut')

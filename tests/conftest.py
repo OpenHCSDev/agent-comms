@@ -243,6 +243,10 @@ def private_comms(private_directory):
     root.mkdir(mode=0o700)
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
+    from agent_comms.launch_root import LaunchRoot
+
+    LaunchRoot.from_path(root).install()
+    comms.route.launch().require_private().check()
     return comms
 
 

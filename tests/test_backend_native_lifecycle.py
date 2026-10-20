@@ -23,6 +23,26 @@ from stored_inputs import stored_inputs
 
 from native_backend_fixture import wait_for
 
+async def test_actual_native_attested_identity_owns_retention_and_reopen(native_backend):
+    owner = native_backend
+    first = await owner.run("retained original", followup="retained followup")
+    assert first[-1].ok, first[-1]
+    child = owner.persistent.child_state.child.proc
+    assert child.alive() and owner.persistent.child_state.idle().current
+    assert [row[0] for row in owner.starts] == [None, "queued"]
+
+    second = await owner.run("warm original")
+    assert second[-1].ok, second[-1]
+    assert owner.persistent.child_state.child.proc is child
+    await owner.force_reopen()
+    assert not child.alive()
+    third = await owner.run("saved original")
+    assert third[-1].ok, third[-1]
+    assert owner.persistent.child_state.child.proc is not child
+    assert owner.persistent.child_state.idle().current
+    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 4
+
+
 async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(native_backend):
     owner = native_backend
     first = await owner.run("first", followup="queued followup")
@@ -186,7 +206,7 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
                 await asyncio.sleep(0.01)
         child = owner.children[-1]
         session = backend.TurnSession.active[turn]
-        forwarding = session.native.forwarding_task
+        forwarding = session.native.forwarding.task
         if termination == "cancel":
             turn.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -228,7 +248,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_resources(
                 assert not turn.done()
                 await asyncio.sleep(0.01)
         session = backend.TurnSession.active[turn]
-        forwarding = session.native.forwarding_task
+        forwarding = session.native.forwarding.task
 
         async def held_close(child, *, graceful):
             if child is session.native:
@@ -252,7 +272,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_resources(
         assert not session.native.proc.alive()
         await session.native.proc.stderr_tail()
         assert forwarding.done()
-        assert session.native.forwarding_task is None
+        assert session.native.forwarding.tasks == ()
         assert turn not in backend.TurnSession.active
         assert owner.provider.posts == len(owner.saved_inputs()) == 1
     finally:
@@ -334,7 +354,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             assert stored_inputs(agent.inputs.dispositions.root).lookup(user_key) == cleared
             assert stored_inputs(agent.inputs.dispositions.root).lookup(bus_key).has_started
             assert not forwarding.pending and not forwarding.accepted
-            assert agent.inputs.state(session).inbox is None
+            assert not agent.inputs.state(session).turn_open()
             assert session not in agent.turns.turn_tasks
             assert not comms.registry.require(session).active_turn.phase.busy
             assert native.session.read_bytes().startswith(saved)

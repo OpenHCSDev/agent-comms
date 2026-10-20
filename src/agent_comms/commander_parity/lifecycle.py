@@ -434,6 +434,7 @@ class StrikeLimitCase(LifecycleCase):
                 created.id,
                 "The copied decision remains unfinished at its recorded review "
                 f"number {number + 1}.",
+                evidence=(created.order.checked().owner,),
             )
         run.commander.fire(
             run.worker, "The copied holder exhausted its declared live strikes on this problem."

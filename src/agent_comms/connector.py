@@ -47,7 +47,7 @@ from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText, option
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
-    CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode,
+    CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode, IssuedTokens,
     RegisteredClient, digest,
 )
 from .messages import Message
@@ -112,15 +112,18 @@ def declared(record: type, values: Mapping[str, object]) -> dict[str, object]:
     return {key: value for key, value in values.items() if key in names}
 
 
+@dataclass
 class OAuthError(Exception):
-    """An OAuth request the connector refuses, with its RFC 6749 error code."""
+    """An OAuth refusal owns its RFC 6749 response as well as its exception text."""
 
-    def __init__(self, error: str, description: str) -> None:
-        super().__init__(description)
-        self.error = error
+    error: str
+    error_description: str
+
+    def __post_init__(self) -> None:
+        super().__init__(self.error_description)
 
     def response(self) -> web.Response:
-        return web.json_response({"error": self.error, "error_description": str(self)}, status=400)
+        return web.json_response(FieldCodec.encode(self), status=400)
 
 
 @dataclass(frozen=True)
@@ -159,7 +162,7 @@ class TokenGrant(DeclaredFamily, affix="Grant"):
     def redeemed(self, grants: ConnectorGrants) -> ConnectorGrants:
         """The grants with this credential spent; refuses a credential it does not hold."""
 
-    def exchange(self, grants: ConnectorGrants) -> tuple[ConnectorGrants, dict[str, JsonValue]]:
+    def exchange(self, grants: ConnectorGrants) -> tuple[ConnectorGrants, IssuedTokens]:
         return self.redeemed(grants).issued(self.client_id)
 
 
@@ -196,6 +199,122 @@ class RefreshTokenGrant(TokenGrant):
                 "invalid_grant", "The refresh token is unknown, revoked or not this client's."
             )
         return replace(grants, refresh=refresh)
+
+
+@dataclass(frozen=True)
+class ResourceMetadata:
+    resource: str
+    authorization_servers: tuple[str, ...]
+    bearer_methods_supported: tuple[str, ...] = ("header",)
+
+
+@dataclass(frozen=True)
+class ServerMetadata:
+    issuer: str
+    authorization_endpoint: str
+    token_endpoint: str
+    registration_endpoint: str
+    response_types_supported: tuple[str, ...] = ("code",)
+    grant_types_supported: tuple[str, ...] = field(default_factory=TokenGrant.names)
+    code_challenge_methods_supported: tuple[str, ...] = ("S256",)
+    token_endpoint_auth_methods_supported: tuple[str, ...] = ("none",)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClientRegistrationReply(ClientRegistration):
+    client_id: str
+    client_id_issued_at: int
+    grant_types: tuple[str, ...] = field(default_factory=TokenGrant.names)
+    response_types: tuple[str, ...] = ("code",)
+    token_endpoint_auth_method: str = "none"
+
+
+@dataclass(frozen=True)
+class McpResult:
+    """An untagged JSON-RPC result. Ping has no additional fields."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class McpEnvelope:
+    jsonrpc: Literal["2.0"] = "2.0"
+
+
+@dataclass(frozen=True)
+class McpReply(McpEnvelope):
+    id: int | str
+    result: McpResult
+
+
+@dataclass(frozen=True)
+class InvalidMcpRequest:
+    message: str
+    code: Literal[-32600] = -32600
+
+
+@dataclass(frozen=True)
+class McpErrorReply(McpEnvelope):
+    error: InvalidMcpRequest
+    id: None = None
+
+
+@dataclass(frozen=True)
+class ToolCapabilities:
+    list_changed: bool = field(default=False, metadata={"wire_name": "listChanged"})
+
+
+@dataclass(frozen=True)
+class ServerCapabilities:
+    tools: ToolCapabilities = ToolCapabilities()
+
+
+@dataclass(frozen=True)
+class ServerInfo:
+    name: str = "agent-comms"
+    version: str = "1"
+
+
+@dataclass(frozen=True)
+class InitializeResult(McpResult):
+    protocol_version: str = field(
+        default=PROTOCOL_VERSION, metadata={"wire_name": "protocolVersion"}
+    )
+    capabilities: ServerCapabilities = ServerCapabilities()
+    server_info: ServerInfo = field(default=ServerInfo(), metadata={"wire_name": "serverInfo"})
+
+
+@dataclass(frozen=True)
+class ToolAnnotations:
+    read_only_hint: bool = field(metadata={"wire_name": "readOnlyHint"})
+
+
+@dataclass(frozen=True)
+class ToolDescription:
+    name: str
+    title: str
+    description: str
+    input_schema: dict[str, JsonValue] = field(metadata={"wire_name": "inputSchema"})
+    annotations: ToolAnnotations
+
+    @classmethod
+    def of(cls, name: str, tool: type[ToolRequest] | type[ConnectorTool]) -> ToolDescription:
+        """The name is the key tools/call dispatches on, so listing and calling share it."""
+        return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
+                   FieldCodec.record_schema(tool), ToolAnnotations(issubclass(tool, ReadTool)))
+
+
+@dataclass(frozen=True)
+class ToolsListResult(McpResult):
+    tools: tuple[ToolDescription, ...]
+
+
+@dataclass(frozen=True)
+class RoundTripResult:
+    round_trip: str
+
+
+@dataclass(frozen=True)
+class PendingAuthorization:
+    client: str
 
 
 @dataclass(frozen=True)
@@ -251,51 +370,36 @@ class McpRequest(McpMessage):
     id: int | str
 
     async def answer(self, connector: Connector) -> web.Response:
-        return web.json_response(
-            {"jsonrpc": "2.0", "id": self.id, "result": await self.result(connector)}
-        )
+        return web.json_response(FieldCodec.encode(McpReply(self.id, await self.result(connector))))
 
     @abstractmethod
-    async def result(self, connector: Connector) -> dict[str, JsonValue]: ...
+    async def result(self, connector: Connector) -> McpResult: ...
 
 
 @dataclass(frozen=True, kw_only=True)
 class InitializeMessage(McpRequest, declared_name="initialize"):
     params: dict[str, object]
 
-    async def result(self, connector: Connector) -> dict[str, JsonValue]:
-        return {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "agent-comms", "version": "1"},
-        }
+    async def result(self, connector: Connector) -> InitializeResult:
+        return InitializeResult()
 
 
 @dataclass(frozen=True, kw_only=True)
 class PingMessage(McpRequest, declared_name="ping"):
     params: dict[str, object] = field(default_factory=dict)
 
-    async def result(self, connector: Connector) -> dict[str, JsonValue]:
-        return {}
+    async def result(self, connector: Connector) -> McpResult:
+        return McpResult()
 
 
 @dataclass(frozen=True, kw_only=True)
 class ToolsListMessage(McpRequest, declared_name="tools/list"):
     params: dict[str, object] = field(default_factory=dict)
 
-    async def result(self, connector: Connector) -> dict[str, JsonValue]:
-        return {
-            "tools": [
-                {
-                    "name": tool.declared_name,
-                    "title": tool.label,
-                    "description": f"{tool.description} {tool.bus_effect}",
-                    "inputSchema": FieldCodec.record_schema(tool),
-                    "annotations": {"readOnlyHint": issubclass(tool, ReadTool)},
-                }
-                for tool in Connector.exposed().values()
-            ]
-        }
+    async def result(self, connector: Connector) -> ToolsListResult:
+        return ToolsListResult(tuple(
+            ToolDescription.of(name, tool) for name, tool in Connector.exposed().items()
+        ))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -329,7 +433,7 @@ class TextContent:
 
 
 @dataclass(frozen=True)
-class ToolsCallResult:
+class ToolsCallResult(McpResult):
     """A tool's encoded reply, or its failed call encoded as an MCP error result."""
 
     content: tuple[TextContent, ...]
@@ -345,11 +449,9 @@ class ToolsCallResult:
 
 
 @dataclass(frozen=True)
-class ToolsCallReply:
-    id: int | str
+class ToolsCallReply(McpReply):
     result: ToolsCallResult
     interpreter: Annotated[Path, PathText]
-    jsonrpc: Literal["2.0"] = "2.0"
 
 
 @dataclass(frozen=True)
@@ -424,27 +526,13 @@ class Connector:
                     await task
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
-        return web.json_response(
-            {
-                "resource": f"{self.issuer}/mcp",
-                "authorization_servers": [self.issuer],
-                "bearer_methods_supported": ["header"],
-            }
-        )
+        return web.json_response(FieldCodec.encode(
+            ResourceMetadata(f"{self.issuer}/mcp", (self.issuer,))))
 
     async def server_metadata(self, request: web.Request) -> web.Response:
-        return web.json_response(
-            {
-                "issuer": self.issuer,
-                "authorization_endpoint": f"{self.issuer}/authorize",
-                "token_endpoint": f"{self.issuer}/token",
-                "registration_endpoint": f"{self.issuer}/register",
-                "response_types_supported": ["code"],
-                "grant_types_supported": list(TokenGrant.names()),
-                "code_challenge_methods_supported": ["S256"],
-                "token_endpoint_auth_methods_supported": ["none"],
-            }
-        )
+        return web.json_response(FieldCodec.encode(ServerMetadata(
+            self.issuer, f"{self.issuer}/authorize", f"{self.issuer}/token",
+            f"{self.issuer}/register")))
 
     async def register(self, request: web.Request) -> web.Response:
         try:
@@ -460,18 +548,10 @@ class Connector:
                 clients=grants.clients | {client_id: RegisteredClient(registration.client_name)},
             )
         )
-        return web.json_response(
-            {
-                "client_id": client_id,
-                "client_id_issued_at": int(time.time()),
-                "client_name": registration.client_name,
-                "redirect_uris": [CALLBACK],
-                "grant_types": list(TokenGrant.names()),
-                "response_types": ["code"],
-                "token_endpoint_auth_method": "none",
-            },
-            status=201,
-        )
+        return web.json_response(FieldCodec.encode(ClientRegistrationReply(
+            client_id=client_id, client_id_issued_at=int(time.time()),
+            client_name=registration.client_name, redirect_uris=registration.redirect_uris,
+        )), status=201)
 
     async def authorize(self, request: web.Request) -> web.Response:
         """Hold the authorization until the owner approves it on this machine, then redirect."""
@@ -522,7 +602,7 @@ class Connector:
             grant = TokenGrant.received(await request.post())
         except MalformedRecord as error:
             return OAuthError("invalid_request", str(error)).response()
-        exchanged: list[dict[str, JsonValue]] = []
+        exchanged: list[IssuedTokens] = []
 
         def spent(grants: ConnectorGrants) -> ConnectorGrants:
             grants, response = grant.exchange(grants)
@@ -533,7 +613,9 @@ class Connector:
             self.store.update(spent)
         except OAuthError as refusal:
             return refusal.response()
-        return web.json_response(exchanged[0], headers={"Cache-Control": "no-store"})
+        return web.json_response(
+            FieldCodec.encode(exchanged[0]), headers={"Cache-Control": "no-store"}
+        )
 
     async def mcp(self, request: web.Request) -> web.Response:
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
@@ -547,7 +629,7 @@ class Connector:
             message = McpMessage.received(await request.json())
         except (MalformedRecord, json.JSONDecodeError) as error:
             return web.json_response(
-                {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": str(error)}}
+                FieldCodec.encode(McpErrorReply(InvalidMcpRequest(str(error))))
             )
         return await message.answer(self)
 
@@ -624,7 +706,8 @@ class RoundTripVerb(ConnectorVerb):
         with client_wire(self.root) as comms:
             if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
                 return f"The service on port {self.port} reads another bus than {self.root}"
-        print(json.dumps({"round_trip": f"{call.params.name} read alike through {running}"}))
+        print(json.dumps(FieldCodec.encode(
+            RoundTripResult(f"{call.params.name} read alike through {running}"))))
         return 0
 
 
@@ -637,7 +720,9 @@ class PendingVerb(ConnectorVerb):
         print(
             json.dumps(
                 {
-                    key: {"client": grants.clients[held.client_id].name}
+                    key: FieldCodec.encode(
+                        PendingAuthorization(grants.clients[held.client_id].name)
+                    )
                     for key, held in grants.requests.items()
                 }
             )

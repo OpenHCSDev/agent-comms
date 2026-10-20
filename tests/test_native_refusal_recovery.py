@@ -1,6 +1,4 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_package import pinned_native_package
 from agent_comms.native_arguments import SelectedModel
 
 import asyncio
@@ -15,8 +13,6 @@ import agent_comms.native_pi as native_pi
 import agent_comms.pi_events as pi_events
 from agent_comms.acp_extension import RequestFailedUpdate
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.tracked_turn import PendingTrackedTerminal, TrackedTurnSession
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
 from test_acp import facts
@@ -59,9 +55,9 @@ def _settled_records():
 
 @pytest.mark.asyncio
 async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
-    wired, tmp_path, monkeypatch
+    private_comms, tmp_path, monkeypatch
 ):
-    agent = canonical_agent(wired, agent_bin="pi", agent_args=[], runtime_enabled=True)
+    agent = canonical_agent(private_comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     sent: list = []
 
     class FakeClient:
@@ -89,7 +85,7 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     async def events(agent_bin, agent_args, task, cwd, *rest, **kwargs):
         async for event in original(stub, agent_args, task, cwd, *rest, **kwargs):
             if isinstance(event, ae.InputStarted):
-                observed['goal'] = wired.goals.update_goal(
+                observed['goal'] = private_comms.goals.update_goal(
                     'proj', SetGoalAction(text='Ship the release'))
                 yield ae.ToolEnd(id='set-goal', name='comms_set_goal', ok=True)
             if isinstance(event, ae.Done):
@@ -98,12 +94,6 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
             yield event
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    # The recorded-protocol launch validates this test's own pinned package;
-    # the live runtime route must not leak into the turn.
-    package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
     agent.sessions.client = FakeClient()
     await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
     try:
@@ -122,7 +112,7 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
             facts(update.field_meta, RequestFailedUpdate) for update in sent
         )
         # The goal was never blocked on an interim refusal.
-        current = wired.registry.require("proj").goal
+        current = private_comms.registry.require("proj").goal
         assert current.id == observed['goal'].id and current.state.active
     finally:
         await agent.shutdown()
@@ -172,22 +162,23 @@ async def test_exhausted_provider_retries_become_typed_provider_failure():
     reason = "503 overloaded after native provider retries"
     from agent_comms.turn_output import TurnOutput
 
-    from agent_comms.turn_failure import ModelRequestFailed
+    from agent_comms.turn_failure import ModelRequestFailed, ProviderRetryExhausted
 
-    turn = object.__new__(TrackedTurnSession)
-    turn.output = TurnOutput()
-    turn.terminal = PendingTrackedTerminal()
-    await turn.native_retry_finished(pi_events.NativeRetryEnd.from_wire({
+    output = TurnOutput()
+    event = pi_events.NativeRetryEnd.from_wire({
         "type": "native_retry_end",
         "success": False,
         "attempt": 3,
         "finalError": reason,
-    }))
-
+    })
+    output.retry_result = event.outcome.result(event.attempt, output.redact)
+    # Retry metadata alone is not a failed assistant terminal. Its existing
+    # output owner refines the actual native terminal when that arrives.
+    output.record_failure(ModelRequestFailed(reason))
     with pytest.raises(native_pi.NativePiTerminalFailure) as caught:
-        turn.output.raise_if_failed(None, SelectedModel("provider", "model"))
+        output.raise_if_failed(None, SelectedModel("provider", "model"))
     assert reason in str(caught.value)
-    assert caught.value.failure == ModelRequestFailed(reason)
+    assert caught.value.failure == ProviderRetryExhausted(reason)
 
 
 @pytest.mark.asyncio

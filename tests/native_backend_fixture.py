@@ -109,7 +109,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             yield agent, session_id
         finally:
             await agent.shutdown()
-            assert not agent.turns.turn_tasks and not any(state.inbox for state in agent.inputs.drained.values())
+            assert not agent.turns.turn_tasks and not any(state.turn_open() for state in agent.inputs.drained.values())
             assert not agent.turns.persistent_backends
 
     @asynccontextmanager

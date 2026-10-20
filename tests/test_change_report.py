@@ -159,5 +159,5 @@ class TestKindDeclarations:
         assert MessageKind.field_value(AlertKind) is AlertKind
 
     def test_file_line_scans_references_from_text(self):
-        references = FileLine.scan("see src/a.py:12, also org.py:3 and plain seq:7")
-        assert [f"{r.file}:{r.line}" for r in references] == ["src/a.py:12", "org.py:3"]
+        references = FileLine.scan("see src/a.py:12, org.py:3, `/home/ts/a.py:9` and plain seq:7")
+        assert [r.to_wire() for r in references] == ["src/a.py:12", "org.py:3", "/home/ts/a.py:9"]

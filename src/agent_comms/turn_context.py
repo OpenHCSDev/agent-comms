@@ -5,14 +5,16 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from abc import abstractmethod
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, Sha256Text
+from .field_codec import FieldCodec, NullMember, Sha256Text, SingleFieldValue, SubclassUnion
 from .goals import Goal, NoGoal
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
@@ -21,9 +23,9 @@ from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from .context_store import RecordedContextState
     from .input_attempt import StoredInput
     from .presentation import ThreadView
-    from .private_bus_checkpoint import CapturedWireSource
     from .relationships import PeerRelation
     from .threads import Thread
 
@@ -380,81 +382,248 @@ class ContextEntryManifest:
         return ContextEntryReference.from_sources(self.manifest.sources)
 
 
+_NO_CONTEXT_RECORDS: Mapping[int, RecordedContextManifest] = MappingProxyType({})
+
+
+class ContextPredecessor(SubclassUnion, affix="ContextPredecessor"):
+    """An absent predecessor or the position that owns its lookup."""
+
+    @abstractmethod
+    def is_direct(self) -> bool: ...
+
+    @abstractmethod
+    def predecessors(self, offset: int) -> tuple[int, ...]: ...
+
+    @abstractmethod
+    def at_keyframe(self, offset: int) -> RecordedContextPredecessor: ...
+
+    @abstractmethod
+    def require_previous(self) -> RecordedContextPredecessor: ...
+
+    @abstractmethod
+    def keyframe_count(self, entries: int, inherited: int) -> int: ...
+
+    @abstractmethod
+    def recorded(
+        self, records: Mapping[int, RecordedContextManifest], position: int,
+        kind: type[ContextSegment],
+    ) -> RecordedSegmentManifest: ...
+
+    @abstractmethod
+    def recording(
+        self, original: RecordedSegmentManifest,
+        records: Mapping[int, RecordedContextManifest],
+        entries: Mapping[ContextEntryReference, SegmentManifest], position: int,
+    ) -> SegmentRecording: ...
+
+
+@dataclass(frozen=True)
+class NoContextPredecessor(NullMember, ContextPredecessor):
+    def is_direct(self) -> bool:
+        return True
+
+    def predecessors(self, offset: int) -> tuple[int, ...]:
+        return ()
+
+    def at_keyframe(self, offset: int) -> RecordedContextPredecessor:
+        return RecordedContextPredecessor(offset)
+
+    def require_previous(self) -> RecordedContextPredecessor:
+        raise ValueError("Recorded text predecessor is missing")
+
+    def keyframe_count(self, entries: int, inherited: int) -> int:
+        return entries
+
+    def recorded(
+        self, records: Mapping[int, RecordedContextManifest], position: int,
+        kind: type[ContextSegment],
+    ) -> RecordedSegmentManifest:
+        raise ValueError("Recorded segment predecessor is missing")
+
+    def recording(
+        self, original: RecordedSegmentManifest,
+        records: Mapping[int, RecordedContextManifest],
+        entries: Mapping[ContextEntryReference, SegmentManifest], position: int,
+    ) -> SegmentRecording:
+        return UnrecordedSegment()
+
+
+@dataclass(frozen=True)
+class RecordedContextPredecessor(SingleFieldValue, ContextPredecessor):
+    record_id: int
+
+    def is_direct(self) -> bool:
+        return False
+
+    def predecessors(self, offset: int) -> tuple[int, ...]:
+        if not 0 <= self.record_id < offset:
+            raise ValueError("Context predecessor is not an earlier record")
+        return (self.record_id,)
+
+    def at_keyframe(self, offset: int) -> RecordedContextPredecessor:
+        return self
+
+    def require_previous(self) -> RecordedContextPredecessor:
+        return self
+
+    def keyframe_count(self, entries: int, inherited: int) -> int:
+        return inherited
+
+    def recorded(
+        self, records: Mapping[int, RecordedContextManifest], position: int,
+        kind: type[ContextSegment],
+    ) -> RecordedSegmentManifest:
+        try:
+            prior = records[self.record_id].segments[position]
+        except (KeyError, IndexError) as error:
+            raise ValueError("Recorded segment predecessor is missing") from error
+        if not prior.previous.is_direct():
+            raise ValueError("Recorded segment predecessor is not a direct keyframe")
+        if prior.manifest.kind is not kind:
+            raise ValueError("Recorded segment predecessor has a different kind")
+        return prior
+
+    def recording(
+        self, original: RecordedSegmentManifest,
+        records: Mapping[int, RecordedContextManifest],
+        entries: Mapping[ContextEntryReference, SegmentManifest], position: int,
+    ) -> SegmentRecording:
+        prior = self.recorded(records, position, original.manifest.kind)
+        return PreviouslyRecordedSegment(prior, prior.restore(entries), self.record_id)
+
+
 @dataclass(frozen=True)
 class RecordedSegmentManifest:
     """A turn segment with transcript contributors held by entry reference."""
 
     manifest: SegmentManifest
     entries: tuple[ContextEntryReference, ...] = ()
-    previous: int | None = field(default=None, metadata={"wire_omit_default": True})
+    previous: ContextPredecessor = field(
+        default_factory=NoContextPredecessor, metadata={"wire_omit_default": True})
     inherited_entries: int = field(default=0, metadata={"wire_omit_default": True})
 
     def __post_init__(self) -> None:
         if self.entries and self.manifest.contributors:
             raise ValueError("Recorded segment cannot inline and reference contributors")
-        if self.inherited_entries < 0 or (self.inherited_entries and self.previous is None):
+        if self.inherited_entries < 0 or (self.inherited_entries and self.previous.is_direct()):
             raise ValueError("Recorded transcript prefix requires its predecessor")
 
     def predecessors(self, offset: int) -> tuple[int, ...]:
-        if self.previous is None:
-            return ()
-        if not 0 <= self.previous < offset:
-            raise ValueError("Context predecessor is not an earlier record")
-        return (self.previous,)
+        return self.previous.predecessors(offset)
 
     def keyframe(
-        self, original: SegmentManifest, offset: int | None,
-    ) -> tuple[tuple[ContextEntryReference, ...], int | None]:
-        if self.previous is None:
-            count, source = len(self.entries), offset
-        else:
-            count, source = self.inherited_entries, self.previous
-        return (tuple(ContextEntryReference.from_sources(child.sources)
-                      for child in original.contributors[:count]), source)
+        self, original: SegmentManifest, offset: int,
+    ) -> tuple[tuple[ContextEntryReference, ...], RecordedContextPredecessor]:
+        count = self.previous.keyframe_count(len(self.entries), self.inherited_entries)
+        references = tuple(ContextEntryReference.from_sources(child.sources)
+                           for child in original.contributors[:count])
+        return references, self.previous.at_keyframe(offset)
 
     def record_text(
-        self, original: SegmentManifest, previous_value: SegmentManifest, offset: int | None,
+        self, original: SegmentManifest, previous_value: SegmentManifest, offset: int,
     ) -> RecordedSegmentManifest:
         if (original.sha256 == previous_value.sha256
                 and original.captured_text and previous_value.captured_text):
-            reference = offset if self.manifest.captured_text else self.previous
-            if reference is None:
-                raise ValueError("Recorded text predecessor is missing")
+            reference = (RecordedContextPredecessor(offset) if self.manifest.captured_text
+                         else self.previous.require_previous())
             return RecordedSegmentManifest(replace(original, captured_text=()), previous=reference)
         return RecordedSegmentManifest(original)
 
-    def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
-                predecessors: dict[int, RecordedContextManifest] | None = None,
-                position: int = 0) -> SegmentManifest:
-        prior = (predecessors[self.previous].segments[position]
-                 if self.previous is not None and predecessors is not None else None)
-        previous = prior.restore(entries) if prior is not None else None
-        original = self.manifest
-        if self.previous is not None and previous is None:
-            raise ValueError("Recorded segment predecessor is missing")
-        if previous is not None and previous.kind is not original.kind:
-            raise ValueError("Recorded segment predecessor has a different kind")
-        if (previous is not None and previous.sha256 == original.sha256
-                and not original.captured_text):
-            original = replace(original, captured_text=previous.captured_text)
-        if not self.entries and not self.inherited_entries:
+    def predecessor(
+        self, predecessors: Mapping[int, RecordedContextManifest], position: int,
+    ) -> RecordedSegmentManifest:
+        return self.previous.recorded(predecessors, position, self.manifest.kind)
+
+    def restore(
+        self, entries: Mapping[ContextEntryReference, SegmentManifest],
+        predecessors: Mapping[int, RecordedContextManifest] = _NO_CONTEXT_RECORDS,
+        position: int = 0,
+    ) -> SegmentManifest:
+        return self.previous.recording(self, predecessors, entries, position).restore(self, entries)
+
+
+class SegmentRecording(ABC):
+    """The previous value needed to record or restore one segment."""
+
+    @abstractmethod
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest: ...
+
+    @abstractmethod
+    def record_entries(
+        self, header: SegmentManifest, references: tuple[ContextEntryReference, ...],
+    ) -> RecordedSegmentManifest: ...
+
+    @abstractmethod
+    def restore_text(self, original: SegmentManifest) -> SegmentManifest: ...
+
+    @abstractmethod
+    def inherited(self, count: int) -> tuple[SegmentManifest, ...]: ...
+
+    def restore(
+        self, recorded: RecordedSegmentManifest,
+        entries: Mapping[ContextEntryReference, SegmentManifest],
+    ) -> SegmentManifest:
+        original = self.restore_text(recorded.manifest)
+        if not recorded.entries and not recorded.inherited_entries:
             return original
-        if self.inherited_entries and (
-                previous is None or self.inherited_entries > len(previous.contributors)):
+        contributors = self.inherited(recorded.inherited_entries)
+        contributors += tuple(entries[reference] for reference in recorded.entries)
+        membership = tuple(source for contributor in contributors
+                           for source in contributor.provenance
+                           for source in source.entry_membership())
+        return replace(original, provenance=(*original.provenance, *membership),
+                       contributors=contributors)
+
+
+class UnrecordedSegment(SegmentRecording):
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
+        return RecordedSegmentManifest(original)
+
+    def record_entries(
+        self, header: SegmentManifest, references: tuple[ContextEntryReference, ...],
+    ) -> RecordedSegmentManifest:
+        return RecordedSegmentManifest(header, references)
+
+    def restore_text(self, original: SegmentManifest) -> SegmentManifest:
+        return original
+
+    def inherited(self, count: int) -> tuple[SegmentManifest, ...]:
+        if count:
             raise ValueError("Recorded transcript prefix is missing")
-        contributors = (previous.contributors[:self.inherited_entries] if previous is not None else ())
-        contributors += tuple(entries[reference] for reference in self.entries)
-        membership = tuple(
-            source
-            for contributor in contributors
-            for source in contributor.provenance
-            for source in source.entry_membership()
-        )
-        return replace(
-            original,
-            provenance=(*original.provenance, *membership),
-            contributors=contributors,
-        )
+        return ()
+
+
+@dataclass(frozen=True)
+class PreviouslyRecordedSegment(SegmentRecording):
+    recorded: RecordedSegmentManifest
+    value: SegmentManifest
+    record_id: int
+
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
+        return self.recorded.record_text(original, self.value, self.record_id)
+
+    def record_entries(
+        self, header: SegmentManifest, references: tuple[ContextEntryReference, ...],
+    ) -> RecordedSegmentManifest:
+        prior, keyframe = self.recorded.keyframe(self.value, self.record_id)
+        inherited = 0
+        for before, current in zip(prior, references, strict=False):
+            if before != current:
+                break
+            inherited += 1
+        if inherited:
+            return RecordedSegmentManifest(header, references[inherited:], keyframe, inherited)
+        return RecordedSegmentManifest(header, references)
+
+    def restore_text(self, original: SegmentManifest) -> SegmentManifest:
+        if self.value.sha256 == original.sha256 and not original.captured_text:
+            return replace(original, captured_text=self.value.captured_text)
+        return original
+
+    def inherited(self, count: int) -> tuple[SegmentManifest, ...]:
+        if count > len(self.value.contributors):
+            raise ValueError("Recorded transcript prefix is missing")
+        return self.value.contributors[:count]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -494,14 +663,10 @@ class ContextSegment(
 
     @classmethod
     def record_manifest(
-        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
-        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        cls, original: SegmentManifest, previous: SegmentRecording,
         *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
-        recorded = RecordedSegmentManifest(original)
-        if previous is not None and previous_value is not None:
-            recorded = previous.record_text(original, previous_value, previous_offset)
-        return recorded, ()
+        return previous.record_text(original), ()
 
     def public_text(self) -> str:
         return self.text()
@@ -784,35 +949,22 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
 
     @classmethod
     def record_manifest(
-        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
-        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        cls, original: SegmentManifest, previous: SegmentRecording,
         *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
         if not original.contributors:
-            return super().record_manifest(original, previous, previous_value, previous_offset,
-                                           recording_turn=recording_turn)
+            return super().record_manifest(original, previous, recording_turn=recording_turn)
         provenance = tuple(source for source in original.provenance
                            for source in source.turn_recording())
         header = replace(original, provenance=provenance, contributors=(), captured_text=())
         references = tuple(ContextEntryReference.from_sources(child.sources)
                            for child in original.contributors)
-        prior: tuple[ContextEntryReference, ...] = ()
-        keyframe_offset = None
-        if (previous is not None and previous_value is not None
-                and recording_turn % cls.keyframe_interval):
-            prior, keyframe_offset = previous.keyframe(previous_value, previous_offset)
-        inherited = 0
-        for before, current in zip(prior, references, strict=False):
-            if before != current:
-                break
-            inherited += 1
-        entries = tuple(ContextEntryManifest(child) for child in original.contributors[inherited:])
-        references = tuple(entry.reference for entry in entries)
-        return (
-            RecordedSegmentManifest(header, references,
-                                    keyframe_offset if inherited else None, inherited),
-            entries,
-        )
+        if not recording_turn % cls.keyframe_interval:
+            previous = UnrecordedSegment()
+        recorded = previous.record_entries(header, references)
+        entries = tuple(ContextEntryManifest(child)
+                        for child in original.contributors[recorded.inherited_entries:])
+        return recorded, entries
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1109,52 +1261,54 @@ class ContextManifestChange(CliResult):
 
 
 @dataclass(frozen=True)
-class RecordedContextManifest:
-    """One turn's context identity and references to separately recorded entries."""
+class RecordedContextIdentity:
+    """The request identity shared by storage and restored context records."""
 
     thread: ThreadIncarnation
     turn: ContextTurn
-    segments: tuple[RecordedSegmentManifest, ...]
     counter: str
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
     recording_turn: int = field(default=1, metadata={"wire_omit_default": True})
 
+    def with_segments(
+        self, segments: tuple[RecordedSegmentManifest, ...],
+    ) -> RecordedContextManifest:
+        return RecordedContextManifest(self.thread, self.turn, self.counter, segments=segments,
+            request_id=self.request_id, recording_turn=self.recording_turn)
+
+
+@dataclass(frozen=True)
+class RecordedContextManifest(RecordedContextIdentity):
+    """One turn's context identity and references to separately recorded entries."""
+
+    segments: tuple[RecordedSegmentManifest, ...] = field(
+        kw_only=True, metadata={"identity_exclude": True})
+
     @classmethod
     def capture(
         cls, manifest: ContextManifest,
-        previous: CapturedWireSource[RecordedContextManifest, ContextManifest] | None = None,
+        previous: RecordedContextState,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
-        recording_turn = 1
-        prior: tuple[RecordedSegmentManifest, ...] = ()
-        if previous is not None:
-            previous_record = previous.pointer.decode_bytes(previous.raw, previous.source.root_id)
-            prior = previous_record.segments
-            recording_turn += previous_record.recording_turn
+        recording_turn = previous.next_recording_turn()
         parts = []
         for position, segment in enumerate(manifest.segments):
-            old = value = offset = None
-            if previous is not None and position < len(previous.value.segments):
-                candidate = previous.value.segments[position]
-                if candidate.kind is segment.kind:
-                    value = candidate
-                    old = prior[position]
-                    offset = previous.pointer.offset
             parts.append(segment.kind.record_manifest(
-                segment, old, value, offset, recording_turn=recording_turn))
+                segment, previous.segment(position, segment), recording_turn=recording_turn))
         return (
             cls(
-                manifest.thread,
-                manifest.turn,
-                tuple(part for part, _ in parts),
-                manifest.counter,
-                manifest.request_id,
-                recording_turn,
+                thread=manifest.thread,
+                turn=manifest.turn,
+                segments=tuple(part for part, _ in parts),
+                counter=manifest.counter,
+                request_id=manifest.request_id,
+                recording_turn=recording_turn,
             ),
             tuple(entry for _, group in parts for entry in group),
         )
 
     def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
-                previous: dict[int, RecordedContextManifest] | None = None) -> ContextManifest:
+                previous: Mapping[int, RecordedContextManifest] = _NO_CONTEXT_RECORDS,
+                ) -> ContextManifest:
         previous = {} if previous is None else previous
         return ContextManifest(
             self.thread,

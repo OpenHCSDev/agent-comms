@@ -250,7 +250,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         text = self._prompt_text(prompt)
         if (
-            await self.turns.active_backend_inbox(session_id) is not None
+            (await self.turns.active_backend_turn(session_id)).is_open
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
             return await self.inputs.accept_followup(
