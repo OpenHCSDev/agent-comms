@@ -77,7 +77,9 @@ from agent_comms.wake_candidate_index import (
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
 from agent_comms.wake_policy import PassiveWake
-from native_proof_cases import emitted_context, read_proof_rows, write_proof_rows
+from native_proof_cases import (
+    append_input_entry, emitted_context, read_proof_rows, recorded_context, write_proof_rows,
+)
 
 
 @pytest.fixture
@@ -187,24 +189,16 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         session_id = entries[0]["id"]
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
-        entries.append(
-            {
-                "type": "message",
-                "id": entry_id,
-                "timestamp": "2026-09-26T00:00:00.000Z",
-                "message": {
-                    "role": "user",
-                    "inputId": input_id,
-                    "inputDigest": native_request_digest(prompt),
-                },
-            }
-        )
-        if fresh:
-            session_file.write_text("".join(json.dumps(row) + "\n" for row in entries))
-        else:
-            with session_file.open("a") as output:
-                output.write(json.dumps(entries[-1]) + "\n")
-        session_file.chmod(0o600)
+        session_entry_start = append_input_entry(session_file, {
+            "type": "message",
+            "id": entry_id,
+            "timestamp": "2026-09-26T00:00:00.000Z",
+            "message": {
+                "role": "user",
+                "inputId": input_id,
+                "inputDigest": native_request_digest(prompt),
+            },
+        })
         digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
@@ -218,7 +212,6 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
                 "committedAtMs": 1_791_964_800_000 + generation,
             }
         )
-        proof_file = Path(str(session_file) + ".input-proof")
         write_proof_rows(session_file, proof_rows)
         # The original selected stage owns this control's response grammar.
         # Relevance guidance can mention triage inside a FULL prompt too.
@@ -237,9 +230,8 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             await observer(emitted_context(proof_rows[-1]))
         return NativeTurnResult(
             reply,
-            NativeContextProof(
-                input_id, session_id, entry_id, generation, digest,
-                1_791_964_800_000 + generation, session_file,
+            recorded_context(
+                session_file, proof_rows[-1], session_entry_start=session_entry_start,
             ),
         )
 
