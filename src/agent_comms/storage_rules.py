@@ -181,7 +181,7 @@ class StorageRule(RoomAllocation):
     def require_quota(self, thread: Thread, *proposed: Path):
         UnitStorage.read(self, thread, *proposed).require_quota()
 
-    def require_floor(self):
+    def require_floor(self) -> None:
         if self.below_floor(self.free_gib()):
             self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}')
 

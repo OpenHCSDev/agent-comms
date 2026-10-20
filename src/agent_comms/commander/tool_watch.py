@@ -1,6 +1,5 @@
 """Follow live native sessions and print turn digests for commander judgment."""
 import os, time, glob, collections
-from pathlib import Path
 
 from ..native_tool_call import CodingCall
 from ..native_entries import NativeEntry

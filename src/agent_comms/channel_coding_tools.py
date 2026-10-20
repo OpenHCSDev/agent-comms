@@ -24,6 +24,7 @@ from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
+from .pi_payloads import StorageDenialToolDetails
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -34,7 +35,6 @@ from .selected_tool_broker import (
 )
 from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageDenied
-from .pi_payloads import StorageDenialToolDetails
 
 
 @dataclass(frozen=True, kw_only=True)
