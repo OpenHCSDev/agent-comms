@@ -583,8 +583,16 @@ class TransientFieldPlan(DeclaredFieldPlan):
     records = False
 
 
-class MissingNoneFieldPlan(DeclaredFieldPlan):
-    """Wire absence is None, independently of the constructor's default factory."""
+class NullMemberOmission(DeclaredFieldPlan):
+    """A declared null member is absent from the wire, as its key's absence."""
+
+    def omitted(self, value: object) -> bool:
+        return isinstance(value, NullMember) or super().omitted(value)
+
+
+class MissingNoneFieldPlan(NullMemberOmission):
+    """Wire absence is None or the declared null member, independently of the
+    constructor's default factory."""
 
     directives = (WireAbsentNone,)
 
