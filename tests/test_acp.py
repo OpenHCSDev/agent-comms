@@ -1911,7 +1911,7 @@ class TestLiveConfigSync:
             wired.registry.rename("child", "renamed-child")
             after = wired.goals.goal_snapshot("proj")
             assert after.goal == before.goal
-            assert after.execution != before.execution
+            assert before.changed_by(after)
             assert after.execution.wait_for[0].incarnation.name == "renamed-child"
             await assert_snapshot_update()
             wired.goals.update_goal(

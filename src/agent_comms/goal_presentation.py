@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
@@ -214,7 +214,9 @@ class GoalSnapshot(GoalPublicationSnapshot):
     execution: ThreadGoalExecution
 
     def changed_by(self, current: GoalSnapshot) -> bool:
-        return self != current
+        # Domain identity ignores renames, but a published wait target includes
+        # its current name. Compare the declared presentation fields as well.
+        return asdict(self) != asdict(current)
 
     def standby(self) -> bool:
         return self.execution.standby()
