@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass, field, fields, replace
 from contextlib import contextmanager
 from functools import partial
@@ -70,9 +70,19 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     def contains(self, other: TranscriptCursor) -> bool:
         return other.within(self)
 
+    def same_position(self, other: TranscriptCursor) -> bool:
+        return self == other
+
+    def accepts_source(self, other: TranscriptCursor) -> bool:
+        return self.session_file == other.session_file
+
     def within(self, other: TranscriptCursor) -> bool:
-        return (self.session_file == other.session_file and self.offset <= other.offset
+        return (self.accepts_source(other) and self.offset <= other.offset
                 and self.wire.within(other.wire))
+
+    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
+                        **bounds: object) -> TranscriptPage:
+        return await loader(**bounds, through=self)
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
@@ -102,6 +112,16 @@ class UnreadTranscriptCursor(TranscriptCursor):
 
     def within(self, other: TranscriptCursor) -> bool:
         return False
+
+    def same_position(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def accepts_source(self, other: TranscriptCursor) -> bool:
+        return True
+
+    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
+                        **bounds: object) -> TranscriptPage:
+        return await loader()
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return self
