@@ -38,6 +38,7 @@ from .goals import (
 )
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
+from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
@@ -564,7 +565,7 @@ class OrderGoalAction(ProblemOrderGoalAction):
 
 @dataclass(frozen=True, kw_only=True)
 class CreateProblemGoalAction(ProblemOrderGoalAction):
-    repo: str
+    repo: RepositoryName
     text: str
 
     def bound_to(self, actor: ThreadIncarnation) -> CreateProblemGoalAction:

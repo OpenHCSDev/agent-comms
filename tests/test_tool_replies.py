@@ -1,4 +1,5 @@
 """Every declared tool's reply is the encoding of its declared result record."""
+from agent_comms.repository_name import RepositoryName
 import os
 from dataclasses import replace
 from typing import get_type_hints
@@ -82,7 +83,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsInboxTool, {"thread": "worker", "standby": {"goal_id": "ongoing", "wait_for": ["lead"]}}, worker
     yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
         problem="P1", order=order, request="request", deadline=RecordedEventTime(1000),
-        commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P1"))}, lead
+        commander="lead", repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Fix P1"))}, lead
     yield CommsTodoListTool, {"thread": "lead"}, lead
     yield CommsUnjudgedTool, {"thread": "lead"}, lead
     yield CommsCorrectWordingTool, {"unit": "worker", "message_id": "m1",
@@ -115,7 +116,7 @@ def scenario(comms: Comms, project, monkeypatch):
         "artifact": str(comms.root / "installed-evidence")}, lead
     yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
         problem="P2", order=replace(order, id="order-P2"), request="request", deadline=RecordedEventTime(4000),
-        commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P2"))}, lead
+        commander="lead", repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Fix P2"))}, lead
     yield CommsFireTool, {"unit": "worker",
                           "reason": "The unit broke the release path twice and missed both of its deadlines."}, lead
     yield CommsTurnsTool, {"thread": "worker"}, lead

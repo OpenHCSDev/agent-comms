@@ -22,6 +22,7 @@ from .goal_actions import (
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
+from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect
 from .thread_status import StoppedThreadStatus
 
@@ -119,7 +120,7 @@ class CheckedPhaseTask(PhaseTask):
     """An explicitly authored task; its order owns source, check, edits and run."""
 
     problem: str
-    repo: str
+    repo: RepositoryName
     text: str
     order: PendingProblemOrder
     deadline_seconds: float

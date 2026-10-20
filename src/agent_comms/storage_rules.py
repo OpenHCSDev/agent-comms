@@ -27,6 +27,7 @@ from .storage_room import (
 if TYPE_CHECKING:
     from .comms import Comms
     from .threads import Thread
+    from .thread_identity import ThreadIncarnation
 
 StoragePath = Annotated[Path, PathText]
 
@@ -93,21 +94,27 @@ class StorageRule(RoomAllocation):
         return StorageRoots(self.scratch_base / name)
 
     def order_checkout(self, name: str, problem: str) -> Path:
-        """The checkout thread ``name`` holds for one ordered problem."""
+        """Allocation path for a new problem checkout; an existing source may be reused."""
         return self.checkout_base.resolve() / f'{name}--{problem}'
 
-    def owns_checkout(self, thread: Thread, path: Path) -> bool:
-        problem = path.name.removeprefix(f'{thread.name}--')
-        return (re.fullmatch(r'P[1-9][0-9]*', problem) is not None
-                and path == self.order_checkout(thread.name, problem))
+    def owns_checkout(self, owner: ThreadIncarnation, path: Path) -> bool:
+        problem = path.name.removeprefix(f'{owner.name}--')
+        return (path == self.checkout_base.resolve() / owner.name
+                or (bool(re.fullmatch(r'P[1-9][0-9]*', problem))
+                    and path == self.order_checkout(owner.name, problem)))
+
+    def checkout_paths(self, owner: ThreadIncarnation) -> tuple[Path, ...]:
+        """Candidate locations; Git worktree metadata supplies their branches."""
+        ordered = self.order_checkout(owner.name, 'P*')
+        return tuple(path for path in (self.checkout_base.resolve() / owner.name,
+                                       *sorted(ordered.parent.glob(ordered.name)))
+                     if path.is_dir() and self.owns_checkout(owner, path))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
         home = self.checkout_base.expanduser().resolve() / thread.name
-        ordered = self.order_checkout(thread.name, 'P*')
         candidates = (home, Path(thread.worktree).expanduser().resolve(),
-                      *(path for path in ordered.parent.glob(ordered.name)
-                              if path.is_dir() and self.owns_checkout(thread, path)))
+                      *self.checkout_paths(thread.incarnation))
         checkouts = {home}
         listed = set()
         for repository in candidates:
@@ -121,7 +128,7 @@ class StorageRule(RoomAllocation):
                             for field in output.split('\0') if field.startswith('worktree '))
             listed.update(entries)
             checkouts.update(path for path in entries
-                             if path.is_dir() and self.owns_checkout(thread, path))
+                             if path.is_dir() and self.owns_checkout(thread.incarnation, path))
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
@@ -199,7 +206,7 @@ class StorageRule(RoomAllocation):
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            if not (checkout.name == thread.name or self.owns_checkout(thread, checkout)):
+            if not self.owns_checkout(thread.incarnation, checkout):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def render(self, roots):
@@ -359,7 +366,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     def check(self, projection: StorageProjection):
         rule, thread = projection.rule, projection.thread
         rule.require_path(thread, self.path)
-        if not rule.owns_checkout(thread, self.path):
+        if not rule.owns_checkout(thread.incarnation, self.path):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         super().check(projection)

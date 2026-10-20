@@ -1,3 +1,4 @@
+from agent_comms.repository_name import RepositoryName
 import importlib
 import json
 import os
@@ -405,7 +406,7 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
     # Read the captured tracking ref even when the remote is unavailable.
     git("remote", "set-url", "origin", str(tmp_path / "absent-remote"))
     config = CommanderConfig.read_root(comms.root).model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)})
+        Repo(checkout=checkout, github=RepositoryName.from_wire("fleet/growth")),)})
     config.write(tmp_path / 'growth-home')
     actual_git, commands = Repo.git, []
 

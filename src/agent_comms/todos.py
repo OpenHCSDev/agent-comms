@@ -7,14 +7,14 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import re
-import subprocess
 import sqlite3
+import subprocess
 import sys
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -22,33 +22,40 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
+from .bus_publication import AgentOrigin
+from .channel_targets import CommandTarget
 from .child_process import (
     BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
 )
-from .bus_publication import AgentOrigin
 from .external_transcript import ExternalTranscript
 from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
-from .channel_targets import CommandTarget
-from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
+from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
-from .threads import Thread
-from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
+from .repository_name import RepositoryName
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
+from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
+from .threads import Thread
+from .typed_table import Column, Index, JsonStorage, TextStorage, TypedStore, TypedTable
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -216,7 +223,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if WorkBranches.main in branches:
             return MainDeliveryMerge()
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
-                                           todo.repo, "merged", todo.order)
+                                           todo.repo, "merged", todo)
         for request in requests:
             for merge in await request.delivery_merges(self, check):
                 return merge
@@ -309,6 +316,11 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     updated_at: float = 0.0
     orders: tuple[str, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
+    problems: tuple[str, ...] = field(default=(), kw_only=True)
+
+    def belongs_to(self, todo: Todo) -> bool:
+        return (todo.id in self.problems
+                or any(identity in self.orders for identity in todo.held_order_ids))
 
     def merged_commits_since(self, since: float) -> Iterator[str]:
         return iter(())
@@ -366,7 +378,8 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 class UnmergedListedPullRequest(ListedPullRequest):
     def parsed(self) -> UnmergedPullRequest:
         return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   ProblemOrder.pull_request_ids(self.body), base=self.base)
+                                   ProblemOrder.pull_request_ids(self.body), base=self.base,
+                                   problems=ProblemOrder.pull_request_problems(self.body))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -377,36 +390,37 @@ class MergedListedPullRequest(ListedPullRequest):
     def parsed(self) -> MergedPullRequest:
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
                                  ProblemOrder.pull_request_ids(self.body), base=self.base,
-                                 merge=self.merge.oid, merged_at=_github_time(self.merged))
+                                 merge=self.merge.oid, merged_at=_github_time(self.merged),
+                                 problems=ProblemOrder.pull_request_problems(self.body))
 
 
 class PullRequests:
-    """Pull requests queried by immutable order identity, cached within one board read."""
+    """Problem and retained order references, cached within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
-        self._read: dict[tuple[str, str, str], tuple[PullRequest, ...]] = {}
-        self._orders: dict[str, dict[str, CheckedProblemOrder]] = {}
+        self._read: dict[tuple[RepositoryName, str, str], tuple[PullRequest, ...]] = {}
+        self._todos: dict[RepositoryName, dict[str, Todo]] = {}
         for todo in todos:
             if todo.holder:
-                order = todo.order.checked()
-                self._orders.setdefault(todo.repo, {})[order.id] = order
+                self._todos.setdefault(todo.repo, {})[todo.id] = todo
 
-    def listed(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
-        checked = order.checked()
-        key = (repo, state, checked.id)
+    def listed(self, repo: RepositoryName, state: str, todo: Todo) -> tuple[PullRequest, ...]:
+        key = (repo, state, todo.id)
         if key not in self._read:
-            self._read[key] = self.read(repo, state, checked)
-        return tuple(request for request in self._read[key] if checked.id in request.orders)
+            self._read[key] = self.read(repo, state, todo)
+        return tuple(request for request in self._read[key] if request.belongs_to(todo))
 
-    def read(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
-        checked = order.checked()
-        orders = self._orders.setdefault(repo, {})
-        orders[checked.id] = checked
-        aliases = {f"o{index}": candidate for index, candidate in enumerate(orders.values())}
+    def read(self, repo: RepositoryName, state: str, todo: Todo) -> tuple[PullRequest, ...]:
+        problems = self._todos.setdefault(repo, {})
+        problems[todo.id] = todo
+        references = ((candidate, reference) for candidate in problems.values()
+                      for reference in (candidate.id, *(order.pull_request_reference
+                                                        for order in candidate.order_history)))
+        aliases = {f"o{index}": pair for index, pair in enumerate(references)}
         selections = []
-        for alias, candidate in aliases.items():
-            search = json.dumps(f'repo:{repo} is:pr is:{state} in:body '
-                                f'"{candidate.pull_request_reference}" sort:updated-desc')
+        for alias, (_, reference) in aliases.items():
+            search = json.dumps(f'repo:{repo.to_wire()} is:pr is:{state} in:body '
+                                f'"{reference}" sort:updated-desc')
             selections.append(
                 f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
                 '... on PullRequest { number branch: headRefName head: headRefOid body '
@@ -419,12 +433,15 @@ class PullRequests:
              f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
-            raise WorkBranchError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
+            raise WorkBranchError(listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
         rows = FieldCodec.decode(dict[str, tuple[ListedPullRequest, ...]],
                                  FieldCodec.parse(listed.stdout))
-        for alias, candidate in aliases.items():
-            self._read[repo, state, candidate.id] = tuple(row.parsed() for row in rows[alias])
-        return self._read[repo, state, checked.id]
+        for candidate in problems.values():
+            requests = {row.number: row.parsed() for alias, (problem, _) in aliases.items()
+                        if problem.id == candidate.id for row in rows[alias]}
+            self._read[repo, state, candidate.id] = tuple(sorted(
+                requests.values(), key=lambda request: request.updated_at, reverse=True))
+        return self._read[repo, state, todo.id]
 
 
 @dataclass(frozen=True)
@@ -532,51 +549,100 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     path: Path
 
     @abstractmethod
-    def commits(self, since: float, *excluded: str) -> Iterator[ProgressPoint]: ...
+    def commits(self, pattern: str, refs: tuple[str, ...],
+                *excluded: str) -> Iterator[ProgressPoint]: ...
+
+    @abstractmethod
+    def references(self, storage: StorageRule, owner: ThreadIncarnation) -> tuple[str, ...]: ...
 
     @abstractmethod
     def readings(self, source: ProgressSource) -> DistanceReadings: ...
 
     @abstractmethod
-    def pushes(self, since: float) -> Iterator[tuple[str, float]]: ...
+    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]: ...
+
+    def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
+                        *excluded: str) -> Iterator[ProgressPoint]:
+        return iter(())
+
+    def published(self, pattern: str) -> Iterator[ProgressPoint]:
+        return iter(())
 
 
 class MissingCheckout(ProgressCheckout):
     """A retired checkout contributes no local history, not a failed Git read."""
 
-    def commits(self, since: float, *excluded: str) -> Iterator[ProgressPoint]:
+    def commits(self, pattern: str, refs: tuple[str, ...],
+                *excluded: str) -> Iterator[ProgressPoint]:
         return iter(())
+
+    def references(self, storage: StorageRule, owner: ThreadIncarnation) -> tuple[str, ...]:
+        return ()
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
         return DistanceReadings()
 
-    def pushes(self, since: float) -> Iterator[tuple[str, float]]:
+    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
         return iter(())
 
 
 class PresentCheckout(ProgressCheckout):
-    def git(self, *args: str) -> str:
-        return CheckedCommit.git(
-            str(self.path), f"--git-dir={(self.path / '.git').absolute()}", *args)
+    default_reference: ClassVar[str] = "refs/remotes/origin/HEAD"
 
-    def commits(self, since: float, *excluded: str) -> Iterator[ProgressPoint]:
-        """Newest branch commit; a Git failure in a present checkout remains an error."""
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(since))
-        log = self.git("log", "-1", f"--since={after}", f"--format={ProgressPoint.format}",
-                       "HEAD", "--not", *excluded)
-        return (ProgressPoint.listed(line) for line in log.splitlines())
+    @property
+    def default_refs(self) -> tuple[str, ...]:
+        return (self.default_reference,) if self.default_reference in self.git_refs else ()
+
+    def git(self, *args: str) -> str:
+        return CheckedCommit.git(str(self.path), *args)
+
+    @cached_property
+    def git_refs(self) -> tuple[str, ...]:
+        return tuple(self.git("for-each-ref", "--format=%(refname)",
+                              "refs/heads/", "refs/remotes/origin/").splitlines())
+
+    @property
+    def origin_refs(self) -> tuple[str, ...]:
+        return tuple(ref for ref in self.git_refs if ref.startswith("refs/remotes/origin/"))
+
+    def references(self, storage: StorageRule, owner: ThreadIncarnation) -> tuple[str, ...]:
+        owned = {f"refs/heads/{branch}"
+                 for branch, paths in WorkBranches(self.path).worktrees().items()
+                 if any(storage.owns_checkout(owner, Path(path).resolve()) for path in paths)}
+        return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
+
+    def commits(self, pattern: str, refs: tuple[str, ...],
+                *excluded: str) -> Iterator[ProgressPoint]:
+        """Newest problem commit across owned branches and retained origin references."""
+        if refs:
+            for line in self.git("log", "-1", "--extended-regexp", "--regexp-ignore-case",
+                                 f"--grep={pattern}", f"--format={ProgressPoint.format}",
+                                 *refs, "--not", *excluded).splitlines():
+                yield ProgressPoint.listed(line)
+
+    def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
+                        *excluded: str) -> Iterator[ProgressPoint]:
+        """The actual check receipt links a head even without a problem token in its title."""
+        return (point for point in self.commits("", refs, *excluded)
+                if order.check.recorded(point.sha, str(self.path)))
+
+    def published(self, pattern: str) -> Iterator[ProgressPoint]:
+        return self.commits(pattern, self.origin_refs, *self.default_refs)
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
-        """Read the bounded distance trend only from explicitly recorded check results."""
-        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(source.since))
-        commits = [ProgressPoint.listed(line) for line in reversed(self.git(
-            "log", f"--max-count={DistanceReadings.window}", "--first-parent", f"--since={after}",
-            f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())]
-        points = [ProgressPoint(base, source.since), *commits][-DistanceReadings.window:]
-        order = source.todo.order.checked()
-        return DistanceReadings(tuple(
-            reading for point in points for reading in self.recorded_distances(order, base, point)))
+        """Read bounded recorded results; an absent remote default supplies no invented base."""
+        if not self.default_refs:
+            return DistanceReadings()
+        readings: list[DistanceReading] = []
+        for tip in source.commits(*self.default_refs):
+            base = self.git("merge-base", tip.sha, self.default_reference).strip()
+            commits = [ProgressPoint.listed(line) for line in reversed(self.git(
+                "log", f"--max-count={DistanceReadings.window}", "--first-parent",
+                f"--format={ProgressPoint.format}", tip.sha, "--not", base).splitlines())]
+            points = [ProgressPoint(base, source.since), *commits][-DistanceReadings.window:]
+            readings.extend(reading for point in points for reading in self.recorded_distances(
+                source.todo.order.checked(), base, point))
+        return DistanceReadings(tuple(readings))
 
     def recorded_distances(self, order: CheckedProblemOrder, base: str,
                            point: ProgressPoint) -> Iterator[DistanceReading]:
@@ -586,30 +652,35 @@ class PresentCheckout(ProgressCheckout):
             yield DistanceReading(point.at, order.check.result.distance(run).plus(
                 order.untouched(touched)), order.check.command)
 
-    def pushes(self, since: float) -> Iterator[tuple[str, float]]:
-        """A push-ref update has its own time, not the commit's author time."""
-        branch = self.git("branch", "--show-current").strip()
-        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(since))
-        for row in self.git("reflog", "show", "--all", "--date=unix", f"--since={after}",
+    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
+        """Retained origin commits prove publication; their push reflog supplies its clock."""
+        published = {point.sha for point in self.published(pattern)}
+        for row in self.git("reflog", "show", "--all", "--date=unix",
                             "--grep-reflog=update by push", "--format=%gD%x09%H").splitlines():
             selector, sha = row.split("\t")
             reference, stamp = selector.rsplit("@{", 1)
-            if reference == f"refs/remotes/origin/{branch}":
+            if reference in self.origin_refs and sha in published:
                 yield sha, float(stamp.removesuffix("}"))
 
 
 @dataclass(frozen=True)
 class ProgressSource:
-    """An order's local checkout capability and independently retained PR references."""
+    """Problem progress across owned worktrees, shared Git history and retained PR identities."""
     todo: Todo
     checkout: ProgressCheckout
     pulls: PullRequests
+    references: tuple[str, ...] = ()
 
     @classmethod
     def of(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> Self:
-        path = storage.order_checkout(todo.held().owner, todo.id)
-        checkout = PresentCheckout(path) if path.is_dir() else MissingCheckout(path)
-        return cls(todo, checkout, pulls)
+        owner = todo.held().owner_identity
+        owned = storage.checkout_paths(owner)
+        candidates = (Path(todo.order.checked().check.directory), *owned)
+        path = next((path for path in candidates if (path / ".git").exists()),
+                    next(iter(owned), candidates[0]))
+        checkout = (PresentCheckout(path) if path in owned or (path / ".git").exists()
+                    else MissingCheckout(path))
+        return cls(todo, checkout, pulls, checkout.references(storage, owner))
 
     @property
     def since(self) -> float:
@@ -617,15 +688,23 @@ class ProgressSource:
 
     def requests(self, state: str) -> list[PullRequest]:
         """Explicit PR references survive checkout removal or branch reuse."""
-        return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
-                if pr.updated_at >= self.since]
+        return list(self.pulls.listed(self.todo.repo, state, self.todo))
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
-        return self.checkout.commits(self.since, *excluded)
+        points = (
+            *self.checkout.checked_commits(self.todo.order.checked(), self.references, *excluded),
+            *self.checkout.commits(self.todo.reference_pattern, self.references, *excluded),
+        )
+        return iter(sorted({point.sha: point for point in points}.values(),
+                           key=lambda point: point.at, reverse=True)[:1])
+
+    def published(self) -> Iterator[ProgressPoint]:
+        return self.checkout.published(self.todo.reference_pattern)
 
     @cached_property
     def pushes(self) -> tuple[PushedProgress, ...]:
-        return tuple(PushedProgress(sha[:9], at=at) for sha, at in self.checkout.pushes(self.since))
+        return tuple(PushedProgress(sha[:9], at=at)
+                     for sha, at in self.checkout.pushes(self.todo.reference_pattern))
 
     @cached_property
     def moved_at(self) -> float:
@@ -638,7 +717,7 @@ class ProgressSource:
 
 
 class MeasuredProgressSource(ProgressSource):
-    """The board's distance view runs the Check; the stall watcher only reads activity."""
+    """The board reads recorded distances; the stall watcher only reads activity."""
 
     def readings(self) -> DistanceReadings:
         return self.checkout.readings(self)
@@ -808,7 +887,7 @@ class PushedProgress(CommittedProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        moves = (*source.commits("origin/HEAD"),
+        moves = (*source.published(),
                  *(ProgressPoint(push.sha, push.at) for push in source.pushes))
         return (cls(move.sha[:9], at=move.at, readings=source.readings())
                 for move in sorted(moves, key=lambda move: move.at, reverse=True)[:1])
@@ -1350,12 +1429,28 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
+    pull_request_problem_label: ClassVar[str] = "Agent-Comms-Problem:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
     def observe_objective(self, failure: type[ObjectiveStrike], goals: Goals, todo: Todo,
                           now: float, pulls: PullRequests) -> tuple[ObjectiveStrike, ...]:
         """Completed or retired orders do not acquire new pending-work failures."""
+        return ()
+
+    @property
+    def declarations(self) -> tuple[CheckedProblemOrder, ...]:
+        return ()
+
+    @classmethod
+    def pull_request_problems(cls, body: str) -> tuple[str, ...]:
+        """Explicit body declarations and problem headings, never titles or incidental mentions."""
+        return tuple(re.findall(
+            rf"(?m)^(?:#{{1,6}} +|{re.escape(cls.pull_request_problem_label)} +|Problem: +)"
+            r"(P[1-9][0-9]*)(?=[:\s]|$)", body))
+
+    def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
+                        pulls: PullRequests) -> tuple[Todo, ...]:
         return ()
 
     def reissued(self, at: float) -> PendingProblemOrder:
@@ -1444,6 +1539,10 @@ class FoldedProblemOrder(ProblemOrder):
     def phase(self) -> type[OrderPhase]:
         return self.original.phase
 
+    @property
+    def declarations(self) -> tuple[CheckedProblemOrder, ...]:
+        return self.original.declarations
+
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return (f"{todo.id} folded into {self.into}: {self.why}",)
 
@@ -1465,6 +1564,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def story(self) -> tuple[StoryLine, ...]:
         return (StoryLine(self.at, f"Ordered {self.id}: {'; '.join(self.edits)}"),)
+
+    @property
+    def declarations(self) -> tuple[CheckedProblemOrder, ...]:
+        return (self,)
 
     id: str
     owner: FileLine
@@ -1537,6 +1640,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
+    def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
+                        pulls: PullRequests) -> tuple[Todo, ...]:
+        source = ProgressSource.of(todo, storage, pulls)
+        return tuple(DoneTodoState.closed(todo, merged) for repo in repos
+                     for merged in self.observed_merges(repo, source))
+
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
         return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
                      if repo.contains(merged.sha))
@@ -1556,8 +1665,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str) -> str:
         """The order creates its PR with the immutable identity every progress reader uses."""
         created = subprocess.run(
-            ("gh", "pr", "create", "-R", todo.repo, "--title", title, "--body-file", "-"),
-            input=self.pull_request_body(body), cwd=checkout,
+            ("gh", "pr", "create", "-R", todo.repo.to_wire(), "--title", title, "--body-file", "-"),
+            input=f"{self.pull_request_problem_label} {todo.id}\n{self.pull_request_body(body)}",
+            cwd=checkout,
             capture_output=True, text=True, timeout=60)
         if created.returncode:
             raise ValueError(created.stderr.strip() or "Order pull request creation failed.")
@@ -2032,7 +2142,9 @@ class AssignTodo(TodoOperation):
             self.order.require_writable()
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
-        assigned = replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
+        assigned = replace(assigned, deadline=self.deadline,
+                           order=self.order, prior_orders=current.orders_before(self.order),
+                           goal=self.goal,
                            revision=current.revision + 1)
         return self.actor.assigned(current, assigned)
 
@@ -2267,7 +2379,7 @@ class ReviewedHeadVerdict(QuotedVerdict):
         current = goals.todos.get(problem)
         recorded = self.prepare(goals, current).record(goals, problem)
         posted = subprocess.run(
-            ("gh", "api", "--method", "POST", f"repos/{recorded.repo}/statuses/{self.head}",
+            ("gh", "api", "--method", "POST", f"repos/{recorded.repo.to_wire()}/statuses/{self.head}",
              "-f", "state=success", "-f", f"context={self.context}",
              "-f", f"description=Accepted by {reviewer.name} on {problem}"),
             capture_output=True, text=True, timeout=60,
@@ -2545,7 +2657,7 @@ class Todo(TypedTable):
     indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
 
     id: str = field(metadata={"sql": Column(primary_key=True)})
-    repo: str
+    repo: RepositoryName = field(metadata={"sql": Column(storage=TextStorage)})
     text: str
     creator: str
     creator_created: float
@@ -2561,11 +2673,31 @@ class Todo(TypedTable):
     verdicts: tuple[OrderVerdict, ...] = ()
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
+    prior_orders: tuple[CheckedProblemOrder, ...] = ()
+
+    @property
+    def order_history(self) -> tuple[CheckedProblemOrder, ...]:
+        return (*self.prior_orders, *self.order.declarations)
+
+    def orders_before(
+        self, following: ProblemOrder, additional: tuple[CheckedProblemOrder, ...] = (),
+    ) -> tuple[CheckedProblemOrder, ...]:
+        current = {order.id for order in following.declarations}
+        return tuple({order.id: order for order in (*self.order_history, *additional)
+                      if order.id not in current}.values())
+
+    @property
+    def held_order_ids(self) -> tuple[str, ...]:
+        return tuple(order.id for order in self.order_history)
+
+    @property
+    def reference_pattern(self) -> str:
+        return rf"(^|[^A-Za-z0-9_]){re.escape(self.id)}([^A-Za-z0-9_]|$)"
 
     unrequested_goal: ClassVar[GoalReference] = NoGoalReference()
 
     @classmethod
-    def ordered(cls, todo_id: str, repo: str, text: str, creator: ThreadIncarnation,
+    def ordered(cls, todo_id: str, repo: RepositoryName, text: str, creator: ThreadIncarnation,
                 assignment: Assignment, deadline: EventTime,
                 order: PendingProblemOrder | MergedProblemOrder,
                 goal: GoalReference = unrequested_goal) -> Todo:
@@ -2573,7 +2705,7 @@ class Todo(TypedTable):
         _text(text, "Todo text", 2000)
         deadline.require_deadline()
         goal.require_reference()
-        return cls(todo_id, _repo(repo), text, creator.name, creator.wire_birth, OpenTodoState,
+        return cls(todo_id, repo, text, creator.name, creator.wire_birth, OpenTodoState,
                    1, goal, assignment, order, deadline)
 
     @property
@@ -2746,17 +2878,6 @@ def _participant(thread: Thread) -> ThreadIncarnation:
     return thread.incarnation
 
 
-def _repo(value: str) -> str:
-    _text(value, "Repo ID", 200)
-    pieces = value.split("/")
-    if len(pieces) != 2 or any(
-        piece in {"", ".", ".."} or not all(char.isalnum() or char in "-_." for char in piece)
-        for piece in pieces
-    ):
-        raise TodoError("Repo ID must have the exact owner/repo form.")
-    return value.lower()
-
-
 @dataclass(frozen=True, slots=True)
 class TodoStore(TypedStore):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -2835,9 +2956,11 @@ class TodoStore(TypedStore):
             target.state.require_open(target)
             if target.holder not in (None, unit):
                 raise ValueError(f'{problem} is already held by {target.holder}')
-            replace(target, order=target.order.linked(source.order), assignment=source.held(),
-                    goal=source.goal, deadline=source.deadline, messages=source.messages,
-                    revision=target.revision + 1).upsert(db)
+            linked = target.order.linked(source.order)
+            replace(target, order=linked,
+                    prior_orders=target.orders_before(linked, source.prior_orders),
+                    assignment=source.held(), goal=source.goal, deadline=source.deadline,
+                    messages=source.messages, revision=target.revision + 1).upsert(db)
 
     def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         """Rows in creation order; an absent store has none, and a read never creates one."""
@@ -2872,8 +2995,8 @@ class TodoStore(TypedStore):
         _text(todo_id, "Todo ID", 128)
         return self._one(self._select("id=?", (todo_id,)), todo_id)
 
-    def list(self, repo: str) -> tuple[Todo, ...]:
-        return self._select("repo=?", (_repo(repo),))
+    def list(self, repo: RepositoryName) -> tuple[Todo, ...]:
+        return self._select("repo=?", (repo.to_wire(),))
 
     def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         return self._select(
@@ -2910,14 +3033,11 @@ class TodoStore(TypedStore):
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:
         """Read before locking; close only orders whose observed revision still holds."""
-        checked = tuple((todo, order) for todo in self.held_for_commander(commander)
-                        if isinstance(order := todo.order, CheckedProblemOrder))
-        pulls = PullRequests(tuple(todo for todo, _ in checked))
-        completed = tuple(DoneTodoState.closed(todo, merged)
-                          for todo, order in checked
-                          for repo in repos if repo.github.lower() == todo.repo
-                          for merged in order.observed_merges(
-                              repo, ProgressSource.of(todo, storage, pulls)))
+        held = self.held_for_commander(commander)
+        pulls = PullRequests(held)
+        completed = tuple(closed for todo in held
+                          for closed in todo.order.closed_by_merge(
+                              todo, tuple(repo for repo in repos if repo.holds(todo)), storage, pulls))
         if not completed:
             return
         with self.writing() as db:
@@ -2982,7 +3102,7 @@ class TodoStore(TypedStore):
     def create(
         self,
         todo_id: str,
-        repo: str,
+        repo: RepositoryName,
         text: str,
         *,
         creator: Thread,

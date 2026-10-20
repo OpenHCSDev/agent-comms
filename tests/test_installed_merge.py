@@ -1,4 +1,5 @@
 """Merge observation closes the real stored order, without a completion request."""
+from agent_comms.repository_name import RepositoryName
 from dataclasses import fields, replace
 import json
 import subprocess
@@ -155,4 +156,4 @@ def test_only_checked_orders_are_selected_for_merge_reconciliation(commander, ch
 
 def test_failed_git_is_not_a_negative_ancestry_result(tmp_path):
     with pytest.raises(subprocess.CalledProcessError):
-        Repo(checkout=tmp_path / 'missing', github='test/repo').contains('a' * 40)
+        Repo(checkout=tmp_path / 'missing', github=RepositoryName.from_wire('test/repo')).contains('a' * 40)

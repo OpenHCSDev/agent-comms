@@ -14,6 +14,7 @@ from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
 from ..repo import Repo
+from ..repository_name import RepositoryName
 from ..standing_rules import (
     DatedStandingRule,
     ReasonedStandingRule,
@@ -214,7 +215,7 @@ class MergeGrowth(DatedStandingRule):
 
     limit: ClassVar[int] = 40
     window: ClassVar[str] = "12 hours ago"
-    repo: str
+    repo: RepositoryName
     sha: str
     subject: str
     merged: float
@@ -279,6 +280,7 @@ class MergeGrowth(DatedStandingRule):
     def line(self) -> str:
         (a, d), (ta, td) = self.src, self.tests
         return (
-            f"GROWTH {self.repo} {self.sha[:9]} src +{a}/-{d} (net {a - d:+}) tests +{ta}/-{td}: "
+            f"GROWTH {self.repo.to_wire()} {self.sha[:9]} src +{a}/-{d} (net {a - d:+}) "
+            f"tests +{ta}/-{td}: "
             f"{self.subject[:90]} -> justify or send back the owner with a deletion order"
         )
