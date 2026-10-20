@@ -1,16 +1,10 @@
-"""Best-effort indexing of successful appends after the outer locks release.
-
-Losing a hint or crashing the daemon leaves the optional index unavailable;
-canonical bus and sealed SQL still drive original delivery. Byte positions
-include observations as well as messages, without inventing message sequences.
-"""
+"""Index successful appends after outer locks release, within the owning root's lifetime."""
 
 from __future__ import annotations
 
 import logging
 import sqlite3
 import threading
-from contextlib import ExitStack
 from pathlib import Path
 
 from .bus_route_counts import BusRouteCounts
@@ -22,7 +16,7 @@ from .wake_candidate_index import FirstBuild, ProjectionUnavailableError, WakeCa
 _LOG = logging.getLogger(__name__)
 _MAX_ACTIVE_ROOTS = 32
 _guard = threading.Lock()
-_pending: dict[Path, tuple[WireLog, int]] = {}
+_pending: dict[Path, CandidateMaintenance] = {}
 
 
 class CandidateMaintenanceFailed(RuntimeError):  # noqa: N818 - named worker failure
@@ -33,72 +27,74 @@ class CandidateMaintenanceFailed(RuntimeError):  # noqa: N818 - named worker fai
         super().__init__(f"Candidate maintenance failed for {root}")
 
 
-def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
-    """Prepare writer indexes, then signal their existing maintenance worker."""
-    if through_bytes <= 0:
-        raise ValueError("candidate notification needs an actual committed byte position")
-    BusRouteCounts(log.path).prepare()
-    root = log.path.parent
-    with _guard:
-        current = _pending.get(root)
-        if current is not None:
-            _pending[root] = (current[0], max(current[1], through_bytes))
-            return
-        if len(_pending) >= _MAX_ACTIVE_ROOTS:
-            raise CandidateMaintenanceFailed(root)
-        _pending[root] = (log, through_bytes)
+class CandidateMaintenance(threading.Thread):
+    """One root's coalesced cursor and actual worker; retirement joins this owner."""
+
+    def __init__(self, log: WireLog, through_bytes: int) -> None:
+        super().__init__(name="agent-comms-candidate-maintenance", daemon=True)
+        self.log = log
+        self.through_bytes = through_bytes
+
+    def run(self) -> None:
+        root = self.log.path.parent
         try:
-            threading.Thread(
-                target=_drain_candidate,
-                args=(root,),
-                name="agent-comms-candidate-maintenance",
-                daemon=True,
-            ).start()
-        except RuntimeError as error:
-            _pending.pop(root, None)
-            raise CandidateMaintenanceFailed(root) from error
-
-
-def _retire_candidate(root: Path) -> None:
-    with _guard:
-        _pending.pop(root, None)
-
-
-def _drain_candidate(root: Path) -> None:
-    with ExitStack() as cleanup:
-        cleanup.callback(_retire_candidate, root)
-        try:
-            with _guard:
-                log, _bytes = _pending[root]
-            # Source ownership is checked off the producer path. Maintenance cannot
-            # create the protocol marker or authorize delivery.
-            with log.checked_read() as source:
+            with self.log.checked_read() as source:
                 metadata = source.marker
             root_id = metadata.root_id
-            index = WakeCandidateIndex(log)
-            routes = BusRouteCounts(log.path)
+            index = WakeCandidateIndex(self.log)
+            routes = BusRouteCounts(self.log.path)
             while True:
                 with _guard:
-                    target = _pending[root][1]
+                    target = self.through_bytes
                 hint = index.notify_committed_append(root_id=root_id, through_bytes=target)
-                result = index.catch_up_committed_append(
-                    hint, start=FirstBuild()
-                )
-                with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
+                result = index.catch_up_committed_append(hint, start=FirstBuild())
+                with self.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
                     route_result = routes.sync(
                         snapshot,
                         lambda record: DeliveryMessage.from_wire(record, root_id=snapshot.metadata.root_id),
                     )
                 if result.caught_up and route_result.complete:
                     with _guard:
-                        if _pending[root][1] <= result.checkpoint_bytes:
-                            # Disarm cleanup before a successor can own this root.
-                            cleanup.pop_all()
+                        if self.through_bytes <= result.checkpoint_bytes:
                             _pending.pop(root)
                             return
-        except (
-            OSError, ValueError, sqlite3.Error, CoordinationError, ProjectionUnavailableError,
-        ) as error:
+        except (OSError, ValueError, sqlite3.Error, CoordinationError, ProjectionUnavailableError) as error:
             failure = CandidateMaintenanceFailed(root)
             _LOG.exception("%s", failure)
             raise failure from error
+        finally:
+            with _guard:
+                if root in _pending and _pending[root] is self:
+                    _pending.pop(root)
+
+
+def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
+    """Prepare writer indexes, then coalesce into the root's actual worker."""
+    if through_bytes <= 0:
+        raise ValueError("candidate notification needs an actual committed byte position")
+    BusRouteCounts(log.path).prepare()
+    root = log.path.parent
+    with _guard:
+        if root in _pending:
+            worker = _pending[root]
+            worker.through_bytes = max(worker.through_bytes, through_bytes)
+            return
+        if len(_pending) >= _MAX_ACTIVE_ROOTS:
+            raise CandidateMaintenanceFailed(root)
+        worker = CandidateMaintenance(log, through_bytes)
+        _pending[root] = worker
+        try:
+            worker.start()
+        except RuntimeError as error:
+            _pending.pop(root)
+            raise CandidateMaintenanceFailed(root) from error
+
+
+def drain_candidate_catchup(root: Path) -> None:
+    """A stopped root cannot be renamed or removed while its worker still writes."""
+    while True:
+        with _guard:
+            if root not in _pending:
+                return
+            worker = _pending[root]
+        worker.join()
