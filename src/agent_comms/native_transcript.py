@@ -9,7 +9,7 @@ from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass
 from math import inf
 from pathlib import Path
-from typing import BinaryIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
