@@ -94,7 +94,7 @@ async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
     task = None
     try:
         with held_source(comms):
-            task = asyncio.create_task(agent.sessions.transcript.replay("saved", "saved", client=Client()))
+            task = asyncio.create_task(agent.sessions.transcript.replay("saved", client=Client()))
             async with asyncio.timeout(15):
                 while "reads" not in agent.sessions.transcript.__dict__:
                     await asyncio.sleep(0.01)

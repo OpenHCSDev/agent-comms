@@ -96,7 +96,7 @@ async def replay(agent):
         async def session_update(self, session_id, update):
             updates.append(update)
 
-    await agent.sessions.transcript.replay("project", "project", client=Client())
+    await agent.sessions.transcript.replay("project", client=Client())
     page = next(
         update.page
         for update in decode_updates(updates[0].field_meta)
