@@ -222,11 +222,9 @@ class ThreadViewTarget:
     def canonical_name(self, canonical):
         return canonical(self.name)
 
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+    def history_view(self, viewer: object, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        if viewer is None:
-            raise ValueError("DM history requires --as <participant>.")
-        return direct(viewer, self.name)
+        return direct(FieldCodec.decode(str, viewer), self.name)
 
     def available(self, snapshot) -> bool:
         return self.canonical_name(snapshot.canonical_name) in snapshot.threads
