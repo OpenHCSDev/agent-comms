@@ -33,7 +33,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
     reason = "The worker changed the wrong owner and left the decision duplicated."
-    standalone = "The worker omitted the requested application check during review."
+    standalone = "The worker omitted the requested application check during the final review."
     comms.goals.todos.apply("P1", StrikeTodo(todo.revision, actor, todo.held(), standalone))
     todo = comms.goals.todos.get("P1")
     caller.invoke(CommsVerdictTool(problem="P1", operation=AcceptedVerdict(
