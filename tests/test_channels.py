@@ -180,8 +180,11 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
                   if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
-    choices = next(field.choices for field in await action.prepare_fields()
-                   if field.name == 'disposition')
+    from agent_comms.launch_root import LaunchRoot
+
+    with LaunchRoot.from_path(comms.root).selected():
+        choices = next(field.choices for field in await action.prepare_fields()
+                       if field.name == 'disposition')
     assert (disposition.label, editor_value) in choices
     edited = action.edited({'disposition': editor_value})
     assert edited.bound[0].disposition == disposition
@@ -442,12 +445,20 @@ def test_pending_projection_observes_external_changes_without_rescanning(tmp_pat
     other = wire(tmp_path)
     comms.messaging.send("other", "#api", "one").message.message_id
     assert comms.bus.pending_count("a") == 1
-    with patch.object(
-        comms.bus.log, "verified_snapshot", side_effect=AssertionError("rescanned idle log")
+    with patch(
+        "agent_comms.wire_log.OpenedWireSnapshot.rows",
+        side_effect=AssertionError("rescanned idle log"),
+    ), patch(
+        "agent_comms.wire_log.OpenedWireSnapshot.public_records",
+        side_effect=AssertionError("rescanned idle log"),
     ):
         for _ in range(10):
             comms.threads.heartbeat("a")
             assert comms.bus.pending_count("a") == 1
+        # Exercise the actual full-history route so this guard cannot become a dead patch.
+        with pytest.raises(AssertionError, match="rescanned idle log"):
+            with comms.bus.log.full_history_snapshot() as (_, messages):
+                list(messages)
     other.channels.update_tags("a", remove=frozenset({"api"}))
     assert comms.bus.pending_count("a") == 0
     other.channels.update_tags("b", add=frozenset({"api"}))
@@ -526,8 +537,12 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_order is LastUserInputChannelSort
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.bus.require_channel("#alpha").created_at == 300
-    with patch.object(
-        comms.bus.log, "verified_snapshot", side_effect=AssertionError("idle rescan")
+    with patch(
+        "agent_comms.wire_log.OpenedWireSnapshot.rows",
+        side_effect=AssertionError("idle rescan"),
+    ), patch(
+        "agent_comms.wire_log.OpenedWireSnapshot.public_records",
+        side_effect=AssertionError("idle rescan"),
     ):
         comms.views.channel_views()
 

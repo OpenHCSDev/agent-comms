@@ -60,7 +60,13 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"].count == 0
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"].count == 0
-    with patch.object(comms.bus.log, 'verified_snapshot', side_effect=AssertionError("idle rescan")):
+    with patch(
+        "agent_comms.wire_log.OpenedWireSnapshot.rows",
+        side_effect=AssertionError("idle rescan"),
+    ), patch(
+        "agent_comms.wire_log.OpenedWireSnapshot.public_records",
+        side_effect=AssertionError("idle rescan"),
+    ):
         comms.views.viewer_snapshot(str(tmp_path))
 
 

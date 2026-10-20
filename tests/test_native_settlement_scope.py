@@ -1,15 +1,14 @@
 """Historical release on real isolated stores, never on a retained user input."""
 
-from bus_history import read_history
-from agent_comms.messages import NoticeRole
+import os
 import sqlite3
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.attempt_states import SucceededAttempt
-from agent_comms.child_process import NoProcess
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 from agent_comms.coordination_session import (
     CoordinationSession,
@@ -20,7 +19,9 @@ from agent_comms.coordinator import Coordination, StandaloneCoordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.selected_claim import publish_selected_resource_claim
 from agent_comms.threads import Thread
-from test_claim_bus_read import selected_turn, settle_failed
+from test_claim_bus_read import (
+    acquire_tool_claim, claim_originals, release_tool_claim, selected_turn, settle_failed,
+)
 
 
 def strand_terminal(monkeypatch, store):
@@ -48,7 +49,7 @@ def test_recovery_does_not_release_a_claim_from_a_dead_owner():
         assert store.snapshots.get("execution").attempt.lifecycle.terminal
 
 
-def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeypatch, *, thread_registration):
+def test_historical_terminal_release_skips_dead_incarnation_and_keeps_new_owner(monkeypatch, *, thread_registration):
     with selected_turn() as (comms, store, selected, resource):
         claimed = publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
         terminal = strand_terminal(monkeypatch, store)
@@ -58,29 +59,27 @@ def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeyp
         later_file = other_project / "later.py"
         later_file.write_text("later\n")
         comms.registry.remove("Alice")
-        comms.registry.declare(thread_registration.new_thread('Alice', original.tags, str(other_project), created_at=original.created_at + 100))
-        comms.messaging.send("Alice", "sender", "Independent manual claim",
-                                     claims=(ExistingFileClaim(later_file),)).message
-        later = comms.bus.log.claim_projection()[str(later_file)]
+        successor = thread_registration.new_thread(
+            'Alice', original.tags, str(other_project), created_at=original.created_at + 100,
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+        comms.registry.declare(successor, RunningThreadStatus())
+        later = acquire_tool_claim(comms, "Alice", later_file)
         assert later.incarnation != claimed.incarnation
+        before = (comms.root / "bus.jsonl").read_bytes()
         with store.session.settlement() as boundary:
             store.session.release_resources(terminal, terminal.attempt.lifecycle, boundary)
+        assert (comms.root / "bus.jsonl").read_bytes() == before
         assert dict(comms.bus.log.claim_projection()) == {str(later_file): later}
-        release = read_history(comms)[-1]
-        assert release.target == terminal.assignments[0].lifecycle.exact_target
-        assert isinstance(release.role, NoticeRole)
-        assert release.claim_transition.incarnation == claimed.incarnation
-        assert release.claim_transition.releases[0].generation == claimed.generation
+        assert not [m for m in claim_originals(comms) if m.claim_transition.releases]
 
 
 def test_old_terminal_cleanup_preserves_later_generation_of_same_file(monkeypatch):
     with selected_turn() as (comms, store, selected, resource):
-        publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
+        old = publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
         terminal = strand_terminal(monkeypatch, store)
-        comms.messaging.send("Alice", "sender", "Replace old generation", releases=(str(resource),)).message
-        comms.messaging.send("Alice", "sender", "Later manual generation",
-                                     claims=(ExistingFileClaim(resource),)).message
-        later = comms.bus.log.claim_projection()[str(resource)]
+        release_tool_claim(comms, old)
+        later = acquire_tool_claim(comms, "Alice", resource)
         before = (comms.root / "bus.jsonl").read_bytes()
         with store.session.settlement() as boundary:
             store.session.release_resources(terminal, terminal.attempt.lifecycle, boundary)

@@ -84,12 +84,10 @@ def test_oversized_append_preserves_marker_and_sequence(tmp_path):
 
 READERS = {
     'snapshot rows': lambda log, metadata: log.opened_wire_snapshot(opening=CurrentSnapshotOpening()),
-    'snapshot records': lambda log, metadata: log.opened_wire_snapshot(opening=CurrentSnapshotOpening()),
     'verified records': lambda log, metadata: log.locked(),
 }
 READS = {
     'snapshot rows': lambda source, log, metadata: list(source.rows()),
-    'snapshot records': lambda source, log, metadata: list(source.records()),
     'verified records': lambda source, log, metadata: list(log.verified_records_unlocked(metadata)),
 }
 
@@ -107,8 +105,8 @@ def test_every_row_reader_refuses_a_bad_physical_row(tmp_path, reader, bad):
     path.chmod(0o600)
     log = WireLog(path)
     log.write_metadata_unlocked(metadata)
-    with READERS[reader](log, metadata) as source:
-        with pytest.raises(RelationViolationError):
+    with pytest.raises(RelationViolationError):
+        with READERS[reader](log, metadata) as source:
             READS[reader](source, log, metadata)
 
 
@@ -120,7 +118,7 @@ def _message_row(seq: int) -> bytes:
 @pytest.mark.parametrize(('reader', 'expected'), [
     ('rows to a stop between rows', 1),
     ('rows to a stop inside the second row', 2),
-    ('records to the cut', 3),
+    ('messages to the cut', 3),
 ])
 def test_rows_leave_the_stream_at_the_last_yielded_row(tmp_path, reader, expected):
     rows = [_message_row(seq) for seq in (1, 2, 3)]
@@ -133,7 +131,7 @@ def test_rows_leave_the_stream_at_the_last_yielded_row(tmp_path, reader, expecte
     read = {
         'rows to a stop between rows': lambda source: list(source.rows(before_offset=len(rows[0]))),
         'rows to a stop inside the second row': lambda source: list(source.rows(before_offset=len(rows[0]) + 1)),
-        'records to the cut': lambda source: list(source.records()),
+        'messages to the cut': lambda source: list(source.public_records()),
     }[reader]
     with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert len(read(source)) == expected
