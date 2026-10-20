@@ -46,7 +46,7 @@ from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTabl
 from agent_comms.wire_log import WireLog
 from agent_comms.wire_record import WireRecord, WireScan
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 # These two old declarations exist only at this one-time format boundary.

@@ -4,8 +4,8 @@
 revision's ``src`` (``python -m agent_comms.installer``), so its steps are the
 target's. The target's stack is built into its own runtime, relocked to the latest
 OpenHCSDev mains, and must import Toad and the ACP client. The bus ledger
-(``carries.json``) names the carry steps still pending; each runs from the revision
-that declares it (``agent_comms.installer.carry``). Every run first rehearses on a
+(``carries.json``) names the carry steps still pending; each runs with the target's
+``src`` and ``tools`` (``agent_comms.installer.carry``). Every run first rehearses on a
 copy of the bus: the steps, then ``who``, ``threads`` and ``history`` reads, and
 every file no step names as rewritten must be unchanged by saved-file size,
 nanosecond mtime and inode. ``--rehearse`` stops there.
@@ -54,7 +54,7 @@ from agent_comms.installer.backup import (
     bus_files,
     transcripts_held,
 )
-from agent_comms.installer.carry import Carried, Carry, CarryChain, CarryLedger, Step, TodoColumnCarry
+from agent_comms.installer.carry import Carried, Carry, CarryChain, CarryLedger
 from agent_comms.installer.practice import practice_copy, prepare_runtime_home
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.todos import PlannedInstallDeadline
@@ -197,7 +197,7 @@ class Stack:
         )
 
     def environment(self, *paths: Path) -> dict:
-        """Use the artifact's packages; only historical carry helpers select explicit source."""
+        """Use the artifact's packages; carry steps also select the target tree's source."""
         environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
         if paths:
             imports = SpecifiedImportPath(os.pathsep.join(map(str, paths)))
@@ -223,22 +223,20 @@ class Stack:
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
-    def call_step(self, step: Step, root: Path, revisions: Revisions,
+    def call_step(self, step: type[Carry], root: Path, tree: TargetTree,
                   method: str, **arguments: bool) -> str:
-        """Run the declaration in its family's source with this stack's interpreter."""
-        tree = revisions.tree(step.family.source_revision(step))
-        output = run(self.python, "-m", "cutover.step_worker", f"cutover.{step.name}",
-                     step.declaration, method, root, json.dumps(arguments), cwd=tree,
-                     env=self.environment(tree / "src", tree / "tools"))
+        """Run the step in the target tree with this stack's interpreter."""
+        output = run(self.python, "-m", step_worker.__name__, step.name(), method, root,
+                     json.dumps(arguments), cwd=tree.path,
+                     env=self.environment(tree.path / "src", tree.path / "tools"))
         return output.strip().splitlines()[-1]
 
-    def backup_files(self, root: Path, pending: tuple[Step, ...],
-                     revisions: Revisions) -> tuple[Path, ...]:
+    def backup_files(self, root: Path, pending: tuple[type[Carry], ...],
+                     tree: TargetTree) -> tuple[Path, ...]:
         return tuple(sorted({
             path for step in pending for path in FieldCodec.decode(
                 tuple[Annotated[Path, PathText], ...], FieldCodec.parse(self.call_step(
-                    step, root, revisions,
-                    Carry.backup_files.__name__)))
+                    step, root, tree, Carry.backup_files.__name__)))
         }))
 
     def running_owners(self, root: Path) -> list[str]:
@@ -265,86 +263,61 @@ print(json.dumps([thread.name for thread in OwnerRestartRequest().threads(snapsh
                 "history": len(history[EverythingHistoryPageResult.messages_key])}
 
 
-@dataclass
-class Revisions:
-    """Temporary worktrees of the revisions the pending steps come from."""
+@dataclass(frozen=True)
+class TargetTree:
+    """The temporary worktree of the target revision the install runs from."""
 
     repo: Path
     scratch: Path
-
-    def __post_init__(self) -> None:
-        self.trees: dict[str, Path] = {}
+    revision: str
 
     @staticmethod
     def prepare(path: Path) -> None:
         run("git", "-C", path, "submodule", "update", "--init", "--recursive", "--checkout")
 
-    def path(self, revision: str) -> Path:
-        return self.scratch / f"tree-{revision[:12]}"
+    @property
+    def path(self) -> Path:
+        return self.scratch / f"tree-{self.revision[:12]}"
 
-    def add(self, revision: str) -> Path:
-        """Check ``revision`` out; the launcher adds the target's tree before running it."""
-        path = self.path(revision)
-        run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
-        return path
-
-    def tree(self, revision: str) -> Path:
-        if revision not in self.trees:
-            self.trees[revision] = self.staged(self.add(revision))
-        return self.trees[revision]
-
-    def adopt(self, revision: str) -> None:
-        """Own the tree the launcher added, so this run stages and removes it."""
-        self.trees[revision] = self.staged(self.path(revision))
-
-    def staged(self, path: Path) -> Path:
-        self.prepare(path)
-        # A historical regular cutover package cannot discover a worker from a
-        # second PYTHONPATH entry. Stage this transport helper, not new Core.
-        shutil.copy2(step_worker.__file__, path / "tools" / "cutover" / "step_worker.py")
-        return path
+    def add(self) -> None:
+        run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", self.path, self.revision)
+        self.prepare(self.path)
 
     def close(self) -> None:
-        for path in self.trees.values():
-            subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(path)])
+        subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(self.path)])
 
 
-def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> Carried:
-    """Run one step with the src of the revision its family names, and
-    ``stack``'s Python: the target's staged stack, never the installed one."""
-    if step.columns:
-        if "--before-stop" in flags:
-            return TodoColumnCarry.before_stop(root, apply=True)
-        return TodoColumnCarry.carry_step(
-            root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
+def carry(step: type[Carry], root: Path, stack: Stack, tree: TargetTree, *flags: str) -> Carried:
+    """Run one step with the target's src and ``stack``'s Python: the target's staged
+    stack, never the installed one."""
     operation = Carry.before_stop.__name__ if "--before-stop" in flags else Carry.carry.__name__
-    output = stack.call_step(step, root, revisions, operation, apply=True)
+    output = stack.call_step(step, root, tree, operation, apply=True)
     return FieldCodec.decode(Carried, FieldCodec.parse(output))
 
 
 def before_stop(
-    root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
+    root: Path, pending: tuple[type[Carry], ...], stack: Stack, tree: TargetTree
 ) -> list[dict]:
     """What the running installation needs before its own stop command reads the bus."""
     with _store_lock(root / "wire"):
-        return [carry(step, root, stack, revisions, "--before-stop", "--apply").report(
-            step.name, True) for step in pending]
+        return [carry(step, root, stack, tree, "--before-stop", "--apply").report(
+            step.name(), True) for step in pending]
 
 
 def carry_all(
-    root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
+    root: Path, pending: tuple[type[Carry], ...], stack: Stack, tree: TargetTree
 ) -> list[dict]:
     results = []
     for step in pending:
         with _store_lock(root / "wire"):
             result = CarryLedger(root).apply(
-                CarryChain.at(revisions.repo, step.revision), step.name,
-                lambda: carry(step, root, stack, revisions, "--apply"))
-        results.append(result.report(step.name, True))
+                step.name(), lambda: carry(step, root, stack, tree, "--apply"))
+        results.append(result.report(step.name(), True))
     return results
 
 
-def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> dict:
+def rehearse(root: Path, stack: Stack, tree: TargetTree, chain: CarryChain,
+             installer: str) -> dict:
     parent = StorageRule.load(root).initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
@@ -356,29 +329,28 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> 
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(stack, home=home)
         stack.prepare_native()
-        target = run("git", "-C", stack.checkout, "rev-parse", "HEAD").strip()
-        pending = CarryChain.at(revisions.repo, target).pending(CarryLedger(copied).applied())
-        for path in stack.backup_files(root, pending, revisions):
+        pending = chain.pending(CarryLedger(copied).applied())
+        for path in stack.backup_files(root, pending, tree):
             destination = copied / path.relative_to(root)
             if path.exists() and not destination.exists():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
-        stopping = before_stop(copied, pending, stack, revisions)
+        stopping = before_stop(copied, pending, stack, tree)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied):
             before = bus_files(copied)
-        report = carry_and_read(copied, before, pending, stack, stack, revisions, stopping)
+        report = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
         return {**report, "copy": asdict(measurement)}
 
 
-def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[Step, ...],
-                   staged: Stack, reader: Stack, revisions: Revisions,
+def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type[Carry], ...],
+                   staged: Stack, reader: Stack, tree: TargetTree,
                    stopping: list[dict]) -> dict:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
-    steps = [*stopping, *carry_all(root, pending, staged, revisions)]
+    steps = [*stopping, *carry_all(root, pending, staged, tree)]
     files = carried(root, before, steps, RehearsalFiles.declared(steps))
     return {"steps": steps, "files": files, "read": reader.verify(root)}
 
@@ -386,17 +358,16 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[Step
 def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool,
             retire: bool, spill_dir: Path, scratch: Path) -> dict:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
-    run owns it and removes it with every other revision tree it adds."""
+    run owns it and removes it."""
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
-    revisions = Revisions(checkout, scratch)
+    tree = TargetTree(checkout, scratch, target)
     try:
-        revisions.adopt(target)
         if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current,
                            target]).returncode:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
         if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
             raise UpgradeRefused("The checkout has local changes")
-        chain = CarryChain.at(checkout, target)
+        chain = CarryChain.at(tree.path)
         member = Install.member(root, retire)
         try:
             pending = member.pending_steps(root, chain)
@@ -406,18 +377,18 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
         installed.require_uv()
         if not rehearse_only and not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
-        staged = Stack.build(revisions.tree(target))
+        staged = Stack.build(tree.path)
         install = member.of(checkout, root, current, target, chain, pending, installed, staged,
-                            revisions, installer, spill_dir)
+                            tree, installer, spill_dir)
         rehearsal = install.rehearsal()
-        report = {"from": current, "to": target, "pending": [step.name for step in pending],
+        report = {"from": current, "to": target, "pending": [step.name() for step in pending],
                   "rehearsal": rehearsal}
         if rehearse_only:
             return report
         report["live"] = install.live(rehearsal)
         return report
     finally:
-        revisions.close()
+        tree.close()
         shutil.rmtree(scratch, ignore_errors=True)
 
 
@@ -430,10 +401,10 @@ class Install(ABC):
     current: str
     target: str
     chain: CarryChain
-    pending: tuple[Step, ...]
+    pending: tuple[type[Carry], ...]
     installed: Stack
     staged: Stack
-    revisions: Revisions
+    tree: TargetTree
     installer: str
     spill_dir: Path
 
@@ -447,19 +418,19 @@ class Install(ABC):
         return Install
 
     @classmethod
-    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
+    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[type[Carry], ...]:
         return chain.pending(CarryLedger(root).applied())
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
-           pending: tuple[Step, ...], installed: Stack, staged: Stack, revisions: Revisions,
+           pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
            installer: str, spill_dir: Path) -> Install:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged.python, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         return member(checkout, root, current, target, chain, pending, installed, staged,
-                      revisions, installer, spill_dir)
+                      tree, installer, spill_dir)
 
     @abstractmethod
     def rehearsal(self) -> dict: ...
@@ -470,11 +441,11 @@ class Install(ABC):
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
-        return rehearse(self.root, self.staged, self.revisions, self.installer)
+        return rehearse(self.root, self.staged, self.tree, self.chain, self.installer)
 
     def live(self, rehearsal: dict) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
-                    self.installed, self.staged, self.revisions, self.installer, self.spill_dir,
+                    self.installed, self.staged, self.tree, self.installer, self.spill_dir,
                     rehearsal['files'])
 
 
@@ -496,22 +467,22 @@ class FreshInstall(Install):
     The target's source creates the bus already in its format and routes to it."""
 
     @classmethod
-    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
+    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[type[Carry], ...]:
         return ()
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
-           pending: tuple[Step, ...], installed: Stack, staged: Stack, revisions: Revisions,
+           pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
            installer: str, spill_dir: Path) -> Install:
         return cls(checkout, root, current, target, chain, pending, installed, staged,
-                   revisions, installer, spill_dir)
+                   tree, installer, spill_dir)
 
     def rehearsal(self) -> dict:
         return {"fresh": str(self.root)}
 
     def live(self, rehearsal: dict) -> dict:
         run("git", "-C", self.checkout, "merge", "--ff-only", "-q", self.target)
-        Revisions.prepare(self.checkout)
+        TargetTree.prepare(self.checkout)
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
@@ -538,20 +509,20 @@ class RetiringInstall(FreshInstall):
         return {"retired": str(retired), "stopped": running, **super().live(rehearsal)}
 
 
-def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
-         installed: Stack, staged: Stack, revisions: Revisions, installer: str,
+def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[type[Carry], ...],
+         installed: Stack, staged: Stack, tree: TargetTree, installer: str,
          spill_dir: Path, rehearsal_files: RehearsalFiles) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
     expected = frozenset((*rehearsal_files.names, CarryLedger.name)) | frozenset(
-        str(path.relative_to(root)) for path in staged.backup_files(root, pending, revisions))
+        str(path.relative_to(root)) for path in staged.backup_files(root, pending, tree))
     selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore = RestoreSpace.measure(max(
         rehearsal_files.restore_bytes,
         sum(path.stat().st_size for path in selected if path.exists()),
     ), root.parent)
     restore.require()
-    stopping = before_stop(root, pending, staged, revisions)
+    stopping = before_stop(root, pending, staged, tree)
     running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
@@ -571,9 +542,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         raise
     try:
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
-        Revisions.prepare(checkout)
+        TargetTree.prepare(checkout)
         staged.prepare_native()
-        passed = carry_and_read(root, before, pending, staged, staged, revisions, stopping)
+        passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
         passed["files"].require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
@@ -597,7 +568,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         os.environ[HOLDER_NONCE] = restored_hold.nonce
         if run("git", "-C", checkout, "rev-parse", "HEAD").strip() != current:
             run("git", "-C", checkout, "reset", "-q", "--keep", current)
-            Revisions.prepare(checkout)
+            TargetTree.prepare(checkout)
         # Republish only when current moved: the outgoing runtime may predate this publisher.
         if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
             installed.publish()

@@ -18,7 +18,7 @@ from typing import Annotated, TextIO
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.upgrade import Revisions, run, upgrade
+from agent_comms.installer.upgrade import TargetTree, run, upgrade
 from agent_comms.storage_rules import StorageRule
 
 
@@ -37,20 +37,20 @@ class InstallRun:
         parent = StorageRule.load(root).initial_roots(command.installer).scratch
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
-        Revisions(checkout, scratch).add(target)
+        TargetTree(checkout, scratch, target).add()
         return cls(replace(command, checkout=checkout), root, scratch, target)
 
     def launch(self, output: TextIO) -> int:
         """The install outlives its caller: a new session, its output in files beside the bus.
         Retiring the caller's process group must not cut an install short."""
-        tree = Revisions(self.command.checkout, self.scratch).path(self.target)
+        tree = TargetTree(self.command.checkout, self.scratch, self.target).path
         logs = self.root.parent / f".{self.root.name}.installer-{Id128Text.mint()}"
         logs.mkdir(mode=0o700)
         result, errors = logs / "result.json", logs / "stderr.log"
         with result.open("xb") as stdout, errors.open("xb") as stderr:
             process = subprocess.Popen(
                 [sys.executable, "-m", "agent_comms.installer"], cwd=tree,
-                env={**os.environ, "PYTHONPATH": str(tree / "src")},
+                env={**os.environ, "PYTHONPATH": os.pathsep.join((str(tree / "src"), str(tree / "tools")))},
                 stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
             )
         print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
