@@ -211,7 +211,7 @@ class StorageRule(RoomAllocation):
         """The rule as an order states it to ``unit``."""
         home = self.checkout_base / unit
         return (
-            f'Storage (enforced, automatic strike): your checkouts are {home}--P<n>, at most '
+            f'Storage (refused without a strike): your checkouts are {home}--P<n>, at most '
             f'{self.max_checkouts} besides your home checkout {home}, removed with git worktree '
             'remove in the same order that created them; your only scratch dir is '
             f'{self.scratch_base / unit}/, capped at {self.scratch_cap_gib:g} GB together with '
