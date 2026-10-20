@@ -234,6 +234,7 @@ class ContextManifests(Carry):
             with store.writing() as context_db, output_path.open("w+b") as output:
                 os.chmod(output_path, 0o600)
                 move = ContextMove(context_db, store)
+                stream.seek(0)
                 for offset, raw in WireRecord.rows(stream, end=witness.offset):
                     digest = _chain(digest, raw)
                     value = FieldCodec.decode(dict[str, object], FieldCodec.parse(raw))
