@@ -238,10 +238,7 @@ class FullNativeExecution(NativeInputExecution):
     def _execution(self, db: sqlite3.Connection) -> ExecutionRecord:
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
-        execution = ExecutionRecord.one(db, execution_id=self.execution_id)
-        if execution is None:
-            raise IdentityConflict("Native full input names a missing execution")
-        return execution
+        return ExecutionRecord.require(db, execution_id=self.execution_id)
 
     def retried_in(self, db: sqlite3.Connection) -> bool:
         """A transient provider failure leaves this input behind a later attempt."""
