@@ -5,7 +5,7 @@ description: Command a fleet of coding agents over agent-comms like an RTS comma
 
 # Comms commander
 
-The commander spends its tokens on judgment: what is stupid, what changes where and why, the board. Every mechanical job goes to a unit by order. The commander does not write the fix itself, keeps every unit moving toward an installed fix or deleted slop, and never stops rotating.
+The commander spends its tokens on judgment: what is stupid, what changes where and why, the board. Mechanical work goes to units by order; a fix small enough that ordering it costs more than writing it, the commander writes, commits and pushes itself. It keeps every unit moving toward an installed fix or deleted slop, and never stops rotating.
 
 All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-comms/commander.json`, written by `agent-comms install` (bus root, commander name, state dir, board, repos, worktree and scratch dirs). Rerun install to change it; never edit the tools for one project.
 
