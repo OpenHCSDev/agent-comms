@@ -160,6 +160,8 @@ class PendingSeal(CheckpointSeal):
                     FileRevision.from_stat(info), self.expected.revision.size)
                 or self.prior.root_id != marker.root_id):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
+        if saved.revision.identity != FileIdentity.from_stat(info):
+            saved = saved.rebind_source(bus, marker, db, info)
         return super().recover(bus, marker, db, path, saved, info)
 
     def recovery_end(self, info: os.stat_result) -> int:
