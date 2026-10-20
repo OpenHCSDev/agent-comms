@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 from functools import cached_property
@@ -14,7 +15,7 @@ from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .goal_actions import (GoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
-                           SentBackOrderGoalAction)
+                           OrderGoalAction, SentBackOrderGoalAction)
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait, RecordedGoalWait, StandbyReview
@@ -33,8 +34,9 @@ from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
+from .thread_identity import ThreadIncarnation
 from .turn_lease import TurnCompletion
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
+from .todos import PendingProblemOrder, SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -72,6 +74,16 @@ class Goals:
             expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
         sent_back: Todo = self.todos.get(problem)
         return sent_back
+
+    def reassign(self, todo: Todo, unit: Thread, assigner: ThreadIncarnation) -> PendingProblemOrder:
+        """Reissue the order through its Goal and return the published order for notification."""
+        order = todo.order.reissued(time.time())
+        commander = todo.creator_identity.name
+        self.update_goal(unit.name, OrderGoalAction(
+            problem=todo.id, expected_revision=todo.revision, order=order,
+            request=todo.goal.request(), deadline=todo.deadline, commander=commander,
+            assigner=assigner, traced=todo.order.owner))
+        return order
 
     def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
         actor = self.registry.require(commander).incarnation

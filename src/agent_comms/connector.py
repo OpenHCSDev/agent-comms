@@ -51,7 +51,7 @@ from .connector_store import (
     RegisteredClient, digest,
 )
 from .messages import Message
-from .commander.standing import UnownedWheelSpin
+from .todos import UnownedWheelSpin
 from .todos import DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import CommsChannelsTool, ReadTool, ToolRequest

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import calendar
 import json
+import logging
 import re
 import subprocess
 import sqlite3
@@ -16,8 +17,8 @@ import sys
 import time
 import asyncio
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
@@ -37,10 +38,12 @@ from .field_codec import (
 from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
-from .standing_rules import UndatedStandingRule
+from .standing_rules import StandingRule, UndatedStandingRule
+from .coordinator import Coordination
+from .turn_digests import TurnDigestRead, TurnsSince
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 from .work_branches import WorkBranchError, WorkBranches
@@ -2439,6 +2442,92 @@ class Todo(TypedTable):
                 order=proposed.order,
             )
         )
+
+
+@dataclass(frozen=True)
+class WheelSpin(StandingRule, declared_name=None):
+    """An order stalls or a unit has no order; Core selects its replacement holder."""
+
+    todo: Todo
+    recent: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def idle(cls, comms: Comms, commander: str) -> list[Thread]:
+        """Recent, unassigned threads whose registry declaration permits assignment."""
+        held = {todo.holder for todo in cls.todos(comms, commander)}
+        excluded = held | {commander}
+        bound = TurnsSince(time.time() - cls.recent)
+        return sorted((thread for thread in comms.registry.all_threads().values()
+                       if thread.name not in excluded and not thread.parked
+                       and TurnDigestRead(comms.root, thread, bound).read().turns),
+                      key=lambda thread: thread.name)
+
+    def assign(self, comms: Comms, commander: str, unit: Thread,
+               assigner: ThreadIncarnation) -> None:
+        """Publish through the Goal owner and notify through the messaging owner."""
+        order = comms.goals.reassign(self.todo, unit, assigner)
+        comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(self.todo)}")
+
+
+@dataclass(frozen=True)
+class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
+    """A unit holds no next order while the board has unowned rows."""
+
+    unit: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
+        return cls.paired(comms, commander, (todo for todo in
+            comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
+            if not todo.holder))
+
+    @classmethod
+    def paired(cls, comms: Comms, commander: str,
+               todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
+        """Each pending row with the first idle unit not struck on it."""
+        idle, found = cls.idle(comms, commander), []
+        for todo in (todo for todo in todos if todo.pending):
+            for unit in idle:
+                if not todo.live_strikes(unit.name):
+                    idle.remove(unit)
+                    found.append(cls(todo, unit.name))
+                    break
+        return tuple(found)
+
+    def line(self) -> str:
+        return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
+                f" -> Core gives it to {self.unit}")
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.assign(comms, commander, comms.registry.require(self.unit),
+                    comms.registry.require(commander).incarnation)
+
+    @classmethod
+    def after_stall(cls, comms: Comms) -> None:
+        """Assign first: refused or unavailable replacements leave the old holder untouched."""
+        stalled = comms.goals.todos.stalled(comms.registry.storage_rule)
+        for commander in {todo.creator_identity.name for todo in stalled}:
+            mine = (todo for todo in stalled if todo.creator_identity.name == commander)
+            for rule in cls.paired(comms, commander, mine):
+                rule.assign(comms, commander, comms.registry.require(rule.unit),
+                            StallWatcherIncarnation.watcher())
+
+    @classmethod
+    def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        """The worker borrows the root for this pass, never while the timer is idle."""
+        with opened_wire() as comms:
+            cls.after_stall(comms)
+
+    @classmethod
+    async def watch(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        """Run a pass each minute; failures go to the existing service log."""
+        while True:
+            (outcome,) = await asyncio.gather(
+                Coordination.run_worker(lambda: cls.watch_pass(opened_wire)),
+                return_exceptions=True)
+            if isinstance(outcome, Exception):
+                logging.error("Stall watcher pass failed", exc_info=outcome)
+            await asyncio.sleep(60)
 
 
 def _text(value: str, label: str, limit: int) -> str:
