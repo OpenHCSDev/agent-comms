@@ -19,7 +19,7 @@ def enforce_storage(ctx: Commander, thread: str, call_id: str,
     """Explain the actual preflight refusal without changing the problem or striking its unit."""
     if thread not in ctx.units() or thread not in ctx.comms.registry:
         return
-    print(f'VIOLATION storage {thread}: {denial.reason}', flush=True)
+    print(f'VIOLATION storage {thread}: {denial.reason} (tool call {call_id})', flush=True)
 
 
 def emit(turns, thread, final=''):

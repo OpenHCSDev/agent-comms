@@ -356,9 +356,7 @@ class PlainTextPattern(BehaviourPattern):
 
 
 class RepeatedStrikePattern(BehaviourPattern):
-    signature = (
-        "A send-back strike on an order already struck since it was sent."
-    )
+    signature = "A send-back strike on an order already struck since it was sent."
     checks = (CallableCheck(Todo.struck_on_order),)
     sources = (ProblemFix("P184", "7af14a520"),)
 
