@@ -48,7 +48,7 @@ from ..plan_phases import OrderPhase, PlanPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..repo import Repo
-from ..standing_rules import HuntDue, RulesDue
+from ..standing_rules import HuntDue
 from ..storage_rules import UnitStorage
 from ..thread_identity import ThreadIncarnation
 from ..todos import (
@@ -834,22 +834,8 @@ class StaleOrderGate(CommanderVerb):
                      + '\nMove their deadlines or withdraw them before sending more work.')
 
 
-class RuledVerb(CommanderVerb):
-    """HARD RULE: no commander action, mine or a fork's, on rules not re-read in 20 min."""
-
-    def gate(self, ctx: Commander) -> None:
-        super().gate(ctx)
-        self.require_review(ctx)
-
-    def require_review(self, ctx: Commander) -> None:
-        for due in RulesDue.violations(ctx.comms, self.who(ctx)):
-            flag = '' if self.who(ctx) == ctx.commander else f' --fork {self.who(ctx)}'
-            sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
-                     f' rules review{flag}, then answer each drawn rule{flag}.')
-
-
 @dataclass(frozen=True, kw_only=True)
-class DirectiveVerb(RuledVerb):
+class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
 
     answers: tuple[str, ...] = option("--answers", nargs="+", default=(),
@@ -863,10 +849,6 @@ class DirectiveVerb(RuledVerb):
         if set(self.answers) != {message.message_id for message in originals}:
             sys.exit('REFUSED: --answers must name original directives on this request.')
         return tuple(message.reference for message in originals)
-
-    def require_review(self, ctx: Commander) -> None:
-        if not self.answer_references(ctx):
-            super().require_review(ctx)
 
     def gate(self, ctx: Commander) -> None:
         answers = self.answer_references(ctx)
@@ -921,7 +903,7 @@ class StrikeVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FireVerb(OrderVerb, RuledVerb):
+class FireVerb(OrderVerb):
     help = "take every open problem off a unit; their orders and strikes stay"
     unit: str = option("unit")
     why: str = option("--why")
@@ -931,7 +913,7 @@ class FireVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnstrikeVerb(OrderVerb, RuledVerb):
+class UnstrikeVerb(OrderVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
     pid: str = option("pid")
     why: str = option("--why")
@@ -943,7 +925,7 @@ class UnstrikeVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DueVerb(OrderVerb, RuledVerb):
+class DueVerb(OrderVerb):
     help = "move a held order's deadline; the reason goes on the public record"
     pid: str = option("pid")
     at: str = option("at", help="HH:MM the order is now due")
@@ -954,7 +936,7 @@ class DueVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallVerb(OrderVerb, RuledVerb):
+class InstallVerb(OrderVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
     at: str = option("at", help="HH:MM the install is due")
     installer: str = option("installer", help="the unit that runs the install")
@@ -966,7 +948,7 @@ class InstallVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class WithdrawVerb(OrderVerb, RuledVerb):
+class WithdrawVerb(OrderVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
     pid: str = option("pid")
     why: str = option("--why")
@@ -978,7 +960,7 @@ class WithdrawVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DoneVerb(OrderVerb, RuledVerb):
+class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
     unit: str = option("unit", metavar="UNIT")
     message: str = option("message", metavar="ORDER")
@@ -1016,7 +998,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CheckVerb(OrderVerb, RuledVerb):
+class CheckVerb(OrderVerb):
     help = "replace an open order's wrong check with one passing on main; keeps deadline, strikes"
     pid: str = option("pid")
     check: str = option("--check", help='"<repo> :: <shell command> -> <integer>"')
@@ -1027,7 +1009,7 @@ class CheckVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ServeVerb(OrderVerb, RuledVerb):
+class ServeVerb(OrderVerb):
     help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
     pid: str = option("pid")
     phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
@@ -1062,7 +1044,7 @@ class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DropVerb(OrderVerb, RuledVerb):
+class DropVerb(OrderVerb):
     help = "drop an old order for a live newer one without a strike"
     unit: str = option("unit")
     message: str = option("message")
@@ -1074,7 +1056,7 @@ class DropVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FoldVerb(OrderVerb, RuledVerb):
+class FoldVerb(OrderVerb):
     help = "join duplicate open problems without losing their text"
     pid: str = option("pid")
     into: str = option("--into")
@@ -1086,7 +1068,7 @@ class FoldVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class LinkVerb(OrderVerb, RuledVerb):
+class LinkVerb(OrderVerb):
     help = "attach an unassigned problem to an existing order"
     pid: str = option("pid")
     unit: str = option("unit")
@@ -1098,7 +1080,7 @@ class LinkVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CloseVerb(OrderVerb, RuledVerb):
+class CloseVerb(OrderVerb):
     help = "the fix works in the app; Core closes the problem"
     pid: str = option("pid")
     works: str = option("--works")
@@ -1109,7 +1091,7 @@ class CloseVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HuntVerb(OrderVerb, RuledVerb):
+class HuntVerb(OrderVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
     where: str = option("where", metavar="FILE:LINE")
     why: str = option("--why")

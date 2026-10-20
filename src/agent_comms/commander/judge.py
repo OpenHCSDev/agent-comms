@@ -26,7 +26,7 @@ from ..field_codec import FieldCodec, option
 from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
-from .order import CommanderVerb, RuledVerb
+from .order import CommanderVerb
 
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
@@ -134,7 +134,7 @@ class AlarmVerb(JudgeVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class VerdictVerb(JudgeVerb, RuledVerb):
+class VerdictVerb(JudgeVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
     ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")

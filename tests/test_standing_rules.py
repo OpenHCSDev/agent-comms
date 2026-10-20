@@ -277,7 +277,7 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
 
     assert lines(comms, RulesDue) == [
         "RULES DUE (no rule review recorded for lead) -> agent-comms-commander rules review"
-        " and answer the drawn rules before any order"]
+        " and answer the drawn rules"]
     drawn = ("Declare each fact once and derive all consumers from its owner.",
              "Kinds are class families whose declarations own their behavior and membership.")
     review(DrawnRuleReviewEntry(drawn))
@@ -292,7 +292,7 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
     monkeypatch.setattr(time, "time", lambda: later)
     assert lines(comms, RulesDue) == [
         "RULES DUE (last rule review was 21 min ago (max 20)) -> agent-comms-commander rules review"
-        " and answer the drawn rules before any order"]
+        " and answer the drawn rules"]
 
 
 
