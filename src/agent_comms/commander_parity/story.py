@@ -42,7 +42,8 @@ class StoryCase(LifecycleCase):
             clean=True,
             replaces=sent_back.messages[-1].message_id,
         )
-        run.commander.strike(run.worker, created.id, cls.strike_reason)
+        run.commander.strike(run.worker, created.id, cls.strike_reason,
+                             evidence=(created.order.checked().owner,))
         saved = run.commander.comms.goals.todos.get(created.id)
         run.commander.call(
             CommsTodoCreateTool(

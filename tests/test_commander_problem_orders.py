@@ -719,7 +719,8 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
-    script.strike('worker', 'P1', f'P1 left count.txt at zero and reported it fixed {__file__}:1')
+    script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed',
+                  evidence=(FileLine(__file__, 1),))
     document = json.loads(Path(body).read_text())
     document['problems'] = ['P1']
     numbered = json.dumps(document)
@@ -740,7 +741,8 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
     (repo / 'count.txt').write_text('0\n')
     problem(script, order_body(repo))
     create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
-    script.strike('worker', 'P2', f'P1 was compared with this miss: P2 left its count at zero and reported it fixed {__file__}:1')
+    script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed',
+                  evidence=(FileLine(__file__, 1),))
     assert [commander_order.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
     why = 'P1 rereads the counter per event; this read of the P2 path found it clean'
     script.hunt(f'{__file__}:1', why, '')
@@ -902,7 +904,8 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     create(commander, 'P1')
     posted = []
     monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): posted.append((recipients, body)))
-    script.strike('worker', 'P1', f'P1 was struck for lateness against the wrong delivered commit {__file__}:1')
+    script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit',
+                  evidence=(FileLine(__file__, 1),))
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and commander_order.struck(current, 'worker') == 0
