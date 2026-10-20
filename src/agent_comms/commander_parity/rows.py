@@ -13,7 +13,13 @@ from ..plan_phases import (
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
-from .wording import OrderWordingComparison, PlainWordsComparison
+from .wording import (
+    ApplicationRunComparison,
+    DecisionAlertsComparison,
+    OrderWordingComparison,
+    PlainWordsComparison,
+    UnitWordingComparison,
+)
 
 
 class CreateProblemParityRow(ParityRow):
@@ -221,6 +227,10 @@ class ApplicationRunParityRow(ParityRow):
     native = "`OrderText` requires the run; `CommsProblemCloseTool.works` checks it"
     phases = (RecordPlanePhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return ApplicationRunComparison.read()
+
 
 class TracedTransferParityRow(ParityRow):
     number = 24
@@ -237,6 +247,10 @@ class UnitWordingParityRow(ParityRow):
     native = "`PlainText` for commander verdicts/strikes; unit wording gets correction"
     phases = (RecordPlanePhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return UnitWordingComparison.read()
+
 
 class DecisionAlertsParityRow(ParityRow):
     number = 26
@@ -244,6 +258,10 @@ class DecisionAlertsParityRow(ParityRow):
     current = "none; every line interrupts"
     native = "`messages.AlertKind.require_publishable`, `tools.CommsDecisionTool`"
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return DecisionAlertsComparison.read()
 
 
 class MomentumParityRow(ParityRow):
