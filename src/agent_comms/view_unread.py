@@ -181,7 +181,7 @@ class CappedCount(Counted):
         return other.capped(self.total)
 
     def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None:
-        counts[name] = CappedReplyUnread.for_count(self.total)
+        counts[name] = CappedReplyUnread.from_count(self.total)
 
 
 @dataclass(frozen=True)

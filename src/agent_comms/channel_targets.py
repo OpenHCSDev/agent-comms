@@ -202,6 +202,11 @@ class NamedTarget(CommandTarget):
 class ThreadTarget(NamedTarget):
     history_result_type = DmHistoryPageResult
     kind = "thread"
+
+    @property
+    def view_reference(self) -> str:
+        """The human DM view, distinct from this thread's saved replies."""
+        return f"@{self.name}"
     incoming_scope = "direct message"
 
     def require_frozen_recipients(self, message, audience):

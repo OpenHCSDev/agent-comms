@@ -16,14 +16,14 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
-from .channel_targets import CommandTarget
+from .channel_targets import CommandTarget, ThreadTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
+from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
-from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, projected
 from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
@@ -39,15 +39,28 @@ from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
-from .ui_model.unread import UnreadPresentation, UnobservedUnread
-from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
-                         NamedViewer)
+from .read_basis import (
+    AnonymousViewer,
+    CapturedSelection,
+    ChannelDisplayScope,
+    DisplayViewer,
+    DMDisplayScope,
+    MessageDisplayScope,
+    NamedViewer,
+)
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
-from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView,
-                             NotificationsView, RegistrationsView, RevisionView,
-                             SidebarView, StoresView)
+from .revision_views import (
+    STATUS_SOURCE,
+    BusSourceView,
+    ExternalTranscriptsView,
+    NotificationsView,
+    RegistrationsView,
+    RevisionView,
+    SidebarView,
+    StoresView,
+)
 from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadIncarnation
@@ -59,6 +72,7 @@ from .thread_presentation import (
 from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
+from .ui_model.unread import IndexingUnread, UnobservedUnread, UnreadPresentation
 from .wire_log import WireLog, WireSnapshot
 
 if TYPE_CHECKING:
@@ -436,13 +450,10 @@ class BusPresentation:
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
-                {}, {}, unread={}, channel_unread={}, visibility=visibility,
+                {}, {}, unread=lambda reference: IndexingUnread(), visibility=visibility,
                 read_marker_notice=basis.document.notice,
             )
-        return replace(
-            snapshot, read_marker_notice=basis.document.notice.take(self.bus.reads),
-            unread_pending=frozenset(snapshot.threads.keys() | snapshot.channels.keys()),
-        )
+        return replace(snapshot, read_marker_notice=basis.document.notice.take(self.bus.reads))
 
     def channel_page(
         self,
@@ -486,8 +497,12 @@ class BusPresentation:
         The index reads the captured complete-line cut; read and write errors propagate.
         """
         snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
+        scopes: dict[str, MessageDisplayScope] = {scope.channel: scope for scope in basis.scopes}
+        scopes.update((ThreadTarget(name).view_reference,
+                       DMDisplayScope.capture(basis.require_viewer(), name, basis.registry))
+                      for name in basis.registry.threads)
         unread = source.query_page_index(lambda page: page.display_unread(
-            basis.scopes, basis.viewer_names, basis.seen(source), source.complete_prefix.boundary, basis.registry))
+            scopes, basis.viewer_names, basis.seen(source), source.complete_prefix.boundary, basis.registry))
         return snapshot.activity, unread
 
 
@@ -687,13 +702,10 @@ class ThreadView(ThreadRecord):
 class CoordinationSnapshot:
     threads: Mapping[str, ThreadView]
     channels: Mapping[str, ChannelView]
-    unread: Mapping[str, int]
+    unread: Mapping[str, UnreadPresentation]
     last_sent: Mapping[str, float]
     references: DisplayReferences
-    channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: type[ChannelSort] = NameChannelSort
-    thread_unread: Mapping[str, UnreadPresentation] = field(default_factory=dict)
-    unread_pending: frozenset[str] = frozenset()
     read_marker_notice: ReadNotice = field(default_factory=NoReadNotice)
 
     @classmethod
@@ -701,7 +713,7 @@ class CoordinationSnapshot:
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        unread: Callable[[str], UnreadPresentation],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
@@ -709,14 +721,18 @@ class CoordinationSnapshot:
             registry, agents, GoalWaits.at(root), visibility,
         ))
         activities = {name: view.activity for name, view in threads.items()}
+        channels = OrderedDict((view.channel.name, view) for view in ChannelView.roster(
+            registry, declarations.visible(visibility), catalog.pinned_members(), catalog.list_order,
+            activities, sent, messages, visibility,
+        ))
+        counts = {name: unread(name) for name in channels}
+        counts.update((ThreadTarget(name).view_reference, unread(ThreadTarget(name).view_reference))
+                      for name in threads)
+        counts.update((name, UnobservedUnread()) for name in threads)
         return cls(
-            channels=OrderedDict((view.channel.name, view) for view in ChannelView.roster(
-                registry, declarations.visible(visibility), catalog.pinned_members(), catalog.list_order,
-                activities, sent, messages, visibility,
-            )),
+            channels=channels,
             threads=threads,
-            unread=unread, last_sent=sent, channel_unread=channel_unread,
-            thread_unread={name: UnobservedUnread() for name in threads},
+            unread=counts, last_sent=sent,
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, read_marker_notice=read_marker_notice,
         )

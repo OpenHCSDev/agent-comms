@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -12,25 +11,11 @@ if TYPE_CHECKING:
 
 
 class UnreadPresentation(ABC):
-    @classmethod
-    def _for_count(
-        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int],
-    ) -> UnreadPresentation:
-        if name in snapshot.unread_pending:
-            return IndexingUnread()
-        return ExactUnread(counts.get(name, 0))
+    pending = False
 
     @classmethod
-    def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return snapshot.thread_unread[name]
-
-    @classmethod
-    def for_bus(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.unread)
-
-    @classmethod
-    def for_channel(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.channel_unread)
+    def for_view(cls, snapshot: CoordinationSnapshot, reference: str) -> UnreadPresentation:
+        return snapshot.unread[reference]
 
     @property
     @abstractmethod
@@ -74,7 +59,7 @@ class ReplyUnread(UnreadPresentation):
 @dataclass(frozen=True)
 class CappedReplyUnread(ReplyUnread):
     @classmethod
-    def for_count(cls, count: int) -> CappedReplyUnread:
+    def from_count(cls, count: int) -> CappedReplyUnread:
         return cls(count) if count else EmptyCappedReplyUnread()
 
     @property
@@ -90,6 +75,7 @@ class EmptyCappedReplyUnread(CappedReplyUnread):
 
 @dataclass(frozen=True)
 class IndexingUnread(UnreadPresentation):
+    pending = True
     label = "Indexing…"
     detail = "Unread replies are still being indexed; the exact count is not yet known."
 
@@ -98,5 +84,6 @@ class IndexingUnread(UnreadPresentation):
 class UnobservedUnread(UnreadPresentation):
     """No observation for this view's source has arrived yet."""
 
+    pending = True
     label = ""
     detail = "Waiting for this source's unread state."

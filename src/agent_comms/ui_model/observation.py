@@ -955,7 +955,7 @@ class SidebarObserved(SidebarResult):
 
     def advance(self, reading: SidebarReading) -> None:
         reading.stage = reading.stage.next()
-        if self.snapshot.unread_pending:
+        if any(unread.pending for unread in self.snapshot.unread.values()):
             reading.sent = NoSidebarSent()
 
 

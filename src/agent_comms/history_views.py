@@ -4,23 +4,23 @@ from __future__ import annotations
 
 import logging
 import time
+from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
-from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
-from .declared_family import DeclaredFamily
 from .cli_result import CliResult
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
-from .thread_identity import ThreadIncarnation
 from .thread_execution import ConversationPreparation
+from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
@@ -47,17 +47,17 @@ from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
-from .page_traversal import OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
+from .page_traversal import OlderTraversal
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
-    MessageNotification,
-    ThreadRecord,
     CountedRead,
     InboxRead,
+    MessageNotification,
+    ThreadRecord,
     ThreadView,
     WireRevision,
 )
@@ -66,6 +66,7 @@ from .store_files import SharedLock, _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
+from .ui_model.unread import ExactUnread
 
 _LOG = logging.getLogger(__name__)
 
@@ -376,14 +377,14 @@ class HistoryViews:
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
                 display_activity,
-                unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
+                unread=lambda reference: ExactUnread(display_unread[reference]),
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer, registry=basis.registry, document=basis.document, visibility=visibility,
         )
-        return replace(snapshot, thread_unread=unread.counts)
+        return replace(snapshot, unread={**snapshot.unread, **unread.counts})
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""

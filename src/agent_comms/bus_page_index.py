@@ -20,7 +20,13 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, MessageDisplayScope, ReadCursor
+from .read_basis import (
+    ChannelDisplayScope,
+    ConversationCursor,
+    DMDisplayScope,
+    MessageDisplayScope,
+    ReadCursor,
+)
 from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
@@ -300,13 +306,13 @@ class BusPageIndex(TypedStore):
         ).fetchone()
         return through if missing is None else missing - 1
 
-    def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
+    def display_unread(self, scopes: Mapping[str, MessageDisplayScope], viewer_names: frozenset[str],
                        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
         counts = {}
-        for scope in scopes:
+        for reference, scope in scopes.items():
             bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
             predicate, parameters = scope.index_predicate
-            counts[scope.channel] = self.connection.execute(
+            counts[reference] = self.connection.execute(
                 f'WITH {ReadCursor.sql("?")}, requests AS ('
                 f'SELECT \'viewer\' AS actor,* FROM "{BusPageRow.declared_name}" '
                 'WHERE seq > ? AND offset < ? '
@@ -337,6 +343,6 @@ class EmptyBusPageIndex(BusPageIndex):
     def display_snapshot(self, scopes, boundary):
         return DisplaySnapshot.empty(scopes)
 
-    def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
+    def display_unread(self, scopes: Mapping[str, MessageDisplayScope], viewer_names: frozenset[str],
                        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
-        return dict.fromkeys((scope.channel for scope in scopes), 0)
+        return dict.fromkeys(scopes, 0)

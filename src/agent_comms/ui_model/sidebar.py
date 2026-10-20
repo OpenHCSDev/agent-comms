@@ -7,20 +7,20 @@ meaning (unread kinds, activity, labels) itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-
-from agent_comms.read_ledger import NoReadNotice, ReadNotice
 from typing import NoReturn
 
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
+from agent_comms.read_ledger import NoReadNotice, ReadNotice
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
 from agent_comms.ui_model.changes import KeyedModel
-from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
+from agent_comms.ui_model.unread import UnobservedUnread, UnreadPresentation
 
 
 @dataclass(frozen=True)
@@ -31,10 +31,10 @@ class PersonUnread(ConversationPreparation):
     snapshot: CoordinationSnapshot
 
     def native(self) -> UnreadPresentation:
-        return UnreadPresentation.for_thread(self.snapshot, self.person.thread.name)
+        return UnreadPresentation.for_view(self.snapshot, self.person.thread.name)
 
     def external(self) -> UnreadPresentation:
-        return UnreadPresentation.for_bus(self.snapshot, self.person.thread.name)
+        return UnreadPresentation.for_view(self.snapshot, ThreadTarget(self.person.thread.name).view_reference)
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,7 @@ class ChannelRowModel:
             f"{'* ' if channel.pinned else ''}{channel.name} {view.active_agents}/{view.registered_agents}",
             f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
             f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
-            UnreadPresentation.for_channel(snapshot, channel.name),
+            UnreadPresentation.for_view(snapshot, channel.name),
             any(name in working for name in view.members),
             tuple(name for name in view.members if name in snapshot.threads),
             frozenset(view.pinned_members),
@@ -152,10 +152,10 @@ class ObservedSidebar(SidebarObservation):
         return self.snapshot.read_marker_notice
 
     def channel_unread(self, target: str) -> UnreadPresentation:
-        return UnreadPresentation.for_channel(self.snapshot, target)
+        return UnreadPresentation.for_view(self.snapshot, target)
 
     def bus_unread(self, target: str) -> UnreadPresentation:
-        return UnreadPresentation.for_bus(self.snapshot, target)
+        return UnreadPresentation.for_view(self.snapshot, ThreadTarget(target).view_reference)
 
     def references_for(self, root):
         from ..display_references import ForeignReferences
