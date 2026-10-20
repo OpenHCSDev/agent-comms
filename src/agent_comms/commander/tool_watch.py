@@ -6,7 +6,6 @@ from ..native_entries import NativeEntry
 from ..pi_payloads import PiMessage, StorageDenialToolDetails, TextContent
 from ..tool_declaration import one_line
 from ..registration import Registration
-from ..todos import StorageStrikeTodo
 from .order import Commander
 
 def thread_names(registry: Registration) -> dict[str, str]:
@@ -17,15 +16,10 @@ def thread_names(registry: Registration) -> dict[str, str]:
 
 def enforce_storage(ctx: Commander, thread: str, call_id: str,
                     denial: StorageDenialToolDetails) -> None:
-    """Report only the preflight refusal recorded in this call's native result."""
+    """Explain the actual preflight refusal without changing the problem or striking its unit."""
     if thread not in ctx.units() or thread not in ctx.comms.registry:
         return
     print(f'VIOLATION storage {thread}: {denial.reason}', flush=True)
-    for todo in ctx.held_by(thread)[:1]:
-        ctx.strike(thread, todo.id,
-                   f'{todo.id} broke the storage rule at tool call {call_id}: {denial.reason}; '
-                   'storage waste is banned outright', 'tool_watch at tool call preflight',
-                   kind=StorageStrikeTodo)
 
 
 def emit(turns, thread, final=''):

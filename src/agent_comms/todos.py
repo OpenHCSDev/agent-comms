@@ -2071,15 +2071,6 @@ class StrikeTodo(TodoOperation, StoryEvent):
         return False
 
 
-@dataclass(frozen=True)
-class StorageStrikeTodo(StrikeTodo):
-    """Repeated reports of one storage violation retain its recorded strike."""
-
-    def repeats(self, recorded: StrikeTodo) -> bool:
-        return (self.actor == recorded.actor and self.previous.owner == recorded.previous.owner
-                and self.reason == recorded.reason)
-
-
 @dataclass(frozen=True, kw_only=True)
 class ObjectiveStrike(StrikeTodo, declared_name=None):
     """An objective failure recorded in the existing strike history, once per order and kind."""
