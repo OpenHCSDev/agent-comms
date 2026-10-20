@@ -94,8 +94,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.goal.active()
-                for current in goal:
-                    self._retain_goal_turns(pending, current)
+                self._retain_goal_turns(pending, next(iter(goal), None))
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -131,8 +130,12 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     inputs.effects.turns.turn_tasks.pop(session_id, None)
 
     @staticmethod
-    def _retain_goal_turns(pending: list[ScheduledTurn], goal: "Goal") -> None:
-        pending[:] = [turn for turn in pending if turn.goal_id == goal.id]
+    def _retain_goal_turns(pending: list[ScheduledTurn], goal: "Goal | None") -> None:
+        """Discard stale goal work without dropping independent incoming turns."""
+        pending[:] = [
+            turn for turn in pending
+            if turn.goal_id is None or (goal is not None and turn.goal_id == goal.id)
+        ]
 
 
 @dataclass(frozen=True, kw_only=True)

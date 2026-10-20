@@ -6,6 +6,7 @@ and checks the declared start rules before recovering any unused READY grant.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from functools import partial
 from typing import TYPE_CHECKING
@@ -50,6 +51,7 @@ class GoalScheduler:
         self.effects = effects
         self.pending_goal_origins: dict[str, str] = {}
         self.goal_snapshots: dict[str, GoalSnapshot] = {}
+        self._snapshot_locks: dict[str, asyncio.Lock] = {}
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
@@ -209,11 +211,14 @@ class GoalScheduler:
         return snapshot is not None and snapshot.execution.standby()
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = await Coordination.run_worker(partial(
-            self.comms.goals.goal_changed,
-            thread_name, self.goal_snapshots.get(session_id),
-        ))
-        if event is None:
-            return
-        await self.effects._emit_event(session_id, event)
-        self.goal_snapshots[session_id] = event.snapshot
+        # The snapshot must advance only after publication, with no concurrent
+        # reader publishing the same previous snapshot while that await runs.
+        async with self._snapshot_locks.setdefault(session_id, asyncio.Lock()):
+            event = await Coordination.run_worker(partial(
+                self.comms.goals.goal_changed,
+                thread_name, self.goal_snapshots.get(session_id),
+            ))
+            if event is None:
+                return
+            await self.effects._emit_event(session_id, event)
+            self.goal_snapshots[session_id] = event.snapshot
