@@ -144,7 +144,9 @@ class CodingToolMode(NativeToolMode):
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
                      *NativeToolDeclaration.extension_arguments(package))
         thread = self.owner.comms.registry.require(self.owner.owner_name)
-        return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
+        return thread.native_launch_arguments(
+            NativeArguments.parse(arguments), package, self.owner.comms.root,
+        )
 
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         return await CodingToolSocket.open(turn, ownership, self.owner)

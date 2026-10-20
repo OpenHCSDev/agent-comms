@@ -137,8 +137,7 @@ def read_historical_native_inputs(
                     "AND d.wire_seq=r.wire_seq AND d.claim_id=c.assignment_id "
                     "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
                     "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
-                    "AND n.owner_lookup=c.recipient_lookup AND n.session_entry_id IS NOT NULL "
-                    "LIMIT 3",
+                    "AND n.owner_lookup=c.recipient_lookup AND n.session_entry_id IS NOT NULL",
                     (wire_root_id, recipient_lookup, source_seq),
                 )
             )
@@ -149,7 +148,10 @@ def read_historical_native_inputs(
                     raise IdentityConflict(
                         "historical native input disappeared inside its snapshot"
                     )
-                rows.append((source, row))
+                # A retried FULL attempt saw the input, but its execution moved
+                # on; only the execution's current attempt can prove the source.
+                if not row.execution.retried_in(db):
+                    rows.append((source, row))
         if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
             raise IdentityConflict("historical source has ambiguous native input evidence")
         source_reads.observe_inputs(tuple(row.require_context_proof() for _source, row in rows))

@@ -178,11 +178,13 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             **project.environment(root),
         }
 
-    def native_launch_arguments(self, arguments: NativeArguments, package: Path) -> tuple[str, ...]:
+    def native_launch_arguments(
+        self, arguments: NativeArguments, package: Path, root: Path,
+    ) -> tuple[str, ...]:
         """The existing native session directory owns this root's launch catalog."""
         if not arguments.loads(NativeRequestTools.native_extension(package)):
             return arguments.argv
-        launch = LaunchRoot.current()
+        launch = LaunchRoot.from_path(root)
         directory = self.native_session_directory(launch.path)
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = self.path_in(launch.path, lookup=self.incarnation.require_recorded().lookup,

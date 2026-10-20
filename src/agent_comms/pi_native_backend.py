@@ -236,7 +236,7 @@ class PiNativeBackend(
             self,
             self.agent_bin,
             thread.native_launch_arguments(
-                NativeArguments.parse(self.arguments(thread)), package.path),
+                NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
             package=package,
             worktree=thread.worktree,
             root=self.comms.root,
@@ -262,7 +262,7 @@ class PiNativeBackend(
         async for event in backend.stream_agent_events(
             self.agent_bin,
             thread.native_launch_arguments(
-                NativeArguments.parse(self.arguments(thread)), package.path),
+                NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
             content.text,
             delivery.worktree,
             delivery.environment,

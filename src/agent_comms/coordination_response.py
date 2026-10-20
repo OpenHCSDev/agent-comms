@@ -310,8 +310,12 @@ class LiveResponseOwner(RegistryOwner):
         return self.thread.incarnation.lookup
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
-        self.require_snapshot(snapshot, "response owner turn stopped or changed before publication")
-        if self.thread.name != fence.owner_thread:
+        # The registry resolves a renamed owner through its alias; the reply's
+        # sender is the current canonical name, which must still be the fenced one.
+        actual = self._snapshot_owner(
+            snapshot, "response owner turn stopped or changed before publication", self.check_type,
+        )
+        if actual.name != fence.owner_thread:
             raise StaleFence("response turn belongs to a different fenced owner")
         self.require_active_turn()
 

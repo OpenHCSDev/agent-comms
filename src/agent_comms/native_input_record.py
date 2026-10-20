@@ -6,9 +6,10 @@ OwnerGenerations is the existing authority for that identity domain.
 
 from __future__ import annotations
 
+import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
-from typing import Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .coordination_contracts import validate_execution_id
 from .coordination_errors import IdentityConflict, UnrecordedNativeContext
@@ -16,6 +17,9 @@ from .coordination_tables.participants import OwnerGenerations
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, JsonShapeFamily, JsonShapeMember, MalformedRecord
 from .typed_table import Column, IntegerStorage, TextStorage
+
+if TYPE_CHECKING:
+    from agent_comms.coordination_tables.executions import ExecutionRecord
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +106,10 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         return ()
 
     def matches_execution(self, execution, owner_lookup: str) -> bool:
+        return False
+
+    def retried_in(self, db: sqlite3.Connection) -> bool:
+        """TRIAGE has no attempts, so a later attempt never replaces it."""
         return False
 
     def proves_full_source(self, proof) -> bool:
@@ -227,12 +235,20 @@ class FullNativeExecution(NativeInputExecution):
             and execution.lifecycle.current_attempt_ordinal == self.attempt_ordinal
         )
 
+    def _execution(self, db: sqlite3.Connection) -> ExecutionRecord:
+        from agent_comms.coordination_tables.executions import ExecutionRecord
+
+        return ExecutionRecord.require(db, execution_id=self.execution_id)
+
+    def retried_in(self, db: sqlite3.Connection) -> bool:
+        """A transient provider failure leaves this input behind a later attempt."""
+        return self._execution(db).lifecycle.current_attempt_ordinal != self.attempt_ordinal
+
     def published_replies(self, db, owner_lookup):
-        from .coordination_tables.executions import ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
         from .message_reference import MessageReference
 
-        execution = ExecutionRecord.one(db, execution_id=self.execution_id)
+        execution = self._execution(db)
         if not self.matches_execution(execution, owner_lookup):
             return ()
         obligations = ResponseObligation.select(

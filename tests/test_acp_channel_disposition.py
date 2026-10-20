@@ -22,6 +22,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
@@ -128,7 +129,8 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
             rows = NativeRuntimeInput.read(
                 store.session._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
             )
-            assert len(rows) == 1 and rows[0].session_id == "isolated-session"
+            assert len(rows) == 1 and rows[0].session_file is not None
+            assert rows[0].session_id == NativeSessionIdentity.locate(rows[0].session_file).session_id
             assert rows[0].session_entry_id is rows[0].llm_context_digest is None
             assert (
                 read_historical_native_inputs(
