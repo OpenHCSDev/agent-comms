@@ -20,18 +20,19 @@ from uuid import uuid4
 
 from pydantic import PrivateAttr
 
-from ..change_report import FileLine
-from ..check_root import CheckRoot
-from ..child_process import BoundedRun, ChildResult
-from ..commander.config import CommanderConfig
-from ..commander.order import Commander, OrderFile
-from ..commander.request import RequestAddVerb
-from ..field_codec import FieldCodec
-from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from ..launch_runtime import ProofBuildMismatchError, RecordedBuildIdentity
-from ..progress_claims import WorkingClaim
-from ..recorded_time import RecordedEventTime
-from ..todos import (
+from agent_comms.change_report import FileLine
+from agent_comms.check_root import CheckRoot
+from agent_comms.child_process import BoundedRun, ChildResult
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.order import Commander, OrderFile
+from agent_comms.commander.request import RequestAddVerb
+from agent_comms.commander_parity import ParityComparison, UnverifiedParity
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.launch_runtime import ProofBuildMismatchError, RecordedBuildIdentity
+from agent_comms.progress_claims import WorkingClaim
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.todos import (
     ApplicationOrderRun,
     DeliveredProblemOrder,
     FileDeliveryEvidence,
@@ -42,9 +43,9 @@ from ..todos import (
     PendingProblemOrder,
     Todo,
 )
-from ..tool_caller import ThreadCaller, ToolCaller
-from ..tool_result import ToolResult
-from ..tools import (
+from agent_comms.tool_caller import ThreadCaller, ToolCaller
+from agent_comms.tool_result import ToolResult
+from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderDoneTool,
@@ -57,7 +58,6 @@ from ..tools import (
     TodoList,
     ToolRequest,
 )
-from . import ParityComparison, UnverifiedParity
 
 
 @dataclass(frozen=True)
