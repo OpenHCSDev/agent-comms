@@ -10,6 +10,8 @@ Every order starts with these steps, before its own:
 1. At the first commit: push, verify `git ls-remote` equals HEAD, open a draft PR. Keep pushing to it.
 2. Land through the merge queue: mark ready, `gh pr merge N --merge`. The queue's hosted ratchets are the only ratchet run; never run them locally, never run the full suite.
 3. Delete slop instead of rewriting it: tests that patch our own code, wording asserts, tests of deleted code, the superseded copy of any system. No compatibility shims or aliases.
-4. When main moves, merge or rebase onto it; a conflict is resolved, never sent back.
+4. Merge main only when the queue reports a conflict; resolve it, never send it back. Several conflicting PRs go to the merger as one batch.
+
+A fork has the commander's context, so its order is a numbered task list to start now, with no deadline: a clock adds nothing to work that already knows its steps. Tristan, 2026-10-20: "stop giving it times give it tasks to do now".
 5. Never close a PR holding real work; land its good parts.
 6. Report: PR, merge commit, what was deleted, and an `Assumed:` list.
