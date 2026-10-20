@@ -66,7 +66,7 @@ def prove(scratch: Path) -> None:
             try:
                 wait_started(service, server_log)
                 barrier = MaintenanceBarrier(copied / "registry.json")
-                held = barrier.begin(MaintenanceOperator("connector-maintenance-proof"))
+                held = barrier.begin(MaintenanceOperator.current())
                 held = barrier.advance(held, PausedPhase)
                 held = barrier.advance(held, InstallingPhase)
                 with store.granted("private maintenance proof") as token:

@@ -28,7 +28,7 @@ def test_bridge_releases_during_maintenance_without_allowing_a_new_owner(tmp_pat
     gate = comms.owners.maintenance
     process = ProcessIdentity.capture(os.getpid())
     with registry.external_process('bridge', process):
-        hold = gate.begin(MaintenanceOperator('bridge-release'))
+        hold = gate.begin(MaintenanceOperator.current())
         for phase in phases:
             hold = gate.advance(hold, phase)
         with pytest.raises(RelationViolationError, match='Maintenance'):
