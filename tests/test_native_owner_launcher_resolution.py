@@ -8,7 +8,8 @@ import pytest
 
 import agent_comms.native_pi as native_pi
 from agent_comms import native_package
-from agent_comms.launch_runtime import LaunchRoot, LaunchRuntime
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_package import NativePackageError, VerifiedNativePackage
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch, SharedRootLaunch

@@ -14,7 +14,8 @@ from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .cli_result import ThreadToolCatalogResult
-from .launch_runtime import LaunchRoot, RestartEnvironment
+from .launch_root import LaunchRoot
+from .launch_runtime import RestartEnvironment
 from .native_arguments import NativeArguments
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from .active_route import CommsRoute, guard_default_route_write, resolve_comms_route
-from .launch_runtime import LaunchRoot
+from .launch_root import LaunchRoot
 
 
 class RouteChanged(ValueError):
