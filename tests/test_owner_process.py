@@ -23,6 +23,7 @@ from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_lease import ActiveTurn
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monkeypatch) -> None:
@@ -31,7 +32,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
     declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task='retained task')
     comms.registry.declare(declared)
     first = comms.owners.start(
-        "worker", agent_bin="pi", agent_args=[]
+        "worker", agent_bin=GivenBinary("pi"), agent_args=GivenArguments(())
     )
     owner = comms.registry.require("worker")
     try:
@@ -54,12 +55,12 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
             mismatched = Comms(tmp_path)
             before = comms.registry.snapshot()
             with pytest.raises(NativePiUnavailable):
-                mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
+                mismatched.owners.restart_owners(["worker"], agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()))
         assert owner.process_alive
         assert comms.registry.snapshot() == before
         assert isinstance(comms.owners.releases.get("worker"), NoRelease)
         restarted = comms.owners.restart_owners(
-            ["worker"], agent_bin="pi", agent_args=[]
+            ["worker"], agent_bin=GivenBinary("pi"), agent_args=GivenArguments(())
         )
         replacement = comms.registry.require("worker")
         assert len(restarted) == 1
@@ -78,7 +79,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
                 assert not replacement.process_alive
 
         (installed,) = Comms(tmp_path).owners.restart_owners(
-            ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch()
+            ["worker"], agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), cutover=BindInstalledLaunch()
         )
         assert installed.previous_pid == replacement.require_process().pid
         assert not replacement.process_alive
@@ -159,7 +160,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     async def thinking_options():
         async with AsyncExitStack() as lifetime:
             # Query the fixture workers' pinned SDK, not the caller's launcher.
-            client = CommsAgent(comms, agent_bin=str(package / 'dist' / 'cli.js'), auto_wake=False)
+            client = CommsAgent(comms, agent_bin=GivenBinary(str(package / 'dist' / 'cli.js')), auto_wake=False)
             lifetime.push_async_callback(client.shutdown)
             catalog = client.sessions.config.catalog_for(ThinkingLevelConfigOption)
             return await catalog.choices(comms.registry.new_thread('catalog', frozenset(), str(tmp_path), model=model))
@@ -227,7 +228,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))
-                comms.owners.start(name, agent_args=arguments)
+                comms.owners.start(name, agent_args=GivenArguments(tuple(arguments)))
             original = comms.registry.require(name)
             ready(original)
             originals.append(original)
@@ -260,7 +261,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(target_runtime.native_entrypoint)
         receipts = comms.owners.restart_owners(
-            selected, agent_bin=str(target_binary), cutover=cutover
+            selected, agent_bin=GivenBinary(str(target_binary)), cutover=cutover
         )
         assert len(receipts) == 2
         assert all(not owner.process_alive for owner in originals)

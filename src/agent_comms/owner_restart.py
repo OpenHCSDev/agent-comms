@@ -22,6 +22,7 @@ from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
 from .thread_identity import ClaimedIdentity, OwnerIdentity
+from .native_arguments import ConfiguredBinary, GivenArguments, InheritedArguments, LaunchArguments, LaunchBinary
 
 if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
@@ -33,8 +34,8 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class OwnerRestartRequest:
     names: tuple[str, ...] | None = None
-    agent_bin: str | None = None
-    agent_args: tuple[str, ...] | None = None
+    agent_bin: LaunchBinary = ConfiguredBinary()
+    agent_args: LaunchArguments = InheritedArguments()
     expected: OwnerRestartSelection | None = None
     runtime: RestartEnvironment | None = None
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
@@ -106,15 +107,15 @@ class OwnerRestartHandoff:
     root: str
     owners: tuple[RetiredOwnerLaunch, ...]
     runtime: RestartEnvironment
-    agent_bin: str | None
-    agent_args: tuple[str, ...] | None
+    agent_bin: LaunchBinary
+    agent_args: LaunchArguments
     launch_runtime: LaunchRuntime
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
             return lifecycle._launch_owner_unlocked(
-                thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary, runtime),
-                self.agent_args if self.agent_args is not None else source.arguments,
+                thread, self.agent_bin.restarted(lifecycle, source.binary, runtime),
+                self.agent_args.restarted(source.arguments),
                 environment=self.runtime.apply_runtime(source.environment),
                 launch_runtime=runtime,
             )
@@ -128,7 +129,7 @@ class OwnerRestartHandoff:
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
         return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
-            thread, source.binary, source.arguments, environment=source.environment,
+            thread, source.binary, GivenArguments(tuple(source.arguments)), environment=source.environment,
             launch_runtime=runtime,
         ))
 

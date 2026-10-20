@@ -43,6 +43,7 @@ from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.native_arguments import GivenArguments
 from bus_history import read_history
 
 
@@ -957,8 +958,7 @@ async def run(arguments):
                         await asyncio.sleep(.03)
             else:
                 await asyncio.to_thread(service.owners.start,name,
-                    agent_args=['--offline','--no-extensions','--no-skills',
-                                '--no-context-files','--no-prompt-templates','--no-tools'])
+                    agent_args=GivenArguments(('--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--no-tools',)))
             await attach(service,name)
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]

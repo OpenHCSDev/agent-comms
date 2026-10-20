@@ -8,6 +8,7 @@ from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.pi_counts import PiCount
 from agent_comms.threads import Thread
+from agent_comms.native_arguments import GivenBinary
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner process fixture")
@@ -39,7 +40,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     try:
         await ready(process.pid)
         receipts = await asyncio.to_thread(
-            comms.owners.restart_owners, ["worker"], agent_bin="pi"
+            comms.owners.restart_owners, ["worker"], agent_bin=GivenBinary("pi")
         )
         assert receipts[0].previous_pid == process.pid
         assert receipts[0].pid != process.pid

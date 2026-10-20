@@ -32,6 +32,7 @@ from agent_comms.channels import ANY_CHANNEL
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
+from agent_comms.native_arguments import GivenArguments
 from delivery_owner_fixture import canonical_agent
 
 
@@ -97,7 +98,7 @@ class TestHandlers:
 
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one")
         agent = canonical_agent(
-            wire(tmp_path / "wire"), agent_args=["--provider", "openrouter", "--model", "one"]
+            wire(tmp_path / "wire"), agent_args=GivenArguments(("--provider", "openrouter", "--model", "one",))
         )
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         with pytest.raises(RequestError):

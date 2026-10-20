@@ -9,12 +9,15 @@ from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime
+
+if TYPE_CHECKING:
+    from .owner_lifecycle import OwnerLifecycle
 from .pi_vocabulary import (
     NoThinkingOverride,
     ThinkingChoice,
@@ -262,25 +265,6 @@ class NativeArguments:
         return str(launcher)
 
     @classmethod
-    def configured_binary(
-        cls, binary: str | None = None, environment: Mapping[str, str] | None = None,
-    ) -> str:
-        source = os.environ if environment is None else environment
-        return binary or source.get(cls.binary_key, cls.default_binary)
-
-    @classmethod
-    def configured(
-        cls,
-        arguments: Sequence[str] | None = None,
-        environment: Mapping[str, str] | None = None,
-    ) -> NativeArguments:
-        if arguments is None:
-            source = os.environ if environment is None else environment
-            encoded = source.get(cls.arguments_key)
-            arguments = () if encoded is None else shlex.split(encoded)
-        return cls.parse(arguments)
-
-    @classmethod
     def parse(cls, arguments: Sequence[str]) -> NativeArguments:
         options = {
             flag: member
@@ -357,3 +341,72 @@ class NativeArguments:
         for entry in self.entries:
             entry.validate_rpc()
         return self.replace(ModeArgument, ModeArgument("rpc")).argv
+
+
+class LaunchBinary(SubclassUnion, affix="Binary"):
+    """The native binary an owner launches: the operator's own, or the configured one."""
+
+    @abstractmethod
+    def configured(self, environment: Mapping[str, str] = os.environ) -> str: ...
+
+    @abstractmethod
+    def restarted(self, lifecycle: OwnerLifecycle, source_binary: str, runtime: LaunchRuntime) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class GivenBinary(SingleFieldValue, LaunchBinary):
+    path: str
+
+    def configured(self, environment: Mapping[str, str] = os.environ) -> str:
+        return self.path
+
+    def restarted(self, lifecycle: OwnerLifecycle, source_binary: str, runtime: LaunchRuntime) -> str:
+        return self.path
+
+
+@dataclass(frozen=True, slots=True)
+class ConfiguredBinary(NullMember, LaunchBinary):
+    def configured(self, environment: Mapping[str, str] = os.environ) -> str:
+        return environment.get(NativeArguments.binary_key, NativeArguments.default_binary)
+
+    def restarted(self, lifecycle: OwnerLifecycle, source_binary: str, runtime: LaunchRuntime) -> str:
+        return lifecycle.restart_entrypoint(source_binary, runtime)
+
+
+class LaunchArguments(SubclassUnion, affix="Arguments"):
+    """The native arguments an owner launches with: the operator's own, or inherited."""
+
+    @abstractmethod
+    def configured(self, environment: Mapping[str, str] = os.environ) -> NativeArguments: ...
+
+    @abstractmethod
+    def restarted(self, source_arguments: Sequence[str]) -> GivenArguments: ...
+
+    @abstractmethod
+    def apply(self, environment: dict[str, str]) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class GivenArguments(SingleFieldValue, LaunchArguments):
+    argv: tuple[str, ...]
+
+    def configured(self, environment: Mapping[str, str] = os.environ) -> NativeArguments:
+        return NativeArguments.parse(self.argv)
+
+    def restarted(self, source_arguments: Sequence[str]) -> GivenArguments:
+        return self
+
+    def apply(self, environment: dict[str, str]) -> None:
+        environment[NativeArguments.arguments_key] = shlex.join(self.argv)
+
+
+@dataclass(frozen=True, slots=True)
+class InheritedArguments(NullMember, LaunchArguments):
+    def configured(self, environment: Mapping[str, str] = os.environ) -> NativeArguments:
+        return NativeArguments.parse(shlex.split(environment.get(NativeArguments.arguments_key, "")))
+
+    def restarted(self, source_arguments: Sequence[str]) -> GivenArguments:
+        return GivenArguments(tuple(source_arguments))
+
+    def apply(self, environment: dict[str, str]) -> None:
+        """The launch inherits the arguments its environment already carries."""

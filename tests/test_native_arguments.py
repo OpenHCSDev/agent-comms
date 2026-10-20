@@ -8,6 +8,7 @@ import pytest
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, OffThinkingLevel
 
 from agent_comms.native_arguments import (
+    InheritedArguments,
     NamedOption,
     NativeArguments,
     OneShotArgument,
@@ -45,11 +46,11 @@ def test_selected_model_owns_qualification_and_native_arguments():
 
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():
-    arguments = NativeArguments.configured(environment={})
+    arguments = InheritedArguments().configured({})
     assert arguments.argv == ()
     assert arguments.model is None
     assert arguments.thinking is NoThinkingOverride
-    assert NativeArguments.configured(environment={
+    assert InheritedArguments().configured({
         NativeArguments.arguments_key: "--provider user --model selected",
     }).model == "user/selected"
 

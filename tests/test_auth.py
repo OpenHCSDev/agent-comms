@@ -2,10 +2,11 @@
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.native_arguments import GivenBinary
 
 
 async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
-    agent = CommsAgent(wire(tmp_path), agent_bin="pi")
+    agent = CommsAgent(wire(tmp_path), agent_bin=GivenBinary("pi"))
     assert not (await agent.initialize(1, {})).auth_methods
     methods = (await agent.initialize(1, {"auth": {"terminal": True}})).auth_methods
     method, = methods

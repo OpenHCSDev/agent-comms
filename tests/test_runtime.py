@@ -17,6 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from delivery_owner_fixture import canonical_agent
 
 
@@ -249,7 +250,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
     comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    owner = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()), runtime_enabled=True)
     client = canonical_agent(comms)
     updates = []
 
@@ -295,7 +296,7 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
 @pytest.mark.asyncio
 async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_path):
     comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo")
+    agent = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"))
     try:
         response = await agent.new_session(str(tmp_path / "project"))
         assert (

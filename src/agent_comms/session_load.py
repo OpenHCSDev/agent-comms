@@ -9,6 +9,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_presentation import LiveThreadOwnerBinding, ThreadOwnerBinding
+from .native_arguments import GivenArguments
 
 if TYPE_CHECKING:
     from .session_lifecycle import AttachedSessionLifecycle
@@ -43,7 +44,7 @@ class EnsuringSessionLoadPlan(SessionLoadPlan):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         return await Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
-            agent_bin=lifecycle.agent_bin, agent_args=list(lifecycle.agent_args.argv),
+            agent_bin=lifecycle.agent_bin, agent_args=GivenArguments(lifecycle.agent_args.argv),
         ))
 
 

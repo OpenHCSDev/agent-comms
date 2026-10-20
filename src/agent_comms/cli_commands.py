@@ -138,6 +138,7 @@ from .turn_context import (
 from .wire_log import WireLog
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 
 
 def _duration_seconds(value: str) -> float:
@@ -164,8 +165,8 @@ def _tag_text(value: frozenset[str] | None) -> str | None:
     return None if value is None else ', '.join(sorted(value))
 
 
-def _shell_words(value: str | None) -> list[str] | None:
-    return shlex.split(value) if value is not None else None
+def _shell_words(value: str) -> list[str]:
+    return shlex.split(value)
 
 
 def _message_reference(value: str) -> dict[str, object]:
@@ -1762,14 +1763,12 @@ class RestartCliCommand(CliCommand):
             options={"help": "All running owners; excludes stopped threads"},
         ),
     ] = False
-    agent_bin: Annotated[str | None, Argument(flags=("--agent-bin",))] = (
-        None
-    )
+    agent_bin: Annotated[LaunchBinary, Argument(flags=("--agent-bin",))] = ConfiguredBinary()
     agent_args: Annotated[
-        list[str] | None,
+        LaunchArguments,
         Normalize(_shell_words),
         Argument(flags=("--agent-args",)),
-    ] = None
+    ] = InheritedArguments()
 
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:

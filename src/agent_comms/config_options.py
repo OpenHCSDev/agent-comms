@@ -29,7 +29,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_arguments import NativeArguments
+from .native_arguments import ConfiguredBinary, InheritedArguments, NativeArguments
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .pi_vocabulary import ThinkingChoice
@@ -281,13 +281,13 @@ class ConfigOptions:
     @classmethod
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
-        command = NativeArguments.configured_binary()
+        command = ConfiguredBinary().configured()
         configuration = RestartEnvironment.inherit(os.environ)
         package = partial(
             NativePiRpcLaunch.package_for_command,
             command, LaunchRuntime.running(), LaunchRoot.current().path,
         )
-        return cls(command, NativeArguments.configured(), configuration, package)
+        return cls(command, InheritedArguments().configured(), configuration, package)
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:

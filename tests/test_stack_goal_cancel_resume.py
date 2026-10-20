@@ -18,6 +18,7 @@ from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, Rese
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.input_attempt import StartedInput
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from stored_inputs import stored_inputs
 
 
@@ -115,21 +116,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         comms = wire(root / "wire")
         owner = CommsAgent(
             comms,
-            agent_bin=native_bin,
-            agent_args=[
-                "--offline",
-                "--no-extensions",
-                "--no-skills",
-                "--no-context-files",
-                "--no-prompt-templates",
-                "--no-tools",
-                "--provider",
-                "openrouter",
-                "--model",
-                "z-ai/glm-5.3-flash",
-                "--thinking",
-                "off",
-            ],
+            agent_bin=GivenBinary(native_bin),
+            agent_args=GivenArguments(("--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools", "--provider", "openrouter", "--model", "z-ai/glm-5.3-flash", "--thinking", "off",)),
             runtime_enabled=True,
             # Explicit prompts drive the two attempts; autonomous scheduling
             # is disabled so this regression has a strict two-request bound.

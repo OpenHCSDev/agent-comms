@@ -39,7 +39,7 @@ from .input_disposition import InputDispositions
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
-from .native_arguments import NativeArguments
+from .native_arguments import ConfiguredBinary
 from .native_settings import NativeThreadDefaults
 from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
@@ -534,7 +534,7 @@ class ThreadManagement:
 
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""
-        resolved_bin = NativeArguments.configured_binary()
+        resolved_bin = ConfiguredBinary().configured()
         runtime = LaunchRuntime.running()
         with spec.prepared(self, resolved_bin, runtime) as child:
             child = self.registry._declare_unlocked(child)

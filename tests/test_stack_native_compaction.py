@@ -25,6 +25,7 @@ from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
@@ -297,7 +298,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     comms.messaging.initialize_private_initial_protocol()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     owner = CommsAgent(
-        comms, agent_bin=native_bin, agent_args=native_args, runtime_enabled=True,
+        comms, agent_bin=GivenBinary(native_bin), agent_args=GivenArguments(tuple(native_args)), runtime_enabled=True,
         auto_wake=False,
     )
     updates = []

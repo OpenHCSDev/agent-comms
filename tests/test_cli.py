@@ -9,6 +9,7 @@ import pytest
 from agent_comms.channel_targets import ChannelSelection, CommandTarget
 from agent_comms.cli import main
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 
 
 @pytest.fixture
@@ -356,10 +357,8 @@ class TestSelectedTargetActions:
                 action.edited(arguments)
             with pytest.raises(ValueError):
                 RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets('alpha'), arguments)
-        explicit = RestartCliCommand(name='alpha', agent_bin='/operator/native',
-                                      agent_args=['--no-extensions'])
-        assert explicit.agent_bin == '/operator/native'
-        assert explicit.agent_args == ['--no-extensions']
+        explicit = RestartCliCommand(name='alpha', agent_bin=GivenBinary('/operator/native'),
+                                      agent_args=GivenArguments(('--no-extensions',)))
         from agent_comms.cli import build_parser
         options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',

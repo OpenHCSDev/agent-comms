@@ -23,6 +23,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.threads import Thread
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from shared_bus_restart_native import attach
 
 
@@ -107,7 +108,7 @@ async def run(stage, package):
     persist('canonical-saved-fork-prepared-no-input')
     try:
         await asyncio.to_thread(service.owners.start, child.name,
-                                agent_bin=str(binary), agent_args=launch.arguments)
+                                agent_bin=GivenBinary(str(binary)), agent_args=GivenArguments(tuple(launch.arguments)))
         await attach(service, child.name)
         async with acp.spawn_agent_process(Observation(), sys.executable, '-m', 'agent_comms.acp',
                                            env=environment, cwd=source.worktree) as (client, process):

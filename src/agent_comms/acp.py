@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
 
 from .turn_runner import RELAY_PREFIX
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 
 
 class CommsAgent(SessionEffects, InputEffects, TurnEffects):
@@ -100,8 +101,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str | None = None,
-        agent_args: list[str] | None = None,
+        agent_bin: LaunchBinary = ConfiguredBinary(),
+        agent_args: LaunchArguments = InheritedArguments(),
         runtime_enabled: bool = False,
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,

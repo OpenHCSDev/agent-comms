@@ -13,13 +13,14 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
+    owner = canonical_agent(comms, agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), runtime_enabled=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     response = await owner.new_session(str(tmp_path / "project"))
     session = response.session_id

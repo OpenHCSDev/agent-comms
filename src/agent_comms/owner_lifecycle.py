@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
@@ -33,7 +32,7 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .native_arguments import NativeArguments
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -312,7 +311,7 @@ class OwnerLifecycle:
 
     def ensure_owner(
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
-        agent_args: Sequence[str] | None = None,
+        agent_args: LaunchArguments = InheritedArguments(),
     ) -> Thread:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -331,7 +330,8 @@ class OwnerLifecycle:
             )
 
     def start(
-        self, name: str, *, agent_bin: str | None = None, agent_args: Sequence[str] | None = None
+        self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
+        agent_args: LaunchArguments = InheritedArguments(),
     ) -> OwnerStartResult:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -348,7 +348,7 @@ class OwnerLifecycle:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
             owner = self._launch_owner_unlocked(
-                thread, NativeArguments.configured_binary(agent_bin), agent_args,
+                thread, agent_bin.configured(), agent_args,
                 launch_runtime=LaunchRuntime.running(),
             )
             return OwnerStartResult(owner.name, owner.require_process().pid, True)
@@ -378,8 +378,8 @@ class OwnerLifecycle:
         self,
         names: Sequence[str] | None = None,
         *,
-        agent_bin: str | None = None,
-        agent_args: Sequence[str] | None = None,
+        agent_bin: LaunchBinary = ConfiguredBinary(),
+        agent_args: LaunchArguments = InheritedArguments(),
         expected: OwnerRestartSelection | None = None,
         runtime: RestartEnvironment | None = None,
         cutover: OwnerCutover = PreserveOwnerRuntime(),
@@ -393,8 +393,7 @@ class OwnerLifecycle:
         from .owner_restart import OwnerRestartRequest
 
         request = OwnerRestartRequest(
-            tuple(names) if names is not None else None, agent_bin,
-            tuple(agent_args) if agent_args is not None else None,
+            tuple(names) if names is not None else None, agent_bin, agent_args,
             expected, runtime,
         )
         return cutover.restart(self, request)
@@ -474,7 +473,7 @@ class OwnerLifecycle:
         self,
         thread: Thread,
         agent_bin: str,
-        agent_args: Sequence[str] | None = None,
+        agent_args: LaunchArguments = InheritedArguments(),
         *,
         launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
@@ -488,8 +487,7 @@ class OwnerLifecycle:
         agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
-        if agent_args is not None:
-            env[NativeArguments.arguments_key] = shlex.join(agent_args)
+        agent_args.apply(env)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:

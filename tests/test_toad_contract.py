@@ -11,6 +11,7 @@ from agent_comms.goals import Goal
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage
+from agent_comms.native_arguments import GivenBinary
 
 
 @pytest.mark.asyncio
@@ -22,7 +23,7 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     comms = wire(tmp_path / "wire")
     assert isinstance(comms, Comms)
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
-    agent = CommsAgent(comms, agent_bin="nonexistent-pi", runtime_enabled=False, auto_wake=False)
+    agent = CommsAgent(comms, agent_bin=GivenBinary("nonexistent-pi"), runtime_enabled=False, auto_wake=False)
 
     session = NewSessionResponse(
         session_id="worker", field_meta=(await agent.sessions.metadata("worker"))

@@ -29,7 +29,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_arguments import NativeArguments
+from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
@@ -353,7 +353,7 @@ def step(comms: Comms) -> None:
                 (owner.name,),
                 expected=record.selection,
                 runtime=record.target.runtime,
-                agent_bin=record.target.agent_bin,
+                agent_bin=GivenBinary(record.target.agent_bin),
                 launch_runtime=record.target.launch_runtime,
             )
             (acknowledgement,) = PreserveOwnerRuntime().restart(comms.owners, request)
