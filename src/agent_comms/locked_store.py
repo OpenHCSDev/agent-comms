@@ -144,12 +144,6 @@ class RootFile:
     def at(cls, root: Path | str, *args, **kwargs):
         return cls(cls.path_in(root), *args, **kwargs)
 
-
-class RuntimeFile(RootFile):
-    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
-
-    __slots__ = ()
-
     @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
         declared, pending = set(), [cls]
@@ -159,6 +153,18 @@ class RuntimeFile(RootFile):
             if "filename" in vars(family):
                 declared.add(family.path_in(root))
         return frozenset(declared)
+
+
+class DurableFile(RootFile):
+    """Bus state retained across installations, with conversion owned by its store."""
+
+    __slots__ = ()
+
+
+class RuntimeFile(RootFile):
+    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
+
+    __slots__ = ()
 
 
 class DocumentConversion(ABC):
