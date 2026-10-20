@@ -27,7 +27,7 @@ from agent_comms.field_codec import FieldCodec, PathText, SubclassUnion, NullMem
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
-from agent_comms.owner_cutover import StoppedOwnerInstallation, MaintainedOwnerCutover
+from agent_comms.owner_cutover import MaintainedOwnerCutover
 from agent_comms.owner_lifecycle import OwnerRestartSelection, OwnerRestartResult
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.registry_document import RegistrySnapshot
@@ -124,7 +124,7 @@ class RuntimePublication:
         input is resubmitted. Unrelated maintenance and changed incarnations
         are refused rather than guessed.
         """
-        installed = StoppedOwnerInstallation.current_pointer().resolve(strict=True)
+        installed = LaunchRuntime.current_pointer().resolve(strict=True)
         if Path(sys.executable).parent.resolve().parent != installed:
             raise RuntimeError('Drain and stop must run with the installed source interpreter')
         carries = PreparedCarries.at(checkout, root, self.backup(root), self.published())
@@ -139,7 +139,7 @@ class RuntimePublication:
             os.fsencode(self.runtime.resolve())).hexdigest())
         intent_path = root / 'runtime-publication.json'
         with _store_lock(root / 'runtime-publication'):
-            previous = StoppedOwnerInstallation.current_pointer().resolve(strict=True)
+            previous = LaunchRuntime.current_pointer().resolve(strict=True)
             intent = PublicationIntent.read(intent_path)
             intent.require_target(self.runtime, previous)
             current = barrier.read()
@@ -176,7 +176,7 @@ class RuntimePublication:
         return StoreBackup(root, active_route_path(), path)
 
     def published(self) -> bool:
-        return StoppedOwnerInstallation.current_pointer().resolve(strict=True) == self.runtime.resolve()
+        return LaunchRuntime.current_pointer().resolve(strict=True) == self.runtime.resolve()
 
     def release_if_safe(self, carries: PreparedCarries, barrier, hold: MaintenanceState) -> None:
         if barrier.read() == hold and carries.cleanup(self.published()):
@@ -198,7 +198,7 @@ class RuntimePublication:
 
     def publish_links(self) -> None:
         """Move declarations and the pointer, without killing unrelated processes."""
-        current = StoppedOwnerInstallation.current_pointer()
+        current = LaunchRuntime.current_pointer()
         if self.published():
             raise ValueError(f'Publication would retire the runtime it publishes: {self.runtime}')
         for link, target in self.links.items():

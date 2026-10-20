@@ -17,7 +17,7 @@ import time
 source = Path(__file__).resolve().parents[1]
 from agent_comms.active_route import ActiveRoute, publish_active_route
 from agent_comms.comms import Comms
-from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import ReadyPhase
 from agent_comms.runtime import socket_path
 from tools.publish_runtime import RuntimePublication
@@ -41,7 +41,7 @@ def main():
     for key in tuple(os.environ):
         if key.startswith(('AGENT_COMMS_', 'PI_')) and key not in environment:
             del os.environ[key]
-    current = StoppedOwnerInstallation.current_pointer()
+    current = LaunchRuntime.current_pointer()
     current.parent.mkdir(mode=0o700, parents=True)
     current.symlink_to(old)
     starter = '''
