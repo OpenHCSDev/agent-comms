@@ -1824,7 +1824,7 @@ class Assignment:
     def require_trace(self, owner: str, traced: FileLine | None) -> None:
         owners = {self.owner, *(previous.name for previous in self.previous_owners)}
         if owner != self.owner and len(owners) >= 2 and traced is None:
-            raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
+            raise TodoError(f"This problem has had {sorted(owners)}; read the failing path "
                              "and pass --traced PATH:LINE.")
         if traced is not None:
             traced.require_exists()

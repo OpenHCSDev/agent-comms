@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -12,7 +11,7 @@ from ..change_report import FileLine
 from ..commander.config import CommanderConfig
 from ..comms import Comms
 from ..thread_identity import ThreadIncarnation
-from ..todos import Assignment, Todo
+from ..todos import Assignment, TodoError
 from . import ParityComparison, UnverifiedParity
 
 
@@ -50,36 +49,41 @@ class ConfigurationComparison(ParityComparison):
 
 @dataclass(frozen=True)
 class TraceOutcome:
-    refused: bool
-    reason: str
+    refusal: str = ""
+
+    @property
+    def refused(self) -> bool:
+        return bool(self.refusal)
 
     @classmethod
     def read(cls, action: Callable[[], object]) -> TraceOutcome:
         try:
             action()
-        except ValueError as error:
-            return cls(True, str(error))
-        return cls(False, "")
+        except TodoError as error:
+            return cls(str(error))
+        return cls()
+
+
+@dataclass(frozen=True)
+class TraceCases:
+    without_trace: TraceOutcome
+    with_trace: TraceOutcome
+
+    @property
+    def passed(self) -> bool:
+        return self.without_trace.refused and not self.with_trace.refused
 
 
 @dataclass(frozen=True)
 class TransferComparison(ParityComparison):
     problem: str
-    current_without_trace: TraceOutcome
-    native_without_trace: TraceOutcome
-    current_with_trace: TraceOutcome
-    native_with_trace: TraceOutcome
+    current: TraceCases
+    native: TraceCases
     unchanged: bool
 
     @property
     def passed(self) -> bool:
-        return (
-            self.current_without_trace == self.native_without_trace
-            and self.current_without_trace.refused
-            and self.current_with_trace == self.native_with_trace
-            and not self.current_with_trace.refused
-            and self.unchanged
-        )
+        return self.current == self.native and self.current.passed and self.unchanged
 
     def describe(self) -> str:
         return f"current=Assignment.require_trace; native=Todo.assigned; {self!r}"
@@ -89,49 +93,37 @@ class TransferComparison(ParityComparison):
         config = CommanderConfig.read(CommanderConfig.path())
         comms = Comms(config.root)
         store = comms.goals.todos
+        commander = comms.registry.require(config.commander)
         registered = frozenset(
             thread.incarnation for thread in comms.registry.all_threads().values()
         )
-        with store.snapshot() as db:
-            history = tuple(Todo.stream(db))
-        for todo in history:
-            assignment = todo.assignment
-            if not todo.pending or assignment is None:
+        orders = store.held_for_commander(commander.incarnation)
+        declaration = Assignment.require_trace.__code__
+        trace = FileLine.from_wire(f"{declaration.co_filename}:{declaration.co_firstlineno}")
+        for todo in orders:
+            if not todo.pending:
                 continue
-            proposed = next(
-                (
-                    other.assignment
-                    for other in history
-                    if other.assignment is not None
-                    and other.assignment.owner_identity in registered
-                    and other.assignment.owner != assignment.owner
-                    and other.assignment.generation != assignment.generation
-                ),
-                None,
-            )
-            if proposed is None:
-                continue
-            current_without = TraceOutcome.read(
-                partial(assignment.require_trace, proposed.owner, None)
-            )
-            if not current_without.refused:
-                continue
-            source = inspect.getsourcefile(Assignment.require_trace)
-            if source is None:
-                return UnverifiedParity(
-                    "Assignment.require_trace has no inspectable source location"
+            assignment = todo.held()
+            for other in orders:
+                proposed = other.held()
+                if proposed.owner_identity not in registered:
+                    continue
+                if proposed.generation == assignment.generation:
+                    continue
+                current_without = TraceOutcome.read(
+                    partial(assignment.require_trace, proposed.owner, None)
                 )
-            trace = FileLine.from_wire(
-                f"{source}:{inspect.getsourcelines(Assignment.require_trace)[1]}"
-            )
-            return cls(
-                todo.id,
-                current_without,
-                TraceOutcome.read(partial(todo.assigned, proposed, None)),
-                TraceOutcome.read(partial(assignment.require_trace, proposed.owner, trace)),
-                TraceOutcome.read(partial(todo.assigned, proposed, trace)),
-                store.get(todo.id) == todo,
-            )
+                if not current_without.refused:
+                    continue
+                current = TraceCases(
+                    current_without,
+                    TraceOutcome.read(partial(assignment.require_trace, proposed.owner, trace)),
+                )
+                native = TraceCases(
+                    TraceOutcome.read(partial(todo.assigned, proposed, None)),
+                    TraceOutcome.read(partial(todo.assigned, proposed, trace)),
+                )
+                return cls(todo.id, current, native, store.get(todo.id) == todo)
         return UnverifiedParity(
             "Assignment.require_trace and Todo.assigned exist, but no live pending order "
             "has two retained owners and a distinct registered assignment to compare; "
