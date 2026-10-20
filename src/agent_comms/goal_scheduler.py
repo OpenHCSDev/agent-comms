@@ -71,8 +71,18 @@ class GoalScheduler:
         self.sessions = sessions
         self.inputs = inputs
 
+    async def _retain_current_goal_turns(self, session_id: str) -> None:
+        """Keep only turns still owned by the currently active goal."""
+        current = await Coordination.run_worker(lambda: self.comms.registry.require(
+            self.sessions.require(session_id)
+        ).goal.active())
+        WakeScheduleCheck._retain_goal_turns(
+            self.inputs.state(session_id).pending_turns, current,
+        )
+
     async def schedule_goal(self, session_id: str) -> None:
         """Finish recording the goal's start permission before binding its loop queue."""
+        await self._retain_current_goal_turns(session_id)
         check = OwnerTurnScheduleCheck(
             session_id=session_id, inputs=self.inputs, turns=self.effects.turns,
         )
@@ -82,15 +92,8 @@ class GoalScheduler:
             return
         scheduled = await Coordination.run_worker(partial(self.prepare_goal, session_id))
         if scheduled is None:
-            # A prior READY grant may still be queued while a failed turn
-            # blocks its goal. The current goal decides whether it survives;
-            # independent incoming turns are never discarded.
-            current = await Coordination.run_worker(lambda: self.comms.registry.require(
-                self.sessions.require(session_id)
-            ).goal.active())
-            WakeScheduleCheck._retain_goal_turns(
-                self.inputs.state(session_id).pending_turns, current,
-            )
+            # Preparing this grant may itself have blocked the goal.
+            await self._retain_current_goal_turns(session_id)
             return
         # A worker wait cannot reserve the process-local queue. Its original
         # rules recheck that resource before the authorized work is bound.
