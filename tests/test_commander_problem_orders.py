@@ -78,16 +78,18 @@ def test_new_native_order_refuses_soft_prose_before_reservation(commander, text)
             deadline=RecordedEventTime(1000), commander='lead',
             repo='OpenHCSDev/agent-comms', text='Repair the store',
         )).apply(comms, caller)
-    assert comms.goals.todos.list() == ()
+    assert comms.goals.todos.list('OpenHCSDev/agent-comms') == ()
     assert comms.registry.require('worker').goal == original
 
 
-@pytest.mark.parametrize('field', ('edits', 'banned', 'report'))
+@pytest.mark.parametrize('field', ('edits', 'banned', 'report', 'run'))
 def test_direct_assignment_uses_the_same_wording_family(commander, field):
     comms, _ = commander
     current = create(commander, 'P1')
     text = 'Please repair the store'
     value = text if field == 'report' else (text,)
+    if field == 'run':
+        value = ApplicationOrderRun('Run the actual application and please show the result')
     checked = replace(order(comms.root, 'replacement'), **{field: value})
     with pytest.raises(ValueError, match='Soft wording'):
         comms.goals.todos.assign(
@@ -98,6 +100,19 @@ def test_direct_assignment_uses_the_same_wording_family(commander, field):
             deadline=current.deadline, order=checked,
         )
     assert comms.goals.todos.get('P1') == current
+
+
+def test_direct_creation_checks_defect_prose_before_writing(commander):
+    comms, _ = commander
+    lead = comms.registry.require('lead')
+    with pytest.raises(ValueError, match='Soft wording'):
+        comms.goals.todos.create(
+            'Psoft', 'OpenHCSDev/agent-comms', 'Please repair the store',
+            creator=lead, owner=comms.registry.require('worker'), generation='ongoing',
+            deadline=RecordedEventTime(1000), order=order(comms.root, 'soft-order'),
+            goal=GoalRef(lead.name, lead.created_at, 'request'),
+        )
+    assert comms.goals.todos.list('OpenHCSDev/agent-comms') == ()
 
 
 def working(comms):
