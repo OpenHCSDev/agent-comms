@@ -1,12 +1,16 @@
 """Heartbeat acceptance uses the actual rule family, worker, publication and inbox."""
 
+import json
 import os
 from contextlib import contextmanager
 from dataclasses import replace
 
+import pytest
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import RequestGoalOrder
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
@@ -14,6 +18,14 @@ from agent_comms.standing_rules import DiskLow, RulesDue
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from test_commander_problem_orders import create
+
+
+@pytest.fixture(autouse=True)
+def stable_memory_threshold(commander):
+    """Keep the condition true while still reading the host's actual changing measurements."""
+    comms, _ = commander
+    policy = replace(comms.registry.storage_rule, memory_gib=1024.0)
+    (comms.root / "storage.json").write_text(json.dumps(FieldCodec.encode(policy)))
 
 
 def connector_sender(comms):
