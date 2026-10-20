@@ -716,7 +716,11 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
         datum.write_text("changed before failure")
         raise RuntimeError("carry failed after writing")
 
-    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
+    def recorded(*command, **options):
+        commands.append(command)
+        return "new" if "rev-parse" in command else ""
+
+    monkeypatch.setattr(upgrade_bus, "run", recorded)
     monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
     monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
@@ -726,10 +730,72 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
                          "worker", comms.root.parent,
                          RehearsalFiles(0, 1, ("kept.txt",), datum.stat().st_size))
     assert datum.read_text() == "before"
-    assert not any("reset" in command for command in commands)
+    assert ("git", "-C", stack.checkout, "reset", "-q", "--keep", "old") in commands
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
     backups = list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*/stores/kept.txt"))
     assert len(backups) == 1 and backups[0].read_text() == "before"
+
+
+@pytest.mark.parametrize("restart_fails", [False, True])
+def test_failed_live_carry_restores_checkout_and_reports_original_error(
+    comms, tmp_path, monkeypatch, capsys, restart_fails
+):
+    import upgrade_bus
+
+    checkout = tmp_path / "rollback-checkout"
+    checkout.mkdir()
+    repo = Repository(checkout)
+    current = repo.commit({"carry_before": step_source()})
+    target = repo.commit({"carry_after": step_source()})
+    repo.git("checkout", "--detach", current)
+    declaration = checkout / STEPS / "carry.py"
+    local_source = declaration.read_text() + "\n# Preserve this unrelated local edit.\n"
+    declaration.write_text(local_source)
+    datum = comms.root / "kept.txt"
+    datum.write_text("before")
+    calls = []
+
+    class Installed(Stack):
+        def running_owners(self, root):
+            return ["worker"]
+
+        def owners(self, root, command, names):
+            assert names == ["worker"]
+            calls.append(command)
+            if command == "start" and restart_fails:
+                raise RuntimeError("restart failed after restore")
+
+        def prepare_native(self):
+            pass
+
+        def publish(self):
+            assert repo.git("rev-parse", "HEAD") == current
+            calls.append("publish")
+
+    def failed_carry(*args):
+        assert repo.git("rev-parse", "HEAD") == target
+        datum.write_text("changed before failure")
+        raise RuntimeError("carry failed after forward merge")
+
+    monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
+    monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
+    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "absent-route.json")
+    stack = Installed(checkout)
+    expected = "restart failed after restore" if restart_fails else "carry failed after forward merge"
+    with pytest.raises(RuntimeError, match=expected):
+        upgrade_bus.live(checkout, comms.root, current, target, (object(),), stack, stack, None,
+                         "worker", comms.root.parent,
+                         RehearsalFiles(0, 1, ("kept.txt",), datum.stat().st_size))
+    assert repo.git("rev-parse", "HEAD") == current
+    assert declaration.read_text() == local_source
+    assert datum.read_text() == "before"
+    assert calls == ["stop", "publish", "start"]
+    stderr = capsys.readouterr().err
+    original = ("upgrade-bus: install failed (RuntimeError: carry failed after forward merge); "
+                "restoring original installation")
+    assert original in stderr
+    assert stderr.index(original) < stderr.index(" reset -q --keep ")
+    assert ("upgrade-bus: restored after failure" in stderr) is not restart_fails
 
 
 def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
