@@ -111,10 +111,9 @@ class MissingSessionCut(SessionCut):
 @dataclass(frozen=True)
 class PresentSessionCut(SessionCut):
     revision: FileRevision
-
-    @property
-    def offset(self) -> int:
-        return self.revision.size
+    # Just after the last newline-terminated record; a line still being
+    # appended is not a record yet, so no cursor can point inside it.
+    offset: int
 
     def contains(self, current: PresentSessionCut, through: int) -> bool:
         # A session is append-only within one inode; replacement changes the cut.
@@ -150,9 +149,6 @@ class NativeRecord(TranscriptRecord):
     def project(self, projection):
         """A decoded record owns whether it can produce presentation events."""
         return projection(self) if self.entry is not None else ()
-
-    def incomplete_tail(self, through: int) -> bool:
-        return self.end == through and not self.complete and self.entry is None
 
     @property
     def size(self) -> int:
@@ -241,7 +237,21 @@ class NativeTranscript(TranscriptSource):
 
     def cut(self) -> SessionCut:
         revision = FileRevision.capture(self.path)
-        return MissingSessionCut() if revision is None else PresentSessionCut(revision)
+        return (MissingSessionCut() if revision is None
+                else PresentSessionCut(revision, self.record_end(revision.size)))
+
+    def record_end(self, size: int) -> int:
+        """The end of the last complete record within the first ``size`` bytes."""
+        with self.path.open("rb") as stream:
+            position = size
+            while position > 0:
+                count = min(position, 65536)
+                stream.seek(position - count)
+                boundary = stream.read(count).rfind(b"\n")
+                if boundary >= 0:
+                    return position - count + boundary + 1
+                position -= count
+        return 0
 
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return self.cut().publication_revision(root, self, recipient)

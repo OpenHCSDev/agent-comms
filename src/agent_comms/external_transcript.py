@@ -294,9 +294,6 @@ class ExternalRecord(TranscriptRecord):
     def size(self) -> int:
         return sum(event.text_size for event in self.events)
 
-    def incomplete_tail(self, through: int) -> bool:
-        return False  # Only finished items are records.
-
 
 @dataclass(frozen=True)
 class ExternalCut(RecordsCut, TypedRow):

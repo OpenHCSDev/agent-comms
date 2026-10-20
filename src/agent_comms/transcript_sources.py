@@ -195,8 +195,6 @@ class TranscriptTraversal(ABC):
             message = next(source_rows, None)
             while record is not None or message is not None:
                 if record is not None and not events:
-                    if self.ascending and record.incomplete_tail(frontier.offset):
-                        break
                     consumed = consumed.at_offset(self.native_position(record))
                     record, events = next(projected, (None, ()))
                     continue
