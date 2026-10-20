@@ -16,17 +16,12 @@ from typing import TYPE_CHECKING, BinaryIO, Literal
 
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
+from .channel_targets import CommandTarget
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
-from .read_basis import (
-    ChannelDisplayScope,
-    ConversationCursor,
-    DMDisplayScope,
-    MessageDisplayScope,
-    ReadCursor,
-)
+from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, MessageDisplayScope, ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
@@ -306,8 +301,8 @@ class BusPageIndex(TypedStore):
         ).fetchone()
         return through if missing is None else missing - 1
 
-    def display_unread(self, scopes: Mapping[str, MessageDisplayScope], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
+    def display_unread(self, scopes: Mapping[CommandTarget, MessageDisplayScope], viewer_names: frozenset[str],
+                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[CommandTarget, int]:
         counts = {}
         for reference, scope in scopes.items():
             bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
@@ -343,6 +338,6 @@ class EmptyBusPageIndex(BusPageIndex):
     def display_snapshot(self, scopes, boundary):
         return DisplaySnapshot.empty(scopes)
 
-    def display_unread(self, scopes: Mapping[str, MessageDisplayScope], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
+    def display_unread(self, scopes: Mapping[CommandTarget, MessageDisplayScope], viewer_names: frozenset[str],
+                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[CommandTarget, int]:
         return dict.fromkeys(scopes, 0)

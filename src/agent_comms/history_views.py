@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
+from .channel_targets import NativeThreadTarget
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
@@ -384,7 +385,9 @@ class HistoryViews:
         unread = self.transcript_reads.counts(
             captured_viewer, registry=basis.registry, document=basis.document, visibility=visibility,
         )
-        return replace(snapshot, unread={**snapshot.unread, **unread.counts})
+        counts = dict(snapshot.unread)
+        counts.update((NativeThreadTarget(name), shown) for name, shown in unread.counts.items())
+        return replace(snapshot, unread=counts)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""

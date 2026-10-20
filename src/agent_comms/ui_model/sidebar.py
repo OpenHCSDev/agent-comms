@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import NoReturn
 
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.channel_targets import ChannelTarget, NativeThreadTarget, ThreadTarget
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.read_ledger import NoReadNotice, ReadNotice
@@ -31,10 +31,11 @@ class PersonUnread(ConversationPreparation):
     snapshot: CoordinationSnapshot
 
     def native(self) -> UnreadPresentation:
-        return UnreadPresentation.for_view(self.snapshot, self.person.thread.name)
+        return UnreadPresentation.for_view(self.snapshot, NativeThreadTarget(self.person.thread.name))
 
     def external(self) -> UnreadPresentation:
-        return UnreadPresentation.for_view(self.snapshot, ThreadTarget(self.person.thread.name).view_reference)
+        return UnreadPresentation.for_view(
+            self.snapshot, ThreadTarget(self.person.thread.name))
 
 
 @dataclass(frozen=True)
@@ -88,7 +89,7 @@ class ChannelRowModel:
             f"{'* ' if channel.pinned else ''}{channel.name} {view.active_agents}/{view.registered_agents}",
             f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
             f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
-            UnreadPresentation.for_view(snapshot, channel.name),
+            UnreadPresentation.for_view(snapshot, ChannelTarget(channel.name)),
             any(name in working for name in view.members),
             tuple(name for name in view.members if name in snapshot.threads),
             frozenset(view.pinned_members),
@@ -152,10 +153,10 @@ class ObservedSidebar(SidebarObservation):
         return self.snapshot.read_marker_notice
 
     def channel_unread(self, target: str) -> UnreadPresentation:
-        return UnreadPresentation.for_view(self.snapshot, target)
+        return UnreadPresentation.for_view(self.snapshot, ChannelTarget(target))
 
     def bus_unread(self, target: str) -> UnreadPresentation:
-        return UnreadPresentation.for_view(self.snapshot, ThreadTarget(target).view_reference)
+        return UnreadPresentation.for_view(self.snapshot, ThreadTarget(target))
 
     def references_for(self, root):
         from ..display_references import ForeignReferences

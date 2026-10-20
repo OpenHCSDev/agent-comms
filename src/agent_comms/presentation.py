@@ -16,7 +16,7 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
-from .channel_targets import CommandTarget, ThreadTarget
+from .channel_targets import ChannelTarget, CommandTarget, NativeThreadTarget, ThreadTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
@@ -39,28 +39,14 @@ from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
-from .read_basis import (
-    AnonymousViewer,
-    CapturedSelection,
-    ChannelDisplayScope,
-    DisplayViewer,
-    DMDisplayScope,
-    MessageDisplayScope,
-    NamedViewer,
-)
+from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
+                         DMDisplayScope, MessageDisplayScope, NamedViewer)
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
-from .revision_views import (
-    STATUS_SOURCE,
-    BusSourceView,
-    ExternalTranscriptsView,
-    NotificationsView,
-    RegistrationsView,
-    RevisionView,
-    SidebarView,
-    StoresView,
-)
+from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView,
+                             NotificationsView, RegistrationsView, RevisionView,
+                             SidebarView, StoresView)
 from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadIncarnation
@@ -489,7 +475,7 @@ class BusPresentation:
         self,
         source: WireSnapshot,
         basis: CapturedSelection,
-    ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
+    ) -> tuple[Mapping[str, ChannelActivity], Mapping[CommandTarget, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
         The captured basis owns channel inclusion, viewer aliases and read
@@ -497,8 +483,9 @@ class BusPresentation:
         The index reads the captured complete-line cut; read and write errors propagate.
         """
         snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
-        scopes: dict[str, MessageDisplayScope] = {scope.channel: scope for scope in basis.scopes}
-        scopes.update((ThreadTarget(name).view_reference,
+        scopes: dict[CommandTarget, MessageDisplayScope] = {
+            ChannelTarget(scope.channel): scope for scope in basis.scopes}
+        scopes.update((ThreadTarget(name),
                        DMDisplayScope.capture(basis.require_viewer(), name, basis.registry))
                       for name in basis.registry.threads)
         unread = source.query_page_index(lambda page: page.display_unread(
@@ -702,7 +689,7 @@ class ThreadView(ThreadRecord):
 class CoordinationSnapshot:
     threads: Mapping[str, ThreadView]
     channels: Mapping[str, ChannelView]
-    unread: Mapping[str, UnreadPresentation]
+    unread: Mapping[CommandTarget, UnreadPresentation]
     last_sent: Mapping[str, float]
     references: DisplayReferences
     channel_order: type[ChannelSort] = NameChannelSort
@@ -713,7 +700,7 @@ class CoordinationSnapshot:
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        unread: Callable[[str], UnreadPresentation],
+        unread: Callable[[CommandTarget], UnreadPresentation],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
@@ -725,10 +712,9 @@ class CoordinationSnapshot:
             registry, declarations.visible(visibility), catalog.pinned_members(), catalog.list_order,
             activities, sent, messages, visibility,
         ))
-        counts = {name: unread(name) for name in channels}
-        counts.update((ThreadTarget(name).view_reference, unread(ThreadTarget(name).view_reference))
-                      for name in threads)
-        counts.update((name, UnobservedUnread()) for name in threads)
+        counts = {ChannelTarget(name): unread(ChannelTarget(name)) for name in channels}
+        counts.update((target, unread(target)) for target in map(ThreadTarget, threads))
+        counts.update((NativeThreadTarget(name), UnobservedUnread()) for name in threads)
         return cls(
             channels=channels,
             threads=threads,
