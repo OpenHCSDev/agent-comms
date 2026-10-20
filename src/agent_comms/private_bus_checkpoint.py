@@ -1070,8 +1070,9 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 class CheckpointSchema(ABC):
     """Whether the index file holds the SQL objects its row declarations derive.
 
-    The bus owns every indexed row, so a stored schema that differs is rebuilt from
-    the proved bus bytes by the exclusive holder; it is never read and never refused.
+    The bus owns every indexed row, so the exclusive holder rebuilds a sealed index
+    whose stored schema differs from the proved bus bytes; its rows are never read.
+    An index file the seal does not name is refused, as every other change is.
     """
 
     @classmethod
@@ -1113,6 +1114,7 @@ class StaleCheckpointSchema(CheckpointSchema):
         )
 
     def recover(self, bus, marker, db, path, saved, info) -> PrefixWitness:
+        marker.seal.require_sealed_index(saved, path)
         rebuilt = saved.rebuild_from_empty(bus, marker, db, path, info)
         return marker.seal.recover(bus, marker, db, path, rebuilt, info)
 
