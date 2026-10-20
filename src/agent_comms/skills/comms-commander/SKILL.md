@@ -66,7 +66,6 @@ The order declaration supplies its ID and first-call times when omitted. A mecha
 - **Judged against what the commander would have done.** If a unit action is not what you would have done given what it knew, say why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
 - **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.
 - **The owner's anger is the signal that something real broke.** Every owner message gets its own answer in that turn. When the owner escalates, name the failure as bluntly as they do, say what you broke, and act in the same turn; never answer anger with calm procedure, a bare "doing it", or silence, and never drift back to polite once the heat passes.
-- **The commander grants source budget; a unit never grants its own.** A `Src-Budget` trailer the unit wrote without a commander grant in its order is restated authority: strike it and send the commit back.
 
 ## The board
 

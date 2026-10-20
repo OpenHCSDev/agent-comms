@@ -12,9 +12,10 @@ from agent_comms.cli_protocol import WireModel
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
+from agent_comms_hooks.session import SessionHook
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import Binding, LineMonitorBridge, Options, run_bridge
+from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 
 
@@ -104,9 +105,13 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()
-        with self.source.open('rb') as stream:
-            original = FileRevision.from_file(stream)
-            async with aclosing(WireWatch.observations(WatchSource.modified_file(self.source))) as changes:
+        source = self.options.operation.transcript_source()
+        async with aclosing(WireWatch.observations(WatchSource.modified_file(source))) as changes:
+            await anext(changes)
+            while not source.exists():
+                await anext(changes)
+            with source.open('rb') as stream:
+                original = FileRevision.from_file(stream)
                 for update in self.decoded(stream, self.history_start(stream, original.size), original.size, session):
                     yield update
                 # Only the current status is published from the recent window.
@@ -114,12 +119,24 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
                     yield update
                 async for _ in changes:
                     opened = FileRevision.from_file(stream)
-                    current = FileRevision.capture(self.source)
+                    current = FileRevision.capture(source)
                     if (current is None or current.identity != original.identity
                             or min(opened.size, current.size) < stream.tell()):
                         raise ValueError('Claude transcript was replaced or truncated')
                     for update in self.decoded(stream, stream.tell(), opened.size, session):
                         yield update
+
+
+class Connect(Enrol):
+    @classmethod
+    def serves(cls, bridge: type) -> bool:
+        return issubclass(bridge, ClaudeBridge)
+
+    async def execute(self, bridge: LineMonitorBridge) -> None:
+        await super().execute(bridge)
+        SessionHook.current(
+            bridge.binding.thread, str(RunningClaude(bridge.binding.thread).source)
+        ).start()
 
 
 def main() -> None:
