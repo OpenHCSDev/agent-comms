@@ -4,7 +4,6 @@ import json
 import os
 import secrets
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -16,36 +15,47 @@ from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
     ExistingFileClaim,
+    OwnedAttemptClaim,
     WritableFileClaim,
 )
+from agent_comms.messages import ClaimNoticeKind
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.threads import Thread
 
 
-def test_create_claim_competes_before_file_exists_and_releases_without_creation():
-    with TemporaryDirectory(prefix="comms-create-claim-", dir="/var/tmp") as directory:
-        root = Path(directory) / "wire"
-        root.mkdir(mode=0o700)
-        work = Path(directory) / "work"
-        work.mkdir()
-        c = Comms(root)
-        for name, created in [("a", 21.0), ("b", 22.0)]:
-            c.registry.declare(c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created))
-        c.messaging.initialize_private_initial_protocol()
-        resource = WritableFileClaim(Path("new/nested/file.py"))
-        committed = c.messaging.send("a", "#team", "Claim before create", claims=[resource]).message
-        assert not (work / "new").exists()
-        projection = Comms(root).bus.log.claim_projection()
-        assert projection[str(work / "new/nested/file.py")].seq == committed.seq
-        with pytest.raises(ClaimConflict):
-            c.messaging.send("b", "#team", "Competing create", claims=[resource]).message
-        c.messaging.send(
-            "a", "#team", "Release unused creation", releases=["new/nested/file.py"]
-        ).message
-        c.messaging.send("b", "#team", "New owner", claims=[resource]).message
-        assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
+def test_create_claim_competes_before_file_exists_and_releases_without_creation(tmp_path):
+    root = tmp_path / "wire"
+    root.mkdir(mode=0o700)
+    work = tmp_path / "work"
+    work.mkdir()
+    c = Comms(root)
+    for name, created in [("a", 21.0), ("b", 22.0)]:
+        c.registry.declare(c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created))
+    c.messaging.initialize_private_initial_protocol()
+    resource = WritableFileClaim(Path("new/nested/file.py"))
+
+    def acquire(name):
+        owner = c.registry.require(name)
+        return c.bus.publisher.publish_claim_envelope(
+            ClaimNoticeKind.claimed(owner), worktree=work,
+            incarnation=str(owner.created_at), claims=[resource],
+            claim=OwnedAttemptClaim(turn_id=f"turn-{name}", owner_claimed_generation=1,
+                                    operation_id=secrets.token_hex(16)),
+        )
+
+    committed = acquire("a")
+    assert not (work / "new").exists()
+    projection = Comms(root).bus.log.claim_projection()
+    assert projection[str(work / "new/nested/file.py")].seq == committed.seq
+    with pytest.raises(ClaimConflict):
+        acquire("b")
+    c.messaging.send(
+        "a", "#team", "Release unused creation", releases=["new/nested/file.py"]
+    ).message
+    acquire("b")
+    assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
 
 
 def test_create_claim_preserves_physical_paths_without_aliases(tmp_path):

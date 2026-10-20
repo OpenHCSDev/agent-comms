@@ -222,8 +222,13 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             assert (displaced / "module.py").read_bytes() == b"value = 1\n"
             parent.unlink()
             displaced.rename(parent)
+            later_call = claim_scope.for_operation("e" * 32)
+            reused = publish_selected_resource_claim(
+                comms, store, later_call, "Alice", ExistingFileClaim(Path(resource))
+            )
+            assert reused == selected_owner
             write_selected_claimed_file(
-                comms, store, claim_scope, "Alice", selected_owner, b"value = 2\n"
+                comms, store, later_call, "Alice", reused, b"value = 2\n"
             )
             assert resource.read_bytes() == b"value = 2\n"
             with pytest.raises(IdentityConflict):

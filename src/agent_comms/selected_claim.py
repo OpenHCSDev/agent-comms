@@ -183,7 +183,9 @@ def publish_selected_resource_claim(
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
             existing = source.claim(resource)
-            if existing is not None and existing.held_by(owner.name, str(owner.created_at), claim_scope):
+            if existing is not None and existing.held_by(
+                owner.name, str(owner.created_at), claim_scope
+            ):
                 return existing
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
@@ -309,7 +311,9 @@ def write_selected_claimed_file(
             _verify_selected_wake_state(initial, owner, generation, scoped, claim_scope)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             with bus_lock.current_source(bus.log, marker) as source:
-                if claimed.claim_scope != claim_scope or source.claim(normalized) != claimed:
+                if not claimed.held_by(
+                    owner.name, str(owner.created_at), claim_scope
+                ) or source.claim(normalized) != claimed:
                     raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
                 os.ftruncate(fd, 0)

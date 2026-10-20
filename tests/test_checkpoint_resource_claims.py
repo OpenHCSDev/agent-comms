@@ -28,17 +28,17 @@ def authored(tmp_path):
     return comms, paths, claim_scope
 
 
-def authorized(comms, claim_scope, paths):
+def authorized(comms, claim_scope, paths, owner_name='owner'):
     with (
         comms.bus.opened_activity() as activity,
         _store_lock(comms._wire_lock_path),
         comms.bus.log.locked() as lock,
     ):
         snapshot = comms.registry.snapshot()
-        owner = snapshot.threads['owner']
+        owner = snapshot.threads[owner_name]
         return comms.bus.publisher._publish_claim_envelope_unlocked(
             lock, snapshot,
-            Message('owner', 'peer', 'authorized claim', InfoKind),
+            Message(owner_name, 'peer', 'authorized claim', InfoKind),
             worktree=Path(owner.worktree), incarnation=str(owner.created_at),
             claims=tuple(ExistingFileClaim(path) for path in paths),
             claim=claim_scope, activity=activity,
@@ -76,7 +76,7 @@ def test_claim_decisions_never_scan_or_decode_bus_history(tmp_path, monkeypatch)
     monkeypatch.setattr(WireLog, 'verified_records_unlocked', forbidden)
     first = authorized(comms, claim_scope, paths[:1])
     with pytest.raises(ClaimConflict):
-        comms.messaging.send('peer', 'owner', 'losing', claims=[ExistingFileClaim(paths[0])]).message
+        authorized(comms, replace(claim_scope, operation_id='b' * 32), paths[:1], 'peer')
     assert comms.bus.log.claim_projection()[str(paths[0])].seq == first.seq
     comms.messaging.send('owner', 'peer', 'release', releases=paths[:1]).message
     with pytest.raises(IdentityConflict):
