@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import time
-from abc import abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_tables.refusals import SendRefusal
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.revision_views import CommanderView
@@ -104,7 +101,9 @@ class OpenCardDetail(CardDetail):
 
     @property
     def turn_lines(self) -> tuple[str, ...]:
-        return tuple(turn.line for turn in self.turns.turns) or ("No recorded turns.",)
+        return tuple(
+            f"Turn {turn.turn_id}: {len(turn.events)} recorded events" for turn in self.turns.turns
+        ) or ("No recorded turns.",)
 
 
 @dataclass(frozen=True)
@@ -123,51 +122,6 @@ class UnitCard:
             not any(order.overdue for order in self.orders),
             min(order.todo.deadline.recorded_at("An order deadline") for order in self.orders),
             self.unit.name.casefold(),
-        )
-
-
-class CommanderAlarmSource(DeclaredFamily, affix="AlarmSource"):
-    """Each retained alarm source reads its existing owner, not a copied flag."""
-
-    @classmethod
-    @abstractmethod
-    def read(
-        cls,
-        comms: Comms,
-        commander: ThreadIncarnation,
-        orders: tuple[CommanderOrder, ...],
-        now: float,
-    ) -> tuple[str, ...]: ...
-
-
-class StalledOrderAlarmSource(CommanderAlarmSource):
-    @classmethod
-    def read(cls, comms, commander, orders, now):
-        return tuple(
-            f"STALLED {order.todo.held().owner} {order.todo.id}: {order.progress.line}"
-            for order in orders
-            if order.todo.pending
-            and order.progress.stalled(order.todo.order.checked().at.recorded_at("An order"), now)
-        )
-
-
-class FailedDeliveryAlarmSource(CommanderAlarmSource):
-    @classmethod
-    def read(cls, comms, commander, orders, now):
-        presentation = comms.views.thread_presentations((commander.name,)).require(commander.name)
-        return tuple(
-            f"RECORDED FAILED DELIVERY to {failed.recipient}: {failed.label}"
-            for notice in presentation.sent_notifications
-            for failed in notice.state.failed_notifications(notice)
-        )
-
-
-class RefusedSendAlarmSource(CommanderAlarmSource):
-    @classmethod
-    def read(cls, comms, commander, orders, now):
-        return tuple(
-            f"REFUSED SEND #{refusal.id} {refusal.sender} -> {refusal.target}: {refusal.reason}"
-            for refusal in SendRefusal.recent(comms.root, sender=commander.name)
         )
 
 
@@ -209,11 +163,12 @@ class CommanderModel:
             if unit in request.expanded:
                 detail = OpenCardDetail(current, comms.transcripts.turns(unit.name, LastTurns(3)))
             cards.append(UnitCard(unit, current, detail))
-        all_orders = tuple(order for card in cards for order in card.orders)
         alarms = tuple(
-            alarm
-            for source in CommanderAlarmSource.members_with(CommanderAlarmSource)
-            for alarm in source.read(comms, commander, all_orders, now)
+            f"STALLED {order.todo.held().owner} {order.todo.id}: {order.progress.line}"
+            for card in cards
+            for order in card.orders
+            if order.todo.pending
+            and order.progress.stalled(order.todo.order.checked().at.recorded_at("An order"), now)
         )
         return cls(commander, tuple(sorted(cards, key=lambda card: card.priority)), alarms)
 
