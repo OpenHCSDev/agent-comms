@@ -28,12 +28,31 @@ The runtime reads only version 2.
 - [x] Implementation checkpoint pushed on `fix/p281-maintenance-holder`.
 - [x] Production AST inventory: 381 Core modules and 39 tools; no parse omissions.
 - [x] Migrate all discovered producer and test callers off string operators.
-- [ ] Focused checks, tools ratchet and src ratchet against `origin/main`.
-- [ ] Copied-bus live-phase proof using existing installed Python; no build,
-      environment creation or `uv sync` is authorized for this proof.
-- [ ] Prove calling-session death leaves the worker alive, then SIGKILL the
-      worker mid-drain; record first refusal, second acceptance and release JSON.
-- [ ] Open P281's PR through the commander's canonical PR command.
+- [x] Eleven focused real-process/ingress/todo/carry checks passed.
+- [ ] Tools ratchet and src ratchet against `origin/main`.
+- [x] Copied-bus live-phase proof with existing Python, without a build,
+      environment creation or `uv sync`.
+- [x] Calling-session death left the worker alive; SIGKILL of its job mid-drain
+      gave a named `held` refusal, then an accepted and retained second message.
+      The release record retained the dead PID/birth time; original bus unchanged.
+- [x] Draft PR #2072 opened through the commander's canonical PR command.
+
+## Installation wiring follow-up
+
+Normal and unchanged live installs now use the selected interpreter to refresh
+`RuntimePublication`. That existing owner publishes console/skill links and
+calls the declared `Harness.configure` implementations; repeated refreshes are
+safe. Consumers no longer skip refresh merely because the pointer is current.
+
+Actual installed programs, with a private HOME and candidate publication code,
+verified every declared hook on PATH/configuration, including P275 SessionStart
+and P285 UserPromptSubmit. SessionStart exited zero with all 45 packaged files;
+repeated refresh preserved user settings without duplicate hooks. Production
+configuration and services were not changed.
+
+This does not yet fence external bridge watches or session hooks across mutable
+checkout/schema updates. The reported transitional-reader failure remains
+unfixed; publication success is not acceptance of that separate lifecycle gap.
 
 The inventory includes declarations, inheritance, imports, writes, decisions
 and references throughout both production roots. Generated test child programs

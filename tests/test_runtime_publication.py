@@ -52,6 +52,8 @@ def test_pending_carries_refuse_before_cli_or_maintenance(tmp_path, monkeypatch)
 
 def test_pointer_publication_does_not_kill_unselected_runtime_processes(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    # These tiny process-lifetime runtimes contain no packaged harness commands.
+    monkeypatch.setenv("PATH", str(tmp_path / "no-harnesses"))
     runtimes = {name: tmp_path / name for name in ("previous-runtime", "runtime")}
     for runtime in runtimes.values():
         (runtime / "bin").mkdir(parents=True)
