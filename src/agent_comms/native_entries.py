@@ -553,9 +553,9 @@ class MessageEntry(NativeEntry):
         return self.message.assistant
 
     @property
-    def input_id(self) -> str:
-        """A tracked user entry's input id; untracked entries ask message.input_id."""
-        return self.message.input_id.require()
+    def input_id(self) -> str | None:
+        # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
+        return self.message.input_id.value_or(None)
 
     @property
     def tracked_user(self) -> MessageEntry | None:
