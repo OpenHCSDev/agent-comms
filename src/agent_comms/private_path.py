@@ -47,13 +47,13 @@ class FileIdentity:
 class ObservedPath(ABC):
     @staticmethod
     def at(path: Path) -> ObservedPath:
-        return ObservedPath.capture(path.stat)
+        return ObservedPath.observe(path.stat)
 
     @staticmethod
-    def capture(observe: Callable[[], os.stat_result]) -> ObservedPath:
+    def observe(read_stat: Callable[[], os.stat_result]) -> ObservedPath:
         """Decode a pathname or pinned-descriptor observation at the boundary."""
         try:
-            observed = observe()
+            observed = read_stat()
         except FileNotFoundError:
             return AbsentPath()
         return PresentPath(FileIdentity.from_stat(observed))

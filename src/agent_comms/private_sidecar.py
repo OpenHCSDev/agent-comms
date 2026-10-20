@@ -141,7 +141,7 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))
-        intent = ObservedPath.capture(partial(
+        intent = ObservedPath.observe(partial(
             os.stat, StoreOwner.snapshot_intent(path).name,
             dir_fd=directory.fd, follow_symlinks=False,
         ))
