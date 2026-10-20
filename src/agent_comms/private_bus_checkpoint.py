@@ -5,9 +5,10 @@ advance the index after flushing the bus and its directory under the bus lock.
 The saved bus marker binds the SQLite file identity and checked byte range;
 a matching bus revision alone does not make the SQL rows trustworthy.
 An unfinished write resumes from its proved cut. Relocation and rebuilding
-validate the saved prefix before indexing the added bytes. Reject unexpected
-changes to the index file instead of silently rebuilding. Reading this index neither
-submits native input nor marks a message handled.
+validate the saved prefix before indexing the added bytes. The row declarations
+own the index's SQL schema: a saved schema that differs from them is rebuilt from
+the proved bus bytes, and every other unexpected change to the index file is
+refused. Reading this index neither submits native input nor marks a message handled.
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ from .typed_table import (
     ForeignKey,
     Index,
     SQLiteSchemaObject,
+    SQLiteTableName,
     SqlValue,
     TypedTable,
 )
@@ -149,15 +151,22 @@ class PrefixWitness(PrefixSeal):
 
     def rebuild_from_empty(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                            path: Path, info: os.stat_result) -> PrefixWitness:
-        """Prove the saved prefix, then replay through the existing tail indexer."""
+        """Prove the saved prefix, then replay through the existing tail indexer.
+
+        The stored tables are dropped and the declared ones created, so the rebuilt
+        index has exactly the schema its row declarations derive.
+        """
         self.require_prefix(bus, info)
         empty = PrefixWitness.empty(self.root_id, info)
         marker.seal_with(PendingSeal.capture(empty, self, path))
         # The emptied index is committed with its own prefix record before indexing, so a bus
         # with nothing to index is sealed over the file as written, with the record it names.
         with db:
-            for table in reversed(TypedTable.members_with(CheckpointTable)):
-                table.delete(db)
+            db.execute("BEGIN IMMEDIATE")
+            for stored in SQLiteTableName.stored(db):
+                stored.drop(db)
+            for table in TypedTable.members_with(CheckpointTable):
+                table.create(db)
             CheckedPrefix.from_witness(empty).upsert(db)
         return empty.index_tail(bus, marker, db, path, info)
 
@@ -951,22 +960,6 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
             return witness
 
     @classmethod
-    def reindex_messages(cls, bus: WireLog) -> PrefixWitness:
-        """Verify the old saved cut before rebuilding its two declared message indexes.
-
-        The caller holds the wire lock and the update owner's original backup.
-        A failed publish leaves a refused seal, never an unproved index.
-        """
-        marker = bus.private_marker_unlocked()
-        path = WritableCheckpoint.path_in(bus.path.parent)
-        with closing(_connect(path, readonly=True)) as db:
-            witness = cls.read_witness(db)
-        witness.require_marker(marker)
-        witness.require_current_revision(bus.path.stat())
-        marker.seal.check_final(witness, path)
-        return cls._install(bus, marker)
-
-    @classmethod
     def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:
         """Check the saved SQL schema and decode the record of checked bus bytes.
 
@@ -1074,17 +1067,58 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     return db
 
 
+class CheckpointSchema(ABC):
+    """Whether the index file holds the SQL objects its row declarations derive.
+
+    The bus owns every indexed row, so a stored schema that differs is rebuilt from
+    the proved bus bytes by the exclusive holder; it is never read and never refused.
+    """
+
+    @classmethod
+    def of(cls, db: sqlite3.Connection) -> CheckpointSchema:
+        declared = {
+            name: sql
+            for table in TypedTable.members_with(CheckpointTable)
+            for name, sql in table.schema_objects().items()
+        }
+        stored = SQLiteSchemaObject.read(
+            db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
+        )
+        if SQLiteSchemaObject.differences(stored, declared):
+            return StaleCheckpointSchema()
+        return DeclaredCheckpointSchema()
+
+    @abstractmethod
+    def require_declared(self) -> None:
+        """Readers and appenders use only the declared schema."""
+
+    @abstractmethod
+    def recover(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection, path: Path,
+                saved: PrefixWitness, info: os.stat_result) -> PrefixWitness:
+        """The exclusive holder's repair, starting from the saved prefix record."""
+
+
+class DeclaredCheckpointSchema(CheckpointSchema):
+    def require_declared(self) -> None:
+        pass
+
+    def recover(self, bus, marker, db, path, saved, info) -> PrefixWitness:
+        return marker.seal.recover(bus, marker, db, path, saved, info)
+
+
+class StaleCheckpointSchema(CheckpointSchema):
+    def require_declared(self) -> None:
+        raise CheckpointNeedsRepairError(
+            "Private bus checkpoint schema differs from its row declarations."
+        )
+
+    def recover(self, bus, marker, db, path, saved, info) -> PrefixWitness:
+        rebuilt = saved.rebuild_from_empty(bus, marker, db, path, info)
+        return marker.seal.recover(bus, marker, db, path, rebuilt, info)
+
+
 def _saved(db: sqlite3.Connection) -> PrefixWitness:
-    schema = {
-        name: sql
-        for table in TypedTable.members_with(CheckpointTable)
-        for name, sql in table.schema_objects().items()
-    }
-    actual = SQLiteSchemaObject.read(
-        db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
-    )
-    if SQLiteSchemaObject.differences(actual, schema):
-        raise RelationViolationError("Private bus checkpoint schema is unavailable.")
+    CheckpointSchema.of(db).require_declared()
     return CheckedPrefix.read_witness(db)
 
 
@@ -1174,10 +1208,10 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     # Flush those bytes before publishing a repaired index check.
     os.fsync(stream.fileno())
     _directory_sync(bus.path)
-    saved = _saved(db)
+    saved = CheckedPrefix.read_witness(db)
     info = os.fstat(stream.fileno())
     saved.require_source(marker, info, stream)
-    return marker.seal.recover(bus, marker, db, path, saved, info)
+    return CheckpointSchema.of(db).recover(bus, marker, db, path, saved, info)
 
 
 @contextmanager
