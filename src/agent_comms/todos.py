@@ -727,6 +727,7 @@ class Stalling:
 @dataclass(frozen=True)
 class Moving(Stalling):
     """Work whose last commit, push or PR change was observed at ``at``."""
+    seconds: ClassVar[int] = 15 * 60
     at: float = field(kw_only=True)
     readings: DistanceReadings = field(default=DistanceReadings(), kw_only=True, compare=False)
 
@@ -1513,7 +1514,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
             f"Order: {self.id}", self.pull_request_instruction(todo.id),
-            *self.work_instructions(), f"Deadline: {FieldCodec.encode(todo.deadline)}"))
+            *self.work_instructions()))
 
     def delivered(self, delivery):
         delivery.at.require_delivery()

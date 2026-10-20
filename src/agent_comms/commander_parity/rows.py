@@ -13,7 +13,7 @@ from ..plan_phases import (
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
-from .lifecycle import verify_order_progress
+from .lifecycle import AssignOrderCase, CreateProblemCase, InstalledEvidenceCase, StrikeLimitCase, verify_order_progress
 
 
 class CreateProblemParityRow(ParityRow):
@@ -23,6 +23,10 @@ class CreateProblemParityRow(ParityRow):
     native = "`CommsTodoCreateTool`"
     phases = (OneOrderOwnerPhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return CreateProblemCase.read()
+
 
 class AssignOrderParityRow(ParityRow):
     number = 2
@@ -30,6 +34,10 @@ class AssignOrderParityRow(ParityRow):
     current = "`order.py send`, `--reassign`, `drop`; `deadlines.json`"
     native = "`CommsOrderTool`, `CommsTodoTool` assignment and release"
     phases = (OneOrderOwnerPhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return AssignOrderCase.read()
 
 
 class DeliveredCommitParityRow(ParityRow):
@@ -46,6 +54,10 @@ class InstalledEvidenceParityRow(ParityRow):
     current = "`order.py close`; `closed.jsonl`"
     native = "`CommsProblemCloseTool`"
     phases = (OneOrderOwnerPhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return InstalledEvidenceCase.read()
 
 
 class BoardParityRow(ParityRow):
@@ -70,6 +82,10 @@ class StrikeLimitParityRow(ParityRow):
     current = "`order.py strike`; `strikes.jsonl`"
     native = "`Strike` rows, author-declared `StrikeLimit`, one `comms_fire`"
     phases = (RecordPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return StrikeLimitCase.read()
 
 
 class VerdictParityRow(ParityRow):
