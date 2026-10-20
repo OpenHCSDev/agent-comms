@@ -46,6 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec, Id128Text
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
@@ -53,7 +54,9 @@ from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, Ma
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
-import publish_runtime
+from agent_comms.locked_store import RuntimeFile
+import agent_comms.restart_queue  # noqa: F401 (declares resettable restart state)
+import agent_comms.runtime_info  # noqa: F401 (declares resettable observations)
 from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 
@@ -73,7 +76,9 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
 
 def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
     """Only the files a step names as rewritten may differ from ``before``."""
-    after = bus_files(root)
+    selected = before.keys() | {name for step in steps for name in step["rewritten"]}
+    after = {name: StoreBackup.digest(root / name) for name in selected
+             if (root / name).is_file()}
     changed = {name for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
     unnamed = sorted(changed - {name for step in steps for name in step["rewritten"]})
     if unnamed:
@@ -125,7 +130,9 @@ class Stack:
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
         run(
-            self.python, publish_runtime.__file__, "--refresh",
+            self.python, "-c",
+            "from tools.publish_runtime import RuntimePublication; "
+            "RuntimePublication.installed().publish_links()",
             cwd=self.checkout, env=self.environment(),
         )
 
@@ -158,8 +165,6 @@ class Stack:
 
     def require_alive(self, root: Path, names: list[str], *, seconds: float) -> None:
         """Each replacement must stay alive for the whole interval, not just its launch."""
-        from agent_comms.child_process import ProcessIdentity
-
         selected = {row["name"]: FieldCodec.decode(ProcessIdentity, row["process_identity"])
                     for row in self.cli(root, "threads")["threads"] if row["name"] in names}
         if set(selected) != set(names):
@@ -215,19 +220,19 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
     ``stack``'s Python: the target's staged stack, never the installed one."""
     if step.columns:
         if "--before-stop" in flags:
-            return TodoColumnCarry.before_stop(root, apply=True)
+            return TodoColumnCarry.before_stop(root, apply="--apply" in flags)
         return TodoColumnCarry.carry_step(
-            root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
+            root, step, CarryChain.at(revisions.repo, step.revision), apply="--apply" in flags)
     tree = revisions.tree(step.written)
     environment = stack.environment(tree / "src", tree / "tools")
     worker = (
         "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
         "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
-        "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
+        "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=sys.argv[5]=='1'))))"
     )
     operation = "before_stop" if "--before-stop" in flags else "carry"
     output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
-                 operation, root, cwd=tree, env=environment)
+                 operation, root, "1" if "--apply" in flags else "0", cwd=tree, env=environment)
     return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
 
 
@@ -253,12 +258,35 @@ def carry_all(
     return results
 
 
-def copy_bus(root: Path, copy: Path) -> None:
-    """Hold the wire; SQLite owns each committed database copy and its companions."""
-    # The maintenance files describe the live root; a copy is a new root and starts open.
+def upgrade_files(root: Path, pending: tuple[Step, ...], checkout: Path) -> tuple[Path, ...]:
+    """The step declarations and runtime-file family own the entire write/reset set."""
+    files = {CarryLedger(root).path}
+    files.update(path for step in pending for path in step.current(checkout).backup_files(root))
+    files.update(path for path in RuntimeFile.paths_in(root) if path.is_file())
+    return tuple(sorted(files))
+
+
+def copy_bus(root: Path, copy: Path, pending: tuple[Step, ...], checkout: Path) -> None:
+    """Copy every step's declared stores, not 25 GiB of unrelated message history.
+
+    Native sessions remain read-only inputs at their original paths. Only the
+    declared stores are writable in this pass; the live application is checked
+    after installation. SQLite, not raw WAL copying, owns database snapshots.
+    """
     held = MaintenanceBarrier(root / "registry.json").witness_paths
+    files = {path for path in upgrade_files(root, pending, checkout)
+             if path not in held and path.exists() and not path.is_symlink()}
+    required = sum(path.stat().st_size for path in files)
+    if shutil.disk_usage(copy.parent).free - required < 10 * 1024 ** 3:
+        raise UpgradeRefused(
+            f"Declared-store copy needs {required} bytes plus 10 GiB free; no agents stopped"
+        )
+    copy.mkdir(mode=0o700)
     with _store_lock(root / "wire"):
-        StoreBackup.copy_tree(root, copy, excluded=held)
+        for source in sorted(files):
+            target = copy / source.relative_to(root)
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            StoreBackup.copy_file(source, target)
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
@@ -279,9 +307,12 @@ def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
 
 
 def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions) -> dict:
-    with tempfile.TemporaryDirectory(dir=root.parent, prefix=f".{root.name}.rehearsal.") as scratch:
+    with tempfile.TemporaryDirectory(
+        dir=revisions.scratch, prefix=f".{root.name}.rehearsal."
+    ) as scratch:
         copy = Path(scratch) / root.name
-        copy_bus(root, copy)
+        copy_bus(root, copy, pending, stack.checkout)
+        reset = RuntimeFile.reset(copy, Path(scratch) / "runtime-before")
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
         stack.prepare_native()
         # Hold the copy before reading it, exactly as the live run holds the bus.
@@ -301,7 +332,18 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
                 failures.append({"step": step.name, "error": str(error)})
         if failures:
             raise UpgradeRefused(json.dumps({"rehearsal_failures": failures, "steps": steps}))
-        return {"steps": steps, "files": carried(copy, before, steps), "read": stack.verify(copy)}
+        # A second read uses each step's own current-schema checks and must
+        # report no further writes. This does not pretend to be a UI check.
+        for step in pending:
+            try:
+                if carry(step, copy, stack, revisions).changed:
+                    failures.append({"step": step.name, "error": "second run still changes data"})
+            except UpgradeRefused as error:
+                failures.append({"step": step.name, "error": str(error)})
+        if failures:
+            raise UpgradeRefused(json.dumps({"rehearsal_failures": failures, "steps": steps}))
+        return {"steps": steps, "files": carried(copy, before, steps),
+                "read": {"steps": len(steps)}, "runtime_reset": reset}
 
 
 def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
@@ -411,13 +453,15 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     lock = installed.lock
+    backup = None
+    complete = False
     try:
         staged.owners(root, "stop", running)
-        with transcripts_held(root):
-            backup = Backup.take(root, ROUTE, (root,),
-                root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
+        backup = StoreBackup.take(root, ROUTE, upgrade_files(root, pending, staged.checkout),
+            root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
         if lock.exists():
             shutil.copy2(lock, backup.path / "uv.lock")
+        reset = RuntimeFile.reset(root, backup.path / "runtime-before")
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Revisions.prepare(checkout)
         installed.relock()
@@ -426,16 +470,31 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.publish()
         services = HostService.restart_running(installed.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
+        complete = True
         return {"stopped_and_started": running, **passed, "services": services,
-                "backup": str(backup.path)}
+                "runtime_reset": reset, "backup": str(backup.path)}
     finally:
-        # Stop and restart are one lifetime, including a failed stop or install.
-        # Never recompute the set from the now-stopped registry.
-        try:
-            maintenance.clear(held)
-        finally:
-            installed.owners(root, "start", running)
-            installed.require_alive(root, running, seconds=20)
+        # A failure must restore data AND source before any original can start.
+        # A failed restore deliberately exits here with maintenance still held.
+        if backup is not None and not complete:
+            restored = False
+            try:
+                backup.restore()
+                run("git", "-C", checkout, "switch", "--detach", current)
+                saved_lock = backup.path / "uv.lock"
+                if saved_lock.exists():
+                    shutil.copy2(saved_lock, lock)
+                installed.sync()
+                restored = True
+            finally:
+                if not restored:
+                    raise UpgradeRefused(
+                        f"Restore failed; agents stay stopped and maintenance stays held; "
+                        f"backup: {backup.path}"
+                    )
+        maintenance.clear(held)
+        installed.owners(root, "start", running)
+        installed.require_alive(root, running, seconds=20)
 
 
 

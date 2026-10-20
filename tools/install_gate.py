@@ -510,9 +510,7 @@ class RehearsalFiles:
 
 @dataclass(frozen=True)
 class RehearsalReads:
-    threads: int
-    who: int
-    history: int
+    steps: int
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, SingleFieldValue
-from .locked_store import LockedStore, RootFile
+from .locked_store import LockedStore, RuntimeFile
 from .pi_counts import PiCount, UnreportedCount
 from .thread_owned_state import ThreadOwnedState
 
@@ -76,7 +76,7 @@ class RuntimeInfoDocument(SingleFieldValue):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[RuntimeInfoDocument]):
+class RuntimeInfoStore(RuntimeFile, ThreadOwnedState, LockedStore[RuntimeInfoDocument]):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"

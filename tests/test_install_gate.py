@@ -224,7 +224,7 @@ class InstallGateTests(unittest.TestCase):
         installer.write_text(
             "import sys, time\n"
             "if '--help' not in sys.argv: time.sleep(2.1)\n"
-            'print(\'{"rehearsal":{"steps":[],"read":{"threads":1,"who":2,"history":3},"files":{"identical":4,"rewritten":5}}}\')\n'
+            'print(\'{"rehearsal":{"steps":[],"read":{"steps":3},"files":{"identical":4,"rewritten":5}}}\')\n'
         )
         result = rehearse(
             target,
@@ -236,7 +236,7 @@ class InstallGateTests(unittest.TestCase):
             self.root / "rehearse.log",
             self.root,
         )
-        self.assertEqual(result.read.history, 3)
+        self.assertEqual(result.read.steps, 3)
         self.assertEqual(result.files.identical, 4)
 
     def test_private_home_rebinds_route_and_preserves_live_pointer(self):

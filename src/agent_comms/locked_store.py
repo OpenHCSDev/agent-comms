@@ -157,8 +157,34 @@ class RuntimeFile(RootFile):
             family = pending.pop()
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
-                declared.add(family.path_in(root))
+                path = family.path_in(root)
+                declared.add(path)
+                if path.is_dir() and not path.is_symlink():
+                    declared.update(path.rglob("*"))
         return frozenset(declared)
+
+    @classmethod
+    def reset(cls, root: Path, saved: Path) -> tuple[str, ...]:
+        """Start fresh after all writers stop; old records stay in the upgrade backup.
+
+        In particular an uncertain restart is not erased or replayed. Nothing
+        reads these archived files as current runtime state.
+        """
+        paths = cls.paths_in(root)
+        moved = []
+        for path in sorted(paths):
+            if any(parent in paths for parent in path.parents):
+                continue
+            if path.is_symlink():
+                raise ValueError(f"Runtime state must not be a symlink: {path}")
+            if path.exists():
+                target = saved / path.relative_to(root)
+                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                if target.exists() or target.is_symlink():
+                    raise FileExistsError(target)
+                path.rename(target)
+                moved.append(str(path.relative_to(root)))
+        return tuple(moved)
 
 
 class DocumentConversion(ABC):

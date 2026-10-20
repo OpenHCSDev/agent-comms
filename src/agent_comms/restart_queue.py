@@ -30,6 +30,7 @@ from .native_arguments import NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .locked_store import RuntimeFile
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
@@ -163,9 +164,14 @@ class RestartQueueLayoutError(RelationViolationError):
 
 
 @dataclass(frozen=True)
-class RestartQueue:
-    """One active record per recorded owner; settled records never enter that set."""
+class RestartQueue(RuntimeFile):
+    """One active record per recorded owner; reset, never converted, at upgrade.
 
+    Upgrade archives the old directory, including uncertain attempts. The
+    watcher only reads the new queue and cannot replay archived records.
+    """
+
+    filename: ClassVar[str] = DIRECTORY
     directory: Path
 
     def __post_init__(self) -> None:

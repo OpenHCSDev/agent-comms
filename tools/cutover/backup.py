@@ -242,6 +242,7 @@ class StoreBackup(Backup):
         for name in json.loads((self.path / 'selected.json').read_text()):
             target = self.root / name
             if name in saved:
+                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
                 os.close(descriptor)
                 stage = Path(temporary)
