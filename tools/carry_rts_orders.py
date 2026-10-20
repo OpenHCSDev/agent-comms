@@ -4,14 +4,24 @@ import argparse
 import json
 import re
 import sys
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Annotated
 
 from agent_comms import todos
 from agent_comms.change_report import FileLine
 from agent_comms.commander.config import Repo
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec, NullMember, boundary_decoder
+from agent_comms.field_codec import (
+    FieldCodec,
+    FieldRepresentation,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+    TextRepresentation,
+    boundary_decoder,
+)
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
@@ -50,6 +60,54 @@ class RtsStrike:
         return todos.StrikeTodo(1, actor, previous, self.why, RecordedEventTime(self.at))
 
 
+class OrderMerge(SubclassUnion, affix=""):
+    @abstractmethod
+    def wrap(
+        self, order: todos.PendingProblemOrder
+    ) -> todos.PendingProblemOrder | todos.MergedProblemOrder: ...
+
+
+@dataclass(frozen=True)
+class NotMerged(NullMember, OrderMerge):
+    def wrap(self, order: todos.PendingProblemOrder) -> todos.PendingProblemOrder:
+        return order
+
+
+@dataclass(frozen=True)
+class MergedAt(SingleFieldValue, OrderMerge):
+    sha: str
+
+    def wrap(self, order: todos.PendingProblemOrder) -> todos.MergedProblemOrder:
+        return todos.MergedProblemOrder(original=order, sha=self.sha)
+
+
+class MechanicalRunJson(FieldRepresentation):
+    accepts_null = True
+
+    @classmethod
+    def decode(cls, value: object) -> todos.MechanicalOrderRun:
+        FieldCodec.decode(type(None), value)
+        return todos.MechanicalOrderRun()
+
+    @classmethod
+    def encode(cls, value: object) -> None:
+        return None
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type(None))
+
+
+class ApplicationRunText(TextRepresentation[todos.ApplicationOrderRun]):
+    @classmethod
+    def from_text(cls, value: str) -> todos.ApplicationOrderRun:
+        return todos.ApplicationOrderRun(value)
+
+    @classmethod
+    def encode(cls, value: object) -> str:
+        return FieldCodec.encode_record(value)["text"]
+
+
 @dataclass(frozen=True)
 class RtsOrder:
     due: str
@@ -59,9 +117,12 @@ class RtsOrder:
     facts: tuple[str, ...]
     check: tuple[str, str, int]
     disk: bool
-    works: str | NullMember
+    works: (
+        Annotated[todos.MechanicalOrderRun, MechanicalRunJson]
+        | Annotated[todos.ApplicationOrderRun, ApplicationRunText]
+    )
     started: bool = False
-    merged: str | NullMember = NullMember()
+    merged: OrderMerge = NotMerged()
     no_first_call: bool = False
 
     @boundary_decoder
@@ -74,9 +135,6 @@ class RtsOrder:
         check = OrderCheck.parse(f"{directory} :: {command} -> {expected}")
         if check is None:
             raise ValueError(f"{self.facts}: the order needs a check")
-        run: todos.OrderRun = todos.MechanicalOrderRun()
-        if isinstance(self.works, str):
-            run = todos.ApplicationOrderRun(self.works)
         return todos.PendingProblemOrder(
             id=self.msg,
             owner=FileLine(place[1], int(place[2])),
@@ -92,7 +150,7 @@ class RtsOrder:
             at=RecordedEventTime(self.at),
             first_call_deadline=RecordedEventTime(self.at + 120),
             first_call=todos.ObservedFirstCall() if self.started else todos.AwaitingFirstCall(),
-            run=run,
+            run=self.works,
         )
 
 
@@ -145,12 +203,9 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     repo = Repo.of(Path(order.owner.file).parent)
                     text = problems[pid].text
                     todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
-                record = (
-                    todos.MergedProblemOrder(original=order, sha=row.merged)
-                    if isinstance(row.merged, str)
-                    else order
-                )
-                todo = todos.AssignTodo(todo.revision, proposed, due, record, todo.goal).apply(todo)
+                todo = todos.AssignTodo(
+                    todo.revision, proposed, due, row.merged.wrap(order), todo.goal
+                ).apply(todo)
                 history = tuple(
                     strike.recorded(actor, comms.registry.require(strike.unit).incarnation)
                     for strike in strikes
