@@ -9,6 +9,7 @@ import shlex
 import signal
 import subprocess
 import tempfile
+import time
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace

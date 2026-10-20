@@ -151,6 +151,71 @@ async def test_each_registered_request_holder_has_independent_wakes(commander):
     assert not heartbeat.reviews
 
 
+async def test_directive_backlog_ignores_order_revision_and_summarizes_new_directive(
+        commander, monkeypatch):
+    from agent_comms.connector import CALLER
+    from agent_comms.goals import RequestDirective
+    from agent_comms.plan_phases import RecordPlanePhase
+    from agent_comms.tools import CommsOrderServeTool, CommsSendTool
+
+    comms, caller = commander
+    connector_sender(comms)
+    # Expire the real recorded directives immediately, without replacing their owner or clock.
+    monkeypatch.setattr(RequestDirective, "window", -1)
+    create(commander, "P1")
+    CommsOrderServeTool(problem="P1", serves=RecordPlanePhase).apply(comms, caller)
+
+    def direct(number):
+        CommsSendTool.invoke(comms, {"from": "claude-ai", "to": "lead",
+            "body": f"Directive {number}: keep the request open and order the next repair."},
+            caller=CALLER)
+
+    def received():
+        return [message for message in comms.bus.inbox("lead")
+                if message.body.startswith("COMMANDER HEARTBEAT:")]
+
+    @contextmanager
+    def opened():
+        yield comms
+
+    heartbeat = CommanderHeartbeat("claude-ai")
+    with external_commander(comms, "lead"), external_commander(comms, "worker"):
+        for number in range(60):
+            direct(number)
+        initial = comms.registry.require("lead").goal.require()
+        assert len(initial.order.directives) == 60
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        first = received()
+        assert len(first) == 1
+        directive_lines = [line for line in first[0].body.splitlines()
+                           if "DIRECTIVE UNACTED:" in line]
+        assert len(directive_lines) == 1 and "60 claude-ai directives" in directive_lines[0]
+        oldest, newest = initial.order.directives[0], initial.order.directives[-1]
+        assert f"oldest {oldest.seq} due {oldest.due_time}" in directive_lines[0]
+        assert f"newest {newest.seq} due {newest.due_time}" in directive_lines[0]
+
+        create(commander, "P2")
+        CommsOrderServeTool(problem="P2", serves=RecordPlanePhase).apply(comms, caller)
+        ordered = comms.registry.require("lead").goal.require()
+        assert ordered.revision > initial.revision
+        assert ordered.id == initial.id and ordered.order.directives == initial.order.directives
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        assert received() == first
+
+        direct(60)
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        changed = received()
+        assert len(changed) == 2
+        directive_lines = [line for line in changed[-1].body.splitlines()
+                           if "DIRECTIVE UNACTED:" in line]
+        assert len(directive_lines) == 1 and "61 claude-ai directives" in directive_lines[0]
+        assert not directive_lines[0].startswith("NO LONGER CURRENT:")
+        latest = comms.registry.require("lead").goal.require().order.directives[-1]
+        assert f"newest {latest.seq} due {latest.due_time}" in directive_lines[0]
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        assert received() == changed
+
+
 def test_changing_measurements_do_not_reannounce_a_rule(commander):
     comms, _ = commander
     assert len({
