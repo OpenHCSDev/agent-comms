@@ -189,15 +189,17 @@ class LifecycleRun:
     @classmethod
     def invoke(cls, program: str, *arguments: str) -> ChildResult:
         return cls.invoke_command(
-            (sys.executable, "-c", program, *arguments), env=cls.python_environment()
+            (sys.executable, "-c", program, *arguments),
+            cwd=Path.cwd(),
+            env=cls.python_environment(),
         )
 
     @staticmethod
     def invoke_command(
         command: tuple[str, ...],
         *,
-        cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        cwd: str | Path,
+        env: dict[str, str],
     ) -> ChildResult:
         return asyncio.run(BoundedRun.run(command, timeout=120, cwd=cwd, env=env))
 
