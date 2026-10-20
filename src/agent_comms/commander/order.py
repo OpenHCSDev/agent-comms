@@ -31,7 +31,7 @@ from typing import Self
 from pydantic import PrivateAttr
 
 from agent_comms_hooks import ClaudeHook
-from agent_comms_hooks.watch import PeerSync
+from agent_comms_hooks.watch import LoopClaim, PeerSync, WatchRecord
 
 from ..change_report import FileLine
 from ..child_process import BoundedRun
@@ -1137,7 +1137,10 @@ class OverdueVerb(OrderVerb):
     help = "loop: every minute, name units past their deadline"
 
     def run(self, ctx: Commander) -> None:
-        ctx.overdue()
+        with LoopClaim.for_command(ctx.state, sys.argv).held(
+            WatchRecord(ctx.commander, str(ctx.root), tuple(sys.argv))
+        ):
+            ctx.overdue()
 
 
 def main(a, ctx: Commander):

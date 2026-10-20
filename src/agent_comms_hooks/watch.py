@@ -1,6 +1,6 @@
-"""The watch claim of one CLI conversation, and the hook that reports a lapsed one.
+"""Process-lifetime watch claims and the hook that reports a lapsed one.
 
-A bridge watch holds an exclusive flock on its claim for its whole life and
+A watched process holds an exclusive flock on its claim for its whole life and
 writes there the command that started it. The kernel drops the lock when the
 process dies, so a claim with a record and no holder is a watch that lapsed.
 """
@@ -11,18 +11,15 @@ import fcntl
 import hashlib
 import json
 import shlex
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from os import fstat
 from pathlib import Path
-from typing import TYPE_CHECKING
-
+from agent_comms.commander.config import CommanderConfig
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
-
-if TYPE_CHECKING:
-    from agent_comms.commander.config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -37,8 +34,53 @@ class WatchRecord:
         return cls(bus, root, tuple(command))
 
 
+class Claim(ABC):
+    """The kernel-held lifetime and saved re-arm command of one watched process."""
+
+    @property
+    @abstractmethod
+    def path(self) -> Path: ...
+
+    @abstractmethod
+    def lapsed_warning(self, record: WatchRecord) -> str: ...
+
+    def live_warning(self, record: WatchRecord):
+        return None
+
+    @contextmanager
+    def launching(self) -> Iterator[None]:
+        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with self.path.with_suffix(".launch.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            yield
+
+    @contextmanager
+    def held(self, record: WatchRecord) -> Iterator[None]:
+        """One watch per conversation, independent of --state and bus aliases."""
+        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with self.path.open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock.truncate(0)
+            lock.write(json.dumps(asdict(record)))
+            lock.flush()
+            yield
+
+    def state(self) -> WatchState:
+        if not self.path.exists():
+            return UnclaimedWatch()
+        with self.path.open() as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return LiveWatch(self, WatchRecord.decode(**json.load(lock)))
+            text = lock.read()
+        if not text:
+            return UnclaimedWatch()
+        return LapsedWatch(self, WatchRecord.decode(**json.loads(text)))
+
+
 @dataclass(frozen=True)
-class WatchClaim:
+class WatchClaim(Claim):
     thread: str
 
     @property
@@ -54,13 +96,6 @@ class WatchClaim:
     @property
     def reader_path(self) -> Path:
         return self.path.with_suffix(".reader.lock")
-
-    @contextmanager
-    def launching(self) -> Iterator[None]:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.with_suffix(".launch.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            yield
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
@@ -88,29 +123,39 @@ class WatchClaim:
             with self.held(record):
                 pass
 
-    @contextmanager
-    def held(self, record: WatchRecord) -> Iterator[None]:
-        """One watch per conversation, independent of --state and bus aliases."""
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lock.truncate(0)
-            lock.write(json.dumps(asdict(record)))
-            lock.flush()
-            yield
+    def live_warning(self, record: WatchRecord):
+        if self.has_reader():
+            return None
+        return (
+            f"agent-comms: the session bridge for {record.bus} is connected, but no "
+            f"Monitor reader is running. Delivery is paused. Attach Monitor now: "
+            f"{shlex.join(record.command)}"
+        )
 
-    def state(self) -> WatchState:
-        if not self.path.exists():
-            return UnclaimedWatch()
-        with self.path.open() as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return LiveWatch(self, WatchRecord.decode(**json.load(lock)))
-            text = lock.read()
-        if not text:
-            return UnclaimedWatch()
-        return LapsedWatch(self, WatchRecord.decode(**json.loads(text)))
+    def lapsed_warning(self, record: WatchRecord) -> str:
+        return (
+            f"agent-comms: the watch for bus thread {record.bus} (Core {record.root}) is not "
+            f"running, so messages to {record.bus} are not reaching this session. Re-arm it now: "
+            f"{shlex.join(record.command)}  "
+            f"(to stop watching on purpose, remove {self.path})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LoopClaim(Claim):
+    path: Path
+
+    @classmethod
+    def for_command(cls, state: Path, command: Sequence[str]) -> LoopClaim:
+        key = hashlib.sha256(shlex.join(command[1:]).encode()).hexdigest()
+        return cls(state / "loops" / f"{key}.lock")
+
+    def lapsed_warning(self, record: WatchRecord) -> str:
+        return (
+            f"agent-comms: the commander loop for {record.bus} (Core {record.root}) is not "
+            f"running. Re-arm its Monitor now: {shlex.join(record.command)}  "
+            f"(to stop watching on purpose, remove {self.path})"
+        )
 
 
 class WatchState:
@@ -124,34 +169,19 @@ class UnclaimedWatch(WatchState):
 
 @dataclass(frozen=True)
 class RecordedWatch(WatchState):
-    claim: WatchClaim
+    claim: Claim
     record: WatchRecord
 
 
 class LiveWatch(RecordedWatch):
     def report(self, hook: ClaudeHook) -> None:
-        if not self.claim.has_reader():
-            hook.warn(
-                f"agent-comms: the session bridge for {self.record.bus} is connected, but no "
-                f"Monitor reader is running. Delivery is paused. Attach Monitor now: "
-                f"{shlex.join(self.record.command)}"
-            )
+        if warning := self.claim.live_warning(self.record):
+            hook.warn(warning)
 
 
 class LapsedWatch(RecordedWatch):
-
-    @property
-    def warning(self) -> str:
-        bus = self.record.bus
-        return (
-            f"agent-comms: the watch for bus thread {bus} (Core {self.record.root}) is not "
-            f"running, so messages to {bus} are not reaching this session. Re-arm it now: "
-            f"{shlex.join(self.record.command)}  "
-            f"(to stop watching on purpose, remove {self.claim.path})"
-        )
-
     def report(self, hook: ClaudeHook) -> None:
-        hook.warn(self.warning)
+        hook.warn(self.claim.lapsed_warning(self.record))
 
 
 class WatchGuard(ClaudeHookProgram):
@@ -222,3 +252,8 @@ def main() -> None:
     A failure exits nonzero, which Claude Code reports without blocking the session."""
     hook = ClaudeHook.read()
     WatchClaim(hook.session_id).state().report(hook)
+    path = CommanderConfig.path()
+    if path.exists():
+        config = CommanderConfig.read(path)
+        for path in sorted((config.state / "loops").glob("*.lock")):
+            LoopClaim(path).state().report(hook)
