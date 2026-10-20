@@ -11,6 +11,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.checkpoint_seals import FinalSeal, PendingSeal
 from agent_comms.errors import RelationViolationError
 from agent_comms.wire_log import WireLog
+from agent_comms.private_bus_checkpoint import PrefixWitness
 from test_private_bus_checkpoint import _page, _root
 
 
@@ -131,6 +132,71 @@ def test_uncertain_seal_publication_recovers_exact_committed_suffix(tmp_path, mo
     assert isinstance(comms.bus.log.private_marker_unlocked().seal, FinalSeal)
     # Reopened canonical readers agree; no replay or new publication.
     assert [row.message.seq for row in _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)[1]] == [1, 2]
+
+
+def test_same_inode_interrupted_append_does_not_rescan_prefix(tmp_path, monkeypatch):
+    comms, _ = _root(tmp_path)
+    publish_initial(comms, "sender", "Alice", "original")
+    real = WireLog.write_metadata_unlocked
+
+    def interrupt(self, marker):
+        if isinstance(marker.seal, PendingSeal):
+            raise OSError("interrupted before index intent")
+        return real(self, marker)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(WireLog, "write_metadata_unlocked", interrupt)
+        with pytest.raises(RelationViolationError, match="UNKNOWN"):
+            publish_initial(comms, "sender", "Alice", "interrupted")
+
+    def unexpected_scan(self, bus, info):
+        raise AssertionError("same-inode tail recovery rescanned the prefix")
+
+    monkeypatch.setattr(PrefixWitness, "require_prefix", unexpected_scan)
+    publish_initial(comms, "sender", "Alice", "new send, not a replay")
+    assert _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)[0].through_seq == 3
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_interrupted_rebind_checks_prefix_before_resuming(tmp_path, monkeypatch, corrupt):
+    from agent_comms.comms import Comms
+
+    original, _ = _root(tmp_path)
+    publish_initial(original, "sender", "Alice", "prefix-body-" + "x" * 10000)
+    comms = Comms(shutil.copytree(original.root, tmp_path / "copied"))
+    real = WireLog.write_metadata_unlocked
+
+    def interrupt(self, marker):
+        real(self, marker)
+        if isinstance(marker.seal, PendingSeal):
+            raise OSError("interrupted after rebind intent")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(WireLog, "write_metadata_unlocked", interrupt)
+        with pytest.raises(RelationViolationError, match="UNKNOWN"):
+            with comms.bus.log.locked():
+                pass
+    assert isinstance(comms.bus.log.private_marker_unlocked().seal, PendingSeal)
+    if corrupt:
+        raw = comms.bus.log.path.read_bytes()
+        comms.bus.log.path.write_bytes(raw.replace(b"prefix-body-", b"broken-body-", 1) + b"\n")
+    calls = []
+    require_prefix = PrefixWitness.require_prefix
+
+    def checked(self, bus, info):
+        calls.append(self.offset)
+        return require_prefix(self, bus, info)
+
+    monkeypatch.setattr(PrefixWitness, "require_prefix", checked)
+    if corrupt:
+        with pytest.raises(RelationViolationError, match="checked prefix changed"):
+            with comms.bus.log.locked():
+                pass
+    else:
+        with comms.bus.log.locked():
+            pass
+        assert isinstance(comms.bus.log.private_marker_unlocked().seal, FinalSeal)
+    assert len(calls) == 1
 
 
 def test_absent_public_marker_never_substitutes_for_required_or_redirected_marker(tmp_path):
