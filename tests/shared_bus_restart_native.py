@@ -46,6 +46,7 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_arguments import GivenArguments
 from bus_history import read_history
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -831,7 +832,7 @@ async def run(arguments):
     for index in range(arguments.registry_size):
         service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:
-        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
+        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model=DeclaredModel('restart-local/fixture'), thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)

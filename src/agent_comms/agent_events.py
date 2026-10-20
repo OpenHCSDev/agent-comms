@@ -26,6 +26,7 @@ from .field_codec import NullMember
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_counts import PiCount, UnreportedCount
+from .thread_model import ThreadModel, UndeclaredModel
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
     CompactionReason,
@@ -347,7 +348,7 @@ class ContextInfo(ContextUsageObservation, ContextSizeObservation):
 class NativeMetadataObservation(RuntimeInfoObservation):
     """Only native state snapshots carry identity/configuration observations."""
 
-    model: str | None = None
+    model: ThreadModel = UndeclaredModel()
     session_file: str | None = None
     thinking_level: ThinkingLevelField = NoThinkingOverride
 

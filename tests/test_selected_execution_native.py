@@ -33,6 +33,7 @@ from agent_comms.wake_candidate_index import (
 )
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.thread_model import DeclaredModel
 
 tmp_path = private_root_fixture
 
@@ -57,7 +58,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         with Coordination(str(root / "coordination.sqlite3")) as store:
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
-    comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level=LowThinkingLevel))
+    comms.registry.register(replace(owner, model=DeclaredModel("selected-offline/fixture"), thinking_level=LowThinkingLevel))
     assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []

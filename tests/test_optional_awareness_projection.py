@@ -28,6 +28,7 @@ from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
     WakeCandidateIndex, RebuildIndex,
 )
+from agent_comms.thread_model import DeclaredModel
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requires POSIX")
 
@@ -43,7 +44,7 @@ def _root(
     )
     for number in range(recipients):
         comms.registry.declare(
-            comms.registry.new_thread(f'member{number:03}', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol')
+            comms.registry.new_thread(f'member{number:03}', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     store = Coordination(str(root / "coordination.sqlite3"))

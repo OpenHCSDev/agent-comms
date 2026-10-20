@@ -9,6 +9,7 @@ from agent_comms.comms import wire
 from agent_comms.pi_counts import PiCount
 from agent_comms.threads import Thread
 from agent_comms.native_arguments import GivenBinary
+from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner process fixture")
@@ -23,7 +24,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(session)))
     comms.agents.observe_runtime_info("worker", ContextUsageObservation(context_used=PiCount.from_wire(23)))
     comms.agents.observe_runtime_info(
-        "worker", AgentInfo(model="test/model", context_size=PiCount.from_wire(100))
+        "worker", AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(100))
     )
     comms.ledger.merge({"saved": {"worker": ["work remains", 23]}}, "worker")
     metadata = comms.agents.runtime_info.path.read_bytes()

@@ -15,6 +15,7 @@ from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_phase import PreparingPhase
 from agent_comms.threads import ChosenModel, NextTurnConfiguration
+from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.mark.asyncio
@@ -94,14 +95,14 @@ def test_native_source_publication_retains_original_claim_across_rename(tmp_path
 
 def test_native_source_publication_retains_captured_configuration(tmp_path):
     comms = Comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='test/old'))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/old')))
     original = comms.agents.begin_turn("owner", "configuration-source-check")
     comms.threads.set_thread_configuration(
-            comms.registry.require('owner'), NextTurnConfiguration(model=ChosenModel('test/next')))
+            comms.registry.require('owner'), NextTurnConfiguration(model=ChosenModel(DeclaredModel('test/next'))))
     original.require_snapshot(comms.registry.snapshot(), "The claimed turn keeps its configuration")
     selected = comms.registry.attach_native_session(original, str(tmp_path / "saved.jsonl"))
-    assert selected.thread.model == "test/old"
+    assert selected.thread.model == DeclaredModel("test/old")
     assert selected.thread.thinking_level == original.thread.thinking_level
     assert selected.turn_lease == original.turn_lease
-    assert comms.registry.require("owner").model == "test/next"
+    assert comms.registry.require("owner").model == DeclaredModel("test/next")
     assert comms.agents.finish_turn(original.turn_lease)

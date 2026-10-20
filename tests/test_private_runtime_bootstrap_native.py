@@ -16,6 +16,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.thread_model import DeclaredModel
 
 # The native package executes against only the loopback model declared below.
 tmp_path = private_root_fixture
@@ -105,7 +106,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "recipient"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), model='selected-offline/fixture', thinking_level=OffThinkingLevel)
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel)
         )
     # Ordinary publication must reach the same bootstrap as explicit protocol install.
     first = comms.messaging.send("sender", "recipient", "BOOTSTRAP_FIRST").message

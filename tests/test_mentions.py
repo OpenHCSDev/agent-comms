@@ -12,6 +12,7 @@ from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.thread_model import DeclaredModel
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
@@ -201,7 +202,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
     result = invoke_tool(comms, "comms_model", peer_configuration)
     assert result["thread"] == "peer" and result["thinking_level"] == "high"
     configured = comms.registry.require("peer")
-    assert configured.model == "openai-codex/gpt-5.6-sol"
+    assert configured.model == DeclaredModel("openai-codex/gpt-5.6-sol")
     assert configured.service_tier.value == "standard"
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_model", {"model": "openrouter/own", "service_tier": "fast"})

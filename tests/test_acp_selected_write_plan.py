@@ -35,6 +35,7 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.thread_model import DeclaredModel
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink(),
@@ -61,7 +62,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runti
             comms.registry.new_thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
         )
         comms.registry.declare(
-            comms.registry.new_thread('alpha', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61002.0, model='test/fake')
+            comms.registry.new_thread('alpha', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61002.0, model=DeclaredModel('test/fake'))
         )
         root_id = comms.messaging.initialize_private_initial_protocol()
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -97,7 +98,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runti
         try:
             assert process.pid != sender_pid
             comms.registry.declare(
-                comms.registry.new_thread('beta', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(process.pid), created_at=61003.0, model='test/fake')
+                comms.registry.new_thread('beta', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(process.pid), created_at=61003.0, model=DeclaredModel('test/fake'))
             )
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(

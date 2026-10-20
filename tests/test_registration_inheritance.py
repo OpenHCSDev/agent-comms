@@ -9,6 +9,7 @@ from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registration_inheritance import PredicateInheritance
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def test_unchanged_registration_retains_generated_creation_marker(*, thread_registration):
@@ -42,7 +43,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         frozenset({"team"}),
         '/old',
         session_file=str(tmp_path / "session.jsonl"),
-        model="provider/model",
+        model=DeclaredModel('provider/model'),
         thinking_level=HighThinkingLevel,
         auto_title_pending=True,
         title=GivenThreadText("retained"),

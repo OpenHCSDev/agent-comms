@@ -3,6 +3,7 @@
 
 from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, InheritedArguments, NativeArguments
 from agent_comms.pi_vocabulary import OffThinkingLevel
+from agent_comms.thread_model import DeclaredModel
 
 
 def test_native_arguments_configured_has_one_default(monkeypatch):
@@ -13,7 +14,7 @@ def test_native_arguments_configured_has_one_default(monkeypatch):
     monkeypatch.setenv(NativeArguments.binary_key, "/fixture/pi")
     monkeypatch.setenv(NativeArguments.arguments_key, '--model "fixture/model" --thinking off')
     assert ConfiguredBinary().configured() == "/fixture/pi"
-    assert InheritedArguments().configured().model == "fixture/model"
+    assert InheritedArguments().configured().model == DeclaredModel("fixture/model")
     assert InheritedArguments().configured().thinking is OffThinkingLevel
     assert GivenArguments(()).configured().argv == ()
 

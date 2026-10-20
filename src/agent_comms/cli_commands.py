@@ -75,7 +75,6 @@ from .field_codec import (
     Editor,
     EditorFormat,
     FactoryArgumentDefault,
-    GivenArgumentDefault,
     Multiline,
     NamedArgumentGroup,
     Normalize,
@@ -118,6 +117,7 @@ from .thread_execution import (
     ThreadExecution,
 )
 from .thread_text import NoThreadText, ThreadText
+from .thread_model import ThreadModel
 from .thread_management import (
     ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
     ThreadDeleted,
@@ -481,7 +481,7 @@ class UserMessageSentResult(CliResult):
 @dataclass(frozen=True)
 class ThreadConfiguredResult(CliResult):
     configured: str
-    model: str | None
+    model: ThreadModel
     thinking_level: ThinkingLevelField
     service_tier: ServiceTier
 
@@ -1846,12 +1846,8 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         ),
     ]
     model: Annotated[
-        str | None,
-        Catalog(ModelConfigOption),
-        Argument(
-            flags=("--model",), default=GivenArgumentDefault(NativeThreadDefaults.model)
-        ),
-    ]
+        ThreadModel, Catalog(ModelConfigOption), Argument(flags=("--model",)),
+    ] = NativeThreadDefaults.model
     thinking_level: Annotated[
         ThinkingLevelField,
         Catalog(ThinkingLevelConfigOption),

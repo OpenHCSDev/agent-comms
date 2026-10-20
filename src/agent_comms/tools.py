@@ -96,6 +96,7 @@ from .restart_queue import (
 )
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .threads import NextTurnConfiguration
+from .thread_model import ThreadModel
 from .transcript_events import SentTranscript
 from .todos import (
     CorrectCheckTodo,
@@ -161,7 +162,7 @@ class ToolArgumentsRefusedError(MalformedRecord, ToolRefusedError):
 @dataclass(frozen=True)
 class ModelChanged(ToolResult):
     thread: str
-    model: str | None
+    model: ThreadModel
     thinking_level: ThinkingLevelField
     service_tier: ServiceTier
 

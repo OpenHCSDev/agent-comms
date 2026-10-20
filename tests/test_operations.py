@@ -28,6 +28,7 @@ from agent_comms.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import ChosenModel, NextTurnConfiguration
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
@@ -199,11 +200,11 @@ class TestThreadOps:
 
     def test_presence_uses_configured_model_with_runtime_context(self, wired):
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel("configured/model"))
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel(DeclaredModel('configured/model')))
         )
         wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
         wired.agents.observe_runtime_info(
-            "fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100))
+            "fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100))
         )
         row = next(row.to_wire() for row in wired.views.who() if row.thread.name == "fixer")
         assert row["model"] == "configured/model"
@@ -212,12 +213,12 @@ class TestThreadOps:
 
     def test_configuration_names_the_resolved_model(self, wired):
         wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
-        wired.agents.observe_runtime_info("fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100)))
+        wired.agents.observe_runtime_info("fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100)))
         answer = wired.configuration.answer("fixer")
         assert answer.model == "observed/model"
         assert answer.context_usage.label == "25/100 tokens (25.0%)"
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel("configured/model"))
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel(DeclaredModel('configured/model')))
         )
         answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"
@@ -225,7 +226,7 @@ class TestThreadOps:
 
     def test_runtime_info_rejects_unknown_thread(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.agents.observe_runtime_info("ghost", AgentInfo(model="model"))
+            wired.agents.observe_runtime_info("ghost", AgentInfo(model=DeclaredModel('model')))
 
     def test_list_threads_shape(self, wired):
         rows = {row.thread.name: row for row in wired.views.list_threads()}
@@ -323,7 +324,7 @@ class TestThreadOps:
         references = tuple(message.reference for message in wired.bus.inbox("PR111", CommandTarget.named("fixer")))
         assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
-        wired.agents.observe_runtime_info("PR111", AgentInfo(model="test/model"))
+        wired.agents.observe_runtime_info("PR111", AgentInfo(model=DeclaredModel('test/model')))
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
@@ -336,7 +337,7 @@ class TestThreadOps:
         assert wired.registry.require("planner").tags == frozenset({"base"})
         assert wired.registry.require("fixer").parent == "planner"
         assert wired.agents.activity.current_for(("planner",), active=frozenset({"planner"}))["planner"].detail == "renaming"
-        assert wired.agents.agent_info_of("planner").model == "test/model"
+        assert wired.agents.agent_info_of("planner").model == DeclaredModel("test/model")
         assert wired.ledger.read().entries["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
@@ -447,11 +448,11 @@ class TestThreadOps:
 class TestFork:
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(ValueError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
 
 class TestLedgerOps:

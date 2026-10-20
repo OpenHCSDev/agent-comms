@@ -614,7 +614,6 @@ class NativeSession(MroDispatch, ABC):
         self.output.retry_result = result
 
     async def initialize_rpc(self) -> None:
-        self.model_name: str | None = None
         self.active_session_file = self.launch.session.session_file
         self.watchdog.reading()
 

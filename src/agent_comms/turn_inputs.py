@@ -132,11 +132,10 @@ class InputForwarding:
         return True
 
     async def use_settings(self, session: TurnSession, item: UseSettings) -> bool:
-        provider, model_id = item.model.split("/", 1)
         # Pi resets thinking to the new model's default, so the level follows the model.
         await self.write(
             session,
-            commands.SetModel(provider=provider, model_id=model_id),
+            item.model.set_model(commands.SetModel),
             *item.thinking_level.native_arguments(
                 lambda level: commands.SetThinkingLevel(level=level.wire_value())
             ),

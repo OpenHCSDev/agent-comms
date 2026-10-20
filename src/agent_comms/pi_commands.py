@@ -199,7 +199,6 @@ class GetState(SessionSnapshot, NativeQuery):
         if response.succeeded:
             state = response.data.require_payload()
             session.native.attestation = session.native.attestation.observe(state)
-            session.model_name = state.model.display_name
             session.active_session_file = state.session_file.text_or(session.active_session_file)
             state.model.context_window.observe_size(session.usage)
             yield state.agent_info(session)
@@ -345,13 +344,6 @@ class SettingCommand(CatalogQuery):
 
 @dataclass(frozen=True, kw_only=True)
 class SetModel(SettingCommand):
-    @classmethod
-    def from_name(cls, model: str | None):
-        if model is None:
-            return cls()
-        provider, model_id = model.split('/', 1)
-        return cls(provider=provider, model_id=model_id)
-
     result_type = events.ModelChanged
     error_message = "Model change failed"
     provider: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()

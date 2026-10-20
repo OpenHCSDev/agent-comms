@@ -33,6 +33,7 @@ from agent_comms.threads import Thread
 
 from native_context_budget_installed_journey import ReceiptSubscriber
 from stored_inputs import stored_inputs
+from agent_comms.thread_model import DeclaredModel
 
 
 REASON = "Controlled provider usage limit has been reached; original input not retried"
@@ -123,7 +124,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
-    comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=str(fresh.path), model='error-local/error-fixture', thinking_level=OffThinkingLevel))
+    comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=str(fresh.path), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
     environment.update(

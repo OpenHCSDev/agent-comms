@@ -18,6 +18,7 @@ from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
+    from .thread_model import ThreadModel
 from .pi_vocabulary import (
     NoThinkingOverride,
     ThinkingChoice,
@@ -304,12 +305,14 @@ class NativeArguments:
         return NoSelectedModel if provider is None else ModelProvider.member_named(provider)
 
     @property
-    def model(self) -> str | None:
+    def model(self) -> ThreadModel:
+        from .thread_model import ThreadModel
+
         selected = self.value(ModelArgument)
         provider = self.value(ProviderArgument)
         if selected is None or provider is None:
-            return selected
-        return SelectedModel(provider, selected.removeprefix(provider + "/")).qualified
+            return ThreadModel.reported(selected)
+        return ThreadModel.reported(SelectedModel(provider, selected.removeprefix(provider + "/")).qualified)
 
     @property
     def thinking(self) -> type[ThinkingChoice]:
@@ -321,9 +324,7 @@ class NativeArguments:
             tuple(entry for entry in self.entries if not isinstance(entry, member)) + entries
         )
 
-    def with_model(self, selected: str | None) -> NativeArguments:
-        if selected is None:
-            return self
+    def with_model(self, selected: str) -> NativeArguments:
         return self.replace(ProviderArgument).replace(
             ModelArgument, *SelectedModel.decode(selected).arguments
         )

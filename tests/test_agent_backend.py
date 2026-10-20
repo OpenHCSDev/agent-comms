@@ -17,6 +17,7 @@ from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
+from agent_comms.thread_model import DeclaredModel
 
 # -- registry ---------------------------------------------------------------
 
@@ -80,7 +81,7 @@ def _declared(name, *roles, location=_Location, new_threads=False, serves=True, 
 
 
 def test_validation_names_missing_roles_and_abstract_methods():
-    class HalfBackend(ab.Steers, ab.Compacts):
+    class HalfBackend(ab.Steers):
         pass
 
     HalfBackend.location_type = _Location
@@ -90,10 +91,10 @@ def test_validation_names_missing_roles_and_abstract_methods():
     with pytest.raises(ab.BackendDeclarationError) as error:
         ab.validate_backends([HalfBackend])
     message = str(error.value)
-    for role in ("ConfiguresModel",):
+    for role in ("Compacts",):
         assert role in message
     assert "leaves methods abstract" in message
-    for method in ("compact", "run_turn", "abort", "close_idle"):
+    for method in ("run_turn", "abort", "close_idle"):
         assert repr(method) in message
 
 
@@ -226,7 +227,7 @@ def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comm
     from agent_comms.turn_runner import TurnRunner
 
     runner = _Runner(comms)
-    thread = comms.registry.new_thread('owner', frozenset(), '/tmp/owner', model='p/m')
+    thread = comms.registry.new_thread('owner', frozenset(), '/tmp/owner', model=DeclaredModel('p/m'))
     backend = TurnRunner.backend_for(runner, "session", thread)
     assert type(backend) is PiNativeBackend
     assert TurnRunner.backend_for(runner, "session", thread) is backend

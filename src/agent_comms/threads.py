@@ -44,6 +44,7 @@ from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
+from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import (
     AgentThreadRole,
@@ -88,10 +89,10 @@ class ModelChoice(NextTurnSetting, SubclassUnion, affix="Model"):
 
 @dataclass(frozen=True, slots=True)
 class ChosenModel(SingleFieldValue, ModelChoice):
-    name: Annotated[str, BoundedText]
+    model: DeclaredModel
 
     def configured(self, thread: Thread) -> Thread:
-        return replace(thread, model=self.name.strip())
+        return replace(thread, model=self.model)
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +155,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     session_file: Annotated[str | None, RegistrationPolicy(InheritMissing)] = (
         field(default=None, kw_only=True)
     )
-    model: Annotated[str | None, RegistrationPolicy(InheritMissing)] = None
+    model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = UndeclaredModel()
     thinking_level: Annotated[
         ThinkingLevelField, RegistrationPolicy(InheritApplied)
     ] = NoThinkingOverride
@@ -315,8 +316,6 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             raise ValueError("Finished turn requires a prior turn generation and ID.")
         if self.parent == self.name:
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
-        if self.model is not None and not self.model.strip():
-            raise ValueError("Thread model cannot be empty.")
 
     def require_original_model_configuration(self, original: Thread) -> None:
         changed = any((
@@ -329,17 +328,13 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if changed:
             raise RelationViolationError("Thread configuration changed before publication")
 
-    def needs_model_observation(self) -> bool:
-        """Only an unset declaration needs a saved or live model observation."""
-        return self.model is None
-
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: type[ThinkingChoice],
+        self, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
             self,
-            model=model if self.needs_model_observation() else self.model,
+            model=self.model.applied(model),
             thinking_level=self.thinking_level.observed(thinking_level),
         )
 

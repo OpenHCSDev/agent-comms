@@ -32,6 +32,7 @@ class InstalledApp(ToadApp):
 
 
 from retained_history_cutover_pilot import reference_actual_history
+from agent_comms.thread_model import DeclaredModel
 
 def prepare_physical_fixture():
     """Prepare the same original immutable archive for the existing native recorder."""
@@ -46,7 +47,7 @@ def prepare_physical_fixture():
     (profile/'auth.json').write_text('{}')
     (profile/'settings.json').write_text(json.dumps({'retry':{'enabled':False,'maxRetries':0}}))
     comms=wire(destination/'wire');root_id=comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(comms.registry.new_thread('archive-review', frozenset({'comms'}), str(project), model='selected-offline/fixture', thinking_level=OffThinkingLevel))
+    comms.registry.declare(comms.registry.new_thread('archive-review', frozenset({'comms'}), str(project), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel))
     reference_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     index=next(i for i,item in enumerate(comms.views.historical_threads()) if item.thread.name=='nra-architecture')
     acknowledgement={'owner':'Mendel477/268','root':str(comms.root),'wire_root_id':root_id,

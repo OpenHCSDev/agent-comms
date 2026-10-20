@@ -27,6 +27,7 @@ from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import current_thread
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -58,11 +59,11 @@ def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> N
 class TestAgentRuntimeInfo:
     def test_context_percent_and_persistence(self, tmp_path: Path):
         info = AgentRuntimeInfo(
-            thread="a", model="provider/model", context_used=PiCount.from_wire(25), context_size=PiCount.from_wire(100), timestamp=1.0
+            thread="a", model=DeclaredModel('provider/model'), context_used=PiCount.from_wire(25), context_size=PiCount.from_wire(100), timestamp=1.0
         )
         assert info.context_reading() == ContextUsage(25, 100)
         store = RuntimeInfoStore(tmp_path / "runtime.json")
-        store.observe("a", 1.0, AgentInfo(model="provider/model", context_size=PiCount.from_wire(100)))
+        store.observe("a", 1.0, AgentInfo(model=DeclaredModel('provider/model'), context_size=PiCount.from_wire(100)))
         store.observe("a", 1.0, ContextUsageObservation(context_used=PiCount.from_wire(25)))
         assert store.read().observations["a"] == info
 

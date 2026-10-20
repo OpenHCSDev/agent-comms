@@ -34,6 +34,7 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
 from agent_comms.native_arguments import GivenArguments
 from delivery_owner_fixture import canonical_agent
+from agent_comms.thread_model import DeclaredModel
 
 
 
@@ -80,7 +81,7 @@ class TestHandlers:
             "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model="test/model", context_size=PiCount.from_wire(272000))
+            "proj", ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[

@@ -10,6 +10,7 @@ from agent_comms.channel_targets import ChannelSelection, CommandTarget
 from agent_comms.cli import main
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.thread_model import UndeclaredModel
 
 
 @pytest.fixture
@@ -651,6 +652,6 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     assert not launched.open_targets() and not batch.open_targets()
     created = ThreadCreatedResult("child", NoProcess())
     assert created.open_targets() == ("child",)
-    command = NewThreadCliCommand(name="child", project="/project", model=None)
+    command = NewThreadCliCommand(name="child", project="/project", model=UndeclaredModel())
     completed = TargetCompleted("/project", command, created)
     assert TargetBatchResult((completed, batch.outcomes[-1], completed)).open_targets() == ("child",)

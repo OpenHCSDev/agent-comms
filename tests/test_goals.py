@@ -24,6 +24,7 @@ from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import ToolRequest
+from agent_comms.thread_model import DeclaredModel
 
 
 def test_reported_turn_states_preserve_existing_wire_values():
@@ -50,13 +51,13 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(
-            comms.registry.require('worker'), NextTurnConfiguration(model=ChosenModel('test/model')))
+            comms.registry.require('worker'), NextTurnConfiguration(model=ChosenModel(DeclaredModel('test/model'))))
     comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
     restored = wire(tmp_path).registry.require("worker")
     assert restored.goal == goal
-    assert restored.model == "test/model"
+    assert restored.model == DeclaredModel("test/model")
     assert restored.name == "renamed"
     comms.goals.update_goal("worker", PausedGoalAction())
     tool = next(

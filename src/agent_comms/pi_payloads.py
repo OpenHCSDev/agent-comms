@@ -54,6 +54,7 @@ from .pi_vocabulary import (
     UnreportedStopReason,
 )
 from .send_result import CorrectionResult, CorrectionUnreported
+from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
 from .transcript_events import SentTranscript
 from .turn_failure import ProviderTransportFailed
@@ -1113,25 +1114,21 @@ class UnknownDelta(PiDelta):
 @dataclass(frozen=True)
 class PiModel(PiPayload, DeclaredFamily, affix="Model"):
     wire_tag = None
-    display_name: ClassVar[str | None] = None
     context_window: ClassVar[PiCount] = UnreportedCount()
 
     @classmethod
     def wire_member(cls, value):
         return ReportedModel
 
-    @abstractmethod
-    def matches_identity(self, selected: tuple[str, str]) -> bool: ...
+    def thread_model(self) -> ThreadModel:
+        return UndeclaredModel()
 
-    def require_selection(self, selected: str | None):
+    def require_selection(self, selected: ThreadModel):
         raise ValueError("Prepared native model does not match the owner selection")
 
 
 class UnreportedModel(PiModel):
     """The external state has not reported a model; no identity is implied."""
-
-    def matches_identity(self, selected: tuple[str, str]) -> bool:
-        return False
 
 
 @dataclass(frozen=True)
@@ -1146,22 +1143,16 @@ class ReportedModel(PiModel):
         PiField[PiCount], WireName("maxTokens")
     ] = UnreportedCount()
 
-    @property
-    def identity(self):
-        return self.provider, self.id
-
-    def matches_identity(self, selected: tuple[str, str]) -> bool:
-        return self.identity == selected
-
-    def require_selection(self, selected: str | None):
-        if self.display_name != selected:
+    def require_selection(self, selected: ThreadModel):
+        if self.thread_model() != selected:
             return super().require_selection(selected)
         return self
 
-    @property
-    def display_name(self):
+    def thread_model(self) -> ThreadModel:
         name = self.id or self.name
-        return f"{self.provider}/{name}" if self.provider and name else name or self.provider
+        return ThreadModel.reported(
+            f"{self.provider}/{name}" if self.provider and name else name or self.provider
+        )
 
 
 @dataclass(frozen=True)
@@ -1304,14 +1295,11 @@ class StateData(NativeSessionSnapshot, PiResponseData):
         from .agent_events import AgentInfo
 
         return AgentInfo(
-            model=self.model.display_name,
+            model=self.model.thread_model(),
             thinking_level=self.thinking_level,
             session_file=session.active_session_file,
             context_size=self.model.context_window,
         )
-
-    def matches_model(self, selected: tuple[str, str]) -> bool:
-        return self.model.matches_identity(selected)
 
     @property
     def session_busy(self) -> bool:

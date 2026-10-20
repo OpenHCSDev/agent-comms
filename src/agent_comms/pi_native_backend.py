@@ -24,7 +24,6 @@ from .agent_backend import (
     AgentBackend,
     CompactionOutcome,
     Compacts,
-    ConfiguresModel,
     FailedCompaction,
     Forks,
     InputContent,
@@ -178,7 +177,6 @@ class PiNativeBackend(
     Interrupts,
     Compacts,
     Forks,
-    ConfiguresModel,
     AgentBackend,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
@@ -217,7 +215,7 @@ class PiNativeBackend(
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:
         """Pi's command-line arguments for this thread's model and thinking level."""
-        return self.agent_args.with_model(thread.model).with_thinking(
+        return thread.model.native(self.agent_args).with_thinking(
             thread.thinking_level
         ).argv
 
@@ -328,37 +326,3 @@ class PiNativeBackend(
         )
         return PiSessionFile(identity.session_file)
 
-    # -- ConfiguresModel --------------------------------------------------
-
-    async def models(self, thread: Thread) -> tuple[str, ...]:
-        from .pi_commands import GetAvailableModels
-
-        data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv,
-            package=self.comms.owners.require_private_launch().native_package)
-        return tuple(dict.fromkeys(
-            model.display_name for model in data.models if model.provider and model.id
-        ))
-
-    async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
-        from .native_pi import NativePiUnavailable
-        from .pi_commands import SetModel, SetThinkingLevel
-
-        commands = []
-        if model is not None:
-            commands.append(SetModel.from_name(model))
-        if thinking is not None:
-            commands.append(SetThinkingLevel(level=thinking))
-        if not commands:
-            raise ValueError("A configuration change names a model or a thinking level")
-        arguments = self.arguments(thread)
-        for command in commands:
-            state = await command.configure(self.agent_bin, arguments,
-                package=self.comms.owners.require_private_launch().native_package,
-                worktree=Path(thread.worktree))
-            arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
-                state.thinking_level
-            ).argv
-        selected, level = state.model.display_name, state.thinking_level.wire_value()
-        if selected is None or level is None:
-            raise NativePiUnavailable("Native configuration did not report model and thinking level")
-        return selected, level

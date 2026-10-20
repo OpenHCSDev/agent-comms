@@ -55,6 +55,7 @@ from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_text import GivenThreadText, NoThreadText, ThreadText
+from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
 
@@ -139,7 +140,7 @@ class NewThreadSpec:
 
     name: str
     project: str
-    model: str
+    model: ThreadModel
     thinking_level: ThinkingLevelField
     task: LaunchInput = field(default_factory=LaunchInput)
     tags: TagChoice = InheritedTags()
@@ -322,7 +323,7 @@ class ThreadManagement:
         tags: frozenset[str],
         worktree: str,
         process: ProcessState = NO_PROCESS,
-        model: str | None = None,
+        model: ThreadModel = UndeclaredModel(),
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         auto_title_pending: bool = False,
         role: type[ThreadRole] = AgentThreadRole,
@@ -425,7 +426,7 @@ class ThreadManagement:
             return updated
 
     def initialize_native_configuration(
-        self, name: str, *, model: str | None, thinking_level: type[ThinkingChoice],
+        self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):
@@ -437,13 +438,12 @@ class ThreadManagement:
                 self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
-    def resolve_thread_model(self, name: str, default: str = NativeThreadDefaults.model) -> str:
+    def resolve_thread_model(
+        self, name: str, default: DeclaredModel = NativeThreadDefaults.model,
+    ) -> str:
         """Prefer the registered choice, then runtime observation, then default."""
         thread = self.registry.require(name)
-        if not thread.needs_model_observation():
-            return thread.model
-        info = self.agents.agent_info_of(thread.name)
-        return info.model_or(default)
+        return thread.model.otherwise(self.agents.agent_info_of(thread.name).model_or(default.text))
 
     def attach_session(
         self, original: Thread, source_path: str, *, process: ProcessState,
@@ -451,10 +451,7 @@ class ThreadManagement:
         """Attach Pi state and retain its model once, outside the wire lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
-        saved_model = None
-        if original.needs_model_observation() and path.is_file():
-            choice = location.model_choice
-            saved_model = "/".join(choice) if choice is not None else None
+        saved_model = ThreadModel.from_choice(location.model_choice) if path.is_file() else UndeclaredModel()
         with _store_lock(self._wire_lock_path):
             current = self.registry.require(original.name)
             if current != original:

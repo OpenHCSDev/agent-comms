@@ -33,7 +33,8 @@ from .native_arguments import ConfiguredBinary, InheritedArguments, NativeArgume
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .pi_vocabulary import ThinkingChoice
-from .threads import Thread
+from .thread_model import ThreadModel
+from .threads import ChosenModel, NextTurnConfiguration, Thread
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
@@ -51,7 +52,7 @@ class CatalogSelection(Protocol):
     """The model and thinking selection read by both draft and running catalogs."""
 
     @property
-    def model(self) -> str | None: ...
+    def model(self) -> ThreadModel: ...
 
     @property
     def thinking_level(self) -> type[ThinkingChoice]: ...
@@ -106,7 +107,7 @@ class CatalogConfigOption(ConfigOption):
         return self.auth == self.configuration.auth_revision()
 
     def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
-        return self.agent_args.with_model(thread.model).argv
+        return thread.model.native(self.agent_args).argv
 
     async def choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
         async with self.lock:
@@ -192,7 +193,7 @@ class ModelConfigOption(CatalogConfigOption):
     category = "model"
 
     def current_value(self, thread: CatalogSelection) -> str | None:
-        return thread.model
+        return thread.model.otherwise(None)
 
     def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
         return self.agent_args.argv
@@ -212,7 +213,10 @@ class ModelConfigOption(CatalogConfigOption):
                 LaunchRoot.current().path,
                 package=self.package,
             )
-            values = [model.display_name for model in data.models if model.provider and model.id]
+            values = [
+                text for model in data.models if model.provider and model.id
+                for text in model.thread_model().texts()
+            ]
         return [
             CatalogChoice(value=value, name=value) for value in dict.fromkeys(values)
         ]
@@ -241,7 +245,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 
         data = await GetAvailableThinkingLevels().discover(
             self.agent_bin,
-            self.agent_args.with_model(thread.model).argv,
+            thread.model.native(self.agent_args).argv,
             LaunchRoot.current().path,
             package=self.package,
         )
@@ -386,20 +390,19 @@ class SessionConfigOptions(ConfigOptions):
         self, thread: Thread, command: SettingCommand,
     ) -> None:
         """Store the model and thinking level Pi itself reports for this change."""
-        arguments = self.agent_args.with_model(thread.model).with_thinking(
+        arguments = thread.model.native(self.agent_args).with_thinking(
             thread.thinking_level
         )
         state = await command.configure(
             self.agent_bin, arguments.argv, package=self.package, worktree=Path(thread.worktree), root=self.comms.root,
         )
-        model = state.model.display_name
-        level = state.thinking_level.wire_value()
-        if model is None or level is None:
-            raise NativePiUnavailable("Native configuration did not report model and thinking level")
-        state.model.require_selection(model)
+        model = state.model.thread_model().require_reported()
+        if state.thinking_level.wire_value() is None:
+            raise NativePiUnavailable("Native configuration did not report a thinking level")
         await Coordination.run_worker(partial(
-            self.comms.threads.set_thread_configuration,
-            thread, model=model, thinking_level=state.thinking_level,
+            self.comms.threads.set_thread_configuration, thread, NextTurnConfiguration(
+                model=ChosenModel(model), thinking_level=state.thinking_level,
+            ),
         ))
 
     @staticmethod

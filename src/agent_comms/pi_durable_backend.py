@@ -18,7 +18,6 @@ from .agent_backend import (
     AgentBackend,
     CompactionOutcome,
     Compacts,
-    ConfiguresModel,
     RuntimeLocation,
 )
 from .agent_events import Error
@@ -30,11 +29,8 @@ from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
 from .pi_commands import (
     Compact,
-    GetAvailableModels,
-    GetState,
     PiCommand,
     SetModel,
-    SetThinkingLevel,
 )
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiOmitted, PiResponseData
@@ -209,7 +205,7 @@ class CompactDurable(Compact):
     response_payload = OutcomeData
 
 
-class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
+class PiDurableBackend(AgentBackend, Compacts):
     serves_threads = False
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
@@ -238,7 +234,7 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
                     child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
                         cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
-                    model = SetModel.from_name(thread.model)
+                    model = thread.model.set_model(SetModel)
                     await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
                     await child.request(Resume())
                 self.child = child
@@ -255,16 +251,3 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
         command = CompactDurable(custom_instructions=PiOmitted.from_input(instructions))
         return (await child.request(command)).outcome
 
-    async def models(self, thread):
-        child = await self.open(thread)
-        return tuple(model.display_name for model in (await child.request(GetAvailableModels())).models)
-
-    async def configure(self, thread, model, thinking):
-        child = await self.open(thread)
-        if model is not None:
-            await child.request(SetModel.from_name(model))
-        if thinking is not None:
-            await child.request(SetThinkingLevel(level=thinking))
-        state = await child.request(GetState())
-        reported = state.model.require_selection(model if model is not None else state.model.display_name)
-        return reported.display_name, state.thinking_level.wire_value()
