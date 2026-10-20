@@ -62,7 +62,9 @@ class AttemptStore:
         attempt = snapshot.require_current_attempt()
         if (
             attempt.authority != fence.authority
-            or self.participants.get(attempt.owner_lookup).owner_identity != attempt.owner_identity
+            or not self.participants.get(attempt.owner_lookup).owner_identity.same_generation(
+                attempt.owner_identity
+            )
         ):
             raise StaleFence("attempt fence is not current")
         if attempt.revision != fence.revision:
