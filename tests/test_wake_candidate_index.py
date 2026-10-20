@@ -80,7 +80,7 @@ def test_unbuilt_index_rejects_pages_and_resume_without_creating_storage(private
     root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
     message = publish_initial(comms, "sender", "Alice", "not indexed")
     index = WakeCandidateIndex(comms.bus.log)
-    with pytest.raises(ProjectionUnavailableError, match="stale or unrelated"):
+    with pytest.raises(ProjectionUnavailableError, match="initial build"):
         index.page(root_id=root_id, recipient_lookup=lookup["Alice"], after_seq=0,
                    required_through_seq=message.seq)
     with pytest.raises(ProjectionRebuildRequiredError, match="initial build"):
@@ -154,6 +154,26 @@ def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path, private_comms
         index.catch_up_committed_append(hint)
 
 
+def test_verified_replacement_rebuilds_inside_the_index_read(private_comms, participants):
+    comms = private_comms
+    root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
+    message = publish_initial(comms, "sender", "Alice", "original committed message")
+    index = WakeCandidateIndex(comms.bus.log)
+    assert index.maintain(start=FirstBuild())
+    source = comms.bus.log.path
+    replacement = source.with_name("replacement.jsonl")
+    replacement.write_bytes(source.read_bytes())
+    replacement.chmod(0o600)
+    replacement.replace(source)
+    # Source authority is still the canonical wire owner, not this projection.
+    with comms.bus.log.checked_read() as checked:
+        checked.require_current()
+    page = index.page(root_id=root_id, recipient_lookup=participants["Alice"],
+                      after_seq=0, required_through_seq=message.seq)
+    assert [entry.source_seq for entry in page.entries] == [message.seq]
+    assert index._verified_checkpoint(root_id).byte_offset == source.stat().st_size
+
+
 def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_path, private_comms, participants):
     comms = private_comms
     index = WakeCandidateIndex(comms.bus.log)
@@ -181,9 +201,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
             after_seq=0,
             required_through_seq=message.seq,
         )
-    with pytest.raises(ProjectionRebuildRequiredError):
-        index.maintain()  # Initial rebuild must be an explicit maintenance choice.
-    assert index.maintain(start=RebuildIndex())
+    assert index.maintain()  # The empty checkpoint selects its initial maintenance build.
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
@@ -548,7 +566,7 @@ def test_maintenance_replays_its_captured_cut_not_a_later_partial_append(tmp_pat
     ).entries] == [message.seq]
 
 
-def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_path: Path, private_comms, participants) -> None:
+def test_saved_candidate_prefix_ignores_later_tail_and_rebuilds_verified_replacement(tmp_path: Path, private_comms, participants) -> None:
     comms = private_comms
     root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
     lookup = participants
@@ -576,21 +594,16 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
     moved.write_bytes(source.read_bytes())
     moved.chmod(0o600)
     moved.replace(source)
-    with pytest.raises(ProjectionRebuildRequiredError):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=message.seq,
-        )
-    with pytest.raises(ProjectionUnavailableError):
-        index.maintain(start=ResumeIndex())
-    # The canonical barrier, not the disposable index, repairs an identical
-    # original prefix at its new inode. Only then may explicit rebuild adopt it.
+    page = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
+                      after_seq=0, required_through_seq=message.seq)
+    assert [entry.source_seq for entry in page.entries] == [message.seq]
+    assert index.maintain(start=ResumeIndex())
+    # Rebuilding still borrows the canonical wire barrier's verified source.
     with comms.bus.log.checked_read() as checked:
         checked.require_current()
         assert checked.witness.revision == FileRevision.from_stat(source.stat())
-    assert index.maintain(start=RebuildIndex())
+    assert index._verified_checkpoint(root_id).device == source.stat().st_dev
+    assert index._verified_checkpoint(root_id).inode == source.stat().st_ino
 
 
 def _as_response(row, root_id, execution_id):

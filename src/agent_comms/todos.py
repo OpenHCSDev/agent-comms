@@ -17,6 +17,7 @@ import time
 import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
@@ -1714,6 +1715,10 @@ class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
 
+class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
+    """The todo store could not complete its write; its original cause is preserved."""
+
+
 class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
     """The expected revision, assignee or generation is no longer current."""
 
@@ -2481,6 +2486,16 @@ class TodoStore(TypedStore):
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        try:
+            with super(TodoStore, self).writing() as connection:
+                yield connection
+        except sqlite3.Error as error:
+            raise TodoStoreUnwritable(
+                f"{self.path}: {type(error).__name__}: {error}"
+            ) from error
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)

@@ -9,7 +9,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
-from agent_comms.historical_views import DMDisplayHistory
+from agent_comms.historical_views import ConversationObservation, DMDisplayHistory
 from agent_comms.message_bus import MessageBus
 from agent_comms.store_files import (
     ExclusiveLock, SharedLock, StoreLock, StoreLockContention, StoreLockOwner,
@@ -107,7 +107,7 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
 
     def observe():
         try:
-            revision = DMDisplayHistory.revision(comms.views, "peer", worktree=str(tmp_path))
+            revision = DMDisplayHistory.revision(comms.views, "peer", ConversationObservation(), worktree=str(tmp_path))
             assert revision.selection.peer.name == "peer"
         except BaseException as error:
             failures.append(error)

@@ -38,12 +38,13 @@ from urllib.parse import urlencode
 from aiohttp import web
 from pydantic import JsonValue
 
-from .cli_commands import DeclaredOptions, option
+from .cli_commands import DeclaredOptions
+from .command import Command
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord, PathText
+from .field_codec import FieldCodec, MalformedRecord, PathText, option
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
     CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode,
@@ -516,7 +517,7 @@ class Connector:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One connector command: its options are its fields, and its parser comes from them."""
 
     @abstractmethod
@@ -533,7 +534,7 @@ class ConnectorVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_arguments(args)
 
 
 @dataclass(frozen=True, kw_only=True)
