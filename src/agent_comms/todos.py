@@ -1653,11 +1653,19 @@ class InstalledProblemOrder(DeliveredProblemOrder):
             raise ValueError("The order already records different installed evidence.")
         return self
 
+    def merged(self, sha: str) -> ProblemOrder:
+        return self.copy_as(InstalledMergedProblemOrder, sha=sha)
+
     def require_close(self):
         pass
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledMergedProblemOrder(MergedProblemOrder, InstalledProblemOrder):
+    """An installed merge retains the application's existing evidence, without a wrapper."""
 
 
 @dataclass(frozen=True, kw_only=True)

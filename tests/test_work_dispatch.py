@@ -31,7 +31,12 @@ def test_phase_task_accepts_only_its_full_problem_with_installed_evidence(comman
     assert task.done((replace(full, state=DoneTodoState, order=accepted),))
     assert not UnspecifiedPhaseTask().done((replace(full, state=DoneTodoState, order=accepted),))
     for original, expected in ((full.order, False), (accepted, True)):
-        merged = FieldCodec.decode(ProblemOrder, FieldCodec.encode(original.merged("a" * 40)))
+        encoded = FieldCodec.encode(original.merged("a" * 40))
+        assert "original" not in encoded
+        if expected:
+            assert encoded["works"] == original.works
+            assert encoded["artifact"] == original.artifact
+        merged = FieldCodec.decode(ProblemOrder, encoded)
         assert task.done((replace(full, state=DoneTodoState, order=merged),)) is expected
 
 
