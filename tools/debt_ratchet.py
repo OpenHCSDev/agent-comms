@@ -21,7 +21,7 @@ from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cache, cached_property
 from pathlib import Path
 
 sys.path.insert(0, str(
@@ -38,7 +38,7 @@ from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
-from cutover.carry import STEPS, Step, carry_parents
+from cutover.carry import STEPS, Carry, Step, carry_parents
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
@@ -1397,7 +1397,10 @@ class EditedCarry(Measure):
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
                           base, head, "--", str(STEPS)).decode().split("\0")[:-1])
-        parents = carry_parents(git(repo, "show", f"{base}:{STEPS}/carry.py"))
+        @cache
+        def parents() -> dict[str, type[Carry]]:
+            return carry_parents(git(repo, "show", f"{base}:{STEPS}/carry.py"))
+
         edited = 0
         for status in fields:
             path = next(fields)
@@ -1408,7 +1411,7 @@ class EditedCarry(Measure):
                 continue
             if status[0] in "MRC" or status == "T":
                 before = git(repo, "show", f"{base}:{path}")
-                if Step.holds_carry(before, parents):
+                if Step.holds_carry(before, parents()):
                     edited += (status != "M" or cls.conversion(before) !=
                                cls.conversion(git(repo, "show", f"{head}:{path}")))
             elif status == "A":

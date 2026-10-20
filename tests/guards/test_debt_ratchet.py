@@ -11,22 +11,19 @@ import pytest
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
-    FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat,
+    FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat, EditedCarry,
     ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
-    SourceLines, StringIdentity, python_paths,
+    StringIdentity, python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
 
 
-@pytest.mark.parametrize("name,blocked", [
-    (SourceLines.__name__, False),
-    (f"{NoneAbsence.__name__}:tools/example.py", True),
-])
-def test_measure_owner_decides_whether_growth_blocks(name: str, blocked: bool) -> None:
+def test_measure_owner_rejects_a_new_absence() -> None:
+    name = f"{NoneAbsence.__name__}:tools/example.py"
     result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
     assert result.delta[name] == 1
-    assert result.failed is blocked
+    assert result.failed
 
 
 class Repository:
@@ -124,6 +121,14 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     )
     assert forms["agent_comms.probe_record.Record"].version == 7
     assert os.environ["PYTHONPATH"] == inherited
+
+
+def test_unrelated_change_does_not_require_a_core_carry_module(repo: Repository) -> None:
+    base = repo.commit({"plain.py": "value = 1\n"})
+    head = repo.commit({"plain.py": "value = 2\n"})
+    assert EditedCarry.compare(
+        repo.path, base, head, {f"{repo.root}/plain.py"}, repo.root,
+    ) == ({"EditedCarry": 0}, {"EditedCarry": 0})
 
 
 def test_clean_growth_passes_but_type_and_string_dispatch_fail(repo: Repository) -> None:
