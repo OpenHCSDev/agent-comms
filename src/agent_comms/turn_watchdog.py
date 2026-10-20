@@ -248,8 +248,7 @@ class ProgressWatchdog:
             if event.invalidates_stop:
                 session.output.final_assistant_stop = False
             self.progress()
-            if not session.tool_socket.active_tools:
-                self.phase = self.phase.model_progress()
+            self.phase = self.phase.model_progress()
 
     def transition(self, event: PiEvent) -> None:
         self.phase = event.on(self.phase)
@@ -261,8 +260,6 @@ class ProgressWatchdog:
             return self.poll_wait
         if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock:
             return self.input_wait
-        if session.tool_socket.active_tools:
-            return self.unbounded_wait
         if self.phase.model_wait(self.model_wait.timeout()) is None:
             return self.unbounded_wait
         return self.model_wait

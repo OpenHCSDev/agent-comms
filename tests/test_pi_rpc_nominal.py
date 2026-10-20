@@ -80,10 +80,14 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     phase = pi.ToolExecutionStart(tool_call_id="b").on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("a", "b")
+    assert phase.model_wait(360.0) is None
+    assert phase.model_progress() is phase
     phase = pi.ToolExecutionEnd(tool_call_id="a").on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("b",)
-    assert isinstance(pi.ToolExecutionEnd(tool_call_id="b").on(phase), ModelWaitPhase)
+    finished = pi.ToolExecutionEnd(tool_call_id="b").on(phase)
+    assert isinstance(finished, ModelWaitPhase)
+    assert finished.model_wait(360.0) == 360.0
 
 
 @pytest.mark.parametrize(
@@ -280,7 +284,7 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
         awaiting_native_attestation=False,
         stats=SimpleNamespace(requested=False),
         prompt_state=SimpleNamespace(awaiting_start=True),
-        tool_socket=SimpleNamespace(active_tools=set()),
+        tool_socket=SimpleNamespace(active_tools={"stale"}),
     )
     watchdog.phase = ModelWaitPhase()
     wait = watchdog.wait_for(session)
@@ -289,6 +293,10 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     watchdog.now = 0.0
     watchdog.progress()
     assert wait.timeout() == 180.0
+    session.prompt_state.awaiting_start = False
+    model_wait = watchdog.wait_for(session)
+    assert isinstance(model_wait, ModelWait)
+    assert model_wait.timeout() == 60.0  # The stale socket cannot disable model silence.
     watchdog.phase = pi.ToolExecutionStart().on(ModelWaitPhase())
-    session.tool_socket.active_tools = {"tool"}
+    assert watchdog.phase.model_progress() is watchdog.phase
     assert watchdog.wait_for(session).timeout() is None

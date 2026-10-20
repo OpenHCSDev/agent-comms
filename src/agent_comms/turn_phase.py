@@ -222,10 +222,14 @@ class SummarizationRetryPhase(StallExempt, Excursion):
 
 
 @dataclass(frozen=True)
-class ToolRunningPhase(Excursion):
+class ToolRunningPhase(StallExempt, Excursion):
     tools: tuple[tuple[str, str], ...] = ()
     activity_state = ActivityState.WORKING
     label = "Running tool"
+
+    def model_wait(self, backstop: float | None) -> None:
+        # A running tool has no model budget; its terminal event ends the excursion.
+        return None
 
     @property
     def summary(self) -> str:

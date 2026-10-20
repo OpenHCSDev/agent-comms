@@ -318,12 +318,6 @@ class ToolTransport(Generic[Call]):
         for call in self.calls.values():
             call.assert_complete()
 
-    @property
-    def active_tools(self) -> set[str]:
-        return {
-            call.call_id for call in self.calls.values() if call.progress.observation.executing
-        }
-
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))
         await call.authorize(lambda: self.allow(self.calls.identity_for(call).round_number, call))
