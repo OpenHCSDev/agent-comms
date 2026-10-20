@@ -544,6 +544,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra='', deletes=N
     body.write_text(json.dumps({
         'defect': 'The counter file holds zero where the fleet needs one',
         'why_stupid': 'The counter is wrong and that is stupid.',
+        'unplanned_reason': 'This isolated order checks command behavior rather than advancing the plan dependency chain.',
         'order': {'kind': 'pending', 'owner': f'{__file__}:1',
                   'check': FieldCodec.encode(checked), 'edits': [edit],
                   'deletes': FieldCodec.encode(deletes),

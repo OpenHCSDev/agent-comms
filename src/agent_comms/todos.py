@@ -110,6 +110,10 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
+    def merged_commits(self, repo: Repo) -> tuple[str, ...]:
+        """Operations have no commit whose ancestry could prove a merge."""
+        return ()
+
     def strikes(
         self, todo: Todo, order_id: str, actor: ThreadIncarnation
     ) -> tuple[StrikeTodo, ...]:
@@ -136,6 +140,9 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     @property
     def work(self) -> str:
         return f"delivered commit {self.delivered}"
+
+    def merged_commits(self, repo: Repo) -> tuple[str, ...]:
+        return (self.delivered,) if repo.contains(self.delivered, "origin/main") else ()
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -1499,6 +1506,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+        return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
+                     if repo.contains(merged.sha))
+
     @property
     def pull_request_reference(self) -> str:
         return f"{self.pull_request_label} {self.id}"
@@ -1630,6 +1641,11 @@ class DeliveredProblemOrder(CheckedProblemOrder):
             raise ValueError("The order already records a different delivery.")
         return self
 
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+        commits = self.delivery.merged_commits(repo)
+        return (tuple(self.merged(commit) for commit in commits)
+                or super().observed_merges(repo, source))
+
     def closing_artifact(self) -> str:
         return self.delivery.evidence.artifact()
 
@@ -1691,6 +1707,9 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
+
+    def require_close(self) -> None:
+        """Retiring an erroneous order does not claim installed work."""
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
@@ -2693,12 +2712,11 @@ class TodoStore(TypedStore):
         checked = tuple((todo, order) for todo in self.held_for_commander(commander)
                         if isinstance(order := todo.order, CheckedProblemOrder))
         pulls = PullRequests(tuple(todo for todo, _ in checked))
-        completed = tuple(DoneTodoState.closed(todo, order.merged(merged.sha))
+        completed = tuple(DoneTodoState.closed(todo, merged)
                           for todo, order in checked
                           for repo in repos if repo.github.lower() == todo.repo
-                          for merged in MergedProgress.found(
-                              ProgressSource.of(todo, storage, pulls))
-                          if repo.contains(merged.sha))
+                          for merged in order.observed_merges(
+                              repo, ProgressSource.of(todo, storage, pulls)))
         if not completed:
             return
         with self.writing() as db:
