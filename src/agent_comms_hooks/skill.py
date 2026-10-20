@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from pydantic import ValidationError
+
 from agent_comms.commander.config import CommanderConfig
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
@@ -25,7 +27,13 @@ def main() -> None:
     )
     try:
         notice = f"Commander: {CommanderConfig.read(CommanderConfig.path()).commander}."
-    except (OSError, ValueError):
+    except (
+        FileNotFoundError,
+        PermissionError,
+        IsADirectoryError,
+        UnicodeError,
+        ValidationError,
+    ):
         notice = "No commander is configured (installed configuration is missing or invalid)."
     print(
         json.dumps(
