@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -121,6 +122,15 @@ class Coordination:
             None, StoreLock.worker_context().run, operation
         )
         return await join_retirement(pending)
+
+    @classmethod
+    async def watch_worker(cls, operation: Callable[[], None]) -> None:
+        """Join each service pass before idling; cancellation also joins borrowed work."""
+        while True:
+            (outcome,) = await asyncio.gather(cls.run_worker(operation), return_exceptions=True)
+            if isinstance(outcome, Exception):
+                logging.error("Service worker pass failed: %r", operation, exc_info=outcome)
+            await asyncio.sleep(60)
 
     @classmethod
     async def run_async(
