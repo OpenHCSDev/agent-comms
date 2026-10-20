@@ -102,12 +102,14 @@ class DeliveredCommitCase:
         document = replace(document, order=replace(document.order,
             check=replace(document.order.check, directory=str(repository.path))))
         run.document.write_text(json.dumps(FieldCodec.encode(document)))
+        run.decisions.write_text(json.dumps([run.worker]))
         before = {todo.id for todo in run.commander.comms.goals.todos.for_commander(
             run.commander.incarnation)}
         run.commander.problem(str(run.document), run.worker, run.due,
                               f"{Path(__file__).resolve()}:1")
         created, = (todo for todo in run.commander.comms.goals.todos.for_commander(
             run.commander.incarnation) if todo.id not in before)
+        run.decisions.write_text("[]")
         return created
 
     @classmethod
