@@ -43,7 +43,11 @@ class ToolCaller(ABC):
     def acting_name(self, default: str) -> str: ...
 
     @abstractmethod
-    def subject(self, named: str) -> str: ...
+    def own_thread(self) -> str:
+        """The thread a tool acts on when its call names none."""
+
+    def subject(self, named: str) -> str:
+        return named or self.own_thread()
 
     @abstractmethod
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
@@ -74,10 +78,8 @@ class NoThreadCaller(ToolCaller):
     def acting_name(self, default: str) -> str:
         return default
 
-    def subject(self, named: str) -> str:
-        if not named:
-            return self.refuse_thread()
-        return named
+    def own_thread(self) -> NoReturn:
+        return self.refuse_thread()
 
     def may_reconfigure(self, comms: Comms, name: str) -> bool:
         return not comms.registry.status(name).active
@@ -110,8 +112,8 @@ class ThreadCaller(ToolCaller):
     def acting_name(self, default: str) -> str:
         return self.name
 
-    def subject(self, named: str) -> str:
-        return named or self.name
+    def own_thread(self) -> str:
+        return self.name
 
     def may_reconfigure(self, comms: Comms, name: str) -> bool:
         return (not comms.registry.status(name).active
