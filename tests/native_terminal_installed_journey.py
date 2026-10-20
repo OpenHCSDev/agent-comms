@@ -74,11 +74,12 @@ async def main(output, package, launcher, provider, model, thinking, read_only=F
             await agent.turns.run_agent_turn(
                 opened.session_id, opened.session_id, instruction, origins=(original,),
             )
+        (output / 'phase-entries.json').write_text(json.dumps(entered, indent=2))
         if not read_only:
             assert effect.read_text() == 'effect\n'
         assert any(entry['phase'] == 'tool_running' for entry in entered), entered
         assert any(entry['phase'] == 'model_wait' for entry in entered), entered
-        activity_events = [json.loads(line) for line in comms.agents.activity.path.read_text().splitlines()]
+        activity_events = [json.loads(line) for line in activity.ActivityLog.path_in(comms.root).read_text().splitlines()]
         assert activity_events[-1]['state'] == 'idle', activity_events
         thread = comms.registry.require(opened.session_id)
         saved = Path(thread.session_file)
