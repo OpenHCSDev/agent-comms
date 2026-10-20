@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from agent_comms.acp import CommsAgent
+from agent_comms.launch_root import LaunchRoot
 
 
 class FakeClient:
@@ -39,7 +40,12 @@ async def canonical_delivery_owner(root, *, direct=False):
 
 
 def canonical_agent(comms, **options):
-    """Configure the existing owner against its real canonical root marker."""
+    """Configure the existing owner against its real canonical root marker.
+
+    ACP startup selects this process root before constructing the agent. Tests
+    construct it here instead; conftest restores the prior selection at teardown.
+    """
+    LaunchRoot.from_path(comms.root).install()
     with comms.bus.log.locked():
         metadata = comms.bus.log.read_metadata_unlocked()
     if not metadata.private:
