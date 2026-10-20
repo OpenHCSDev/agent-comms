@@ -89,9 +89,8 @@ def test_a_failed_stall_pass_logs_and_releases_the_root_before_the_next_pass(com
 
 def test_parked_units_come_from_the_existing_commander_configuration(commander, commander_script):
     comms, _ = commander
-    config = CommanderConfig.installed().model_copy(update={"parked": frozenset({"worker"})})
+    config = CommanderConfig.read_root(comms.root).model_copy(update={"parked": frozenset({"worker"})})
     config.write(Path.home())
-    CommanderConfig.installed.cache_clear()
     working(comms, 'worker', 2.0)
     assert standing.WheelSpin.idle(comms, "lead") == []
 

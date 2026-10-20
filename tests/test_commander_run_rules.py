@@ -45,14 +45,21 @@ def test_clean_transfers_keep_history_and_third_owner_needs_a_real_line(tmp_path
     assert store.assign('P1', traced=FileLine(__file__, 1), **kwargs) == third
 
 
-def test_send_refuses_missing_run_but_mechanical_orders_are_exempt(commander_script):
+def test_send_requires_a_declared_run_including_mechanical_orders(commander_script):
+    import json
+    from agent_comms.commander.order import OrderFile
     script, repo = commander_script
-    body = repo.parent / 'missing-run.txt'
-    body.write_text(f'Problem: P1\nOwner: {__file__}:1\nCheck: {repo} :: printf 0 -> 1\n'
-                    '1. Repair the counter value.\nBanned: no second store\nReport: the count\n')
-    kwargs = dict(clean=True, new=('P1', 'The real thread list disappears after opening saved history'))
-    with pytest.raises(ValueError, match='Works when:'):
-        script.send('worker', '23:59', body.read_text(), **kwargs)
+    data = {'defect': 'The real thread list disappears after opening saved history',
+            'why_stupid': 'The repeated parser is wrong because Core declares these fields.',
+            'order': {'kind': 'pending', 'owner': f'{__file__}:1',
+                      'check': {'directory': str(repo), 'command': 'printf 0',
+                                'result': {'kind': 'count', 'expected': 1}},
+                      'edits': ['Repair the counter value.'],
+                      'banned': ['no second store'], 'report': 'the count'}}
+    with pytest.raises(SystemExit, match='run: Missing required fields'):
+        OrderFile.read(json.dumps(data))
     assert script.todos() == ()
-    script.send('worker', '23:59', body.read_text(), mechanical=True, **kwargs)
-    assert isinstance(script.COMMS.goals.todos.get('P1').order.run, MechanicalOrderRun)
+    data['order']['run'] = {'kind': 'mechanical'}
+    script.send('worker', '23:59', OrderFile.read(json.dumps(data)), clean=True,
+                new=('P1', data['defect']))
+    assert isinstance(script.comms.goals.todos.get('P1').order.run, MechanicalOrderRun)

@@ -8,8 +8,10 @@ import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .cli_commands import DeclaredOptions, option
+from .cli_commands import DeclaredOptions
+from .command import Command
 from .declared_family import DeclaredFamily
+from .field_codec import option
 from .native_package import (
     install_declared_sources,
     native_environment,
@@ -23,7 +25,7 @@ from .storage_rules import StoragePath, StorageRule
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativePackageVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+class NativePackageVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One verb: its options are its fields, its parser comes from them, apply() does the work."""
 
     @abstractmethod
@@ -36,7 +38,7 @@ class NativePackageVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_arguments(args)
 
 
 @dataclass(frozen=True, kw_only=True)

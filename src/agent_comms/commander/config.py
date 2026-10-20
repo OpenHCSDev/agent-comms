@@ -5,8 +5,6 @@ hardcodes a home directory, a bus root or a unit name.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from functools import cache
 from importlib.resources import files
 from pathlib import Path
 
@@ -17,7 +15,6 @@ from ..errors import RelationViolationError
 from ..native_arguments import NativeArguments
 from ..repo import Repo
 from ..threads import Thread
-from ..todos import Todo
 
 
 class CommanderRole:
@@ -47,6 +44,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     disk: Path
     parked: frozenset[str] = frozenset()
 
+    @property
+    def peer_sync_log(self) -> Path:
+        return self.scratch / "peer-sync.log"
+
     @staticmethod
     def path(home: Path | None = None) -> Path:
         return (home or Path.home()) / '.config/agent-comms/commander.json'
@@ -60,12 +61,28 @@ class CommanderConfig(CommanderRole, BaseModel):
         return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
 
     @classmethod
-    @cache
-    def installed(cls) -> CommanderConfig:
-        return cls.model_validate_json(cls.path().read_text())
+    def read(cls, path: Path | str) -> CommanderConfig:
+        return cls.model_validate_json(Path(path).read_text())
+
+    @staticmethod
+    def root_path(root: Path) -> Path:
+        return root / 'commander.json'
+
+    @classmethod
+    def read_root(cls, root: Path | str) -> CommanderConfig:
+        root = Path(root).resolve()
+        return cls.read(cls.root_path(root)).model_copy(update={'root': root})
+
+    @classmethod
+    def packaged_rules_files(cls) -> tuple[Path, ...]:
+        """All packaged rule files, shared by review and session context."""
+        rules = tuple(sorted(path for path in cls.packaged_rules().iterdir() if path.is_file()))
+        if not rules:
+            raise ValueError('The packaged commander rules directory is empty.')
+        return rules
 
     def repo_directory(self, name: str) -> Path:
-        """A configured GitHub repo name takes precedence over a directory spelling."""
+        """A configured repository name takes precedence over a directory spelling."""
         return next((repo.checkout for repo in self.repos
                      if repo.github.rsplit('/', 1)[-1] == name), Path(name)).resolve()
 
@@ -74,31 +91,11 @@ class CommanderConfig(CommanderRole, BaseModel):
         self.require_commander(Comms(self.root).registry.require(self.commander))
         path = self.path(home)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path.write_text(self.model_dump_json(indent=1) + '\n')
+        record = self.root_path(self.root)
+        record.write_text(self.model_dump_json(indent=1) + '\n')
+        path.unlink(missing_ok=True)
+        path.symlink_to(record)
         for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
         return path
-
-
-@dataclass(frozen=True)
-class Commander:
-    """This machine's commander thread and the bus whose Todo store owns its problems and orders."""
-
-    name: str
-    comms: Comms
-
-    @classmethod
-    def of(cls, config: CommanderConfig) -> Commander:
-        return cls(config.commander, Comms(config.root))
-
-    def orders(self, repos: tuple[Repo, ...]) -> tuple[Todo, ...]:
-        actor = self.comms.registry.require(self.name).incarnation
-        store = self.comms.goals.todos
-        store.reconcile_merges(actor, repos, self.comms.registry.storage_rule)
-        return store.for_commander(actor)
-
-    def units(self) -> frozenset[str]:
-        """The threads this commander gives orders to; the owner, claude-ai and peer commanders
-        are not among them."""
-        return self.comms.goals.todos.units(self.comms.registry.require(self.name).incarnation)

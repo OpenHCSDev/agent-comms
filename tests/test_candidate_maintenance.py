@@ -166,6 +166,50 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
         assert len(page.entries) >= 1 and not page.has_more
 
 
+def test_source_replacement_during_replay_does_not_kill_the_worker(monkeypatch, tmp_path):
+    comms, root_id = _wire(tmp_path)
+    root = comms.bus.log.path.parent
+    replay = WakeCandidateIndex._replay_prefix
+    replaced, finished = threading.Event(), threading.Condition()
+    failures = []
+    drain = maintenance._drain_candidate
+
+    def replace_once(cls, source, *args, **kwargs):
+        batch = replay(source, *args, **kwargs)
+        if not replaced.is_set():
+            path = comms.bus.log.path
+            replacement = path.with_name("replacement.jsonl")
+            replacement.write_bytes(path.read_bytes())
+            replacement.chmod(0o600)
+            replacement.replace(path)
+            replaced.set()
+        return batch
+
+    def observed(path):
+        try:
+            drain(path)
+        except Exception as error:
+            failures.append(error)
+        finally:
+            with finished:
+                finished.notify_all()
+
+    def retired():
+        with maintenance._guard:
+            return root not in maintenance._pending
+
+    monkeypatch.setattr(WakeCandidateIndex, "_replay_prefix", classmethod(replace_once))
+    monkeypatch.setattr(maintenance, "_drain_candidate", observed)
+    monkeypatch.setattr(maintenance, "schedule_candidate_catchup", _SCHEDULE)
+    comms.messaging.send("sender", "beta", "first original")
+    assert replaced.wait(5)
+    second = comms.messaging.send("sender", "beta", "second original").message
+    with finished:
+        assert finished.wait_for(retired, timeout=10)
+    assert not failures
+    assert WakeCandidateIndex(comms.bus.log)._verified_checkpoint(root_id).last_seq == second.seq
+
+
 def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tmp_path):
     comms, root_id = _wire(tmp_path)
     root = comms.bus.log.path.parent

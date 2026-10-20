@@ -11,19 +11,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..cli_commands import option
+from ..field_codec import option
 from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
 from ..todos import Todo
-from .order import COMMS, ME, CommanderVerb, RuledVerb
+from .order import Commander, CommanderVerb, RuledVerb
 
 
-def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
+def open_requests(ctx: Commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
-    thread = COMMS.registry.require(ME)
+    thread = ctx.comms.registry.require(ctx.commander)
     return tuple(request for goal in thread.goal.active()
-                 for request in goal.order.open_requests(goal, COMMS.goals, thread.incarnation))
+                 for request in goal.order.open_requests(goal, ctx.comms.goals, thread.incarnation))
 
 
 class RequestVerb(CommanderVerb):
@@ -35,8 +35,9 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
     help = "record an owner request as the commander's Goal; prints its id"
     text: str = option("text")
 
-    def run(self) -> None:
-        goal = COMMS.goals.update_goal(ME, SetGoalAction(text=self.text, order=RequestGoalOrder()))
+    def run(self, ctx: Commander) -> None:
+        goal = ctx.comms.goals.update_goal(ctx.commander,
+                                          SetGoalAction(text=self.text, order=RequestGoalOrder()))
         print(goal.require().id)
 
 
@@ -46,17 +47,18 @@ class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
     id: str = option("id")
     why: str = option("--why")
 
-    def run(self) -> None:
+    def run(self, ctx: Commander) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())
-        COMMS.goals.update_goal(ME, CompletedGoalAction(progress=self.why, expect=expect))
+        ctx.comms.goals.update_goal(ctx.commander,
+                                   CompletedGoalAction(progress=self.why, expect=expect))
         print(f"{self.id} done")
 
 
 class RequestListVerb(RequestVerb, declared_name="list"):
     help = "the open request and the open orders serving it"
 
-    def run(self) -> None:
-        requests = open_requests()
+    def run(self, ctx: Commander) -> None:
+        requests = open_requests(ctx)
         if not requests:
             print("No open request.")
         for goal, served in requests:
@@ -65,5 +67,5 @@ class RequestListVerb(RequestVerb, declared_name="list"):
                 print(f"  {todo.id} due {todo.deadline.clock()}: {todo.text}")
 
 
-def main(a: list[str]) -> None:
-    RequestVerb.parse(a, __doc__).apply()
+def main(a: list[str], ctx: Commander) -> None:
+    RequestVerb.parse(a, __doc__).apply(ctx)

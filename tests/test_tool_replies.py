@@ -38,6 +38,13 @@ def scenario(comms: Comms, project, monkeypatch):
     for created, name in enumerate(("lead", "worker", "idle"), 1):
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(project), created_at=float(created)))
+    # Commander-specific rules read this bus's record, never the machine's installed config.
+    from agent_comms.commander.config import CommanderConfig
+    CommanderConfig(commander="lead", root=comms.root, cli=project / "agent-comms",
+        state=comms.root / "state", board=comms.root / "board.md",
+        narrative=comms.root / "narrative.md", skill=comms.root / "skill.md",
+        rules=(), repos=(), worktrees=comms.root / "wt", scratch=comms.root / "scratch",
+        disk=comms.root).write(project / "commander-home")
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread(
@@ -87,7 +94,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsVerdictTool, {"problem": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
         todo.revision + 1, actor, todo.assignment, "toolu_1", quote="Repair the existing owner"))}, lead
     yield CommsOrderServeTool, {"problem": "P1", "serves": RecordPlanePhase.declared_name}, lead
-    yield CommsRuleReviewTool, {"entry": FieldCodec.encode(DrawnRuleReviewEntry(("Declare each fact once",), 0))}, lead
+    yield CommsRuleReviewTool, {"entry": FieldCodec.encode(DrawnRuleReviewEntry(("Declare each fact once",)))}, lead
     yield CommsOrderTool, {"owner": "worker", "order": FieldCodec.encode(OrderGoalAction(
         problem="P1", order=order, request="request", deadline=RecordedEventTime(3000),
         commander="lead", assigner=actor,

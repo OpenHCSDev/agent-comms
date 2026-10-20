@@ -17,6 +17,7 @@ import time
 import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
@@ -26,7 +27,7 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
-from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome
+from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -446,7 +447,7 @@ class DistanceReadings:
         if not self.readings:
             return UnreadTrend()
         return self.readings[-1].distance.project(
-            self.counted_trend, lambda: UncountedTrend(self.readings[-1].command))
+            self.counted_trend, lambda printed: UncountedTrend(printed, self.readings[-1].command))
 
     def counted_trend(self, final: int) -> DistanceTrend:
         last = self.readings[-self.window:]
@@ -460,7 +461,7 @@ class DistanceReadings:
             rate = (previous - final) / max(latest.at - first.at, 1.0)
             return MovingTrend(final, latest.at + final / rate)
 
-        return first.distance.project(compared, UnreadTrend)
+        return first.distance.project(compared, lambda printed: UnreadTrend())
 
 
 class DistanceTrend(DeclaredFamily, affix="Trend"):
@@ -495,11 +496,12 @@ class FlatTrend(DistanceTrend):
 
 @dataclass(frozen=True)
 class UncountedTrend(DistanceTrend):
+    printed: NoIntegerPrinted
     command: str
 
     @property
     def projection(self) -> str:
-        return f"; check prints no integer: {self.command}"
+        return self.printed.progress(self.command)
 
 
 @dataclass(frozen=True)
@@ -1083,46 +1085,24 @@ class BluntText(BluntWords, OrderWords):
 class FairText(OrderWords):
     """Paper 1 proves multiple parents derive every required pair with nothing outside, which composition and
     forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
-    A Banned: line may name it."""
+    Only explanatory prose is checked; code and banned-action fields are not prose."""
 
-    CITED = re.compile(OrderWords.CITED.pattern + r'|^Banned:.*$')
     REFUSED = re.compile(r"composition over inheritance|(prefer|favou?r|use) composition|inherits (two|both|multiple|several|\d+)\b"
                          r"|multiple (inheritance|parents) (is (bad|wrong|dangerous|confusing|fragile|slop)|causes|creates|smells|complicates)"
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID in a Slop: line, "
+    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID, "
                "name the restated fact and the declaration that derives it.")
 
 
 class HierarchyText(OrderWords):
-    """A forwarder restates an implementation pair, so the cure is the hierarchy, never a route: text may not keep
-    a forwarder, and a Banned: item may forbid removing classes, bases or parents but not adding them."""
+    """A forwarder restates an implementation pair: explanatory prose must fix the
+    hierarchy rather than preserve a forwarding route."""
 
     REFUSED = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through", re.I)
-    BANS: ClassVar[re.Pattern] = re.compile(r"\b(new class(es)?|new base|base class|changing the hierarchy|inheritance|mixins?|"
-                                            r"multiple parents|changing \w+State)\b", re.I)
-    UNDOES: ClassVar[re.Pattern] = re.compile(r"\b(flatten\w*|remov\w*|replac\w*|delet\w*|collaps\w*|single-parent|one-parent|merg\w*)\b", re.I)
     refusal = ("{1} keeps a forwarder or bans fixing the hierarchy: fold the false owner into the real one or compose "
                "providers as parents, and delete every route.")
-
-    @classmethod
-    def found(cls, text: str) -> list[str]:
-        banned = re.findall(r'(?m)^Banned:(.*)$', cls.CITED.sub(' ', text))
-        return super().found(text) + [item.strip() for line in banned for item in re.split(r',|;|\bor\b', line)
-                                      if cls.BANS.search(item) and not cls.UNDOES.search(item)]
-
-
-class DefectText(BluntWords, OrderWords):
-    """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
-    a text naming no defect needs no label."""
-
-    SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
-
-    @classmethod
-    def found(cls, text: str) -> list[str]:
-        return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
-
 
 class Derivation(DeclaredFamily, affix="Derivation"):
     sentence: ClassVar[str]
@@ -1167,10 +1147,6 @@ class Slop:
     at: FileLine
     derive: type[Derivation]
     by: FileLine
-    USAGE: ClassVar[str] = ('An order naming slop needs Slop: PATTERN-ID; fact WORDS; '
-                            'at PATH:LINE; derive MECHANISM on PATH:LINE')
-    LINE: ClassVar[re.Pattern] = re.compile(
-        r'^Slop: (?P<pattern>\S+); fact (?P<fact>[^\n]+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)[ \t]*$', re.M)
 
     PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
 
@@ -1182,22 +1158,20 @@ class Slop:
                          for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
 
     def __post_init__(self):
+        problems = []
         if self.pattern not in self.patterns():
-            raise ValueError(f'{self.USAGE}. Unknown refactor-audit pattern ID {self.pattern!r}.')
+            problems.append(f'Unknown refactor-audit pattern ID {self.pattern!r}; '
+                            'fix: use an ID from the packaged pattern catalog.')
         if len(self.fact.split()) < 4:
-            raise ValueError('The duplicated fact needs 4+ words.')
-        self.at.require_exists()
-        self.by.require_exists()
-
-    @classmethod
-    def from_order(cls, body):
-        matches = tuple(cls.LINE.finditer(body))
-        if len(matches) != len(re.findall(r'(?m)^Slop:.*$', body)):
-            raise ValueError(cls.USAGE)
-        found = [FieldCodec.decode(cls, cited.groupdict()) for cited in matches]
-        if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
-            raise ValueError(cls.USAGE)
-        return found
+            problems.append('fact: fix: describe the duplicated fact in at least four words')
+        for name, reference in (('at', self.at), ('by', self.by)):
+            try:
+                with MalformedRecord.refusing(name):
+                    reference.require_exists()
+            except MalformedRecord as error:
+                problems.append(f'{name}: {error}; fix: cite an existing source line')
+        if problems:
+            raise ValueError('\n'.join(problems))
 
     def render(self):
         return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
@@ -1209,7 +1183,7 @@ class DirectiveText:
     connector's send refuse a text failing any of these."""
 
     OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
-        FairText, HierarchyText, PlainText, OrderText, DefectText)
+        FairText, HierarchyText, PlainText, OrderText)
 
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
@@ -1223,6 +1197,7 @@ class DirectiveText:
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
     label: ClassVar[str] = "Works when:"
+    mechanical: ClassVar[bool] = False
 
     def require_artifact(self, path: str) -> None:
         pass
@@ -1237,6 +1212,8 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
 
 @dataclass(frozen=True)
 class MechanicalOrderRun(OrderRun):
+    mechanical: ClassVar[bool] = True
+
     def instructions(self) -> tuple[str, ...]:
         return ()
 
@@ -1276,21 +1253,10 @@ class ApplicationOrderRun(OrderRun):
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):
-    """The decision family an order deletes, read once from its Deletes: line."""
+    """The decision family an order deletes, decoded as declared fields."""
 
     label: ClassVar[str] = "Deletes:"
-    LINE: ClassVar[re.Pattern] = re.compile(r"(.+?)\s+at\s+(\S+):(\d+)\s*::\s*(\S+)\s*::\s*(.+)")
     checks: ClassVar[tuple[OrderCheck, ...]] = ()
-
-    @staticmethod
-    def parse(line: str | None) -> OrderDeletion:
-        if line is None:
-            return NoOrderDeletion()
-        if not (found := OrderDeletion.LINE.fullmatch(line.strip())):
-            raise ValueError(f"Write {OrderDeletion.label} <decision family> at PATH:LINE :: "
-                             "<repo> :: <family-wide scanner count>.")
-        return FamilyDeletion(found[1], FileLine(found[2], int(found[3])),
-                              OrderCheck(found[4], found[5], CountCheckResult(0)))
 
     def instructions(self) -> tuple[str, ...]:
         return ()
@@ -1374,6 +1340,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
+    def require_withdrawal(self) -> None:
+        raise ValueError("Only an undelivered order can be withdrawn.")
+
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return ()
 
@@ -1456,15 +1425,20 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return f"{self.owner.to_wire()} | {owner} | {self.id} | {todo.deadline.clock()} | {check}"
 
     def __post_init__(self):
+        problems = []
         if not self.edits or not self.banned:
-            raise ValueError("An order requires edits and banned actions.")
+            problems.append("edits and banned: fix: supply nonempty arrays of actions")
         if any(not text.strip() for text in (self.id, self.report, *self.edits, *self.banned)):
-            raise ValueError("Order text cannot be empty.")
-        for text in (self.report, *self.edits):
-            for family in (OrderText, FairText, HierarchyText):
-                family(text)
-        self.at.require_recorded("An order")
-        self.first_call_deadline.require_deadline()
+            problems.append("order text is empty; fix: supply nonempty id, report and actions")
+        for check in (lambda: self.at.require_recorded("An order"),
+                      self.first_call_deadline.require_deadline):
+            try:
+                with MalformedRecord.refusing('order time'):
+                    check()
+            except MalformedRecord as error:
+                problems.append(str(error))
+        if problems:
+            raise ValueError("\n".join(problems))
 
     line: ClassVar[str]
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
@@ -1481,10 +1455,11 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                    if (named := self.NAMED_FILE.findall(edit)) and not any(map(changed, named)))
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
-        return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
+        return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
+                       if item.name not in evidence}, **evidence)
 
     def merged(self, sha: str) -> ProblemOrder:
-        return MergedProblemOrder(original=self, sha=sha)
+        return self.copy_as(MergedProblemOrder, sha=sha)
 
     @property
     def pull_request_reference(self) -> str:
@@ -1512,15 +1487,17 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return (f"Open the PR with agent-comms-commander order pr {problem} "
                 "--title '<title>' --body-file <file>; Core writes its required order identity.")
 
+    def work_instructions(self) -> tuple[str, ...]:
+        return (f"Owner: {self.owner.to_wire()}",
+                f"Check: {self.check.directory} :: {self.check.command}",
+                *self.deletes.instructions(), *self.run.instructions(),
+                *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
+                "Banned: " + "; ".join(self.banned), "Report: " + self.report)
+
     def instructions(self, todo):
-        return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(), f"Order: {self.id}",
-            f"Owner: {self.owner.to_wire()}", self.pull_request_instruction(todo.id),
-            f"Check: {self.check.directory} :: {self.check.command}",
-            *self.deletes.instructions(),
-            *self.run.instructions(),
-            f"Deadline: {FieldCodec.encode(todo.deadline)}",
-            *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
-            "Banned: " + "; ".join(self.banned), "Report: " + self.report))
+        return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
+            f"Order: {self.id}", self.pull_request_instruction(todo.id),
+            *self.work_instructions(), f"Deadline: {FieldCodec.encode(todo.deadline)}"))
 
     def delivered(self, delivery):
         delivery.at.require_delivery()
@@ -1544,19 +1521,16 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                          "its order has none.")
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
-        raise ValueError("Only an undelivered order can be withdrawn.")
+        self.require_withdrawal()
+        return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
+                            superseded_by=superseded_by)
 
 
 @dataclass(frozen=True, kw_only=True)
-class MergedProblemOrder(ProblemOrder):
-    """An installed merge, retaining its original order without inventing a check or app proof."""
-    original: CheckedProblemOrder
+class MergedProblemOrder(CheckedProblemOrder):
+    """The checked order installed by a merge, with its actual merge identity."""
     sha: str
     line: ClassVar[str] = "Merged and installed"
-
-    @property
-    def id(self) -> str:
-        return self.original.id
 
     def require_close(self) -> None:
         pass
@@ -1564,6 +1538,11 @@ class MergedProblemOrder(ProblemOrder):
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(CheckedProblemOrder):
+    id: str = field(default_factory=lambda: uuid4().hex[:12])
+    at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
+    first_call_deadline: EventTime = field(
+        default_factory=lambda: RecordedEventTime(time.time() + 120))
+
     def reissued(self, at: float) -> PendingProblemOrder:
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
                   - self.at.recorded_at("An order"))
@@ -1585,9 +1564,8 @@ class PendingProblemOrder(CheckedProblemOrder):
         """An undelivered order waits on install once its PR merged."""
         return read[todo.id].waiting_on_install(todo)
 
-    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
-        return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
-                            superseded_by=superseded_by)
+    def require_withdrawal(self) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1710,6 +1688,10 @@ class HuntRecord(TypedTable):
 
 class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
+
+
+class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
+    """The todo store could not complete its write; its original cause is preserved."""
 
 
 class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
@@ -2414,11 +2396,6 @@ class Todo(TypedTable):
                 f"pass --replaces {self.messages[-1].message_id}"
             )
 
-    @classmethod
-    def require_order_body(cls, body: str) -> None:
-        DirectiveText.require(body)
-        Slop.from_order(body)
-
     def require_fold(self, target: Todo, why: str) -> None:
         self.state.require_open(self)
         target.state.require_open(target)
@@ -2497,6 +2474,16 @@ class TodoStore(TypedStore):
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        try:
+            with super(TodoStore, self).writing() as connection:
+                yield connection
+        except sqlite3.Error as error:
+            raise TodoStoreUnwritable(
+                f"{self.path}: {type(error).__name__}: {error}"
+            ) from error
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
