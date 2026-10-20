@@ -200,7 +200,7 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
             return TodoColumnCarry.before_stop(root, apply=True)
         return TodoColumnCarry.carry_step(
             root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
-    tree = revisions.tree(step.revision)
+    tree = revisions.tree(step.written)
     environment = stack.environment(tree / "src", tree / "tools")
     worker = (
         "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
