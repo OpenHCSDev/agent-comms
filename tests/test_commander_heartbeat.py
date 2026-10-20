@@ -125,7 +125,9 @@ async def test_real_rules_publish_once_per_change_and_rotate_units(commander, mo
         assert "NO LONGER CURRENT: DISK LOW:" in changed[-1].body
         assert "floor nothing allocates" in changed[-1].body
     await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
-    assert not heartbeat.reviews
+    assert set(heartbeat.reviews) == {
+        thread.incarnation for thread in comms.registry.all_threads().values()
+    }  # Process baselines survive stopped owners, including a stopped commander.
     assert list(comms.bus.inbox("lead")) == changed
 
 
@@ -155,7 +157,9 @@ async def test_each_registered_request_holder_has_independent_wakes(commander, m
         assert len(comms.bus.inbox("lead")) == len(comms.bus.inbox("second")) == 1
         assert not comms.bus.inbox("worker")
     await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
-    assert not heartbeat.reviews
+    assert set(heartbeat.reviews) == {
+        thread.incarnation for thread in comms.registry.all_threads().values()
+    }
 
 
 async def test_directive_backlog_ignores_order_revision_and_summarizes_new_directive(
@@ -370,6 +374,53 @@ async def test_heartbeat_closes_merged_order_and_survives_maintenance(
                 barrier.clear(held)
     assert pauses == [60, 60]
     assert 'MaintenanceHeldError' in caplog.text
+
+
+@pytest.mark.parametrize("commander_stopped_at_baseline", (False, True))
+async def test_holder_process_restart_wakes_once_without_replaying_orders(
+        commander, commander_stopped_at_baseline):
+    import subprocess
+    from contextlib import ExitStack
+
+    comms, _ = commander
+    create(commander, "P1")
+    create(commander, "P2")
+    heartbeat = CommanderHeartbeat()
+
+    def restart_messages():
+        return [message for message in comms.bus.inbox("worker")
+                if message.sender == heartbeat.sender]
+
+    with ExitStack() as owners:
+        if not commander_stopped_at_baseline:
+            owners.enter_context(external_commander(comms, "lead"))
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+        assert not restart_messages()
+        if commander_stopped_at_baseline:
+            owners.enter_context(external_commander(comms, "lead"))
+        # Register an actual different process through the external-owner lifecycle.
+        process = subprocess.Popen(["sleep", "30"])
+        try:
+            comms.registry.declare(replace(comms.registry.require("worker"),
+                                          execution=ExternalThreadExecution))
+            with comms.registry.external_process("worker", ProcessIdentity.capture(process.pid)):
+                await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+                messages = restart_messages()
+                assert len(messages) == 1
+                assert messages[0].body == (
+                    "Restarted holding order-P1, order-P2; continue them from your branch")
+                for _ in range(2):
+                    await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+                assert restart_messages() == messages
+                restarted_connector = CommanderHeartbeat()
+                await Coordination.run_worker(lambda: restarted_connector.watch_pass(lambda: nullcontext(comms)))
+                assert restart_messages() == messages
+                create(commander, "P3")
+                await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+                assert restart_messages() == messages
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
 
 
 def test_changing_measurements_do_not_reannounce_a_rule(commander):
