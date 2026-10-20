@@ -19,13 +19,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tools")]
 
+from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import Platform, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import DeadHolderReleasedPhase, MaintenanceState
-from upgrade_bus import Revisions, Stack, copy_bus, detached_live, live
+from upgrade_bus import Revisions, Stack, detached_live, live
 
-SCRATCH = Path("/home/ts/.cache/agent-scratch/pi-worker-cpu/p281/holder-death")
+SCRATCH = Path("/home/ts/.cache/agent-scratch/core-runtime-location/P776/holder-proof")
 BUS = SCRATCH / "copy"
 
 
@@ -68,7 +69,7 @@ def live_worker() -> None:
     # steps need no new revision worktree. The real busy owner holds its drain.
     head = subprocess.check_output(('git', 'rev-parse', 'HEAD'), cwd=ROOT, text=True).strip()
     live(ROOT, BUS, head, head, (), STACK, STACK,
-         Revisions(ROOT, SCRATCH / 'unused-revisions'), 'pi-worker-cpu', SCRATCH)
+         Revisions(ROOT, SCRATCH / 'unused-revisions'), 'pi-worker-cpu', SCRATCH, 0)
 
 
 def caller() -> None:
@@ -110,7 +111,11 @@ def probe() -> None:
     for name in ("sender", "receiver"):
         source.registry.declare(source.registry.new_thread(name, frozenset(), str(ROOT)))
     before = digest(original)
-    copy_bus(original, BUS)
+    with CheckRoot(source, ("sender", "receiver"), BUS).open():
+        exercise_holder(original, before)
+
+
+def exercise_holder(original: Path, before: str) -> None:
     busy = subprocess.Popen(
         command(busy_owner),
         env=environment(),
