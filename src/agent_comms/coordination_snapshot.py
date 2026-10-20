@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
-from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING
 
+from agent_comms import field_codec
 from agent_comms.coordination_errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -33,14 +34,12 @@ class RecoverySnapshot:
 
     execution: ExecutionRecord
     attempt: AttemptRecord | None
-    assignments: tuple[WakeAssignment, ...] = dataclass_field(metadata={"wire_name": "claims"})
-    links: tuple[ExecutionAssignmentLink, ...] = dataclass_field(
-        metadata={"snapshot_name": "execution_claims"}
-    )
+    assignments: typing.Annotated[tuple[WakeAssignment, ...], field_codec.WireName("claims")]
+    links: typing.Annotated[tuple[ExecutionAssignmentLink, ...], field_codec.SnapshotName("execution_claims")]
     replay: ReplayAssessments | None
     obligations: tuple[ResponseObligation, ...]
     publication_intents: tuple[PublicationIntents, ...]
-    publication_evidence: tuple[PublicationEvidence, ...] = dataclass_field(metadata={"wire_name": "publication_receipts"})
+    publication_evidence: typing.Annotated[tuple[PublicationEvidence, ...], field_codec.WireName("publication_receipts")]
     connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
     current_execution_id: str | None

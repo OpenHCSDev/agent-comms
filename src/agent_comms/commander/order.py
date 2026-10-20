@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import os
 import re
 import subprocess
 import sys
 import time
+import typing
 from abc import abstractmethod
 from collections.abc import Mapping
 from copy import deepcopy
@@ -30,12 +32,13 @@ from typing import Self
 
 from pydantic import PrivateAttr
 
+from agent_comms import field_codec
 from agent_comms_hooks import ClaudeHook
 from agent_comms_hooks.watch import PeerSync
 
 from ..change_report import FileLine
 from ..child_process import BoundedRun
-from ..cli_commands import DeclaredOptions, option
+from ..cli_commands import DeclaredOptions
 from ..comms import Comms
 from ..declared_family import DeclaredFamily
 from ..field_codec import FieldCodec, MalformedRecord, boundary_decoder
@@ -685,9 +688,7 @@ class Commander(CommanderContext):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    fork: ThreadCaller | NoThreadCaller = option(
-        "--fork", type=ThreadCaller, normalize=FieldCodec.encode,
-        default=NoThreadCaller(), help="the acting commander's name")
+    fork: typing.Annotated[ThreadCaller | NoThreadCaller, field_codec.Normalize(FieldCodec.encode), field_codec.Argument(flags=("--fork",), options={'type': ThreadCaller, 'help': "the acting commander's name"})] = dataclasses.field(default=NoThreadCaller())
 
     def who(self, ctx: Commander) -> str:
         return self.fork.acting_name(ctx.commander)
@@ -746,8 +747,7 @@ class StaleOrderGate(CommanderVerb):
 class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
 
-    answers: tuple[str, ...] = option("--answers", nargs="+", default=(),
-                                      help="original directive message IDs this action answers")
+    answers: typing.Annotated[tuple[str, ...], field_codec.Argument(flags=("--answers",), options={'nargs': "+", 'help': "original directive message IDs this action answers"})] = dataclasses.field(default=())
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
         thread = ctx.comms.registry.require(self.who(ctx))
@@ -779,15 +779,14 @@ class OrderVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "record the order in Core and send it"
-    unit: str = option("unit")
-    due: str = option("due", help="HH:MM local time")
-    body_file: str = option("body_file", metavar="ORDER.json")
-    clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
-    reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
-    replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
-    disk: bool = option("--disk", default=False, help="a cleanup order; never overrides a tool's storage rule")
-    traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
-                                help="the first failing source line, required after two owners")
+    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
+    due: typing.Annotated[str, field_codec.Argument(flags=("due",), options={'help': "HH:MM local time"})]
+    body_file: typing.Annotated[str, field_codec.Argument(flags=("body_file",), options={'metavar': "ORDER.json"})]
+    clean: typing.Annotated[bool, field_codec.Argument(flags=("--clean",), options={'help': "the unit showed no incompetence"})] = dataclasses.field(default=False)
+    reassign: typing.Annotated[str | None, field_codec.Argument(flags=("--reassign",), options={'help': "the concrete failure that forces replacement"})] = dataclasses.field(default=None)
+    replaces: typing.Annotated[str | None, field_codec.Argument(flags=("--replaces",), options={'help': "the current message this order replaces"})] = dataclasses.field(default=None)
+    disk: typing.Annotated[bool, field_codec.Argument(flags=("--disk",), options={'help': "a cleanup order; never overrides a tool's storage rule"})] = dataclasses.field(default=False)
+    traced: typing.Annotated[str | None, field_codec.Argument(flags=("--traced",), options={'metavar': "PATH:LINE", 'help': "the first failing source line, required after two owners"})] = dataclasses.field(default=None)
 
     def run(self, ctx: Commander) -> None:
         ctx.send(self.unit, self.due, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
@@ -798,9 +797,9 @@ class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 @dataclass(frozen=True, kw_only=True)
 class StrikeVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "a send-back, a missed deadline or a false claim"
-    unit: str = option("unit")
-    why: str = option("--why")
-    caught: str = option("--caught", default='review', help='"WHO at STAGE"; stage is review/install/live/user')
+    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    caught: typing.Annotated[str, field_codec.Argument(flags=("--caught",), options={'help': '"WHO at STAGE"; stage is review/install/live/user'})] = dataclasses.field(default='review')
 
     def run(self, ctx: Commander) -> None:
         references = set(re.findall(r'\bP\d+\b', self.why))
@@ -813,8 +812,8 @@ class StrikeVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 @dataclass(frozen=True, kw_only=True)
 class FireVerb(OrderVerb):
     help = "take every open problem off a unit; their orders and strikes stay"
-    unit: str = option("unit")
-    why: str = option("--why")
+    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.fire(self.unit, self.why)
@@ -823,10 +822,9 @@ class FireVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class UnstrikeVerb(OrderVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
-    pid: str = option("pid")
-    why: str = option("--why")
-    at: str | None = option("--at", default=None,
-                            help="HH:MM the strike was recorded; default the newest")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    at: typing.Annotated[str | None, field_codec.Argument(flags=("--at",), options={'help': "HH:MM the strike was recorded; default the newest"})] = dataclasses.field(default=None)
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
@@ -835,9 +833,9 @@ class UnstrikeVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DueVerb(OrderVerb):
     help = "move a held order's deadline; the reason goes on the public record"
-    pid: str = option("pid")
-    at: str = option("at", help="HH:MM the order is now due")
-    why: str = option("--why")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    at: typing.Annotated[str, field_codec.Argument(flags=("at",), options={'help': "HH:MM the order is now due"})]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.due(self.pid, self.at, self.why)
@@ -846,8 +844,8 @@ class DueVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class InstallVerb(OrderVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
-    at: str = option("at", help="HH:MM the install is due")
-    installer: str = option("installer", help="the unit that runs the install")
+    at: typing.Annotated[str, field_codec.Argument(flags=("at",), options={'help': "HH:MM the install is due"})]
+    installer: typing.Annotated[str, field_codec.Argument(flags=("installer",), options={'help': "the unit that runs the install"})]
 
     def run(self, ctx: Commander) -> None:
         planned = RecordedEventTime(time.time()).at_clock(self.at)
@@ -858,10 +856,9 @@ class InstallVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class WithdrawVerb(OrderVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
-    pid: str = option("pid")
-    why: str = option("--why")
-    superseded_by: str | None = option("--superseded-by", default=None, metavar="PID",
-                                       help="the problem that already owns this fix")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    superseded_by: typing.Annotated[str | None, field_codec.Argument(flags=("--superseded-by",), options={'metavar': "PID", 'help': "the problem that already owns this fix"})] = dataclasses.field(default=None)
 
     def run(self, ctx: Commander) -> None:
         ctx.withdraw(self.pid, self.why, self.superseded_by)
@@ -870,14 +867,13 @@ class WithdrawVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
-    unit: str = option("unit", metavar="UNIT")
-    message: str = option("message", metavar="ORDER")
-    sha: str = option("--sha", help="the delivered commit in --repo HEAD, or op")
-    screenshot: str = option("--screenshot", default="", metavar="PATH",
-                             help="for an op: the screenshot the working claim stands on")
+    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",), options={'metavar': "UNIT"})]
+    message: typing.Annotated[str, field_codec.Argument(flags=("message",), options={'metavar': "ORDER"})]
+    sha: typing.Annotated[str, field_codec.Argument(flags=("--sha",), options={'help': "the delivered commit in --repo HEAD, or op"})]
+    screenshot: typing.Annotated[str, field_codec.Argument(flags=("--screenshot",), options={'metavar': "PATH", 'help': "for an op: the screenshot the working claim stands on"})] = dataclasses.field(default="")
 
-    seen: str = option("--seen", default="")
-    repo: str = option("--repo", default="", help="the recorded order check directory")
+    seen: typing.Annotated[str, field_codec.Argument(flags=("--seen",))] = dataclasses.field(default="")
+    repo: typing.Annotated[str, field_codec.Argument(flags=("--repo",), options={'help': "the recorded order check directory"})] = dataclasses.field(default="")
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.message)
@@ -888,9 +884,9 @@ class DoneVerb(OrderVerb):
 class PullRequestVerb(OrderVerb, declared_name="pr"):
     help = ("open the problem's PR from this owned source checkout "
             "with its immutable order identity")
-    pid: str = option("pid")
-    title: str = option("--title")
-    body_file: str = option("--body-file")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    title: typing.Annotated[str, field_codec.Argument(flags=("--title",))]
+    body_file: typing.Annotated[str, field_codec.Argument(flags=("--body-file",))]
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
@@ -908,9 +904,9 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb):
     help = "replace an open order's wrong check with one passing on main; keeps deadline, strikes"
-    pid: str = option("pid")
-    check: str = option("--check", help='"<repo> :: <shell command> -> <integer>"')
-    why: str = option("--why", help="what was wrong with the recorded check")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    check: typing.Annotated[str, field_codec.Argument(flags=("--check",), options={'help': '"<repo> :: <shell command> -> <integer>"'})]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",), options={'help': "what was wrong with the recorded check"})]
 
     def run(self, ctx: Commander) -> None:
         ctx.correct_check(self.pid, self.check, self.why)
@@ -919,8 +915,8 @@ class CheckVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(OrderVerb):
     help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
-    pid: str = option("pid")
-    phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    phase: typing.Annotated[str, field_codec.Argument(flags=("phase",), options={'help': "one of " + ", ".join(OrderPhase.names())})]
 
     def run(self, ctx: Commander) -> None:
         ctx.call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
@@ -930,8 +926,8 @@ class ServeVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class SayVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "a non-order message; refused if it orders work"
-    units: str = option("units", metavar="UNIT[,UNIT]")
-    body_file: str = option("body_file", metavar="BODYFILE")
+    units: typing.Annotated[str, field_codec.Argument(flags=("units",), options={'metavar': "UNIT[,UNIT]"})]
+    body_file: typing.Annotated[str, field_codec.Argument(flags=("body_file",), options={'metavar': "BODYFILE"})]
 
     def run(self, ctx: Commander) -> None:
         ctx.say(self.units, self.body_file, self.answer_references(ctx))
@@ -940,11 +936,11 @@ class SayVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 @dataclass(frozen=True, kw_only=True)
 class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "Core records the problem with its order, or nothing"
-    order: str = option("order", metavar="ORDER.json")
-    to: str = option("--to")
-    due: str = option("--due", help="HH:MM local time")
-    where: str = option("--where", help="the actual file:line where this problem occurs")
-    disk: bool = option("--disk", default=False)
+    order: typing.Annotated[str, field_codec.Argument(flags=("order",), options={'metavar': "ORDER.json"})]
+    to: typing.Annotated[str, field_codec.Argument(flags=("--to",))]
+    due: typing.Annotated[str, field_codec.Argument(flags=("--due",), options={'help': "HH:MM local time"})]
+    where: typing.Annotated[str, field_codec.Argument(flags=("--where",), options={'help': "the actual file:line where this problem occurs"})]
+    disk: typing.Annotated[bool, field_codec.Argument(flags=("--disk",))] = dataclasses.field(default=False)
 
     def run(self, ctx: Commander) -> None:
         ctx.problem(self.order, self.to, self.due, self.where, self.disk,
@@ -954,9 +950,9 @@ class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 @dataclass(frozen=True, kw_only=True)
 class DropVerb(OrderVerb):
     help = "drop an old order for a live newer one without a strike"
-    unit: str = option("unit")
-    message: str = option("message")
-    by: str = option("--by")
+    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
+    message: typing.Annotated[str, field_codec.Argument(flags=("message",))]
+    by: typing.Annotated[str, field_codec.Argument(flags=("--by",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.drop(ctx.incarnation, self.unit, self.message, self.by)
@@ -966,9 +962,9 @@ class DropVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class FoldVerb(OrderVerb):
     help = "join duplicate open problems without losing their text"
-    pid: str = option("pid")
-    into: str = option("--into")
-    why: str = option("--why")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    into: typing.Annotated[str, field_codec.Argument(flags=("--into",))]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.fold(ctx.incarnation, self.pid, self.into, self.why)
@@ -978,9 +974,9 @@ class FoldVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class LinkVerb(OrderVerb):
     help = "attach an unassigned problem to an existing order"
-    pid: str = option("pid")
-    unit: str = option("unit")
-    message: str = option("message")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
+    message: typing.Annotated[str, field_codec.Argument(flags=("message",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.link(ctx.incarnation, self.pid, self.unit, self.message)
@@ -990,9 +986,9 @@ class LinkVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class CloseVerb(OrderVerb):
     help = "the fix works in the app; Core closes the problem"
-    pid: str = option("pid")
-    works: str = option("--works")
-    artifact: str = option("--artifact", default="", help="defaults to the file recorded by done --seen")
+    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
+    works: typing.Annotated[str, field_codec.Argument(flags=("--works",))]
+    artifact: typing.Annotated[str, field_codec.Argument(flags=("--artifact",), options={'help': "defaults to the file recorded by done --seen"})] = dataclasses.field(default="")
 
     def run(self, ctx: Commander) -> None:
         ctx.close(self.pid, self.works, self.artifact)
@@ -1001,10 +997,9 @@ class CloseVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class HuntVerb(OrderVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
-    where: str = option("where", metavar="FILE:LINE")
-    why: str = option("--why")
-    sent: str = option("--sent", default="", metavar="ORDER",
-                       help="the open order the hunt became; omitted means clean")
+    where: typing.Annotated[str, field_codec.Argument(flags=("where",), options={'metavar': "FILE:LINE"})]
+    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    sent: typing.Annotated[str, field_codec.Argument(flags=("--sent",), options={'metavar': "ORDER", 'help': "the open order the hunt became; omitted means clean"})] = dataclasses.field(default="")
 
     def run(self, ctx: Commander) -> None:
         ctx.hunt(self.where, self.why, self.sent)

@@ -21,11 +21,14 @@ import json
 import os
 import stat
 import struct
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from agent_comms import field_codec
 
 from . import store_files
 from .coordinator import Coordination
@@ -335,7 +338,7 @@ class PrivateOwnerRenameIntent:
     old: str
     new: str
     generation: int
-    wire_root_id: str = field(metadata={"wire_name": "wireRootId"})
+    wire_root_id: typing.Annotated[str, field_codec.WireName("wireRootId")]
     version: int = 1
     completed: bool = False
 

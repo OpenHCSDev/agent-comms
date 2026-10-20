@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import typing
+from dataclasses import dataclass
 
+from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
 )
@@ -39,7 +41,7 @@ class ParticipantSnapshot:
     committed: bool
     aliases: tuple[str, ...]
     owner_thread: str
-    participant_generation: int = field(metadata={"wire_name": "generation"})
+    participant_generation: typing.Annotated[int, field_codec.WireName("generation")]
     pointer: CurrentExecutions
 
     @property

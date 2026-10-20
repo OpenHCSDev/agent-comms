@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import sqlite3
 import time
+import typing
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -23,7 +24,7 @@ from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake_policy import WakePolicy
-from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireSnapshot, WireLog
+from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireLog, WireSnapshot
 from .wire_record import WireRecord
 
 
@@ -82,14 +83,14 @@ class CandidateTable:
 
 @dataclass(frozen=True, kw_only=True)
 class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[3]
     root_id: str
     device: int
     inode: int
-    byte_offset: int = field(metadata={"sql": Column(check="byte_offset>=0")})
+    byte_offset: typing.Annotated[int, Column(check="byte_offset>=0")]
     tail_digest: str
-    last_seq: int = field(metadata={"sql": Column(check="last_seq>=0")})
+    last_seq: typing.Annotated[int, Column(check="last_seq>=0")]
 
 
     @classmethod
@@ -134,15 +135,15 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
 
 @dataclass(frozen=True)
 class CandidateResponseKey(CandidateTable, TypedTable):
-    publication_key: str = field(metadata={"sql": Column(primary_key=True)})
+    publication_key: typing.Annotated[str, Column(primary_key=True)]
     without_rowid = True
 
 
 @dataclass(frozen=True)
 class Candidate(CandidateTable, TypedTable):
-    source_seq: int = field(metadata={"sql": Column(primary_key=True)})
+    source_seq: typing.Annotated[int, Column(primary_key=True)]
     message_id: str
-    recipient_lookup: str = field(metadata={"sql": Column(primary_key=True)})
+    recipient_lookup: typing.Annotated[str, Column(primary_key=True)]
     sender: str
     target: str
     wake_mode: type[WakePolicy] | None  # None means a delivery-only/no-wake member.

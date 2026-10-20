@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
+
+from agent_comms import field_codec
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
@@ -46,7 +49,7 @@ class NativeToolDeclaration(ToolDeclaration):
 class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     """A decoded tool is the live call; runtime fields are not model arguments."""
 
-    call_id: str = field(metadata={"wire_context": True})
+    call_id: typing.Annotated[str, field_codec.WireContext(True)]
     claim: ClassVar[None] = None
 
     def allowed_claim(self) -> FileClaimPath | None:
@@ -111,8 +114,7 @@ class PathTool:
 class PatternSearchTool:
     acp_kind = "search"
     pattern: str
-    path: str | None = field(
-        default=None, metadata={"wire_omit_default": True})
+    path: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     def reads(self) -> str:
         return self.pattern
@@ -142,8 +144,8 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
     label = "Read"
-    offset: float | None = field(default=None, metadata={"wire_omit_default": True})
-    limit: float | None = field(default=None, metadata={"wire_omit_default": True})
+    offset: typing.Annotated[float | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    limit: typing.Annotated[float | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     def _parse_resource(self) -> None:
         return None
@@ -154,7 +156,7 @@ class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
     command: str
-    timeout: float | None = field(default=None, metadata={"wire_omit_default": True})
+    timeout: typing.Annotated[float | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     def reads(self) -> str:
         return self.command

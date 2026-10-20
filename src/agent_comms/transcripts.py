@@ -3,45 +3,54 @@
 from __future__ import annotations
 
 import logging
+import typing
 from abc import abstractmethod
 from collections.abc import Awaitable, Sequence
-from dataclasses import dataclass, field, fields, replace
 from contextlib import contextmanager
+from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
 from typing import Callable, ClassVar
 
+from agent_comms import field_codec
+
 from .agent_backend import RuntimeLocation
-from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .bus_publication import CommittedDelivery
+from .coordinated_runtime_schema import assert_native_runtime_schema
+from .coordination_database import CoordinationStore
+from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
+from .coordination_response import _assert_response_schema
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
+from .external_transcript import ExternalTranscript
+from .field_codec import FieldCodec, projected
 from .historical_views import HistorySource
-from .thread_identity import ThreadProvenance
 from .message_bus import MessageBus
-from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
-from .external_transcript import ExternalTranscript
 from .native_transcript import NativeTranscript, RecordsCut
+from .presentation import MessageNotification
 from .private_path import FileRevision
-from .bus_publication import CommittedDelivery
 from .registration import Registration
 from .routing import TurnRouting
+from .thread_identity import ThreadProvenance
 from .threads import Thread
-from .turn_lease import TurnLeaseFence
-from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (
-    AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
-    LaterTranscript, LiveAssignedTranscriptSource, TranscriptDraft, TranscriptSource, WireFrontier,
+    AssignedSourceCursor,
+    AssignedTranscriptSource,
+    EarlierTranscript,
+    LaterTranscript,
+    LiveAssignedTranscriptSource,
+    NoWireFrontier,
+    TranscriptDraft,
+    TranscriptSource,
+    WireFrontier,
 )
-from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
-from .coordination_database import CoordinationStore
-from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_response import _assert_response_schema
-from .presentation import MessageNotification
+from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
+from .turn_lease import TurnLeaseFence
 from .wire_log import WireLog
 
 _LOG = logging.getLogger(__name__)
@@ -201,7 +210,7 @@ class PageSource:
     """The retained stores one thread's transcript page is read from."""
 
     thread: Thread
-    runtime: RuntimeLocation = field(metadata={"wire_name": "session_file"})
+    runtime: typing.Annotated[RuntimeLocation, field_codec.WireName("session_file")]
     inherited: bool
     root: Path
     log: WireLog
@@ -217,16 +226,14 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
     root: str
     requested_name: str
-    thread: ThreadProvenance = field(metadata={"content_exclude": True})
+    thread: typing.Annotated[ThreadProvenance, field_codec.ContentExclude(True)]
     runtime: RuntimeLocation
-    records_cut: RecordsCut = field(metadata={"content_exclude": True})
+    records_cut: typing.Annotated[RecordsCut, field_codec.ContentExclude(True)]
     route_revision: FileRevision | None
-    bus_revision: FileRevision | None = field(metadata={"content_exclude": True})
-    coordination_revision: FileRevision | None = field(
-        metadata={"content_exclude": True}
-    )
+    bus_revision: typing.Annotated[FileRevision | None, field_codec.ContentExclude(True)]
+    coordination_revision: typing.Annotated[FileRevision | None, field_codec.ContentExclude(True)]
     reply_revision: PublishedReplyRevision
-    read_revision: FileRevision | None = field(metadata={"content_exclude": True})
+    read_revision: typing.Annotated[FileRevision | None, field_codec.ContentExclude(True)]
     wire_frontier: WireFrontier
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -301,7 +308,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
 @dataclass(frozen=True, slots=True)
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
-    thread: Thread = field(metadata={"content_exclude": True})
+    thread: typing.Annotated[Thread, field_codec.ContentExclude(True)]
 
     @projected(view="content", name="thread")
     def content_thread(self):
@@ -327,7 +334,7 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
 
 @dataclass(frozen=True, slots=True)
 class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
-    source: HistorySource = field(kw_only=True, metadata={"content_exclude": True})
+    source: typing.Annotated[HistorySource, field_codec.ContentExclude(True)] = field(kw_only=True)
 
     @property
     def historical_source(self) -> str:

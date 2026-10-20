@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import re
+import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
+
+from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily
 from .turn_context import ContextSegment, ContextSpan
@@ -46,7 +49,7 @@ class DisclosureState:
     segment_kind: type[ContextSegment]
     source: str
     neighbor: str
-    owner_rules: tuple[str, ...] = field(default=(), metadata={"wire_omit_default": True})
+    owner_rules: typing.Annotated[tuple[str, ...], field_codec.WireOmitDefault(True)] = field(default=())
 
     @classmethod
     def capture(cls, segment: ContextSegment, span: ContextSpan, question: type[SpanQuestion],

@@ -15,6 +15,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import typing
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -25,14 +26,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
+from agent_comms import field_codec
+
 from . import skills
-from .change_report import FileLine
 from .bus_publication import AgentOrigin
+from .change_report import FileLine
 from .channel_targets import CommandTarget
 from .child_process import (
-    BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
+    BoundedRun,
+    CheckPrinted,
+    ChildResult,
+    ExitedOutcome,
+    NoIntegerPrinted,
+    OrderCheckFailedError,
 )
-from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -48,6 +55,7 @@ from .field_codec import (
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .maintenance_barrier import MaintenanceBarrier
+from .messages import InfoKind, Message
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
@@ -91,10 +99,8 @@ class FileDeliveryEvidence(DeliveryEvidence):
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
-    evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
-                                      metadata={"wire_omit_default": True})
-    proof_build: BuildIdentity = field(default_factory=UnrecordedBuildIdentity,
-                                       metadata={"wire_omit_default": True})
+    evidence: typing.Annotated[DeliveryEvidence, field_codec.WireOmitDefault(True)] = field(default_factory=NoDeliveryEvidence)
+    proof_build: typing.Annotated[BuildIdentity, field_codec.WireOmitDefault(True)] = field(default_factory=UnrecordedBuildIdentity)
 
     @property
     def work(self) -> str:
@@ -1385,8 +1391,7 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
     pull_request_problem_label: ClassVar[str] = "Agent-Comms-Problem:"
-    finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
-                                   metadata={"wire_omit_default": True})
+    finding: typing.Annotated[ProblemFinding, field_codec.WireOmitDefault(True)] = field(default_factory=UnlocatedProblemFinding)
 
     def observe_objective(self, failure: type[ObjectiveStrike], goals: Goals, todo: Todo,
                           now: float, pulls: PullRequests) -> tuple[ObjectiveStrike, ...]:
@@ -1539,12 +1544,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     report: str
     at: EventTime
     first_call_deadline: EventTime
-    check_corrections: tuple[CorrectCheckTodo, ...] = field(
-        default=(), metadata={"wire_omit_default": True})
+    check_corrections: typing.Annotated[tuple[CorrectCheckTodo, ...], field_codec.WireOmitDefault(True)] = field(default=())
     run: OrderRun
-    deletes: OrderDeletion = field(
-        default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
-    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
+    deletes: typing.Annotated[OrderDeletion, field_codec.WireOmitDefault(True)] = field(default_factory=NoOrderDeletion)
+    serves: typing.Annotated[type[OrderPhase], field_codec.WireOmitDefault(True)] = field(default=UnplannedPhase)
 
     def board_cells(self, todo: Todo) -> str:
         last = todo.released[-1:]
@@ -1816,7 +1819,7 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
 
     previous: Assignment
     why: str
-    superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
+    superseded_by: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
 
@@ -1862,8 +1865,8 @@ class OrderedHunt(Hunt):
 
 @dataclass(frozen=True)
 class HuntRecord(TypedTable):
-    id: str = field(metadata={"sql": Column(primary_key=True)})
-    commander: ThreadIncarnation = field(metadata={"sql": Column(index=True)})
+    id: typing.Annotated[str, Column(primary_key=True)]
+    commander: typing.Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
 
 
@@ -1938,8 +1941,7 @@ class Assignment:
     parent: str
     parent_created: float
     generation: str
-    previous_owners: tuple[ThreadIncarnation, ...] = field(
-        default=(), metadata={"wire_omit_default": True})
+    previous_owners: typing.Annotated[tuple[ThreadIncarnation, ...], field_codec.WireOmitDefault(True)] = field(default=())
 
     @classmethod
     def of(cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: str) -> Assignment:
@@ -2093,7 +2095,7 @@ class AssignTodo(TodoOperation):
     deadline: EventTime
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
-    traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
+    traced: typing.Annotated[FileLine | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     def apply(self, current: Todo) -> Todo:
         self.deadline.require_deadline()
@@ -2643,14 +2645,14 @@ class ChangeTodoState(TodoOperation):
 class Todo(TypedTable):
     indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
 
-    id: str = field(metadata={"sql": Column(primary_key=True)})
-    repo: RepositoryName = field(metadata={"sql": Column(storage=TextStorage)})
+    id: typing.Annotated[str, Column(primary_key=True)]
+    repo: typing.Annotated[RepositoryName, Column(storage=TextStorage)]
     text: str
     creator: str
     creator_created: float
     state: type[TodoState]
-    revision: int = field(metadata={"sql": Column(check="revision>0")})
-    goal: GoalReference = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
+    revision: typing.Annotated[int, Column(check="revision>0")]
+    goal: typing.Annotated[GoalReference, Column(storage=JsonStorage, nullable=True)]
     assignment: Assignment | None
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)

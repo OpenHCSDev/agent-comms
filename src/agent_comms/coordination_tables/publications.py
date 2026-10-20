@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass, fields
 from dataclasses import field as dataclass_field
 from typing import ClassVar
@@ -60,49 +61,33 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if acknowledgement.message_id != self.expected_message_id:
             raise IntegrityViolationError("acknowledgement envelope does not match frozen intent")
 
-    execution_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
+    execution_id: typing.Annotated[str, Column(
                 primary_key=True,
                 storage=ExactStorage,
                 check="""typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1 AND 256
              AND instr(execution_id, ':' ) = 0""",
-            ),
-        }
-    )
-    exact_target: str = dataclass_field(
-        metadata={
-            "sql": Column(
+            )]
+    exact_target: typing.Annotated[str, Column(
                 primary_key=True, storage=ExactStorage,
                 check="""
       typeof(exact_target) = 'text' AND length(exact_target) BETWEEN 1 AND 256""",
-            ),
-        }
-    )
-    message: Message = dataclass_field(metadata={"sql": Column(check="json_valid(message)")})
-    publication_key: str = dataclass_field(
-        metadata={
-            "sql": Column(
+            )]
+    message: typing.Annotated[Message, Column(check="json_valid(message)")]
+    publication_key: typing.Annotated[str, Column(
                 storage=ExactStorage,
                 unique=True,
                 check="""
       typeof(publication_key) = 'text' AND length(publication_key) BETWEEN 1 AND 256
     """,
-            )
-        }
-    )
-    expected_message_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
+            )]
+    expected_message_id: typing.Annotated[str, Column(
                 storage=ExactStorage,
                 unique=True,
                 check="""
       typeof(expected_message_id) = 'text' AND length(expected_message_id) BETWEEN 1 AND
       256
     """,
-            ),
-        }
-    )
+            )]
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
@@ -117,9 +102,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
 
-    obligation_intent_required: int | None = dataclass_field(
-        init=False, compare=False, metadata={"sql": Column(generated="1")}
-    )
+    obligation_intent_required: typing.Annotated[int | None, Column(generated="1")] = dataclass_field(init=False, compare=False)
 
     @classmethod
     def references(cls):
@@ -195,9 +178,7 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
-    execution_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
+    execution_id: typing.Annotated[str, Column(
                 primary_key=True,
                 storage=ExactStorage,
                 check=(
@@ -205,26 +186,18 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
                     " AND 256\n"
                     "             AND instr(execution_id, ':') = 0"
                 ),
-            )
-        }
-    )
-    exact_target: str = dataclass_field(metadata={"sql": Column(primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256")})
-    seq: int = dataclass_field(metadata={"sql": Column(unique=True, check="seq > 0")})
-    message_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
+            )]
+    exact_target: typing.Annotated[str, Column(primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256")]
+    seq: typing.Annotated[int, Column(unique=True, check="seq > 0")]
+    message_id: typing.Annotated[str, Column(
                 storage=ExactStorage,
                 unique=True,
                 check=(
                     "\n      typeof(message_id) = 'text' AND length(message_id) BETWEEN 1 AND 256"
                 ),
-            )
-        }
-    )
-    received_at_ms: int = dataclass_field(metadata={"sql": Column(check="received_at_ms >= 0")})
-    obligation_receipt_required: int | None = dataclass_field(
-        init=False, compare=False, metadata={"sql": Column(generated="1")}
-    )
+            )]
+    received_at_ms: typing.Annotated[int, Column(check="received_at_ms >= 0")]
+    obligation_receipt_required: typing.Annotated[int | None, Column(generated="1")] = dataclass_field(init=False, compare=False)
 
     @classmethod
     def references(cls):

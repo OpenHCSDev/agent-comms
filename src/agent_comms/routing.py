@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import typing
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .field_codec import FieldCodec
@@ -49,9 +52,7 @@ class MessageRoute:
 class TurnRouting:
     requests: tuple[MessageReference, ...] = ()
     reply: MessageRoute | None = None
-    publications: tuple[MessageReference, ...] = field(
-        default=(), metadata={"wire_omit_default": True}
-    )
+    publications: typing.Annotated[tuple[MessageReference, ...], field_codec.WireOmitDefault(True)] = field(default=())
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)

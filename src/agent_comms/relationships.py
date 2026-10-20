@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
@@ -16,6 +17,8 @@ from functools import cmp_to_key
 from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal
+
+from agent_comms import field_codec
 
 from . import presentation
 from .channel_targets import CommandTarget
@@ -510,9 +513,9 @@ class RelationshipOrder:
 
 @dataclass(frozen=True, slots=True)
 class RelationshipDocument:
-    collaborations: tuple[Collaboration, ...] = field(default=(), metadata={"wire_required": True})
-    orders: tuple[RelationshipOrder, ...] = field(default=(), metadata={"wire_required": True})
-    version: Literal[2] = field(default=2, metadata={"wire_required": True})
+    collaborations: typing.Annotated[tuple[Collaboration, ...], field_codec.WireRequired(True)] = field(default=())
+    orders: typing.Annotated[tuple[RelationshipOrder, ...], field_codec.WireRequired(True)] = field(default=())
+    version: typing.Annotated[Literal[2], field_codec.WireRequired(True)] = field(default=2)
 
     def __post_init__(self):
         pairs = [edge.pair_identity for edge in self.collaborations]

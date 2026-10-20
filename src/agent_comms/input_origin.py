@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import typing
 from abc import abstractmethod
-from dataclasses import field, dataclass
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
+
+from agent_comms import field_codec
 
 from .bus_publication import HumanOrigin
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import Id128Text
 from .goals import GoalCheckpoint
 from .message_reference import MessageReference
 from .thread_identity import ClaimedIdentity
-from .field_codec import Id128Text
 from .turn_context import Provenance
 
 if TYPE_CHECKING:
@@ -120,7 +123,7 @@ class HumanInputOrigin(InputOrigin):
 
     root_id: Annotated[str, Id128Text]
     author: HumanOrigin
-    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
+    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName('admission')]
     project: str
     goal: GoalCheckpoint
 

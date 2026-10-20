@@ -10,15 +10,24 @@ import hashlib
 import json
 import math
 import sqlite3
+import typing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .diagnostics import FailureReason
+from agent_comms import field_codec
+
 from .coordination_database import CoordinationStore
+from .diagnostics import FailureReason
 from .field_codec import FieldCodec, Id128Text
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
-from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnFence, TurnIdentity
+from .thread_identity import (
+    ClaimedIdentity,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+    TurnFence,
+    TurnIdentity,
+)
 from .thread_status import ThreadStatus
 from .typed_table import Column, ForeignKey, TypedTable
 
@@ -50,16 +59,16 @@ class GoalLedgerTable:
 
 @dataclass(frozen=True)
 class FailedTurnEvidence(GoalLedgerTable, TypedTable):
-    attempt_id: str = field(metadata={"sql": Column(primary_key=True)})
+    attempt_id: typing.Annotated[str, Column(primary_key=True)]
     goal_id: str
-    generation: int = field(metadata={"sql": Column(check="generation>0")})
+    generation: typing.Annotated[int, Column(check="generation>0")]
     owner: str
     owner_created_at: float
     worktree: str
-    claim_scope: int = field(metadata={"wire_name": 'admission', "sql": Column(record_key=True, check="{claim_scope}>0")})
-    turn_generation: int = field(metadata={"sql": Column(check="turn_generation>0")})
-    goal_revision: int = field(metadata={"sql": Column(check="goal_revision>=0")})
-    turn_id: str = field(metadata={"sql": Column(unique=True, check="length(turn_id)=32")})
+    claim_scope: typing.Annotated[int, field_codec.WireName('admission'), Column(record_key=True, check="{claim_scope}>0")]
+    turn_generation: typing.Annotated[int, Column(check="turn_generation>0")]
+    goal_revision: typing.Annotated[int, Column(check="goal_revision>=0")]
+    turn_id: typing.Annotated[str, Column(unique=True, check="length(turn_id)=32")]
     reason: FailureReason
 
     def __post_init__(self) -> None:

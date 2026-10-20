@@ -7,6 +7,7 @@ coverage and offsets are never used across a changed inode, shortened file, or c
 from __future__ import annotations
 
 import json
+import typing
 from collections.abc import Generator, Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
@@ -20,7 +21,13 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, MessageDisplayScope, ReadCursor
+from .read_basis import (
+    ChannelDisplayScope,
+    ConversationCursor,
+    DMDisplayScope,
+    MessageDisplayScope,
+    ReadCursor,
+)
 from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
@@ -44,7 +51,7 @@ class PageIndexTable:
 class BusPageSource(PageIndexTable, TypedTable):
     revision: FileRevision
     tail: str
-    singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)] = field(default=1)
 
     def covers(self, snapshot: WireSnapshot) -> bool:
         return (snapshot.same_file(self.revision.identity)
@@ -54,7 +61,7 @@ class BusPageSource(PageIndexTable, TypedTable):
 
 @dataclass(frozen=True)
 class BusPageRow(PageIndexTable, TypedTable):
-    seq: int = field(metadata={"sql": Column(primary_key=True)})
+    seq: typing.Annotated[int, Column(primary_key=True)]
     offset: int
     sender: str
     target: str
@@ -84,8 +91,8 @@ class BusPageRow(PageIndexTable, TypedTable):
 
 @dataclass(frozen=True)
 class BusPageMetrics(TypedRow):
-    last: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")})
-    human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
+    last: typing.Annotated[float, Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")]
+    human: typing.Annotated[float, Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")]
 
 
 @dataclass(frozen=True)

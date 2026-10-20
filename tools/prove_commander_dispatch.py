@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 import time
+import typing
 from abc import abstractmethod
 from contextlib import aclosing
 from dataclasses import dataclass
@@ -20,13 +21,14 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 from uuid import uuid4
 
+from agent_comms import field_codec
 from agent_comms.change_report import FileLine
 from agent_comms.cli_bridges.shared import DeclaredOptions
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, option
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.messages import Message
@@ -107,7 +109,7 @@ async def stop_after_turn(comms: Comms, unit: str) -> None:
 
 @dataclass(frozen=True, kw_only=True)
 class ProofCommand(DeclaredFamily, DeclaredOptions, affix="ProofCommand"):
-    root: Annotated[Path, PathText] = option("--root")
+    root: Annotated[Path, PathText, field_codec.Argument(flags=("--root",))]
 
     @abstractmethod
     def apply(self, project: Path) -> int: ...
@@ -116,9 +118,9 @@ class ProofCommand(DeclaredFamily, DeclaredOptions, affix="ProofCommand"):
 @dataclass(frozen=True, kw_only=True)
 class CheckProofCommand(ProofCommand):
     help = "check the actual native reply"
-    commander: str = option("--commander")
-    unit: str = option("--unit")
-    token: str = option("--token")
+    commander: typing.Annotated[str, field_codec.Argument(flags=("--commander",))]
+    unit: typing.Annotated[str, field_codec.Argument(flags=("--unit",))]
+    token: typing.Annotated[str, field_codec.Argument(flags=("--token",))]
 
     def apply(self, project: Path) -> int:
         print(int(Reply.read(Comms(self.root), self.commander, self.unit, self.token).arrived))

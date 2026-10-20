@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
 
+from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_REASON_CODE_CHARS,
     MAX_SANITIZED_DETAIL_CHARS,
@@ -36,13 +38,11 @@ class ACPClientConnectivity(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivity"):
-    execution_id: str = dataclass_field(
-        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
-    )
+    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
     owner: OwnerConnectivity
     acp_client: ACPClientConnectivity
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision>0")})
-    observed_at_ms: int = dataclass_field(metadata={"sql": Column(check="observed_at_ms>=0")})
+    revision: typing.Annotated[int, Column(check="revision>0")]
+    observed_at_ms: typing.Annotated[int, Column(check="observed_at_ms>=0")]
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
@@ -84,30 +84,19 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
 class RecoveryAudit(CoordinatorTable, TypedTable):
     # Recovery condition is a stored fact; row identity is the table family tag.
 
-    execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
-    kind: type[RecoveryCondition] = dataclass_field(
-        metadata={"sql": Column(check="kind IN ({recovery_names})")}
-    )
-    reason_code: str = dataclass_field(
-        metadata={"sql": Column(check="length(reason_code) BETWEEN 1 AND 64")}
-    )
-    sanitized_detail: str | None = dataclass_field(
-        metadata={
-            "sql": Column(
+    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True)]
+    kind: typing.Annotated[type[RecoveryCondition], Column(check="kind IN ({recovery_names})")]
+    reason_code: typing.Annotated[str, Column(check="length(reason_code) BETWEEN 1 AND 64")]
+    sanitized_detail: typing.Annotated[str | None, Column(
                 check=(
                     "sanitized_detail IS NULL OR length(sanitized_detail)<="
                     f"{MAX_SANITIZED_DETAIL_CHARS}"
                 )
-            )
-        }
-    )
-    attempt: int = dataclass_field(metadata={"sql": Column(check="attempt>0")})
-    elapsed_ms: int = dataclass_field(metadata={"sql": Column(check="elapsed_ms>=0")})
-    observed_at_ms: int = dataclass_field(metadata={"sql": Column(check="observed_at_ms>=0")})
-    audit_id: int | None = dataclass_field(
-        default=None,
-        metadata={"sql": Column(primary_key=True, auto_increment=True), "snapshot_exclude": True},
-    )
+            )]
+    attempt: typing.Annotated[int, Column(check="attempt>0")]
+    elapsed_ms: typing.Annotated[int, Column(check="elapsed_ms>=0")]
+    observed_at_ms: typing.Annotated[int, Column(check="observed_at_ms>=0")]
+    audit_id: typing.Annotated[int | None, Column(primary_key=True, auto_increment=True), field_codec.SnapshotExclude(True)] = dataclass_field(default=None)
     indexes = (Index(("execution_id", "audit_id")),)
 
     @classmethod

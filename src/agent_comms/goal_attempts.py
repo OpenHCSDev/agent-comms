@@ -19,6 +19,7 @@ import secrets
 import sqlite3
 import stat
 import tempfile
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import ExitStack, closing, suppress
@@ -31,8 +32,6 @@ from uuid import uuid4
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
-from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import PiUsage
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -55,9 +54,10 @@ from .goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 from .ordinary_turn_rules import OrdinaryGoalGrantCheck
-
+from .pi_counts import PiCount, UnreportedCount
+from .pi_payloads import PiUsage
+from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -111,8 +111,8 @@ class StaleAttemptError(GoalAttemptError):
 
 @dataclass(frozen=True)
 class Generation(GoalLedgerTable, TypedTable):
-    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
-    number: int = field(metadata={"sql": Column(check="number>0")})
+    goal_id: typing.Annotated[str, Column(primary_key=True)]
+    number: typing.Annotated[int, Column(check="number>0")]
     lifecycle: GenerationState
     attempt_id: str | None
     ready_digest: str = field(default="", compare=False, repr=False)
@@ -252,34 +252,17 @@ class Reservation:
 
 @dataclass(frozen=True)
 class AttemptRecord(GoalLedgerTable, TypedTable):
-    reservation: Reservation = field(metadata={"sql": Column(primary_key=True)})
+    reservation: typing.Annotated[Reservation, Column(primary_key=True)]
     phase: GoalAttemptPhase
     progress_witness: str | None
     resolution: str | None
 
-    attempt_id: str | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={"sql": Column(unique=True, generated="json_extract(reservation,'$.attempt_id')")},
-    )
-    goal_id: str | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={
-            "sql": Column(
+    attempt_id: typing.Annotated[str | None, Column(unique=True, generated="json_extract(reservation,'$.attempt_id')")] = field(default=None, init=False, compare=False)
+    goal_id: typing.Annotated[str | None, Column(
                 generated="json_extract(reservation,'$.goal_id')",
                 references=(Generation, "goal_id"),
-            )
-        },
-    )
-    generation: int | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={"sql": Column(generated="json_extract(reservation,'$.generation')")},
-    )
+            )] = field(default=None, init=False, compare=False)
+    generation: typing.Annotated[int | None, Column(generated="json_extract(reservation,'$.generation')")] = field(default=None, init=False, compare=False)
     unique = (("goal_id", "generation"),)
     checks = (f"json_extract(phase,'$.kind') IN {GoalAttemptPhase.sql_choices()}",)
 
@@ -415,10 +398,8 @@ class NoAttempt(MissingAttempt):
 
 @dataclass(frozen=True)
 class GoalHumanDecision(GoalLedgerTable, TypedTable):
-    goal_id: str = field(
-        metadata={"sql": Column(primary_key=True, references=(Generation, "goal_id"))}
-    )
-    decision_id: str = field(metadata={"sql": Column(primary_key=True)})
+    goal_id: typing.Annotated[str, Column(primary_key=True, references=(Generation, "goal_id"))]
+    decision_id: typing.Annotated[str, Column(primary_key=True)]
     generation: int
 
     def claim(self, conn: sqlite3.Connection) -> None:
@@ -430,10 +411,8 @@ class GoalHumanDecision(GoalLedgerTable, TypedTable):
 
 @dataclass(frozen=True)
 class GoalProviderUsage(GoalLedgerTable, TypedTable):
-    attempt_id: str = field(
-        metadata={"sql": Column(primary_key=True, references=(AttemptRecord, "attempt_id"))}
-    )
-    response_id: str = field(metadata={"sql": Column(primary_key=True)})
+    attempt_id: typing.Annotated[str, Column(primary_key=True, references=(AttemptRecord, "attempt_id"))]
+    response_id: typing.Annotated[str, Column(primary_key=True)]
     # The canonical opaque provider object remains exact; no second native usage codec.
     usage_json: str
 
@@ -446,7 +425,7 @@ class GoalProviderUsage(GoalLedgerTable, TypedTable):
 
 @dataclass(frozen=True)
 class GoalAttemptSchema(GoalLedgerTable, TypedTable):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
     ddl_digest: str
 
     @classmethod

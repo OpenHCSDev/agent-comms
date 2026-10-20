@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import sqlite3
+import typing
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from agent_comms import field_codec
+
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
-from .input_origin import InputOrigin, UnattributedInputOrigin
 from .input_attempt import (
     GoalInputDecision,
     HistoricalInput,
@@ -21,6 +23,7 @@ from .input_attempt import (
     StoredInput,
     UnresolvedInput,
 )
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
@@ -40,12 +43,10 @@ class DeliveryOverview(ToolResult):
     against the owner."""
 
     inputs: tuple[UnresolvedInput, ...]
-    historical_count: int = field(metadata={"wire_name": "historicalCount"})
-    dismissed_historical_count: int = field(metadata={"wire_name": "dismissedHistoricalCount"})
-    historical_inputs: tuple[HistoricalInput, ...] = field(
-        metadata={"wire_name": "historicalInputs"})
-    current_scope: Literal["owner_queue", "unobserved"] = field(
-        metadata={"wire_name": "currentScope"})
+    historical_count: typing.Annotated[int, field_codec.WireName("historicalCount")]
+    dismissed_historical_count: typing.Annotated[int, field_codec.WireName("dismissedHistoricalCount")]
+    historical_inputs: typing.Annotated[tuple[HistoricalInput, ...], field_codec.WireName("historicalInputs")]
+    current_scope: typing.Annotated[Literal["owner_queue", "unobserved"], field_codec.WireName("currentScope")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,16 +177,12 @@ def _unresolved_kinds() -> str:
 class InputDispositionRow(TypedTable):
     """One stored input; its lookup columns are generated from the stored row."""
 
-    key: str = field(metadata={"sql": Column(primary_key=True)})
+    key: typing.Annotated[str, Column(primary_key=True)]
     attempt: StoredInput
-    owner: str = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.owner')")})
-    turn_id: str | None = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.turn_id')")})
-    sequence: int | None = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.sequence')")})
-    unresolved: bool = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")})
+    owner: typing.Annotated[str, Column(generated="json_extract(attempt,'$.owner')")] = field(init=False, default=None, compare=False, repr=False)
+    turn_id: typing.Annotated[str | None, Column(generated="json_extract(attempt,'$.turn_id')")] = field(init=False, default=None, compare=False, repr=False)
+    sequence: typing.Annotated[int | None, Column(generated="json_extract(attempt,'$.sequence')")] = field(init=False, default=None, compare=False, repr=False)
+    unresolved: typing.Annotated[bool, Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")] = field(init=False, default=None, compare=False, repr=False)
     checks = ("key = json_extract(attempt,'$.key')",)
     indexes = (
         Index(("owner", "unresolved")),

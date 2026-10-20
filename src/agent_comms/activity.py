@@ -6,6 +6,7 @@ import json
 import os
 import threading
 import time
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
@@ -13,6 +14,8 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
+
+from agent_comms import field_codec
 
 from .bus_projection import NoCheckpoint
 from .declared_family import DeclaredFamily
@@ -95,9 +98,7 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     owner: OwnerIdentity
     error_type: str
     reason: str
-    recorded_at: float = field(
-        compare=False, metadata={"artifact_exclude": True}
-    )
+    recorded_at: typing.Annotated[float, field_codec.ArtifactExclude(True)] = field(compare=False)
 
     @property
     @abstractmethod
@@ -209,9 +210,7 @@ class ActivityData:
     thread: str
     state: ActivityState
     detail: str = ""
-    timestamp: float = field(
-        default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
-    )
+    timestamp: typing.Annotated[float, field_codec.WireName("ts"), field_codec.WireRequired(True)] = field(default_factory=time.time)
 
     @classmethod
     def format_detail(cls, detail: str) -> str:
@@ -242,7 +241,7 @@ class ActivityData:
 class Activity(ActivityData):
     """Original persisted event; its nullable diagnostic is external metadata."""
 
-    diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
+    diagnostic: typing.Annotated[DrainDiagnostic | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     @classmethod
     def create(cls, thread: str, state: ActivityState, detail: str = "") -> Self:

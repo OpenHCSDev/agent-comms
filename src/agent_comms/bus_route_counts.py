@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import struct
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
@@ -158,7 +159,7 @@ class ForkRouteTimeNode(RouteTimeNode):
 
 @dataclass(frozen=True)
 class RouteTimeRow(RouteTable, TypedTable):
-    id: int = field(metadata={"sql": Column(primary_key=True)})
+    id: typing.Annotated[int, Column(primary_key=True)]
     node: RouteTimeNode
 
     @classmethod
@@ -200,7 +201,7 @@ class RouteSourceRow(TypedRow, ABC):
 
 @dataclass(frozen=True)
 class RecordedRouteSourceRow(RouteTable, RouteSourceRow, TypedTable, declared_name="route_source"):
-    id: int = field(metadata={"sql": Column(primary_key=True)})
+    id: typing.Annotated[int, Column(primary_key=True)]
     revision: FileRevision
     tail_digest: str
 
@@ -237,7 +238,7 @@ class UnrecordedRouteSource(RouteSourceRow):
 
 @dataclass(frozen=True)
 class RouteEntryRow(RouteTable, TypedTable):
-    seq: int = field(metadata={"sql": Column(primary_key=True)})
+    seq: typing.Annotated[int, Column(primary_key=True)]
     target: str
     sender: str
     sender_lookup: str
@@ -271,9 +272,9 @@ class RouteEntryRow(RouteTable, TypedTable):
 
 @dataclass(frozen=True)
 class RouteIdentityRow(RouteTable, TypedTable):
-    target: str = field(metadata={"sql": Column(primary_key=True)})
-    sender: str = field(metadata={"sql": Column(primary_key=True)})
-    sender_lookup: str = field(metadata={"sql": Column(primary_key=True)})
+    target: typing.Annotated[str, Column(primary_key=True)]
+    sender: typing.Annotated[str, Column(primary_key=True)]
+    sender_lookup: typing.Annotated[str, Column(primary_key=True)]
     first_seq: int
     without_rowid: ClassVar = True
     indexes: ClassVar = (Index(("target", "sender", "first_seq", "sender_lookup")),)

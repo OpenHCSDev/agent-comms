@@ -6,20 +6,21 @@ Waiting rows are also the status source; no activity event mirrors their state.
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
 import os
 import threading
 import time
+import typing
+from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 from uuid import uuid4
 
 from .activity import ActivityState
 from .child_process import ProcessIdentity
-from .thread_identity import ThreadIncarnation
 from .declared_family import DeclaredFamily
+from .thread_identity import ThreadIncarnation
 from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 from .wire_watch import ModifiedWatchSource, WireWatch
 
@@ -86,18 +87,18 @@ class HoldingRoomPhase(RoomPhase):
 
 @dataclass(frozen=True)
 class WorkPeak(TypedTable):
-    work: type[RoomWork] = field(metadata={"sql": Column(primary_key=True)})
-    need: RoomNeed = field(metadata={"sql": Column(storage=JsonStorage)})
+    work: typing.Annotated[type[RoomWork], Column(primary_key=True)]
+    need: typing.Annotated[RoomNeed, Column(storage=JsonStorage)]
 
 
 @dataclass(frozen=True)
 class RoomClaim(TypedTable):
-    ticket: str = field(metadata={"sql": Column(primary_key=True)})
+    ticket: typing.Annotated[str, Column(primary_key=True)]
     root: str
-    unit: ThreadIncarnation = field(metadata={"sql": Column(storage=JsonStorage)})
-    process: ProcessIdentity = field(metadata={"sql": Column(storage=JsonStorage)})
-    work: tuple[type[RoomWork], ...] = field(metadata={"sql": Column(storage=JsonStorage)})
-    phase: RoomPhase = field(metadata={"sql": Column(storage=JsonStorage)})
+    unit: typing.Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
+    process: typing.Annotated[ProcessIdentity, Column(storage=JsonStorage)]
+    work: typing.Annotated[tuple[type[RoomWork], ...], Column(storage=JsonStorage)]
+    phase: typing.Annotated[RoomPhase, Column(storage=JsonStorage)]
     at: float
 
 

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
+from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -31,23 +33,13 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
     def response_record(records, exact_target):
         return next((row for row in records if row.exact_target == exact_target), None)
 
-    execution_id: str = dataclass_field(
-        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
-    )
-    exact_target: str = dataclass_field(
-        metadata={"sql": Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")}
-    )
-    lifecycle: ResponseState = dataclass_field(metadata={"snapshot_exclude": True})
-    reason_code: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
-        }
-    )
-    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
-    )
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
+    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
+    exact_target: typing.Annotated[str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")]
+    lifecycle: typing.Annotated[ResponseState, field_codec.SnapshotExclude(True)]
+    reason_code: typing.Annotated[str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")]
+    created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
+    updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
+    revision: typing.Annotated[int, Column(check="revision > 0")]
 
     @projected(view="snapshot", name="state")
     def snapshot_state(self):
@@ -74,26 +66,10 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("obligation timestamps are inconsistent")
 
-    state: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+    state: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(
                 generated="json_extract(lifecycle, '$.kind')", check="state IN ({response_names})"
-            ),
-        },
-    )
-    receipt_message_id: str | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    receipt_message_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
                 generated="json_extract(lifecycle, '$.message_id')",
                 check=(
                     "\n"
@@ -101,64 +77,21 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
                     " BETWEEN 1 AND 256\n"
                     "    "
                 ),
-            ),
-        },
-    )
-    receipt_seq: int | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    receipt_seq: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
                 generated="json_extract(lifecycle, '$.seq')",
                 check="receipt_seq IS NULL OR receipt_seq > 0",
-            ),
-        },
-    )
-    success_terminal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    success_terminal: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
                 generated="CASE WHEN state IN ({successful_response_names}) THEN 1 ELSE 0 END"
-            ),
-        },
-    )
-    retryable: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, default=None, compare=False)
+    retryable: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
                 generated="CASE WHEN state IN ({retryable_response_names}) THEN 1 ELSE 0 END"
-            ),
-        },
-    )
-    intent_settled: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, default=None, compare=False)
+    intent_settled: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
                 generated="CASE WHEN state IN ({intent_response_names}) THEN 1 ELSE 0 END"
-            ),
-        },
-    )
-    receipt_settled: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN state = 'published' THEN 1 ELSE 0 END"),
-        },
-    )
+            )] = dataclass_field(init=False, default=None, compare=False)
+    receipt_settled: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN state = 'published' THEN 1 ELSE 0 END")] = dataclass_field(init=False, default=None, compare=False)
     checks = (
         "(receipt_message_id IS NULL) = (receipt_seq IS NULL)",
         (

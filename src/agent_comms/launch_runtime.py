@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import os
 import sys
+import typing
 from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from pydantic import BaseModel
+
+from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -169,7 +172,7 @@ class EnvironmentRecord:
 
     @classmethod
     def inherited(cls, environment: Mapping[str, str]) -> dict[str, str]:
-        names = (FieldCodec.wire_key(declaration) for declaration in fields(cls))
+        names = (plan.key for plan in FieldCodec.field_plans(cls))
         return {name: environment[name] for name in names if name in environment}
 
     @classmethod
@@ -177,17 +180,17 @@ class EnvironmentRecord:
         cls, environment: Environment, *names: str
     ) -> Environment:
         """Remove the named fields' variables, or every variable this record declares."""
-        for declaration in fields(cls):
-            if not names or declaration.name in names:
-                environment.pop(FieldCodec.wire_key(declaration), None)
+        for plan in FieldCodec.field_plans(cls):
+            if not names or plan.name in names:
+                environment.pop(plan.key, None)
         return environment
 
     def encode(self) -> dict[str, str]:
         encoded: dict[str, str] = FieldCodec.encode(self)
         return {
-            FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
-            for declaration in fields(self)
-            if FieldCodec.wire_key(declaration) in encoded
+            plan.key: encoded[plan.key]
+            for plan in FieldCodec.field_plans(type(self))
+            if plan.key in encoded
         }
 
 
@@ -199,32 +202,14 @@ class RestartEnvironment(EnvironmentRecord):
     stay in /proc and are read only from the exact selected process at execution.
     """
 
-    home: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"}
-    )
-    path: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True}
-    )
-    pythonpath: ImportPath = field(
-        default_factory=NoImportPath,
-        metadata={"wire_omit_default": True, "wire_name": "PYTHONPATH", "runtime": True},
-    )
-    virtual_env: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True},
-    )
-    config: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"}
-    )
+    home: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("HOME")] = field(default=None)
+    path: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PATH"), field_codec.RuntimeScope(True)] = field(default=None)
+    pythonpath: typing.Annotated[ImportPath, field_codec.WireOmitDefault(True), field_codec.WireName("PYTHONPATH"), field_codec.RuntimeScope(True)] = field(default_factory=NoImportPath)
+    virtual_env: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("VIRTUAL_ENV"), field_codec.RuntimeScope(True)] = field(default=None)
+    config: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("XDG_CONFIG_HOME")] = field(default=None)
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
-    native_config: Annotated[Path, PathText] = field(
-        default=default_agent_directory,
-        metadata={"wire_name": "AGENT_COMMS_NATIVE_CONFIG_DIR", "native": True},
-    )
-    agent_directory: Annotated[Path, PathText] = field(
-        default=default_agent_directory,
-        metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
-    )
+    native_config: Annotated[Path, PathText, field_codec.WireName("AGENT_COMMS_NATIVE_CONFIG_DIR"), field_codec.NativeScope(True)] = field(default=default_agent_directory)
+    agent_directory: Annotated[Path, PathText, field_codec.WireName("PI_CODING_AGENT_DIR"), field_codec.NativeScope(True)] = field(default=default_agent_directory)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
@@ -263,9 +248,9 @@ class RestartEnvironment(EnvironmentRecord):
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
         native = (
-            FieldCodec.wire_key(declared)
-            for declared in fields(self)
-            if declared.metadata.get("native")
+            plan.key
+            for plan in FieldCodec.field_plans(type(self))
+            if plan.setting(field_codec.NativeScope, False)
         )
         return {key: encoded[key] for key in native}
 
@@ -278,9 +263,9 @@ class RestartEnvironment(EnvironmentRecord):
         """Preserve source credentials/settings; replace the declared runtime fields."""
         result = dict(source)
         encoded = self.encode()
-        for declaration in fields(self):
-            if declaration.metadata.get("runtime"):
-                name = FieldCodec.wire_key(declaration)
+        for plan in FieldCodec.field_plans(type(self)):
+            if plan.setting(field_codec.RuntimeScope, False):
+                name = plan.key
                 result.pop(name, None)
                 if name in encoded:
                     result[name] = encoded[name]
@@ -319,24 +304,13 @@ class ThreadLaunch(EnvironmentRecord):
     the record and readers decode it.
     """
 
-    name: str = field(metadata={"wire_name": "AGENT_COMMS_THREAD"})
-    worktree: str = field(metadata={"wire_name": "PI_WORKTREE"})
-    tags: Annotated[frozenset[str], TagListText] = field(
-        default=frozenset(), metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_TAGS"}
-    )
-    parent: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "PI_PARENT_ID"}
-    )
-    task: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "PI_TASK"}
-    )
-    managed: Annotated[bool, FlagText] = field(
-        default=False, metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_MANAGED"}
-    )
-    startup_input: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_STARTUP_INPUT_KEY"},
-    )
+    name: typing.Annotated[str, field_codec.WireName("AGENT_COMMS_THREAD")]
+    worktree: typing.Annotated[str, field_codec.WireName("PI_WORKTREE")]
+    tags: Annotated[frozenset[str], TagListText, field_codec.WireOmitDefault(True), field_codec.WireName("AGENT_COMMS_TAGS")] = field(default=frozenset())
+    parent: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_PARENT_ID")] = field(default=None)
+    task: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_TASK")] = field(default=None)
+    managed: Annotated[bool, FlagText, field_codec.WireOmitDefault(True), field_codec.WireName("AGENT_COMMS_MANAGED")] = field(default=False)
+    startup_input: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("AGENT_COMMS_STARTUP_INPUT_KEY")] = field(default=None)
 
     @classmethod
     def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:

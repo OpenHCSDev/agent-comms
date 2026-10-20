@@ -19,12 +19,12 @@ import hashlib
 import json
 import sqlite3
 import time
-from dataclasses import dataclass, field
+import typing
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Literal, Type
 
-from .field_codec import MalformedRecord
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -36,31 +36,33 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import (
-    PublicationIntents,
     PublicationEvidence,
+    PublicationIntents,
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
-from agent_comms.publisher import ResponseWrites
-from agent_comms.messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole
-from agent_comms.private_send_rules import RunningTurnRegistryCheck
+from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_send_rules import RunningTurnRegistryCheck
+from agent_comms.publisher import ResponseWrites
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.typed_table import (
     Column,
+    ForeignKey,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
-    TypedRow,
     SqlValue,
+    TypedRow,
     TypedTable,
-    ForeignKey,
 )
+
+from .field_codec import MalformedRecord
 
 
 class ResponseTable:
@@ -82,25 +84,19 @@ class ResponseSchemaMeta(ResponseTable, TypedTable, PrivateRuntimeSchema):
     def install(cls, store) -> None:
         install_private_response_schema(store)
 
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[3]
-    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
+    ddl_digest: typing.Annotated[str, Column(check="length(ddl_digest)=64")]
 
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, TypedTable):
-    execution_id: str = field(
-        metadata={"sql": Column(primary_key=True)}
-    )
-    exact_target: str = field(metadata={"sql": Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")})
-    wire_root_id: str = field(
-        metadata={
-            "sql": Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
-        }
-    )
-    owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
-    attempt_ordinal: int = field(metadata={"sql": Column(check="attempt_ordinal>0")})
-    dispatched_at_ms: int = field(metadata={"sql": Column(check="dispatched_at_ms>=0")})
+    execution_id: typing.Annotated[str, Column(primary_key=True)]
+    exact_target: typing.Annotated[str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")]
+    wire_root_id: typing.Annotated[str, Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")]
+    owner_generation: typing.Annotated[int, Column(check="owner_generation>0")]
+    attempt_ordinal: typing.Annotated[int, Column(check="attempt_ordinal>0")]
+    dispatched_at_ms: typing.Annotated[int, Column(check="dispatched_at_ms>=0")]
     without_rowid = True
 
     @classmethod

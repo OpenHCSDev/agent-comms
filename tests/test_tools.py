@@ -1,21 +1,24 @@
+
+import dataclasses
 import json
 import re
+import typing
 
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import ANY_CHANNEL
-from agent_comms.threads import Thread
-from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool
 from agent_comms.native_tools import NativeRequestTools
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool
 
 
 class TestToolCatalog:
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
         from pathlib import Path
-        from agent_comms.pi_vocabulary import ServiceTier
+
         from agent_comms.native_arguments import NativeArguments
+        from agent_comms.pi_vocabulary import ServiceTier
         from agent_comms.tools import ToolsCliCommand
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
@@ -189,10 +192,9 @@ class TestToolCatalog:
 def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms, monkeypatch):
     from dataclasses import dataclass
 
+    from agent_comms.tool_declaration import ToolDeclaration
     from agent_comms.tool_result import ToolResult
     from agent_comms.tools import SubjectBinding, ToolRequest, tool_field
-
-    from agent_comms.tool_declaration import ToolDeclaration
 
     monkeypatch.setattr(ToolDeclaration, "__registry__", dict(ToolDeclaration.__registry__))
 
@@ -206,9 +208,9 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
         label = "Inspect an inbox"
         description = "Test-only declaration extends the complete adapter path."
         context = "thread"
-        target: str = tool_field("Selected peer", binding=SubjectBinding)
-        viewer: str = tool_field("Viewing thread")
-        include_body: bool = tool_field("Include message bodies", default=False)
+        target: typing.Annotated[str, *tool_field("Selected peer", binding=SubjectBinding)]
+        viewer: typing.Annotated[str, *tool_field("Viewing thread")]
+        include_body: typing.Annotated[bool, *tool_field("Include message bodies")] = dataclasses.field(default=False)
 
         def apply(self, comms, caller: ToolCaller) -> InboxInspected:
             messages = comms.bus.inbox(self.viewer, CommandTarget.named(self.target))

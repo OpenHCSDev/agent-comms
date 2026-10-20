@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import typing
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, TextIO, cast
+
+from agent_comms import field_codec
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -37,7 +40,7 @@ class TranscriptProjection:
 class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
     id: str | None = None
-    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+    parent_id: typing.Annotated[str | None, field_codec.WireName("parentId")] = field(default=None)
     timestamp: Annotated[RecordedTimestamp, TimestampText]
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
@@ -488,10 +491,8 @@ class SessionEntry(NativeEntry):
         return self.parent_id
 
     version: int | None = None
-    cwd: str | None = field(default=None, metadata={"wire_omit_default": True})
-    parent_session: str | None = field(default=None, metadata={
-        "wire_name": "parentSession", "wire_omit_default": True,
-    })
+    cwd: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    parent_session: typing.Annotated[str | None, field_codec.WireName("parentSession"), field_codec.WireOmitDefault(True)] = field(default=None)
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
@@ -577,7 +578,7 @@ class CompactionEntry(NativeEntry):
 class StoredEntry(RecordedEntry):
     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
     id: int = field()
-    messages: tuple[PiMessage, ...] = field(default=(), metadata={'wire_name': 'model'})
+    messages: typing.Annotated[tuple[PiMessage, ...], field_codec.WireName('model')] = field(default=())
 
 
 class CustomEntry(NativeEntry):
@@ -590,7 +591,7 @@ class CustomEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class ImportedMetadataEntry(CustomEntry):
-    custom_type: Literal["agent-comms-import"] = field(metadata={"wire_name": "customType"})
+    custom_type: typing.Annotated[Literal["agent-comms-import"], field_codec.WireName("customType")]
     data: ImportedSessionMetadata
 
     def imported_sources(self):
@@ -609,7 +610,7 @@ class UnknownEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class ModelChangeEntry(NativeEntry):
     provider: str
-    model_id: str = field(metadata={"wire_name": "modelId"})
+    model_id: typing.Annotated[str, field_codec.WireName("modelId")]
 
     @property
     def model_choice(self) -> tuple[str, str] | None:
@@ -618,4 +619,4 @@ class ModelChangeEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class ThinkingLevelChangeEntry(NativeEntry):
-    thinking_level: type[ThinkingLevel] = field(metadata={"wire_name": "thinkingLevel"})
+    thinking_level: typing.Annotated[type[ThinkingLevel], field_codec.WireName("thinkingLevel")]

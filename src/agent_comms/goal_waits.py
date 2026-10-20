@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -10,17 +11,23 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
+from .goal_presentation import (
+    GoalExecution,
+    GoalExecutionState,
+    GoalWaitTarget,
+    IdleGoalExecution,
+    ThreadGoalExecution,
+)
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
-from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
+from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
     from .agent_activity import AgentActivity
+    from .registry_document import RegistrySnapshot
     from .threads import Thread
 
 
@@ -233,14 +240,14 @@ class GoalInputReview:
 
 @dataclass(frozen=True, slots=True)
 class StoredGoalWaitRow(TypedTable):
-    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
+    goal_id: typing.Annotated[str, Column(primary_key=True)]
     wait: RecordedGoalWait
 
 
 @dataclass(frozen=True, slots=True)
 class GoalWaitTargetRow(TypedTable):
-    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
-    position: int = field(metadata={"sql": Column(primary_key=True)})
+    goal_id: typing.Annotated[str, Column(primary_key=True)]
+    position: typing.Annotated[int, Column(primary_key=True)]
     target_lookup: str
     indexes = (Index(("target_lookup", "goal_id")),)
 

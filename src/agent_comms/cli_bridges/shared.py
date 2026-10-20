@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import argparse
-import builtins
 import asyncio
+import builtins
+import dataclasses
 import json
 import os
 import signal
 import sys
 import traceback
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import ExitStack, closing, contextmanager
@@ -16,10 +18,12 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar
+
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
 
+from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import ChangeReport
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
@@ -38,17 +42,23 @@ from agent_comms.config_options import CatalogConfigOption, CatalogSelection, Co
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms import field_codec
-from agent_comms.field_codec import FieldCodec, PathText, option
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
-from agent_comms import messages
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
-from .monitor import MonitorAttachment, MonitorPeer, MonitorService, NoReader, ReaderState, read_monitor
+
+from .monitor import (
+    MonitorAttachment,
+    MonitorPeer,
+    MonitorService,
+    NoReader,
+    ReaderState,
+    read_monitor,
+)
 
 
 class DeclaredOptions:
@@ -72,8 +82,8 @@ class DeclaredOptions:
 @dataclass(frozen=True)
 class Binding(TypedTable):
     root: str
-    bus: str = field(metadata={'wire_name': 'bus_thread'})
-    thread: str = field(metadata={'wire_name': 'session'})
+    bus: typing.Annotated[str, field_codec.WireName('bus_thread')]
+    thread: typing.Annotated[str, field_codec.WireName('session')]
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -192,8 +202,8 @@ class ObservedMonitor(MonitorEvidence):
 
 @dataclass(frozen=True)
 class ObservedPart(TypedTable):
-    id: str = field(metadata={'sql': Column(primary_key=True)})
-    number: int = field(metadata={'sql': Column(primary_key=True)})
+    id: typing.Annotated[str, Column(primary_key=True)]
+    number: typing.Annotated[int, Column(primary_key=True)]
     sender: str
     body: str
     record_id: str
@@ -221,9 +231,9 @@ class DeliveryRow(TypedTable):
             f'ORDER BY {cls.sequence_sql} DESC LIMIT 1'))
         return latest[0].message.reference if latest else None
 
-    id: str = field(metadata={'sql': Column(primary_key=True)})
+    id: typing.Annotated[str, Column(primary_key=True)]
     payload: str
-    outcome: type[Outcome] = field(metadata={'sql': Column(index=True)})
+    outcome: typing.Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     @cached_property
@@ -278,8 +288,8 @@ class TargetField:
 
     @classmethod
     def of(cls, plan: field_codec.FieldPlan, value: object) -> TargetField:
-        editor = (CatalogTargetField if 'catalog' in plan.declared.metadata
-                  else plan.setting('editor', cls))
+        editor = (CatalogTargetField if field_codec.Catalog.find(plan.annotation) is not None
+                  else plan.setting(field_codec.Editor, cls))
         return editor(plan, value)
 
     @property
@@ -292,7 +302,7 @@ class TargetField:
 
     @property
     def multiline(self) -> bool:
-        return self.plan.setting('multiline', False)
+        return self.plan.setting(field_codec.Multiline, False)
 
     @property
     def description(self) -> str:
@@ -349,7 +359,7 @@ class ChoiceTargetField(TargetField):
 class CatalogTargetField(ChoiceTargetField):
     @property
     def catalog(self) -> type[CatalogConfigOption]:
-        return self.plan.setting('catalog', CatalogConfigOption)
+        return self.plan.setting(field_codec.Catalog, CatalogConfigOption)
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:
@@ -397,14 +407,12 @@ class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
 @dataclass(frozen=True, kw_only=True)
 class Send(Operation):
     help = "Send to a thread (DM), #channel, or #all"
-    sender: str = option("--from", default="")
-    target: str = option("--to")
-    body: str = option("--body")
-    type: builtins.type[messages.MessageKind] = option("--type", default=messages.InfoKind,
-        choices=messages.SendableMessageKind.names(), editor=ChoiceTargetField)
-    role: builtins.type[messages.SendableRole] = option("--role", default=messages.ConversationRole)
-    report: SendReport = option("--report", default=MissingReport(),
-        help="Change report fields as a JSON object", type=FieldCodec.parse)
+    sender: typing.Annotated[str, field_codec.Argument(flags=("--from",))] = dataclasses.field(default="")
+    target: typing.Annotated[str, field_codec.Argument(flags=("--to",))]
+    body: typing.Annotated[str, field_codec.Argument(flags=("--body",))]
+    type: typing.Annotated[builtins.type[messages.MessageKind], field_codec.Editor(ChoiceTargetField), field_codec.Argument(flags=("--type",), options={'choices': messages.SendableMessageKind.names()})] = dataclasses.field(default=messages.InfoKind)
+    role: typing.Annotated[builtins.type[messages.SendableRole], field_codec.Argument(flags=("--role",))] = dataclasses.field(default=messages.ConversationRole)
+    report: typing.Annotated[SendReport, field_codec.Argument(flags=("--report",), options={'help': "Change report fields as a JSON object", 'type': FieldCodec.parse})] = dataclasses.field(default=MissingReport())
 
     async def execute(self, bridge: CliBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
@@ -439,8 +447,8 @@ class Watch(Inbox):
 
 @dataclass(frozen=True, kw_only=True)
 class Serve(Watch):
-    owner: ProcessIdentity = option('--owner', type=FieldCodec.parse)
-    transcript: Annotated[Path, PathText] = option('--transcript')
+    owner: typing.Annotated[ProcessIdentity, field_codec.Argument(flags=('--owner',), options={'type': FieldCodec.parse})]
+    transcript: Annotated[Path, PathText, field_codec.Argument(flags=('--transcript',))]
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:

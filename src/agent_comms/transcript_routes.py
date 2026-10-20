@@ -3,14 +3,15 @@
 import hashlib
 import os
 import sqlite3
+import typing
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .field_codec import MalformedRecord
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
+from .field_codec import MalformedRecord
 from .private_path import FileRevision
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -23,8 +24,8 @@ class RouteAnnotationTable:
 
 @dataclass(frozen=True)
 class TranscriptRoute(RouteAnnotationTable, TypedTable):
-    session_file: str = field(metadata={"sql": Column(primary_key=True)})
-    entry_id: str = field(metadata={"sql": Column(primary_key=True)})
+    session_file: typing.Annotated[str, Column(primary_key=True)]
+    entry_id: typing.Annotated[str, Column(primary_key=True)]
     routing: TurnRouting
     without_rowid = True
 
@@ -37,7 +38,7 @@ class TranscriptRoute(RouteAnnotationTable, TypedTable):
 class InputDisplay(RouteAnnotationTable, TypedTable):
     """Owner-authored presentation for one native input; None text means internal."""
 
-    native_id: str = field(metadata={"sql": Column(primary_key=True)})
+    native_id: typing.Annotated[str, Column(primary_key=True)]
     text: str | None
     routing: TurnRouting | None = None
     sent_text_digest: str | None = None
@@ -192,8 +193,8 @@ class TranscriptRoutes(StoreWriter):
         A partial successful send subset remains published if a later send fails.
         """
         from .input_disposition import InputDispositions
-        from .native_transcript import NativeTranscript
         from .native_input_owner import RegistryOwner
+        from .native_transcript import NativeTranscript
 
         if not routing.requires_annotation(published):
             return

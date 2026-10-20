@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import typing
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms import field_codec
 
 from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
@@ -54,7 +57,7 @@ class AgentRuntimeInfo(RuntimeInfo):
     model: str | None = None
     context_used: PiCount = field(default_factory=UnreportedCount)
     context_size: PiCount = field(default_factory=UnreportedCount)
-    timestamp: float = field(metadata={"wire_name": "ts", "wire_required": True}, kw_only=True)
+    timestamp: typing.Annotated[float, field_codec.WireName("ts"), field_codec.WireRequired(True)] = field(kw_only=True)
 
     def __post_init__(self) -> None:
         FieldCodec.decode(float, self.timestamp)

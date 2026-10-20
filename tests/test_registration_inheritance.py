@@ -1,9 +1,11 @@
 """Current registration declarations, incarnation and saved relationship ownership."""
 
-from agent_comms.pi_vocabulary import HighThinkingLevel
+import typing
 from dataclasses import dataclass, field, replace
 
+from agent_comms import field_codec
 from agent_comms.comms import wire
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registration_inheritance import PredicateInheritance
 from agent_comms.threads import Thread
 
@@ -23,7 +25,7 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
 
     @dataclass(frozen=True, slots=True)
     class CountedThread(Thread):
-        count: int = field(default=-1, metadata={"registration_inheritance": InheritUnsetCount})
+        count: typing.Annotated[int, field_codec.RegistrationPolicy(InheritUnsetCount)] = field(default=-1)
 
     previous = thread_registration.new_thread('owner', frozenset(), '/wt', kind=CountedThread, created_at=42.0, count=9)
     omitted = replace(previous, count=-1)
@@ -109,7 +111,9 @@ def test_project_round_trip_excludes_current_project_from_history(tmp_path):
 
 def test_project_change_retains_executing_source_but_refuses_another_input(tmp_path):
     import os
+
     import pytest
+
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.coordination_errors import StaleFence
     from agent_comms.coordination_response import LiveResponseOwner
@@ -146,7 +150,9 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
 
 def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     import os
+
     import pytest
+
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.coordination_errors import StaleFence
 

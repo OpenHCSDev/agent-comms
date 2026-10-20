@@ -13,10 +13,13 @@ import hashlib
 import json
 import os
 import secrets
+import typing
 from contextlib import suppress
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
+
+from agent_comms import field_codec
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
@@ -27,14 +30,14 @@ from agent_comms.coordinator import Coordination
 
 from .comms import Comms
 from .coordination_cohort import sealed_cohort_assignments
-from .envelope_claim_transitions import ExistingFileClaim
-from .store_files import _store_lock
-from .threads import Thread
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .declared_family import DeclaredFamily
-from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
+from .envelope_claim_transitions import ExistingFileClaim
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
+from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
+from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
+from .threads import Thread
 
 _MAX_BYTES = 1024 * 1024
 
@@ -51,7 +54,7 @@ class SelectedWriteBinding:
     root_id: str
     source: MessageReference
     assignment_id: str
-    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
+    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName('admission')]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -66,7 +69,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     claim_id: str
     owner: str
     incarnation: float
-    claim_epoch: int = field(metadata={"wire_name": 'admission_epoch'})
+    claim_epoch: typing.Annotated[int, field_codec.WireName('admission_epoch')]
     expected_attempt_ordinal: Literal[1]
     operation_id: str
     resource: str

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import typing
+from dataclasses import dataclass
+
+from agent_comms import field_codec
 
 from .assignment_states import AssignmentState
 from .coordination_tables.publications import PublicationEvidence
@@ -13,7 +16,7 @@ from .send_result import SendResult
 
 @dataclass(frozen=True, slots=True)
 class CoordinatedTurn:
-    assignment_ids: tuple[str, ...] = field(metadata={"wire_name": "claim_ids"})
+    assignment_ids: typing.Annotated[tuple[str, ...], field_codec.WireName("claim_ids")]
     disposition: type[AssignmentState]
     input_id: str
     publications: tuple[PublicationEvidence, ...]

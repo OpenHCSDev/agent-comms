@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import json
 import re
+import typing
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import ClassVar, NoReturn, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, NoReturn
+
+from agent_comms import field_codec
 
 if TYPE_CHECKING:
     from acp import RequestError
@@ -20,8 +23,8 @@ if TYPE_CHECKING:
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
-from .input_attempt import InputAttempt
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from .input_attempt import InputAttempt
 
 
 class FailureSource(DeclaredFamily, affix="FailureSource"):
@@ -96,7 +99,7 @@ class ProviderRetryResult:
 
     success: bool
     attempt: int
-    final_error: str | None = field(default=None, metadata={"wire_name": "finalError"})
+    final_error: typing.Annotated[str | None, field_codec.WireName("finalError")] = field(default=None)
 
     def __post_init__(self) -> None:
         if self.attempt < 0:
@@ -129,9 +132,7 @@ class ACPFailure(DeliveryFailure):
     input_state: type[InputAttempt] | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
     # Public failed-outcome projection of the turn-owned immutable result.
-    retry_result: ProviderRetryResult | None = field(
-        default=None, metadata={"wire_omit_default": True},
-    )
+    retry_result: typing.Annotated[ProviderRetryResult | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     @property
     def description(self) -> str:
@@ -272,8 +273,12 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
 
     async def publish(self, client, session_id: str) -> NativeTurnOutcome:
         from acp.schema import AgentMessageChunk, TextContentBlock
+
         from .acp_extension import (
-            InputFailedUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates,
+            InputFailedUpdate,
+            RequestFailedUpdate,
+            TextRouteUpdate,
+            encode_updates,
         )
 
         failure = self.request.failure

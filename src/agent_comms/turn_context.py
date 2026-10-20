@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
+
+from agent_comms import field_codec
 
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
@@ -254,9 +257,8 @@ class SegmentManifest:
     utf8_bytes: int
     tokens: int
     contributors: tuple[SegmentManifest, ...] = ()
-    captured_text: tuple[str, ...] = field(default=(), metadata={"wire_omit_default": True})
-    source_spans: tuple[ContributionCoordinates, ...] = field(
-        default=(), metadata={"wire_omit_default": True})
+    captured_text: typing.Annotated[tuple[str, ...], field_codec.WireOmitDefault(True)] = field(default=())
+    source_spans: typing.Annotated[tuple[ContributionCoordinates, ...], field_codec.WireOmitDefault(True)] = field(default=())
 
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
@@ -386,8 +388,8 @@ class RecordedSegmentManifest:
 
     manifest: SegmentManifest
     entries: tuple[ContextEntryReference, ...] = ()
-    previous: int | None = field(default=None, metadata={"wire_omit_default": True})
-    inherited_entries: int = field(default=0, metadata={"wire_omit_default": True})
+    previous: typing.Annotated[int | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    inherited_entries: typing.Annotated[int, field_codec.WireOmitDefault(True)] = field(default=0)
 
     def __post_init__(self) -> None:
         if self.entries and self.manifest.contributors:
@@ -679,8 +681,7 @@ class SystemLayerSegment(MeasuredNativeSegment):
     tokens: int
     sha256: str
     utf8_bytes: int
-    source_spans: tuple[ContributionCoordinates, ...] = field(
-        default=(), metadata={"wire_omit_default": True})
+    source_spans: typing.Annotated[tuple[ContributionCoordinates, ...], field_codec.WireOmitDefault(True)] = field(default=())
 
     def __post_init__(self):
         super().__post_init__()
@@ -1056,7 +1057,7 @@ class ContextManifest:
     counter: str
     # Original request-owner correlation, absent for previews and captures that
     # never observed dispatch. It permits neither new input nor replay.
-    request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
+    request_id: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     @property
     def public_text_recorded(self) -> bool:
@@ -1116,8 +1117,8 @@ class RecordedContextManifest:
     turn: ContextTurn
     segments: tuple[RecordedSegmentManifest, ...]
     counter: str
-    request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
-    recording_turn: int = field(default=1, metadata={"wire_omit_default": True})
+    request_id: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    recording_turn: typing.Annotated[int, field_codec.WireOmitDefault(True)] = field(default=1)
 
     @classmethod
     def capture(

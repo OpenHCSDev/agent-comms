@@ -5,29 +5,36 @@ from __future__ import annotations
 import logging
 import os
 import shlex
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from uuid import uuid4
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from .commander_heartbeat import CommanderHeartbeat
+from agent_comms import field_codec
 
-from .child_process import ObservedProcess, ParentedProcess, Platform, ProcessIdentity, ProcessState, SynchronousProcess
-from .turn_lease import NoTurnRecord
+from .active_route import resolve_comms_route
+from .child_process import (
+    ObservedProcess,
+    ParentedProcess,
+    Platform,
+    ProcessIdentity,
+    ProcessState,
+    SynchronousProcess,
+)
 from .cli_result import CliResult
-from .tool_result import ToolResult
+from .commander_heartbeat import CommanderHeartbeat
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
+from .launch_root import LaunchRoot
+from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .launch_root import LaunchRoot
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
-from .active_route import resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -39,6 +46,8 @@ from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .tool_result import ToolResult
+from .turn_lease import NoTurnRecord
 from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 
 if TYPE_CHECKING:
@@ -74,7 +83,7 @@ class TaskLaunchInput(LaunchInput):
 class OwnerRestartSelection:
     identity: OwnerIdentity
     process: ProcessIdentity
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: typing.Annotated[int, field_codec.WireName("admission_generation")]
     interpreter: str
 
     @classmethod
@@ -157,9 +166,7 @@ class NoRelease(OwnerRelease):
 
 @dataclass(frozen=True)
 class ReleasedOwner(ThreadIncarnationRecord):
-    process_identity: ProcessState = field(
-        metadata={"sql": Column(storage=JsonStorage, nullable=True)},
-    )
+    process_identity: typing.Annotated[ProcessState, Column(storage=JsonStorage, nullable=True)]
 
     def require_process(self) -> ProcessIdentity:
         return self.process_identity.require(f"Thread {self.name!r} has no released process")
@@ -170,7 +177,7 @@ class ReleasedOwner(ThreadIncarnationRecord):
 
 @dataclass(frozen=True)
 class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
-    name: str = field(metadata={"sql": Column(primary_key=True)})
+    name: typing.Annotated[str, Column(primary_key=True)]
     before: int
     after: int
 

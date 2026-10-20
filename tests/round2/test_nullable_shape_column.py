@@ -1,7 +1,8 @@
 """Physical SQL NULL decodes to mandatory state through the original codec."""
 
 import sqlite3
-from dataclasses import dataclass, field
+import typing
+from dataclasses import dataclass
 
 import pytest
 
@@ -26,17 +27,15 @@ class RecordedEpoch(JsonShapeMember, StoredEpoch):
 
 @dataclass(frozen=True)
 class NullableShapeRow(TypedTable):
-    key: str = field(metadata={"sql": Column(primary_key=True)})
-    epoch: StoredEpoch = field(
-        metadata={"sql": Column(storage=IntegerStorage, nullable=True, check="epoch>0")}
-    )
+    key: typing.Annotated[str, Column(primary_key=True)]
+    epoch: typing.Annotated[StoredEpoch, Column(storage=IntegerStorage, nullable=True, check="epoch>0")]
     optional_count: int | None = None
 
 
 @dataclass(frozen=True)
 class RequiredShapeRow(TypedTable):
-    key: str = field(metadata={"sql": Column(primary_key=True)})
-    epoch: StoredEpoch = field(metadata={"sql": Column(storage=IntegerStorage)})
+    key: typing.Annotated[str, Column(primary_key=True)]
+    epoch: typing.Annotated[StoredEpoch, Column(storage=IntegerStorage)]
 
 
 def test_sql_nullable_shape_roundtrips_without_optional_semantic_value(tmp_path):

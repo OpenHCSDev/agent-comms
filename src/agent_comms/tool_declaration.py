@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+import typing
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import ClassVar, Self
+
+from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord
@@ -19,8 +22,8 @@ def one_line(text: str, limit: int) -> str:
 
 @dataclass(frozen=True)
 class ReplacementEdit:
-    old_text: str = field(metadata={"wire_name": "oldText"})
-    new_text: str = field(metadata={"wire_name": "newText"})
+    old_text: typing.Annotated[str, field_codec.WireName("oldText")]
+    new_text: typing.Annotated[str, field_codec.WireName("newText")]
 
 
 @dataclass(frozen=True)
@@ -41,7 +44,6 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     @classmethod
     def _member_declarations(cls):
         # These existing owners share this registry; imports acquire declarations.
-        from . import native_tools, tools
 
         return super()._member_declarations()
 

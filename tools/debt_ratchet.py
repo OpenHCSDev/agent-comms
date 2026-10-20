@@ -272,6 +272,40 @@ class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
 
 
+class StringFieldMetadata(PerFileOccurrenceMeasure):
+    """Dataclass instructions belong to typed annotations, not metadata dictionaries.
+
+    Imported aliases are resolved at this Python boundary. Dynamic rebinding is
+    outside this syntactic guard's proof scope, as with the existing import guards.
+    """
+
+    @staticmethod
+    def sites(tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        constructors, modules = set(), set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "dataclasses":
+                constructors.update(alias.asname or alias.name for alias in node.names
+                                    if alias.name == "field")
+            elif isinstance(node, ast.Import):
+                modules.update(alias.asname or alias.name for alias in node.names
+                               if alias.name == "dataclasses")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and (
+                isinstance(node.func, ast.Name) and node.func.id in constructors
+                or isinstance(node.func, ast.Attribute) and node.func.attr == "field"
+                and isinstance(node.func.value, ast.Name) and node.func.value.id in modules
+            ):
+                yield node
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        return sum(
+            sum(isinstance(key, ast.Constant) and isinstance(key.value, str)
+                for key in keyword.value.keys) if isinstance(keyword.value, ast.Dict) else 1
+            for keyword in node.keywords if keyword.arg == "metadata"
+        )
+
+
 class CheckedRevision(Measure):
     """A checker's findings per changed file. Both revisions are checked under the head's
     configuration, so the difference is the code's alone. A path missing at one revision counts

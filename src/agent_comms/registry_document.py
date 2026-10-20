@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import math
 import time
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import Field, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
+
+from agent_comms import field_codec
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -18,14 +21,23 @@ from .registration_change import (
     RegistrationChange,
     UpdatedRegistration,
 )
-from .registry_provenance import RegisteredRecipient, RegistryNames, RegistryProvenance, RetiredRecipient
+from .registry_provenance import (
+    RegisteredRecipient,
+    RegistryNames,
+    RegistryProvenance,
+    RetiredRecipient,
+)
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
 from .thread_identity import (
-    ClaimedIdentity, GenerationCounter, OwnerIdentity, RecordedThreadIncarnation, TurnIdentity,
+    ClaimedIdentity,
+    GenerationCounter,
+    OwnerIdentity,
+    RecordedThreadIncarnation,
+    TurnIdentity,
 )
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
@@ -159,16 +171,18 @@ class ThreadSlice[Value](ABC):
         """A copy an edit can change without changing ``value``."""
 
     @staticmethod
-    def of(declared: Field) -> type[ThreadSlice]:
-        kind: type[ThreadSlice] = declared.metadata["thread_slice"]
+    def of(plan: field_codec.FieldPlan) -> type[ThreadSlice]:
+        kind = plan.setting(field_codec.SlicePolicy, None)
+        if kind is None or not issubclass(kind, ThreadSlice):
+            raise TypeError(f"{plan.name} declares no thread slice")
         return kind
 
     @staticmethod
     def required[Document: type](document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
-        for declared, _ in FieldCodec.record_fields(document):
-            if not issubclass(declared.metadata.get("thread_slice", type), ThreadSlice):
-                raise TypeError(f"{document.__name__}.{declared.name} declares no thread slice")
+        for plan in FieldCodec.field_plans(document):
+            if plan.declared.init and plan.records:
+                ThreadSlice.of(plan)
         return document
 
 
@@ -223,18 +237,13 @@ class WholeDocumentValue(ThreadSlice[int]):
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
-    version: Literal[1] = field(
-        default=1, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
-    threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
-    statuses: dict[str, ThreadStatus] = field(
-        default_factory=dict, metadata={"thread_slice": OwnRow})
-    last_seen: dict[str, float] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
-    aliases: dict[str, str] = field(default_factory=dict, metadata={"thread_slice": AliasesOf})
-    owners: GenerationCounter = field(
-        default_factory=GenerationCounter, metadata={"thread_slice": GenerationOf})
-    claims: GenerationCounter = field(
-        default_factory=GenerationCounter,
-        metadata={"wire_name": 'admissions', "thread_slice": GenerationOf})
+    version: typing.Annotated[Literal[1], field_codec.SlicePolicy(WholeDocumentValue), field_codec.WireRequired(True)] = field(default=1)
+    threads: typing.Annotated[dict[str, Thread], field_codec.SlicePolicy(OwnRow)] = field(default_factory=dict)
+    statuses: typing.Annotated[dict[str, ThreadStatus], field_codec.SlicePolicy(OwnRow)] = field(default_factory=dict)
+    last_seen: typing.Annotated[dict[str, float], field_codec.SlicePolicy(OwnRow)] = field(default_factory=dict)
+    aliases: typing.Annotated[dict[str, str], field_codec.SlicePolicy(AliasesOf)] = field(default_factory=dict)
+    owners: typing.Annotated[GenerationCounter, field_codec.SlicePolicy(GenerationOf)] = field(default_factory=GenerationCounter)
+    claims: typing.Annotated[GenerationCounter, field_codec.WireName('admissions'), field_codec.SlicePolicy(GenerationOf)] = field(default_factory=GenerationCounter)
 
     _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
 
@@ -252,8 +261,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return replace(
             self,
             **{
-                declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
-                for declared, _ in FieldCodec.record_fields(cast(type, type(self)))
+                plan.name: ThreadSlice.of(plan).copy(getattr(self, plan.name))
+                for plan in FieldCodec.field_plans(type(self)) if plan.declared.init and plan.records
             },
         )
 
@@ -296,8 +305,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         thread's declaration is neither decoded nor validated here.
         """
         try:
-            keyed = [(ThreadSlice.of(declared), key)
-                     for declared, key in FieldCodec.record_fields(cast(type, cls))]
+            keyed = [(ThreadSlice.of(plan), plan.key)
+                     for plan in FieldCodec.field_plans(cls) if plan.declared.init and plan.records]
             canonical = name
             for kind, key in keyed:
                 canonical = kind.canonical(raw[key], canonical)
@@ -309,8 +318,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     @classmethod
     def thread_rows(cls) -> tuple[str, ...]:
         """The sections that hold one row per thread name."""
-        return tuple(declared.name for declared, _ in FieldCodec.record_fields(cast(type, cls))
-                     if ThreadSlice.of(declared) is OwnRow)
+        return tuple(plan.name for plan in FieldCodec.field_plans(cls)
+                     if plan.declared.init and plan.records and ThreadSlice.of(plan) is OwnRow)
 
     @classmethod
     def from_wire(cls, raw: dict, earlier: tuple[dict, RegistryDocument] | None = None

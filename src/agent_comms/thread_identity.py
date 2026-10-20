@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import math
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
+
+from agent_comms import field_codec
 
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
@@ -253,12 +256,10 @@ class ThreadProvenance:
     name: str
     tags: frozenset[str]
     worktree: str
-    created_at: float = field(metadata={"wire_required": True})
+    created_at: typing.Annotated[float, field_codec.WireRequired(True)]
     session_file: str | None = None
     title: str | None = None
-    backend: type[AgentBackend] = field(
-        default_factory=AgentBackend.for_new_threads, metadata={"wire_omit_default": True},
-    )
+    backend: typing.Annotated[type[AgentBackend], field_codec.WireOmitDefault(True)] = field(default_factory=AgentBackend.for_new_threads)
 
     @cached_property
     def runtime(self) -> RuntimeLocation:
@@ -361,7 +362,7 @@ class ClaimedIdentity:
     """A registry-allocated input generation, never an owner lease."""
 
     incarnation: ThreadIncarnation
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: typing.Annotated[int, field_codec.WireName("admission_generation")]
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
@@ -384,7 +385,7 @@ class TurnFence:
 
     identity: TurnIdentity
     turn_id: str
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: typing.Annotated[int, field_codec.WireName("admission_generation")]
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""

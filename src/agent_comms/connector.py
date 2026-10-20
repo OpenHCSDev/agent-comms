@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import dataclasses
 import hashlib
 import html
 import json
@@ -26,11 +27,12 @@ import logging
 import secrets
 import sys
 import time
+import typing
 import urllib.request
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
@@ -38,26 +40,38 @@ from urllib.parse import urlencode
 from aiohttp import web
 from pydantic import JsonValue
 
+from agent_comms import field_codec
+
 from .cli_commands import DeclaredOptions
-from .command import Command
 from .cli_protocol import CoreError
-from .comms import Comms, client_wire
-from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord, PathText, option
-from .goal_actions import DirectiveGoalAction
-from .connector_store import (
-    CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode,
-    RegisteredClient, digest,
-)
-from .messages import Message
+from .command import Command
 from .commander.standing import UnownedWheelSpin
 from .commander_heartbeat import CommanderHeartbeat
+from .comms import Comms, client_wire
+from .connector_store import (
+    CODE_SECONDS,
+    AuthorizationRequest,
+    ConnectorGrants,
+    ConnectorStore,
+    IssuedCode,
+    RegisteredClient,
+    digest,
+)
 from .coordinator import Coordination
+from .declared_family import DeclaredFamily
+from .errors import ToolRefusedError, UnregisteredThreadError
+from .field_codec import FieldCodec, MalformedRecord, PathText
+from .goal_actions import DirectiveGoalAction
+from .messages import Message
 from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_caller import ThreadCaller
 from .tools import (
-    CommsChannelsTool, CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+    CommsChannelsTool,
+    CommsVerdictTool,
+    ReadTool,
+    TodoChanged,
+    ToolRequest,
+    tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -90,8 +104,8 @@ class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
 class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declared_name):
     label = "Review PR head"
     description = "Record the connector reviewer's acceptance of the exact PR commit it reviewed."
-    id: str = tool_field("Problem ID")
-    operation: ReviewedHeadVerdict = tool_field("Accepted PR-head verdict")
+    id: typing.Annotated[str, *tool_field("Problem ID")]
+    operation: typing.Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
 
     def apply(self, comms: Comms, caller: DirectorCaller) -> TodoChanged:
         todo = self.operation.reviewed(
@@ -108,7 +122,7 @@ PROTOCOL_VERSION = "2025-06-18"
 
 def declared(record: type, values: Mapping[str, object]) -> dict[str, object]:
     """The values a record declares; an OAuth peer may send parameters it does not read."""
-    names = {FieldCodec.wire_key(item) for item in fields(record)}
+    names = {plan.key for plan in FieldCodec.field_plans(record)}
     return {key: value for key, value in values.items() if key in names}
 
 
@@ -202,7 +216,7 @@ class RefreshTokenGrant(TokenGrant):
 class ToolCall:
     name: str
     arguments: dict[str, object] = field(default_factory=dict)
-    meta: dict[str, object] = field(default_factory=dict, metadata={"wire_name": "_meta"})
+    meta: typing.Annotated[dict[str, object], field_codec.WireName("_meta")] = field(default_factory=dict)
 
     @classmethod
     def of(cls, tool: type[ToolRequest]) -> ToolCall:
@@ -333,11 +347,8 @@ class ToolsCallResult:
     """A tool's encoded reply, or its failed call encoded as an MCP error result."""
 
     content: tuple[TextContent, ...]
-    is_error: bool = field(metadata={"wire_name": "isError"})
-    structured_content: dict[str, JsonValue] = field(
-        default_factory=dict,
-        metadata={"wire_name": "structuredContent", "wire_omit_default": True},
-    )
+    is_error: typing.Annotated[bool, field_codec.WireName("isError")]
+    structured_content: typing.Annotated[dict[str, JsonValue], field_codec.WireName("structuredContent"), field_codec.WireOmitDefault(True)] = field(default_factory=dict)
 
     @classmethod
     def failed(cls, error: Exception) -> ToolsCallResult:
@@ -576,13 +587,9 @@ class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(ConnectorVerb):
     help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
-    root: Annotated[Path, PathText] = option("--root", help="Explicit Comms root to serve")
-    port: int = option("--port", default=PORT, help="The loopback port it listens on")
-    issuer: str = option(
-        "--issuer",
-        default=f"http://{LOOPBACK}:{PORT}",
-        help="Public origin the OAuth metadata names",
-    )
+    root: Annotated[Path, PathText, field_codec.Argument(flags=("--root",), options={'help': "Explicit Comms root to serve"})]
+    port: typing.Annotated[int, field_codec.Argument(flags=("--port",), options={'help': "The loopback port it listens on"})] = dataclasses.field(default=PORT)
+    issuer: typing.Annotated[str, field_codec.Argument(flags=("--issuer",), options={'help': "Public origin the OAuth metadata names"})] = dataclasses.field(default=f"http://{LOOPBACK}:{PORT}")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
@@ -600,9 +607,9 @@ class RoundTripVerb(ConnectorVerb):
     runtime and its loopback read agrees with this bus. Native-only installs do not need it."""
 
     help = "Read the bus through the running connector service and compare"
-    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
-    runtime: Annotated[Path, PathText] = option("runtime", help="The Python the service runs")
-    port: int = option("--port", default=PORT, help="The service's loopback port")
+    root: Annotated[Path, PathText, field_codec.Argument(flags=("root",), options={'help': "The comms root it proves"})]
+    runtime: Annotated[Path, PathText, field_codec.Argument(flags=("runtime",), options={'help': "The Python the service runs"})]
+    port: typing.Annotated[int, field_codec.Argument(flags=("--port",), options={'help': "The service's loopback port"})] = dataclasses.field(default=PORT)
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         read = ToolCall.of(CommsChannelsTool)
@@ -648,7 +655,7 @@ class PendingVerb(ConnectorVerb):
 @dataclass(frozen=True, kw_only=True)
 class ApproveVerb(ConnectorVerb):
     help = "Approve one waiting authorization"
-    request: str = option("request", help="The id the authorize page shows")
+    request: typing.Annotated[str, field_codec.Argument(flags=("request",), options={'help': "The id the authorize page shows"})]
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         def approved(grants: ConnectorGrants) -> ConnectorGrants:

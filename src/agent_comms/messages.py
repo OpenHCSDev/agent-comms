@@ -6,11 +6,14 @@ import builtins
 import hashlib
 import re
 import time
+import typing
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type, cast
+
+from agent_comms import field_codec
 
 from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
@@ -165,8 +168,8 @@ class NoMembershipChange(NullMember):
 class MessageRoleWire:
     """The unchanged external fields, decoded once into a message role."""
 
-    change: MembershipChange | NoMembershipChange = field(default_factory=NoMembershipChange, metadata={"wire_name": "membership", "wire_omit_default": True})
-    notice: bool = field(default=False, metadata={"wire_omit_default": True})
+    change: typing.Annotated[MembershipChange | NoMembershipChange, field_codec.WireName("membership"), field_codec.WireOmitDefault(True)] = field(default_factory=NoMembershipChange)
+    notice: typing.Annotated[bool, field_codec.WireOmitDefault(True)] = field(default=False)
 
     def role(self):
         role = self.change.conversation_role()
@@ -335,31 +338,18 @@ class Message:
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
-    sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
-    target: str = field(metadata={"wire_name": "to", "wire_order": 3})
-    body: str = field(metadata={"wire_name": "text", "wire_order": 6})
-    type: builtins.type[MessageKind] = field(metadata={"wire_order": 5})
-    timestamp: float = field(
-        default_factory=time.time, metadata={"wire_name": "ts", "wire_order": 4}
-    )
-    seq: int = field(default=0, metadata={"wire_order": 0, "publication_exclude": True})
-    sender_role: Type[ThreadRole] = field(  # noqa: UP006 - the `type` field shadows the builtin
-        default=AgentThreadRole, metadata={"wire_order": 7, "publication_exclude": True}
-    )
-    role: MessageRole = field(default_factory=ConversationRole, metadata={"wire_order": 8})
-    mentions: tuple[ThreadMention, ...] = field(
-        default=(),
-        metadata={"wire_omit_default": True, "wire_order": 10, "publication_exclude": True},
-    )
-    task: TaskAttachment = field(
-        default_factory=NoTaskAttachment, metadata={"wire_omit_default": True, "wire_order": 12}
-    )
-    report: ChangeReport | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_order": 13}
-    )
-    answers: tuple[MessageReference, ...] = field(
-        default=(), metadata={"wire_omit_default": True, "wire_order": 14}
-    )
+    sender: typing.Annotated[str, field_codec.WireName("from"), field_codec.WireOrder(2)]
+    target: typing.Annotated[str, field_codec.WireName("to"), field_codec.WireOrder(3)]
+    body: typing.Annotated[str, field_codec.WireName("text"), field_codec.WireOrder(6)]
+    type: typing.Annotated[builtins.type[MessageKind], field_codec.WireOrder(5)]
+    timestamp: typing.Annotated[float, field_codec.WireName("ts"), field_codec.WireOrder(4)] = field(default_factory=time.time)
+    seq: typing.Annotated[int, field_codec.WireOrder(0), field_codec.PublicationExclude(True)] = field(default=0)
+    sender_role: typing.Annotated[Type[ThreadRole], field_codec.WireOrder(7), field_codec.PublicationExclude(True)] = field(default=AgentThreadRole)
+    role: typing.Annotated[MessageRole, field_codec.WireOrder(8)] = field(default_factory=ConversationRole)
+    mentions: typing.Annotated[tuple[ThreadMention, ...], field_codec.WireOmitDefault(True), field_codec.WireOrder(10), field_codec.PublicationExclude(True)] = field(default=())
+    task: typing.Annotated[TaskAttachment, field_codec.WireOmitDefault(True), field_codec.WireOrder(12)] = field(default_factory=NoTaskAttachment)
+    report: typing.Annotated[ChangeReport | None, field_codec.WireOmitDefault(True), field_codec.WireOrder(13)] = field(default=None)
+    answers: typing.Annotated[tuple[MessageReference, ...], field_codec.WireOmitDefault(True), field_codec.WireOrder(14)] = field(default=())
 
     @property
     def text_size(self) -> int:
@@ -377,9 +367,9 @@ class Message:
         return replace(
             self,
             **{
-                declared.name: declared.default
-                for declared in fields(self)
-                if declared.metadata.get("publication_exclude")
+                plan.name: plan.declared.default
+                for plan in FieldCodec.field_plans(type(self))
+                if plan.setting(field_codec.PublicationExclude, False)
             },
         )
 
@@ -525,7 +515,7 @@ class Message:
 @dataclass(frozen=True, kw_only=True)
 class ClaimMessage(Message):
     """An original claim envelope, distinct from a fresh conversation message."""
-    claim_transition: ClaimTransition = field(metadata={'wire_order': 11})
+    claim_transition: typing.Annotated[ClaimTransition, field_codec.WireOrder(11)]
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:

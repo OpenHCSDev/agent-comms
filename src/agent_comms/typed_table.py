@@ -14,7 +14,7 @@ import types
 from abc import abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from pathlib import Path
@@ -27,13 +27,19 @@ from typing import (
     Union,
     get_args,
     get_origin,
-    get_type_hints,
 )
 
-from .locked_store import RootFile
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
+from .field_codec import (
+    FieldCodec,
+    FieldDirective,
+    FieldPlan,
+    MalformedRecord,
+    ValueDecoder,
+    compile_decoder,
+)
+from .locked_store import RootFile
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -79,7 +85,7 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     @classmethod
     def family_constraints(cls, column: str, annotation: object) -> tuple[str, ...]:
         """The generated selector CHECK, also consumed by stopped DDL carries."""
-        if get_origin(annotation) is Annotated:
+        if FieldCodec._representation(annotation)[1] is not None:
             return ()
         declared, _ = _base_type(annotation)
         if get_origin(declared) is not type:
@@ -239,7 +245,7 @@ class JsonStorage(SqlStorage):
 
 
 @dataclass(frozen=True)
-class Column:
+class Column(FieldDirective):
     """Constraints on a field; its name and type remain on the dataclass field."""
 
     primary_key: bool = False
@@ -252,6 +258,10 @@ class Column:
     generated: str | None = None
     storage: type[SqlStorage] | None = None
     nullable: bool = False  # SQLite NULL may decode to a mandatory nominal value.
+
+    @classmethod
+    def declared(cls, annotation: object) -> Column:
+        return cls.find(annotation) or cls()
 
     @property
     def writable(self) -> bool:
@@ -336,6 +346,17 @@ class _Field(SqlValue):
     nullable: bool
     column: Column
 
+    @classmethod
+    def for_field(cls, plan: FieldPlan) -> _Field:
+        column = Column.declared(plan.annotation)
+        return cls(
+            name=plan.name, wire_name=plan.key if column.record_key else plan.name,
+            init=plan.declared.init, annotation=plan.annotation,
+            nullable=_base_type(plan.annotation)[1] or column.nullable,
+            storage=column.storage or SqlStorage.for_type(plan.annotation),
+            column=column, value=plan.value,
+        )
+
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
     """Quote a declaration-owned SQL constant, never a query parameter."""
@@ -351,21 +372,7 @@ class TypedRow:
     def _fields(cls) -> tuple[_Field, ...]:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
-        hints = get_type_hints(cls, include_extras=True)
-        return tuple(
-            _Field(
-                name=item.name,
-                wire_name=(FieldCodec.wire_key(item)
-                           if item.metadata.get("sql", Column()).record_key else item.name),
-                init=item.init,
-                annotation=hints[item.name],
-                nullable=_base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
-                storage=item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
-                column=item.metadata.get("sql", Column()),
-                value=compile_decoder(hints[item.name]),
-            )
-            for item in fields(cls)
-        )
+        return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls))
 
     @classmethod
     def column_projection(cls) -> dict[str, str]:

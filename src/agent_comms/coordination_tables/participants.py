@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
-from dataclasses import field as dataclass_field
 
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
@@ -15,17 +15,11 @@ from agent_comms.typed_table import (
 
 @dataclass(frozen=True, kw_only=True)
 class Participants(CoordinatorTable, TypedTable):
-    participant_lookup: str = dataclass_field(
-        metadata={
-            "sql": Column(
+    participant_lookup: typing.Annotated[str, Column(
                 primary_key=True,
                 check="\n        length(participant_lookup) BETWEEN 1 AND 256\n    ",
-            )
-        }
-    )
-    display_name: str = dataclass_field(
-        metadata={"sql": Column(check="length(display_name) BETWEEN 1 AND 256")}
-    )
+            )]
+    display_name: typing.Annotated[str, Column(check="length(display_name) BETWEEN 1 AND 256")]
     committed: bool
 
     @classmethod
@@ -58,11 +52,9 @@ END"""
 
 @dataclass(frozen=True, kw_only=True)
 class ParticipantAliases(CoordinatorTable, TypedTable):
-    alias: str = dataclass_field(
-        metadata={"sql": Column(primary_key=True, check="length(alias) BETWEEN 1 AND 256")}
-    )
+    alias: typing.Annotated[str, Column(primary_key=True, check="length(alias) BETWEEN 1 AND 256")]
     participant_lookup: str
-    renamed_at_ms: int = dataclass_field(metadata={"sql": Column(check="renamed_at_ms >= 0")})
+    renamed_at_ms: typing.Annotated[int, Column(check="renamed_at_ms >= 0")]
 
     @classmethod
     def references(cls):
@@ -90,11 +82,9 @@ END"""
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerGenerations(CoordinatorTable, TypedTable):
-    owner_lookup: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
-    owner_thread: str = dataclass_field(
-        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
-    )
-    generation: int = dataclass_field(metadata={"sql": Column(check="generation > 0")})
+    owner_lookup: typing.Annotated[str, Column(primary_key=True)]
+    owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
+    generation: typing.Annotated[int, Column(check="generation > 0")]
 
     @classmethod
     def references(cls):

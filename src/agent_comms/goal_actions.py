@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import typing
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
+
+from agent_comms import field_codec
 
 from .change_report import FileLine
 from .child_process import ProcessIdentity
@@ -551,7 +554,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 class OrderGoalAction(ProblemOrderGoalAction):
     """The order's commander gives the problem to this thread."""
     expected_revision: int
-    traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
+    traced: typing.Annotated[FileLine | None, field_codec.WireOmitDefault(True)] = field(default=None)
     assigner: ThreadIncarnation
 
     def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:

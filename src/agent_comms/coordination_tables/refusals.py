@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from dataclasses import dataclass, field
+import typing
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 class SendRefusal(CoordinatorTable, TypedTable):
     """One attempted send, with no fabricated message, audience or delivery identity."""
 
-    id: int = field(metadata={"sql": Column(primary_key=True)})
+    id: typing.Annotated[int, Column(primary_key=True)]
     sender: str
     target: str
     reason: str

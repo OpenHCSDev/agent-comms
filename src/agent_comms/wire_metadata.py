@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
+
+from agent_comms import field_codec
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
@@ -61,7 +64,7 @@ class ArchivedAccess(WireAccess):
         return _connect(path, readonly=True)
 
     def verify_checkpoint(self, bus, marker, db, stream, path, *, mode):
-        from .private_bus_checkpoint import CheckedRead, CheckedPrefix, _tail
+        from .private_bus_checkpoint import CheckedPrefix, CheckedRead, _tail
 
         # The saved check binds the bus bytes and index file, not
         # the current writer's disposable index membership. No recovery writes
@@ -76,21 +79,13 @@ class ArchivedAccess(WireAccess):
 @dataclass
 class WireMetadata:
     last_seq: int = 0
-    claimed_after_seq: int = field(default=0, metadata={"wire_name": 'admission_after_seq', "wire_required": True})
-    access: WireAccess = field(default_factory=WritableAccess, metadata={"wire_required": True})
-    writer_protocol_version: Literal[1] | None = field(
-        default=None, metadata={"wire_omit_default": True}
-    )
-    wire_root_id: str | None = field(default=None, metadata={"wire_omit_default": True})
-    claim_envelopes_version: Literal[1] | None = field(
-        default=None, metadata={"wire_omit_default": True}
-    )
-    checkpoint_version: Literal[1] | None = field(
-        default=None, metadata={"wire_omit_default": True}
-    )
-    checkpoint_seal: CheckpointSeal | None = field(
-        default=None, metadata={"wire_omit_default": True}
-    )
+    claimed_after_seq: typing.Annotated[int, field_codec.WireName('admission_after_seq'), field_codec.WireRequired(True)] = field(default=0)
+    access: typing.Annotated[WireAccess, field_codec.WireRequired(True)] = field(default_factory=WritableAccess)
+    writer_protocol_version: typing.Annotated[Literal[1] | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    wire_root_id: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    claim_envelopes_version: typing.Annotated[Literal[1] | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    checkpoint_version: typing.Annotated[Literal[1] | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    checkpoint_seal: typing.Annotated[CheckpointSeal | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
     def __post_init__(self) -> None:
         if not 0 <= self.last_seq <= MAX_WIRE_SEQ:

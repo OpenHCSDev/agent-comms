@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
 
+from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -48,10 +50,10 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
                 "selected owner has an unresolved execution; new claims remain pending"
             )
 
-    owner_lookup: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
-    execution_id: str | None = dataclass_field(metadata={"sql": Column()})
-    attempt_ordinal: int | None = dataclass_field(metadata={"sql": Column()})
-    pointer_revision: int = dataclass_field(metadata={"sql": Column(check="pointer_revision >= 0")})
+    owner_lookup: typing.Annotated[str, Column(primary_key=True)]
+    execution_id: typing.Annotated[str | None, Column()]
+    attempt_ordinal: typing.Annotated[int | None, Column()]
+    pointer_revision: typing.Annotated[int, Column(check="pointer_revision >= 0")]
 
     def __post_init__(self) -> None:
         require_nonempty(self.owner_lookup, "owner_lookup")
@@ -65,12 +67,7 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
-    required_active: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={"sql": Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END")},
-    )
+    required_active: typing.Annotated[str | None, Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END")] = dataclass_field(init=False, default=None, compare=False)
 
     checks = ("(execution_id IS NULL) = (attempt_ordinal IS NULL)",)
 
@@ -134,9 +131,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             )
         )
 
-    execution_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
+    execution_id: typing.Annotated[str, Column(
                 primary_key=True,
                 check=(
                     "\n"
@@ -144,26 +139,16 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                     "on_id, ':') = 0\n"
                     "    "
                 ),
-            )
-        }
-    )
+            )]
     origin: ExecutionOrigin
-    lifecycle: ExecutionState = dataclass_field(metadata={"snapshot_exclude": True})
-    owner_thread: str = dataclass_field(
-        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
-    )
+    lifecycle: typing.Annotated[ExecutionState, field_codec.SnapshotExclude(True)]
+    owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_lookup: str
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
-    max_attempts: int = dataclass_field(metadata={"sql": Column(check="max_attempts > 0")})
-    reason_code: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
-        }
-    )
-    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
-    )
+    revision: typing.Annotated[int, Column(check="revision > 0")]
+    max_attempts: typing.Annotated[int, Column(check="max_attempts > 0")]
+    reason_code: typing.Annotated[str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")]
+    created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
+    updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
     @projected(view="snapshot", name="status")
     def snapshot_status(self):
         return type(self.lifecycle)
@@ -188,27 +173,11 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
 
-    status: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+    status: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(
                 generated="json_extract(lifecycle, '$.kind')",
                 check="status IN\n      ({execution_names})",
-            ),
-        },
-    )
-    current_attempt_ordinal: int | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    current_attempt_ordinal: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
                 generated="json_extract(lifecycle, '$.ordinal')",
                 check=(
                     "\n"
@@ -216,107 +185,41 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                     "al BETWEEN 1 AND max_attempts\n"
                     "    "
                 ),
-            ),
-        },
-    )
-    required_attempt_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    required_attempt_kind: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
                 generated=(
                     "CASE\n"
                     "        WHEN status = 'active' THEN 'active'\n"
                     "        WHEN status = 'completed' THEN 'succeeded'\n"
                     "    END"
                 )
-            ),
-        },
-    )
-    active_execution_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN status = 'active' THEN execution_id END"),
-        },
-    )
-    active_attempt_ordinal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END"),
-        },
-    )
-    wire_execution_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN origin = 'wire' THEN execution_id END"),
-        },
-    )
-    wire_claim_ordinal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN origin = 'wire' THEN 0 END"),
-        },
-    )
-    claim_status_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, default=None, compare=False)
+    active_execution_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN status = 'active' THEN execution_id END")] = dataclass_field(init=False, default=None, compare=False)
+    active_attempt_ordinal: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END")] = dataclass_field(init=False, default=None, compare=False)
+    wire_execution_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN origin = 'wire' THEN execution_id END")] = dataclass_field(init=False, default=None, compare=False)
+    wire_claim_ordinal: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN origin = 'wire' THEN 0 END")] = dataclass_field(init=False, default=None, compare=False)
+    claim_status_kind: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
                 generated=(
                     "CASE\n"
                     "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
                     "'\n"
                     "        ELSE status END"
                 )
-            ),
-        },
-    )
-    deferred_replay_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, default=None, compare=False)
+    deferred_replay_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
                 generated=(
                     "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                     " NULL\n"
                     "              THEN execution_id END"
                 )
-            ),
-        },
-    )
-    deferred_replay_required: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, default=None, compare=False)
+    deferred_replay_required: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
                 generated=(
                     "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                     " NULL\n"
                     "              THEN 1 END"
                 )
-            ),
-        },
-    )
+            )] = dataclass_field(init=False, default=None, compare=False)
     checks = (
         (
             "(status IN ({unstarted_execution_names}) AND current_attempt_ord"

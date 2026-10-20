@@ -25,6 +25,7 @@ import tarfile
 import tempfile
 import time
 import tomllib
+import typing
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager
@@ -38,6 +39,7 @@ from cutover.carry import CarryLedger
 from cutover.carry_maintenance_identity import OldMarker, StoredMaintenanceState
 from install_snapshot import SnapshotHome
 
+from agent_comms import field_codec
 from agent_comms.active_route import ActiveRoute, CommsRoute
 from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import Platform
@@ -97,9 +99,7 @@ class ExternalRecord(RecordMember):
 @dataclass(frozen=True)
 class WheelFiles(ExternalRecord):
     packages: tuple[str, ...]
-    force_include: dict[str, str] = field(
-        default_factory=dict, metadata={"wire_name": "force-include"}
-    )
+    force_include: typing.Annotated[dict[str, str], field_codec.WireName("force-include")] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -360,7 +360,7 @@ class SnapshotCopy(SnapshotHome):
 @dataclass(frozen=True)
 class RouteDocument:
     version: int
-    selection: ActiveRoute = field(metadata={"wire_inline": True})
+    selection: typing.Annotated[ActiveRoute, field_codec.WireInline(True)]
 
     def require_current(self) -> None:
         if self.version != ActiveRoute.version:
@@ -919,14 +919,14 @@ class GateReport:
 
 @dataclass(frozen=True)
 class RepositoryAnswer(ExternalRecord):
-    name: str = field(metadata={"wire_name": "nameWithOwner"})
+    name: typing.Annotated[str, field_codec.WireName("nameWithOwner")]
 
 
 @dataclass(frozen=True)
 class PullRequestAnswer(ExternalRecord):
-    head: str = field(metadata={"wire_name": "headRefOid"})
-    base: str = field(metadata={"wire_name": "baseRefOid"})
-    cross_repository: bool = field(metadata={"wire_name": "isCrossRepository"})
+    head: typing.Annotated[str, field_codec.WireName("headRefOid")]
+    base: typing.Annotated[str, field_codec.WireName("baseRefOid")]
+    cross_repository: typing.Annotated[bool, field_codec.WireName("isCrossRepository")]
 
     def require_local(self) -> None:
         if self.cross_repository:

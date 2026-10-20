@@ -10,12 +10,15 @@ fsync before any reader observes it. Parsed rows alone are NOT durable proof.
 from __future__ import annotations
 
 import stat
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+
+from agent_comms import field_codec
 
 from .coordination_errors import IdentityConflict
 from .field_codec import (
@@ -38,7 +41,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
-    from .registry_provenance import RegistryProvenance
+    pass
 
 
 class ClaimTransitionError(ValueError):
@@ -174,7 +177,7 @@ class UnrecordedScope(NullMember, ClaimScope):
 class RecordedScope(ClaimScope, declared_name=None):
     """Every acquisition published today records the input generation and operation it serves."""
 
-    owner_claimed_generation: int = field(metadata={"wire_name": "owner_admission_generation"})
+    owner_claimed_generation: typing.Annotated[int, field_codec.WireName("owner_admission_generation")]
     operation_id: Annotated[str, Id128Text]
     turn_id: str
 
@@ -208,13 +211,13 @@ class WakeClaim(RecordMember, RecordedScope):
     wire_root_id: Annotated[str, Id128Text]
     source_seq: int
     source_message_id: Annotated[str, BoundedText]
-    wake_assignment_id: Annotated[str, BoundedText] = field(metadata={"wire_name": "wake_claim_id"})
+    wake_assignment_id: Annotated[str, BoundedText, field_codec.WireName("wake_claim_id")]
     wake_revision: int
     recipient_lookup: Annotated[str, Id128Text]
     execution_id: Annotated[str, BoundedText]
     participant_generation: int
     attempt_ordinal: int
-    version: Literal[1] = field(default=1, metadata={"wire_required": True})
+    version: typing.Annotated[Literal[1], field_codec.WireRequired(True)] = field(default=1)
 
     def belongs_to(self, attempt: AttemptRecord) -> bool:
         # The attempts table's primary key fixes its immutable participant identity.
@@ -277,7 +280,7 @@ class ClaimIdentity:
 @dataclass(frozen=True)
 class AcquiringClaim(ClaimIdentity):
     generation: Annotated[str, Id128Text]
-    claim_scope: ClaimScope = field(metadata={"wire_name": "admission"})
+    claim_scope: typing.Annotated[ClaimScope, field_codec.WireName("admission")]
 
 
 @dataclass(frozen=True)
@@ -285,8 +288,7 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
-    expired: tuple[Annotated[str, ResourcePathText], ...] = field(
-        default=(), kw_only=True, metadata={"wire_omit_default": True})
+    expired: typing.Annotated[tuple[Annotated[str, ResourcePathText], ...], field_codec.WireOmitDefault(True)] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
@@ -342,8 +344,7 @@ class Acquisition(ClaimTransition, declared_name=None):
 
     claims: tuple[Annotated[str, ResourcePathText], ...] = field(kw_only=True)
     # The stored bus row carries both sides of a transition; an acquisition's release side is empty.
-    releases: tuple[ClaimRelease, ...] = field(
-        default=(), kw_only=True, metadata={"wire_required": True})
+    releases: typing.Annotated[tuple[ClaimRelease, ...], field_codec.WireRequired(True)] = field(default=(), kw_only=True)
     generation: Annotated[str, Id128Text] = field(kw_only=True)
     claim_scope: ClassVar[ClaimScope]
 
@@ -383,7 +384,7 @@ class Acquisition(ClaimTransition, declared_name=None):
 class WakeClaims(RecordMember, Acquisition, AcquiringClaim):
     """An acquisition published today; its row records the scope it serves."""
 
-    claim_scope: RecordedScope = field(metadata={"wire_name": "admission"})
+    claim_scope: typing.Annotated[RecordedScope, field_codec.WireName("admission")]
 
 
 @dataclass(frozen=True)
@@ -400,9 +401,8 @@ class UnscopedClaims(RecordMember, Acquisition):
 class ReleasedClaims(RecordMember, ClaimTransition):
     releases: tuple[ClaimRelease, ...]
     # The stored bus row carries both sides of a transition; a release acquires nothing and mints no generation.
-    claims: tuple[Annotated[str, ResourcePathText], ...] = field(
-        default=(), metadata={"wire_required": True})
-    generation: None = field(default=None, metadata={"wire_required": True})
+    claims: typing.Annotated[tuple[Annotated[str, ResourcePathText], ...], field_codec.WireRequired(True)] = field(default=())
+    generation: typing.Annotated[None, field_codec.WireRequired(True)] = field(default=None)
 
     def __post_init__(self) -> None:
         super().__post_init__()

@@ -1,5 +1,8 @@
 
-from agent_comms.field_codec import FieldCodec, option
+import typing
+
+from agent_comms import field_codec
+
 """External contracts and adding commands without editing any consumer catalog."""
 
 import asyncio
@@ -10,20 +13,19 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind
-from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
+from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
     RuntimeRequest,
 )
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.threads import Thread
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
@@ -68,7 +70,7 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
     @dataclass(frozen=True, kw_only=True)
     class ContractProbeCliCommand(CliCommand, declared_name="contract-probe"):
         help = "Test extension through declaration membership"
-        amount: int = option("--amount")
+        amount: typing.Annotated[int, field_codec.Argument(flags=("--amount",))]
 
         def apply(self, ctx):
             return ContractProbeResult(self.amount + 1, str(ctx.root))

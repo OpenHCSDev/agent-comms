@@ -11,8 +11,9 @@ import argparse
 import shlex
 import subprocess
 import sys
+import typing
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 
@@ -26,6 +27,7 @@ from install_gate import (
     run,
 )
 
+from agent_comms import field_codec
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, GitCommitText
 from agent_comms.todos import ReviewedHeadVerdict
@@ -52,11 +54,11 @@ class PullRequestNumber(ExternalRecord):
 @dataclass(frozen=True)
 class QueuedPullRequest(ExternalRecord):
     number: int
-    head: str = field(metadata={"wire_name": "headRefOid"})
-    branch: str = field(metadata={"wire_name": "headRefName"})
-    base: Literal["main"] = field(metadata={"wire_name": "baseRefName"})
-    cross_repository: Literal[False] = field(metadata={"wire_name": "isCrossRepository"})
-    draft: Literal[False] = field(metadata={"wire_name": "isDraft"})
+    head: typing.Annotated[str, field_codec.WireName("headRefOid")]
+    branch: typing.Annotated[str, field_codec.WireName("headRefName")]
+    base: typing.Annotated[Literal["main"], field_codec.WireName("baseRefName")]
+    cross_repository: typing.Annotated[Literal[False], field_codec.WireName("isCrossRepository")]
+    draft: typing.Annotated[Literal[False], field_codec.WireName("isDraft")]
     state: Literal["OPEN"]
 
     @classmethod

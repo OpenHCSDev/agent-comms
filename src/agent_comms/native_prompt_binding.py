@@ -9,9 +9,10 @@ user-message hash and the required execution evidence has been recorded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from contextlib import contextmanager
+import typing
 from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,16 +21,16 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .locked_store import RootFile
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .private_send_rules import NativeIdentityCheck
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .locked_store import RootFile
+from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputExecution, NativeInputRecord
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .native_pi import read_tracked_input_commitment
-from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
+from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
@@ -50,22 +51,18 @@ class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchem
     def install(cls, store) -> None:
         install_prompt_binding_schema(store)
 
-    input_id: str = field(
-        metadata={
-            "sql": Column(
+    input_id: typing.Annotated[str, Column(
                 primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
-            )
-        }
-    )
+            )]
     stage: type[NativeInputExecution]
     execution_id: str | None
     attempt_ordinal: int | None
     owner_lookup: str
     owner_thread: str
-    owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
+    owner_generation: typing.Annotated[int, Column(check="owner_generation>0")]
     wire_root_id: str
     expected_prompt_digest: str
-    bound_at_ms: int = field(metadata={"sql": Column(check="bound_at_ms>0")})
+    bound_at_ms: typing.Annotated[int, Column(check="bound_at_ms>0")]
 
     def __post_init__(self):
         # Original durable SQL is validated on acquisition, not at each caller.

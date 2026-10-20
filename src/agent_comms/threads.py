@@ -5,23 +5,25 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass, field, fields, replace
+import typing
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms import field_codec
+
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
+from .cli_result import ThreadToolCatalogResult
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .cli_result import ThreadToolCatalogResult
-from .launch_root import LaunchRoot
-from .native_arguments import NativeArguments
-from .native_tools import NativeRequestTools
-from .store_files import _atomic_write_text
 from .goals import (
     GoalDeclaration,
     NoGoal,
 )
+from .launch_root import LaunchRoot
+from .native_arguments import NativeArguments
+from .native_tools import NativeRequestTools
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -35,17 +37,18 @@ from .registration_inheritance import (
     InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
+from .store_files import _atomic_write_text
+from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     ThreadProvenance,
     ThreadRole,
+    TurnFence,
     TurnId,
     TurnIdentity,
 )
-from .thread_identity import TurnFence
 from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
-from .task_sources import TaskScope
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -62,52 +65,30 @@ class Thread(ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
 
     name: str = field(kw_only=False)
-    tags: frozenset[str] = field(kw_only=False, metadata={"registration_inheritance": InheritEmpty})
+    tags: typing.Annotated[frozenset[str], field_codec.RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
     worktree: str = field(kw_only=False)
     parent: str | None = None
     task: str | None = None
     process_identity: ProcessState = field(default_factory=NoProcess)
-    session_file: str | None = field(
-        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
-    )
-    model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
-    thinking_level: ThinkingLevelField = field(
-        default=NoThinkingOverride, metadata={"registration_inheritance": InheritThinkingLevel}
-    )
-    service_tier: ServiceTier = field(
-        default=ServiceTier.PRIORITY, kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious},
-    )
-    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": GoalDeclaration})
-    created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
-                              metadata={"wire_required": True})
+    session_file: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(default=None, kw_only=True)
+    model: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(default=None)
+    thinking_level: typing.Annotated[ThinkingLevelField, field_codec.RegistrationPolicy(InheritThinkingLevel)] = field(default=NoThinkingOverride)
+    service_tier: typing.Annotated[ServiceTier, field_codec.RegistrationPolicy(InheritPrevious)] = field(default=ServiceTier.PRIORITY, kw_only=True)
+    goal: typing.Annotated[GoalDeclaration, field_codec.RegistrationPolicy(GoalDeclaration)] = field(default_factory=NoGoal)
+    created_at: typing.Annotated[float, field_codec.WireRequired(True)] = field(default_factory=_thread_creation_time, kw_only=True)
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
-    storage_roots: StorageRoots = field(kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious})
+    storage_roots: typing.Annotated[StorageRoots, field_codec.RegistrationPolicy(InheritPrevious)] = field(kw_only=True)
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.
-    earlier_projects: tuple[StoragePath, ...] = field(default=(), kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True})
-    auto_title_pending: bool = field(
-        default=False, metadata={"registration_inheritance": InheritPrevious}
-    )
+    earlier_projects: typing.Annotated[tuple[StoragePath, ...], field_codec.RegistrationPolicy(InheritPrevious), field_codec.WireOmitDefault(True)] = field(default=(), kw_only=True)
+    auto_title_pending: typing.Annotated[bool, field_codec.RegistrationPolicy(InheritPrevious)] = field(default=False)
     # The project changed during a turn, and no turn has started in it yet.
     # The next turn start clears this; an idle owner starts that turn itself.
-    project_resume_due: bool = field(
-        default=False,
-        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
-    )
-    title: str | None = field(default=None, kw_only=True,
-                             metadata={"registration_inheritance": InheritMissing})
-    role: type[ThreadRole] = field(
-        default=AgentThreadRole, metadata={"registration_inheritance": InheritPrevious}
-    )
-    execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
-                                            metadata={"wire_omit_default": True})
-    backend: type[AgentBackend] = field(
-        default_factory=AgentBackend.for_new_threads, kw_only=True,
-        metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
-    )
+    project_resume_due: typing.Annotated[bool, field_codec.RegistrationPolicy(InheritPrevious), field_codec.WireOmitDefault(True)] = field(default=False)
+    title: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(default=None, kw_only=True)
+    role: typing.Annotated[type[ThreadRole], field_codec.RegistrationPolicy(InheritPrevious)] = field(default=AgentThreadRole)
+    execution: typing.Annotated[type[ThreadExecution], field_codec.WireOmitDefault(True)] = field(default=NativeThreadExecution, kw_only=True)
+    backend: typing.Annotated[type[AgentBackend], field_codec.WireOmitDefault(True), field_codec.RegistrationPolicy(InheritPrevious)] = field(default_factory=AgentBackend.for_new_threads, kw_only=True)
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
@@ -360,11 +341,11 @@ class Thread(ThreadProvenance):
         inherited = {}
         if previous is not None:
             inherited = {
-                declared.name: policy.choose(
-                    getattr(self, declared.name), getattr(previous, declared.name)
+                plan.name: policy.choose(
+                    getattr(self, plan.name), getattr(previous, plan.name)
                 )
-                for declared in fields(self)
-                if (policy := declared.metadata.get("registration_inheritance")) is not None
+                for plan in FieldCodec.field_plans(type(self))
+                if (policy := plan.setting(field_codec.RegistrationPolicy, None)) is not None
             }
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
@@ -448,6 +429,6 @@ def current_thread(registry) -> Thread:
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from . import pi_native_backend, pi_durable_backend  # noqa: E402, F401
+from . import pi_durable_backend, pi_native_backend  # noqa: E402, F401
 
 AgentBackend.seal()

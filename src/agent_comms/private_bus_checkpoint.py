@@ -18,41 +18,56 @@ import os
 import sqlite3
 import stat
 import tempfile
+import typing
 from abc import ABC, abstractmethod
+from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Callable, Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast
+
+from agent_comms import field_codec
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
-from .envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
-    ResourceClaim, UnclaimedResource,
-)
 from .coordination_tables.publications import PublicationIntents
+from .envelope_claim_transitions import (
+    ClaimOwner,
+    ClaimProjection,
+    ClaimTransition,
+    ClaimTransitionError,
+    ResourceClaim,
+    UnclaimedResource,
+)
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
-from .private_path import FileIdentity, FileRevision
-from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from .message_reference import MessageReference
 from .messages import Message
-from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
-from .wire_metadata import WireMetadata
-from .wire_record import WireRecord
+from .private_path import FileIdentity, FileRevision
+from .store_files import ExclusiveLock, LockMode, SharedLock
 from .thread_identity import ThreadIncarnation
 from .turn_context import ContextEntryManifest, RecordedContextManifest
+from .typed_table import (
+    Column,
+    ForeignKey,
+    Index,
+    SQLiteSchemaObject,
+    SqlStorage,
+    SqlValue,
+    TypedTable,
+)
+from .wire_metadata import WireMetadata
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .wire_log import WireLog, WireSnapshot
-    from .retained_task_facts import ExactTaskFact
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .retained_task_facts import ExactTaskFact
     from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
+    from .wire_log import WireLog, WireSnapshot
 
 OriginalSource = TypeVar("OriginalSource")
 
@@ -73,7 +88,7 @@ class CapturedWireSource[OriginalSource, Value = OriginalSource]:
 @dataclass(frozen=True)
 class PrefixWitness(PrefixSeal):
     # The high-water is a derived page fact, not a persistent seal field.
-    latest_source_seq: int = field(default=0, compare=False, metadata={"seal_exclude": True})
+    latest_source_seq: typing.Annotated[int, field_codec.SealExclude(True)] = field(default=0, compare=False)
 
     @property
     def device(self) -> int:
@@ -638,7 +653,7 @@ class CheckpointTable:
 
 @dataclass(frozen=True)
 class ResponseKeys(CheckpointTable, TypedTable):
-    key: str = field(metadata={"sql": Column(primary_key=True)})
+    key: typing.Annotated[str, Column(primary_key=True)]
 
 
 @dataclass(frozen=True)
@@ -650,12 +665,8 @@ class ClaimCommits(CheckpointTable, TypedTable):
     """
 
     transition: ClaimTransition
-    seq: int | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated="json_extract(transition,'$.seq')"),
-    })
-    operation_id: str | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')"),
-    })
+    seq: typing.Annotated[int | None, Column(unique=True, generated="json_extract(transition,'$.seq')")] = field(default=None, init=False, compare=False)
+    operation_id: typing.Annotated[str | None, Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')")] = field(default=None, init=False, compare=False)
 
     @classmethod
     def latest_sequence(cls, db: sqlite3.Connection) -> int:
@@ -702,7 +713,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
 class ResourceClaims(CheckpointTable, TypedTable):
     """Current membership references its original typed acquisition, never a copy."""
 
-    resource: str = field(metadata={"sql": Column(primary_key=True)})
+    resource: typing.Annotated[str, Column(primary_key=True)]
     claim_seq: int
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
@@ -743,8 +754,8 @@ class ResourceClaims(CheckpointTable, TypedTable):
 class WireSourcePointer(Generic[OriginalSource], ABC):
     """Locate and read a stored row by its byte offset and length."""
 
-    offset: int = field(metadata={"sql": Column(check="offset>=0")})
-    length: int = field(metadata={"sql": Column(check="length>0")})
+    offset: typing.Annotated[int, Column(check="offset>=0")]
+    length: typing.Annotated[int, Column(check="length>0")]
 
     @abstractmethod
     def decode_bytes(self, raw: bytes, root_id: str) -> OriginalSource: ...
@@ -770,8 +781,8 @@ class PublicMessages(CheckpointTable, TypedTable):
     only gaps, so checking continuity never walks an intact message history.
     """
 
-    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
-    previous_seq: int = field(metadata={"sql": Column(check="previous_seq>=0 AND previous_seq<seq")})
+    seq: typing.Annotated[int, Column(primary_key=True, check="seq>0")]
+    previous_seq: typing.Annotated[int, Column(check="previous_seq>=0 AND previous_seq<seq")]
     sender: str
     message_id: str
     gap: ClassVar[str] = "seq != previous_seq + 1"
@@ -825,7 +836,7 @@ class PublicMessages(CheckpointTable, TypedTable):
 
 @dataclass(frozen=True)
 class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, TypedTable):
-    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
+    seq: typing.Annotated[int, Column(primary_key=True, check="seq>0")]
     message_id: str
     sender_lookup: str
     indexes = (Index(("sender_lookup", "seq")), Index(("message_id", "seq")))
@@ -875,9 +886,9 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
 
 @dataclass(frozen=True)
 class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTable, TypedTable):
-    session_id: str = field(metadata={"sql": Column(primary_key=True)})
-    session_file: str = field(metadata={"sql": Column(primary_key=True)})
-    entry_id: str = field(metadata={"sql": Column(primary_key=True)})
+    session_id: typing.Annotated[str, Column(primary_key=True)]
+    session_file: typing.Annotated[str, Column(primary_key=True)]
+    entry_id: typing.Annotated[str, Column(primary_key=True)]
 
     @classmethod
     def for_reference(cls, reference, *, offset: int, length: int):
@@ -1137,8 +1148,8 @@ class RecordedContextManifestSources(
 
 @dataclass(frozen=True)
 class Addressed(CheckpointTable, TypedTable):
-    lookup: str = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
+    lookup: typing.Annotated[str, Column(primary_key=True)]
+    seq: typing.Annotated[int, Column(True, references=(DeliverySources, "seq"))]
 
     @classmethod
     def observed_after(
@@ -1177,15 +1188,15 @@ class Addressed(CheckpointTable, TypedTable):
 class Replies(CheckpointTable, TypedTable):
     """A committed delivery that names an earlier message as the one it answers."""
 
-    answered_seq: int = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
+    answered_seq: typing.Annotated[int, Column(primary_key=True)]
+    seq: typing.Annotated[int, Column(True, references=(DeliverySources, "seq"))]
 
 
 @dataclass(frozen=True)
 class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certificate"):
     """The existing SQLite row, decoded once at its persistence boundary."""
 
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[2]
     root_id: str
     device: int

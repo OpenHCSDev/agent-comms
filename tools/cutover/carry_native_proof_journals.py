@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import typing
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from agent_comms import field_codec
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import NativeInputEvidenceRead
@@ -33,8 +35,8 @@ class JsonProof(NativeInputCommit):
 
     schema: Literal[1]
     type: Literal["context_committed"]
-    request_generation: int = field(metadata={"wire_name": "requestGeneration"})
-    llm_context_digest: str = field(metadata={"wire_name": "llmContextDigest"})
+    request_generation: typing.Annotated[int, field_codec.WireName("requestGeneration")]
+    llm_context_digest: typing.Annotated[str, field_codec.WireName("llmContextDigest")]
 
     def matches(self, recorded: RecordedProof) -> bool:
         return (

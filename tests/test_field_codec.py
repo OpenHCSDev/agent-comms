@@ -1,17 +1,36 @@
+
+import typing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 import pytest
 
+from agent_comms import field_codec
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
-    FieldCodec, InlineRecord, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember, PathText, SubclassUnion,
-    RecordedTimestamp, TimestampText, TextRepresentation, WireValue,
+    FieldCodec,
+    InlineRecord,
+    JsonShapeFamily,
+    JsonShapeMember,
+    MalformedRecord,
+    NullMember,
+    PathText,
+    RecordedTimestamp,
+    SubclassUnion,
+    TextRepresentation,
+    TimestampText,
+    WireValue,
 )
 from agent_comms.messages import (
-    ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
-    MembershipNoticeRole, Message, MessageRole, NoticeRole,
+    ConversationRole,
+    InfoKind,
+    MembershipChange,
+    MembershipConversationRole,
+    MembershipNoticeRole,
+    Message,
+    MessageRole,
+    NoticeRole,
 )
 
 
@@ -22,8 +41,7 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access():
     @dataclass
     class Record:
         value: str
-        local: Opaque = field(default_factory=Opaque, repr=False, compare=False,
-            metadata={"wire_transient": True, "wire_name": ""})
+        local: typing.Annotated[Opaque, field_codec.WireTransient(True), field_codec.WireName("")] = field(default_factory=Opaque, repr=False, compare=False)
 
         def __getattribute__(self, name):
             if name == "local":
@@ -43,7 +61,7 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access():
 def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims():
     @dataclass
     class Record:
-        value: str = field(metadata={"wire_transient": True, "wire_context": True})
+        value: typing.Annotated[str, field_codec.WireTransient(True), field_codec.WireContext(True)]
 
     with pytest.raises(TypeError, match="exactly one declared field plan"):
         FieldCodec.record_fields(Record)
@@ -60,7 +78,7 @@ def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
 
     @dataclass
     class Record:
-        value: str = field(metadata={"wire_registry_probe": True})
+        value: typing.Annotated[str, object()]
 
     assert isinstance(FieldCodec.field_plan(Record, "value"), ProbePlan)
     assert FieldCodec.encode(Record("omit")) == {}
@@ -85,7 +103,7 @@ def test_field_plan_refuses_an_unclaimed_representation():
 def test_field_plan_refuses_unrelated_claims_instead_of_ordering_flags():
     @dataclass
     class Record:
-        value: str | None = field(metadata={"wire_context": True, "wire_absent_none": True})
+        value: typing.Annotated[str | None, field_codec.WireContext(True), field_codec.WireAbsentNone(True)]
 
     with pytest.raises(TypeError, match="exactly one declared field plan"):
         FieldCodec.field_plan(Record, "value")
@@ -100,7 +118,7 @@ def test_wire_absence_is_none_without_running_the_constructor_factory():
 
     @dataclass
     class Record:
-        id: str | None = field(default_factory=fresh, metadata={"wire_absent_none": True})
+        id: typing.Annotated[str | None, field_codec.WireAbsentNone(True)] = field(default_factory=fresh)
 
     record = Record()
     assert created == ["created"]
@@ -317,9 +335,10 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
 
 
 def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
-    from pathlib import Path
-    from agent_comms.typed_table import Column, TextStorage, TypedTable
     import sqlite3
+    from pathlib import Path
+
+    from agent_comms.typed_table import Column, TextStorage, TypedTable
 
     class HexInteger(TextRepresentation):
         @classmethod
@@ -355,7 +374,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
 
     @dataclass(frozen=True)
     class ScalarRow(TypedTable, declared_name="field_representation_rows"):
-        count: Annotated[int, HexInteger] = field(metadata={"sql": Column(storage=TextStorage)})
+        count: Annotated[int, HexInteger, Column(storage=TextStorage)]
 
     with sqlite3.connect(":memory:") as db:
         ScalarRow.create(db)
@@ -390,7 +409,7 @@ class Record:
     choice: Choice
     pair: tuple[str, str]
     aliases: dict[str, list[int]]
-    label: str = field(default="default", metadata={"wire_name": "externalLabel"})
+    label: typing.Annotated[str, field_codec.WireName("externalLabel")] = field(default="default")
     optional: float | None = None
     ignored: ClassVar[str] = "not stored"
 
@@ -439,7 +458,7 @@ def test_alias_collision_and_reserved_tag():
     @dataclass
     class Bad:
         first: str
-        second: str = field(metadata={"wire_name": "first"})
+        second: typing.Annotated[str, field_codec.WireName("first")]
 
     with pytest.raises(TypeError, match="Conflicting"):
         FieldCodec.encode(Bad("a", "b"))
@@ -482,6 +501,7 @@ def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause()
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
     import math
     from typing import Any, Literal
+
     from agent_comms.field_codec import FieldRepresentation
 
     class NullableInteger(FieldRepresentation):
@@ -590,7 +610,7 @@ def test_request_schema_preserves_nullable_fields_and_owned_nonnull_constraint()
     @dataclass(frozen=True)
     class Request:
         nullable: str | None = None
-        nonnull: str | None = field(default=None, metadata={"wire_nonnull": True})
+        nonnull: typing.Annotated[str | None, field_codec.WireNonNull(True)] = field(default=None)
 
     properties = FieldCodec.record_schema(Request)["properties"]
     assert properties["nullable"] == {"anyOf": [{"type": "string"}, {"type": "null"}]}
@@ -607,7 +627,7 @@ def test_family_instance_schema_tracks_decode_members_and_custom_discriminator()
 
     @dataclass(frozen=True)
     class ExplicitScope(Scope):
-        project: str = field(metadata={"wire_name": "externalProject"})
+        project: typing.Annotated[str, field_codec.WireName("externalProject")]
 
     @dataclass(frozen=True)
     class Request:
@@ -704,7 +724,7 @@ class InlineContainer:
 
 @dataclass(frozen=True)
 class FieldInlineContainer:
-    pair: Pair = field(metadata={"wire_inline": True})
+    pair: typing.Annotated[Pair, field_codec.WireInline(True)]
 
 
 @pytest.mark.parametrize("value", [InlineContainer(InlinePair(7, "seven")),
@@ -730,12 +750,12 @@ class TypeInlineClash:
 @dataclass(frozen=True)
 class FieldInlineClash:
     text: str
-    pair: Pair = field(metadata={"wire_inline": True})
+    pair: typing.Annotated[Pair, field_codec.WireInline(True)]
 
 
 @dataclass(frozen=True)
 class FamilyInlineClash:
-    choice: Choice = field(metadata={"wire_inline": True})
+    choice: typing.Annotated[Choice, field_codec.WireInline(True)]
     kind: str
 
 

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms import field_codec
+
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text
-from .text_digest import TextDigest
-from .thread_identity import GenerationCounter, ThreadIncarnation
 from .input_origin import (
     InputDelivery,
     InputOrigin,
@@ -18,6 +19,8 @@ from .input_origin import (
     UnattributedInputOrigin,
     UndeliveredInput,
 )
+from .text_digest import TextDigest
+from .thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -161,10 +164,9 @@ class UnresolvedInput:
     sequence: int | None
     target: str
     text: str
-    input_id: str = field(metadata={"wire_name": "inputId"})
+    input_id: typing.Annotated[str, field_codec.WireName("inputId")]
     status: str
-    reviewed_for_goals: tuple[str, ...] = field(
-        default=(), metadata={"wire_name": "reviewedForGoals", "wire_omit_default": True})
+    reviewed_for_goals: typing.Annotated[tuple[str, ...], field_codec.WireName("reviewedForGoals"), field_codec.WireOmitDefault(True)] = field(default=())
 
     @classmethod
     def of(cls, row: StoredInput) -> UnresolvedInput:
@@ -178,7 +180,7 @@ class UnresolvedInput:
 class HistoricalInput(UnresolvedInput):
     """An earlier notice of an unresolved input, shown with whether the owner dismissed it."""
 
-    notice_dismissed: bool = field(kw_only=True, metadata={"wire_name": "noticeDismissed"})
+    notice_dismissed: typing.Annotated[bool, field_codec.WireName("noticeDismissed")] = field(kw_only=True)
 
     @classmethod
     def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
@@ -205,15 +207,12 @@ class StoredInput(InputAttempt):
     key: str
     sequence: int | None
     owner: str
-    claim_scope: int = field(metadata={"wire_name": 'admission'})
+    claim_scope: typing.Annotated[int, field_codec.WireName('admission')]
     target: str
     source_text: str
-    origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
-                               metadata={"wire_omit_default": True})
-    notice_dismissed: bool = field(default=False, metadata={"wire_omit_default": True},
-                                   kw_only=True)
-    goal_reviews: dict[str, GoalInputDecision] = field(
-        default_factory=dict, metadata={"wire_omit_default": True}, kw_only=True)
+    origin: typing.Annotated[InputOrigin, field_codec.WireOmitDefault(True)] = field(default_factory=UnattributedInputOrigin, kw_only=True)
+    notice_dismissed: typing.Annotated[bool, field_codec.WireOmitDefault(True)] = field(default=False, kw_only=True)
+    goal_reviews: typing.Annotated[dict[str, GoalInputDecision], field_codec.WireOmitDefault(True)] = field(default_factory=dict, kw_only=True)
 
     def __post_init__(self) -> None:
         try:
@@ -311,10 +310,10 @@ class ReservedInput(RecoverableUnboundInput):
 @dataclass(frozen=True)
 class SentInput(StoredInput):
     has_native_binding = True
-    turn_id: str = field(metadata={"public_exclude": True, "wire_required": True})
-    native_id: str = field(metadata={"public_exclude": True, "wire_required": True})
+    turn_id: typing.Annotated[str, field_codec.PublicExclude(True), field_codec.WireRequired(True)]
+    native_id: typing.Annotated[str, field_codec.PublicExclude(True), field_codec.WireRequired(True)]
     # The native session owns the sent text; this row only proves which text it was.
-    sent_digest: TextDigest = field(metadata={"public_exclude": True, "wire_required": True})
+    sent_digest: typing.Annotated[TextDigest, field_codec.PublicExclude(True), field_codec.WireRequired(True)]
 
     def __post_init__(self) -> None:
         super().__post_init__()

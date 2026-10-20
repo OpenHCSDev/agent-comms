@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
+import typing
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -44,9 +45,9 @@ class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
     def install(cls, store) -> None:
         install_private_cohort_schema(store)
 
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[2]
-    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest) = 64")})
+    ddl_digest: typing.Annotated[str, Column(check="length(ddl_digest) = 64")]
 
     @classmethod
     def trigger_bodies(cls):
@@ -68,40 +69,26 @@ class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_batch_receipts"):
-    wire_root_id: str = field(
-        metadata={
-            "sql": Column(
+    wire_root_id: typing.Annotated[str, Column(
                 primary_key=True,
                 check=(
                     "\n"
                     "                length(wire_root_id) = 32 AND wire_root_id NOT G"
                     "LOB '*[^0-9a-f]*'"
                 ),
-            )
-        }
-    )
-    wire_seq: int = field(metadata={"sql": Column(primary_key=True, check="wire_seq > 0")})
-    message_id: str = field(metadata={"sql": Column(check="length(message_id) BETWEEN 1 AND 256")})
-    exact_target: str = field(
-        metadata={"sql": Column(check="length(exact_target) BETWEEN 1 AND 256")}
-    )
-    envelope_digest: str = field(metadata={"sql": Column(check="length(envelope_digest) = 64")})
-    audience_digest: str = field(metadata={"sql": Column(check="length(audience_digest) = 64")})
-    decisions_digest: str = field(metadata={"sql": Column(check="length(decisions_digest) = 64")})
-    member_count: int = field(metadata={"sql": Column(check="member_count BETWEEN 0 AND 4096")})
-    claim_count: int = field(
-        metadata={"sql": Column(check="claim_count BETWEEN 0 AND member_count")}
-    )
-    manifest_codec: str = field(
-        metadata={"sql": Column(check="length(manifest_codec) BETWEEN 1 AND 256")}
-    )
-    resolver_version: str = field(
-        metadata={"sql": Column(check="length(resolver_version) BETWEEN 1 AND 256")}
-    )
-    policy_version: str = field(
-        metadata={"sql": Column(check="length(policy_version) BETWEEN 1 AND 256")}
-    )
-    accepted_at_ms: int = field(metadata={"sql": Column(check="accepted_at_ms >= 0")})
+            )]
+    wire_seq: typing.Annotated[int, Column(primary_key=True, check="wire_seq > 0")]
+    message_id: typing.Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
+    exact_target: typing.Annotated[str, Column(check="length(exact_target) BETWEEN 1 AND 256")]
+    envelope_digest: typing.Annotated[str, Column(check="length(envelope_digest) = 64")]
+    audience_digest: typing.Annotated[str, Column(check="length(audience_digest) = 64")]
+    decisions_digest: typing.Annotated[str, Column(check="length(decisions_digest) = 64")]
+    member_count: typing.Annotated[int, Column(check="member_count BETWEEN 0 AND 4096")]
+    claim_count: typing.Annotated[int, Column(check="claim_count BETWEEN 0 AND member_count")]
+    manifest_codec: typing.Annotated[str, Column(check="length(manifest_codec) BETWEEN 1 AND 256")]
+    resolver_version: typing.Annotated[str, Column(check="length(resolver_version) BETWEEN 1 AND 256")]
+    policy_version: typing.Annotated[str, Column(check="length(policy_version) BETWEEN 1 AND 256")]
+    accepted_at_ms: typing.Annotated[int, Column(check="accepted_at_ms >= 0")]
     sealed: bool = field(default=False)
     without_rowid = True
 
@@ -222,9 +209,9 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchMembers(CohortTable, TypedTable):
-    wire_root_id: str = field(metadata={"sql": Column(primary_key=True)})
-    wire_seq: int = field(metadata={"sql": Column(primary_key=True)})
-    ordinal: int = field(metadata={"sql": Column(primary_key=True, check="ordinal >= 0")})
+    wire_root_id: typing.Annotated[str, Column(primary_key=True)]
+    wire_seq: typing.Annotated[int, Column(primary_key=True)]
+    ordinal: typing.Annotated[int, Column(primary_key=True, check="ordinal >= 0")]
     claim_id: str
     recipient_lookup: str
     unique = (
@@ -291,13 +278,11 @@ class ClaimBatchMembers(CohortTable, TypedTable):
 class CohortDeliveryReceipts(CohortTable, TypedTable):
     # Delivery selection kind is distinct from this table's nominal identity.
 
-    wire_root_id: str = field(metadata={"sql": Column(primary_key=True)})
-    wire_seq: int = field(metadata={"sql": Column(primary_key=True)})
-    ordinal: int = field(metadata={"sql": Column(primary_key=True, check="ordinal >= 0")})
+    wire_root_id: typing.Annotated[str, Column(primary_key=True)]
+    wire_seq: typing.Annotated[int, Column(primary_key=True)]
+    ordinal: typing.Annotated[int, Column(primary_key=True, check="ordinal >= 0")]
     recipient_lookup: str
-    canonical_thread: str = field(
-        metadata={"sql": Column(check="length(canonical_thread) BETWEEN 1 AND 256")}
-    )
+    canonical_thread: typing.Annotated[str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")]
     kind: Literal["selected", "unmentioned_observer"]
     claim_id: str | None
     checks = (
@@ -402,9 +387,9 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
 
 @dataclass(frozen=True, kw_only=True)
 class AwarenessSchemaMeta(AwarenessTable, TypedTable):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[2]
-    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest) = 64")})
+    ddl_digest: typing.Annotated[str, Column(check="length(ddl_digest) = 64")]
 
     @classmethod
     def trigger_bodies(cls):
@@ -426,14 +411,12 @@ class AwarenessSchemaMeta(AwarenessTable, TypedTable):
 
 @dataclass(frozen=True, kw_only=True)
 class AwarenessClaimGenerations(AwarenessTable, TypedTable):
-    claim_id: str = field(metadata={"sql": Column(primary_key=True)})
+    claim_id: typing.Annotated[str, Column(primary_key=True)]
     wire_root_id: str
-    wire_seq: int = field(metadata={"sql": Column(check="wire_seq > 0")})
+    wire_seq: typing.Annotated[int, Column(check="wire_seq > 0")]
     recipient_lookup: str
-    canonical_thread: str = field(
-        metadata={"sql": Column(check="length(canonical_thread) BETWEEN 1 AND 256")}
-    )
-    owner_generation: int = field(metadata={"sql": Column(check="owner_generation > 0")})
+    canonical_thread: typing.Annotated[str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")]
+    owner_generation: typing.Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
         """A historical capture is omitted; a changed current owner refuses."""

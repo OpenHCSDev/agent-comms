@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from enum import IntFlag
 from typing import Final
 
+from agent_comms import field_codec
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -91,35 +93,18 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
             generation=self.owner_generation,
         )
 
-    execution_id: str = dataclass_field(
-        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
-    )
-    attempt_ordinal: int = dataclass_field(
-        metadata={"sql": Column(primary_key=True, check="attempt_ordinal > 0")}
-    )
+    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
+    attempt_ordinal: typing.Annotated[int, Column(primary_key=True, check="attempt_ordinal > 0")]
     owner_lookup: str
-    owner_thread: str = dataclass_field(
-        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
-    )
-    owner_generation: int = dataclass_field(metadata={"sql": Column(check="owner_generation > 0")})
-    owner_token_digest: str = dataclass_field(
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
-        }
-    )
-    lifecycle: AttemptState = dataclass_field(metadata={"snapshot_exclude": True})
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
+    owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
+    owner_generation: typing.Annotated[int, Column(check="owner_generation > 0")]
+    owner_token_digest: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256")]
+    lifecycle: typing.Annotated[AttemptState, field_codec.SnapshotExclude(True)]
+    revision: typing.Annotated[int, Column(check="revision > 0")]
     last_progress_at_ms: int | None
-    reason_code: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
-        }
-    )
-    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
-    )
+    reason_code: typing.Annotated[str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")]
+    created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
+    updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
     @projected(view="snapshot", name="phase")
     def snapshot_phase(self):
@@ -156,81 +141,29 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
         ):
             raise ValueError("attempt progress time is inconsistent")
 
-    phase: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+    phase: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(
                 generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"
-            ),
-        },
-    )
-    lease_expires_at_ms: int | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    lease_expires_at_ms: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
                 generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
                 check="lease_expires_at_ms >= 0",
-            ),
-        },
-    )
-    backend_done: bool = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    backend_done: typing.Annotated[bool, field_codec.SnapshotExclude(True), Column(
                 generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
                 check="backend_done IN (0,1)",
-            ),
-        },
-    )
-    process_dead: bool = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    process_dead: typing.Annotated[bool, field_codec.SnapshotExclude(True), Column(
                 generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
                 check="process_dead IN (0,1)",
-            ),
-        },
-    )
-    phase_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
+            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    phase_kind: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
                 generated=(
                     "CASE\n"
                     "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
                     "'active' END"
                 )
-            ),
-        },
-    )
-    active_required_status: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END"),
-        },
-    )
+            )] = dataclass_field(init=False, default=None, compare=False)
+    active_required_status: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END")] = dataclass_field(init=False, default=None, compare=False)
     checks = (
         (
             "last_progress_at_ms IS NULL OR\n"
@@ -341,15 +274,11 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
     def allows_retry(self) -> bool:
         return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
 
-    execution_id: str = dataclass_field(
-        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
-    )
-    facts: ReplayFact = dataclass_field(
-        metadata={"sql": Column(check="facts >= 0 AND facts <= 1023")}
-    )
-    replay_safe: bool = dataclass_field(metadata={"sql": Column()})
-    side_effects_possible: bool = dataclass_field(metadata={"sql": Column()})
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
+    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
+    facts: typing.Annotated[ReplayFact, Column(check="facts >= 0 AND facts <= 1023")]
+    replay_safe: typing.Annotated[bool, Column()]
+    side_effects_possible: typing.Annotated[bool, Column()]
+    revision: typing.Annotated[int, Column(check="revision > 0")]
 
     @classmethod
     def accumulate(cls, db, execution_id: str, observed: ReplayFact) -> None:
@@ -440,20 +369,13 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if self.facts != ReplayFact.NONE and self.replay_safe:
             raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
 
-    retry_authorized: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
+    retry_authorized: typing.Annotated[int | None, Column(
                 generated=(
                     "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
                     "e = 0\n"
                     "              THEN 1 ELSE 0 END"
                 )
-            )
-        },
-    )
+            )] = dataclass_field(init=False, default=None, compare=False)
 
     checks = ("facts = 0 OR replay_safe = 0",)
 

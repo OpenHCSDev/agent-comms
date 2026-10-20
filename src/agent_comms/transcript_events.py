@@ -3,25 +3,35 @@
 from __future__ import annotations
 
 import json
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
-from pydantic import JsonValue
 from urllib.parse import quote
+
+from pydantic import JsonValue
+
+from agent_comms import field_codec
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .messages import Message
 from .message_reference import MessageReference
+from .messages import Message
 from .recorded_time import EventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 from .ui_model.message_category import (
-    MessageCategory, UserCategory, AgentCategory, InboundCategory, OutboundCategory,
-    OtherCategory, ThinkingCategory, ToolCategory,
+    AgentCategory,
+    InboundCategory,
+    MessageCategory,
+    OtherCategory,
+    OutboundCategory,
+    ThinkingCategory,
+    ToolCategory,
+    UserCategory,
 )
 
 if TYPE_CHECKING:
@@ -358,8 +368,7 @@ class ToolStartTranscript(ToolTranscript):
             self.tool_call_id, EventTime.capture(self.timestamp), thread, problem)
 
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
-    tool: tool_declaration.ToolDeclaration | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_bind": {"call_id": "tool_call_id"}})
+    tool: typing.Annotated[tool_declaration.ToolDeclaration | None, field_codec.WireOmitDefault(True), field_codec.WireBind({"call_id": "tool_call_id"})] = field(default=None)
 
     @property
     def title(self) -> str:
@@ -406,8 +415,8 @@ class ToolEndTranscript(ToolTranscript):
 
     text: str = ""
     ok: bool = True
-    diff: ToolDiff | None = field(default=None, metadata={"wire_omit_default": True})
-    sent_message: SentTranscript | None = field(default=None, metadata={"wire_omit_default": True})
+    diff: typing.Annotated[ToolDiff | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    sent_message: typing.Annotated[SentTranscript | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
 
 class CallState(DeclaredFamily, affix="CallState"):

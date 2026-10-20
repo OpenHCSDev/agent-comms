@@ -20,9 +20,10 @@ import os
 import secrets
 import sqlite3
 import stat
+import typing
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -189,7 +190,7 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 @dataclass(frozen=True)
 class SnapshotMeta(TypedTable):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
     ddl_digest: str
 
     @classmethod

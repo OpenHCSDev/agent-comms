@@ -13,12 +13,16 @@ are never read.
 
 Every fork reviews for itself, and all three of a fork's drawn rules come from paper 1.
 """
-import random, re, sys
+
+import random
+import re
+import sys
+import typing
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms import field_codec
 
-from ..field_codec import option
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller
@@ -93,8 +97,8 @@ class ReviewVerb(RulesVerb):
 @dataclass(frozen=True, kw_only=True)
 class AnswerVerb(RulesVerb):
     help = "answer a drawn rule for the acting commander"
-    n: int = option("n", help="the drawn rule number")
-    text: str = option("text", help="how this tick obeys or breaks that rule")
+    n: typing.Annotated[int, field_codec.Argument(flags=("n",), options={'help': "the drawn rule number"})]
+    text: typing.Annotated[str, field_codec.Argument(flags=("text",), options={'help': "how this tick obeys or breaks that rule"})]
 
     def run(self, ctx: Commander) -> None:
         answer(ctx, self.n, self.text, self.who(ctx))

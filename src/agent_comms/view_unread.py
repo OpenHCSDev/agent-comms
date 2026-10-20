@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -44,7 +45,7 @@ class ReplyIndexTable:
 class ReplyIndex(ReplyIndexTable, TypedTable):
     revision: FileRevision | None = None
     records: int = 0
-    source: str = field(default="", metadata={"sql": Column(primary_key=True, check="source<>''")})
+    source: typing.Annotated[str, Column(primary_key=True, check="source<>''")] = field(default="")
     start: int = 0
     limit: ClassVar[int] = 32
 
@@ -116,8 +117,8 @@ class ReplyRead:
 
 @dataclass(frozen=True)
 class TranscriptReply(ReplyIndexTable, TypedTable):
-    source: str = field(metadata={"sql": Column(primary_key=True)})
-    end: int = field(metadata={"sql": Column(primary_key=True)})
+    source: typing.Annotated[str, Column(primary_key=True)]
+    end: typing.Annotated[int, Column(primary_key=True)]
     without_rowid = True
 
     @classmethod

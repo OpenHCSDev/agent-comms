@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import base64
 import binascii
+import typing
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
+
+from agent_comms import field_codec
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -16,8 +19,8 @@ MAX_PROMPT_IMAGES = 8
 @dataclass(frozen=True, slots=True)
 class ImageInput:
     data: str
-    mime_type: str = field(metadata={"wire_name": "mimeType"})
-    type: Literal["image"] = field(default="image", kw_only=True, metadata={"wire_required": True})
+    mime_type: typing.Annotated[str, field_codec.WireName("mimeType")]
+    type: typing.Annotated[Literal["image"], field_codec.WireRequired(True)] = field(default="image", kw_only=True)
 
     def __post_init__(self) -> None:
         if self.mime_type not in IMAGE_MIME_TYPES:

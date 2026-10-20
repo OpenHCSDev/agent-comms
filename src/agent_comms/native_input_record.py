@@ -6,9 +6,12 @@ OwnerGenerations is the existing authority for that identity domain.
 
 from __future__ import annotations
 
+import typing
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, Literal
+
+from agent_comms import field_codec
 
 from .coordination_contracts import validate_execution_id
 from .coordination_errors import IdentityConflict, UnrecordedNativeContext
@@ -22,14 +25,11 @@ from .typed_table import Column, IntegerStorage, TextStorage
 class NativeInputCommit:
     """Original emitted input identity shared with its assembled context."""
 
-    input_id: Annotated[str, Id128Text] = field(metadata={
-        "wire_name": "inputId",
-        "sql": Column(
+    input_id: Annotated[str, Id128Text, field_codec.WireName("inputId"), Column(
             primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"
-        ),
-    })
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_entry_id: str = field(metadata={"wire_name": "sessionEntryId"})
+        )]
+    session_id: typing.Annotated[str, field_codec.WireName("sessionId")]
+    session_entry_id: typing.Annotated[str, field_codec.WireName("sessionEntryId")]
 
     @property
     def input_commit(self) -> NativeInputCommit:
@@ -44,9 +44,7 @@ class NativeInputLocation(NativeInputCommit):
     position_column: ClassVar[Column] = Column(
         check="session_entry_start>0", nullable=True, storage=IntegerStorage,
     )
-    session_entry_start: int = field(kw_only=True, metadata={
-        "wire_name": "sessionEntryStart", "sql": position_column,
-    })
+    session_entry_start: typing.Annotated[int, field_codec.WireName("sessionEntryStart"), position_column] = field(kw_only=True)
 
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
@@ -378,17 +376,17 @@ class NativeInputContext:
         # a partial group is corruption, never an unrecorded reference.
         if self.context_anchor is None:
             try:
-                for item in fields(self):
-                    if item.metadata.get("native_context"):
-                        FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, item.name)))
+                for plan in FieldCodec.field_plans(type(self)):
+                    if plan.setting(field_codec.NativeContext, None):
+                        FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, plan.name)))
             except MalformedRecord as error:
                 raise IdentityConflict("Native unrecorded context group is partial") from error
             return UnrecordedNativeInputReference()
         try:
-            for item in fields(self):
-                annotation = item.metadata.get("native_context")
+            for plan in FieldCodec.field_plans(type(self)):
+                annotation = plan.setting(field_codec.NativeContext, None)
                 if annotation is not None:
-                    FieldCodec.decode(annotation, FieldCodec.encode(getattr(self, item.name), annotation))
+                    FieldCodec.decode(annotation, FieldCodec.encode(getattr(self, plan.name), annotation))
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context group is partial") from error
         return NativeInputReference.acquire(self)

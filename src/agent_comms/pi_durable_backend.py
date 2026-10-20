@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import typing
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
@@ -10,6 +11,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from pydantic import JsonValue
+
+from agent_comms import field_codec
 
 from .agent_backend import (
     AgentBackend,
@@ -138,7 +141,7 @@ class DurableRetryEnd(RetryEnd, DurablePiEvent):
 
 @dataclass(frozen=True)
 class TaskFailed(DurablePiEvent):
-    task_id: int = field(metadata={'wire_name': 'taskId'})
+    task_id: typing.Annotated[int, field_codec.WireName('taskId')]
     message: str
 
     def convert(self):
@@ -154,9 +157,9 @@ class Open(HostQuery):
     path: str
     cwd: str
     provider: str | None
-    model_id: str | None = field(metadata={'wire_name': 'modelId'})
-    thinking_level: ThinkingLevelField = field(metadata={'wire_name': 'thinkingLevel'})
-    auth_path: str = field(metadata={'wire_name': 'authPath'})
+    model_id: typing.Annotated[str | None, field_codec.WireName('modelId')]
+    thinking_level: typing.Annotated[ThinkingLevelField, field_codec.WireName('thinkingLevel')]
+    auth_path: typing.Annotated[str, field_codec.WireName('authPath')]
     response_payload = RecoveryData
 
 
@@ -191,8 +194,8 @@ class Settle(HostQuery):
 class Entries(HostQuery):
     limit: int
     cursor: dict[str, JsonValue] | None = None
-    min_entry_id: int | None = field(default=None, metadata={'wire_name': 'minEntryId', 'wire_omit_default': True})
-    max_entry_id: int | None = field(default=None, metadata={'wire_name': 'maxEntryId', 'wire_omit_default': True})
+    min_entry_id: typing.Annotated[int | None, field_codec.WireName('minEntryId'), field_codec.WireOmitDefault(True)] = field(default=None)
+    max_entry_id: typing.Annotated[int | None, field_codec.WireName('maxEntryId'), field_codec.WireOmitDefault(True)] = field(default=None)
     order: str = 'descending'
     response_payload = HistoryData
 

@@ -9,16 +9,18 @@ from __future__ import annotations
 import math
 import re
 import types
+import typing
 from abc import abstractmethod
-from decimal import Decimal
 from dataclasses import dataclass, field, fields, is_dataclass, replace
+from decimal import Decimal
 from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
+
+from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
-from .turn_failure import ProviderTransportFailed
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
 from .pi_vocabulary import (
@@ -28,9 +30,10 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnreportedStopReason,
 )
+from .send_result import CorrectionResult, CorrectionUnreported
 from .tool_declaration import ToolDeclaration
 from .transcript_events import SentTranscript
-from .send_result import CorrectionResult, CorrectionUnreported
+from .turn_failure import ProviderTransportFailed
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
@@ -183,7 +186,7 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
 
 @dataclass(frozen=True)
 class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
-    final_error: str = field(metadata={"wire_name": "finalError"})
+    final_error: typing.Annotated[str, field_codec.WireName("finalError")]
 
     def __post_init__(self) -> None:
         if not self.final_error.strip():
@@ -647,7 +650,7 @@ class AssistantMessage(PiMessage):
         return PublicInstructionDisclosure()
 
     # Pi's assistant record always carries an array, including failed terminals.
-    content: tuple[PiContent, ...] = field(default=(), metadata={"wire_required": True})
+    content: typing.Annotated[tuple[PiContent, ...], field_codec.WireRequired(True)] = field(default=())
     # Original Pi completion metadata. These are observations, not registry
     # configuration or permission to select a model for a later request.
     api: str | None = wire_field("api")
@@ -975,7 +978,7 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
 class QueueClearedData(PiResponseData):
     """Native IDs actually removed, never the texts of possible candidates."""
 
-    input_ids: tuple[str, ...] = field(metadata={"wire_name": "inputIds"})
+    input_ids: typing.Annotated[tuple[str, ...], field_codec.WireName("inputIds")]
 
     def require_requested(self, requested: tuple[str, ...]) -> tuple[str, ...]:
         if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(requested):
@@ -1040,7 +1043,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     native_input_proof_capability: str | None = wire_field("nativeInputProofCapability")
     # Native omission and null both mean no model observation. Omit the named
     # default on output; its internal family tag is not a native model object.
-    model: PiModel = field(default_factory=UnreportedModel, metadata={"wire_omit_default": True})
+    model: typing.Annotated[PiModel, field_codec.WireOmitDefault(True)] = field(default_factory=UnreportedModel)
     thinking_level: ThinkingLevelField = wire_field("thinkingLevel", default=NoThinkingOverride)
     message_count: NonnegativePiCount = wire_field("messageCount", UnreportedCount())
     pending_message_count: NonnegativePiCount = wire_field("pendingMessageCount", UnreportedCount())
@@ -1262,7 +1265,7 @@ class OpaqueToolDetails(NativeToolDetails):
 class FileMutationToolDetails(NativeToolDetails, NativeEditDetails):
     """Known native publisher metadata, retaining the existing edit evidence."""
     strict_fields = True
-    artifact: NativeFileArtifact = field(metadata={"wire_name": "agentCommsArtifact"})
+    artifact: typing.Annotated[NativeFileArtifact, field_codec.WireName("agentCommsArtifact")]
 
     def edit_diff(self):
         return self.reported_diff()
@@ -1366,7 +1369,7 @@ class McpServerReceipt:
 class McpLiveAcknowledgement:
     version: Literal[1]
     source: Literal["pi-mcp-client"]
-    input_id: str = field(metadata={"wire_name": "inputId"})
+    input_id: typing.Annotated[str, field_codec.WireName("inputId")]
     state: Literal["running"]
     lifetime: Literal["turn"]
     servers: tuple[McpServerReceipt, ...]

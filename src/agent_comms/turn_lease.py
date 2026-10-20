@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import time
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms import field_codec
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
@@ -124,7 +127,7 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     owner_pid: int
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
-    claimed_generation: int | None = field(default=None, metadata={"wire_name": "admission_generation"})
+    claimed_generation: typing.Annotated[int | None, field_codec.WireName("admission_generation")] = field(default=None)
     turn_generation: int | None = None
     phase: TurnPhase = field(default_factory=PreparingPhase)
     executing = True
@@ -297,8 +300,8 @@ class StoredTurnReference(RecordMember, TurnRecord):
 class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
-    identity: TurnIdentity = field(metadata={"wire_transient": True})
-    registry_path: Path = field(repr=False, compare=False, metadata={"wire_transient": True})
+    identity: typing.Annotated[TurnIdentity, field_codec.WireTransient(True)]
+    registry_path: typing.Annotated[Path, field_codec.WireTransient(True)] = field(repr=False, compare=False)
 
     record_type = ActiveTurn
 

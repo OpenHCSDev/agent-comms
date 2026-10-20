@@ -1,10 +1,12 @@
 """Publication content identity, separate from actual bus delivery evidence."""
 
 import json
+import typing
 from dataclasses import dataclass, field, replace
 
 import pytest
 
+from agent_comms import field_codec
 from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import ThreadMention
@@ -38,7 +40,7 @@ def test_publication_snapshot_is_frozen_content_not_delivery_enrichment():
 def test_new_declared_delivery_field_inherits_snapshot_without_consumer_edit():
     @dataclass(frozen=True, slots=True)
     class DeliveredMessage(Message):
-        delivery_observation: int = field(default=0, metadata={"publication_exclude": True})
+        delivery_observation: typing.Annotated[int, field_codec.PublicationExclude(True)] = field(default=0)
         annotation: str = "original"
 
     original = DeliveredMessage("owner", "#team", "answer", InfoKind, timestamp=42.0)

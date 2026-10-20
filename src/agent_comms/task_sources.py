@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -24,9 +27,9 @@ if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
+    from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -317,8 +320,7 @@ class UserTaskDrop(UserTaskSupersession):
 class ScopedTaskDeclaration(TaskAttachment):
     """The source and its history; each author type decides whether work may start."""
     scope: TaskScope
-    change: TaskChange = field(default_factory=OriginalTaskChange,
-                              metadata={"wire_omit_default": True})
+    change: typing.Annotated[TaskChange, field_codec.WireOmitDefault(True)] = field(default_factory=OriginalTaskChange)
     retains_authored_task = True
 
     def require_scoped_task(self) -> ScopedTaskDeclaration:
@@ -634,8 +636,8 @@ class Constraint(ModelTaskDeclaration):
         return (ConstraintTaskFact(message),)
 
 
-from .working_memory_labels import ClassifierVersion, JevClassifier
 from .turn_context import ContextSegment
+from .working_memory_labels import ClassifierVersion, JevClassifier
 
 
 @dataclass(frozen=True, kw_only=True)

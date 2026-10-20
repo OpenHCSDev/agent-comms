@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import os
 import stat
+import typing
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
+from agent_comms import field_codec
+
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
-from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
+from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
@@ -64,7 +67,7 @@ class RetiredOwnerLaunch:
     """Original stopped registry observation plus acquired launch resources."""
 
     owner: OwnerIdentity
-    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
+    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName('admission')]
     launch: RetainedOwnerLaunch
 
     @classmethod

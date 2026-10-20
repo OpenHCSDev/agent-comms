@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import typing
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from agent_comms import field_codec
 
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
@@ -21,8 +24,8 @@ class NativeReopenError(ValueError):
 class NativeSessionIdentity:
     """SessionManager's observed saved-session identity."""
 
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    session_id: typing.Annotated[str, field_codec.WireName("sessionId")]
+    session_file: typing.Annotated[str, field_codec.WireName("sessionFile")]
 
     def __post_init__(self):
         if not self.session_id or not Path(self.session_file).is_absolute():

@@ -12,11 +12,14 @@ import os
 import sqlite3
 import stat
 import time
+import typing
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+
+from agent_comms import field_codec
 
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord
@@ -42,15 +45,13 @@ class RecordedGoalRevision:
 class GoalHistoryEntry(TypedTable):
     # The durable kind field is a journal fact, not the TypedTable family tag.
 
-    sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
+    sequence: typing.Annotated[int | None, Column(primary_key=True)]
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
-    before: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
-    after: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
-    owner_created_at: float = field(kw_only=True, metadata={"history_exclude": True})
-    state: Literal["pending", "committed", "aborted", "uncertain"] = field(
-        kw_only=True, metadata={"history_exclude": True}
-    )
+    before: typing.Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+    after: typing.Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+    owner_created_at: typing.Annotated[float, field_codec.HistoryExclude(True)] = field(kw_only=True)
+    state: typing.Annotated[Literal["pending", "committed", "aborted", "uncertain"], field_codec.HistoryExclude(True)] = field(kw_only=True)
     indexes = (Index(("owner_created_at", "sequence")),)
 
     def reports_turn(self, turn_id: str) -> bool:

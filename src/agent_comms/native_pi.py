@@ -11,11 +11,14 @@ import re
 import shutil
 import sqlite3
 import sys
+import typing
 from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
+
+from agent_comms import field_codec
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
@@ -169,30 +172,15 @@ def main() -> int:
 @dataclass(frozen=True, slots=True)
 class NativeContextRecord(NativeInputCommit):
     """Native context facts extend the original committed input declaration."""
-    request_generation: int = field(
-        metadata={
-            "wire_name": "requestGeneration",
-            "sql": Column(
+    request_generation: typing.Annotated[int, field_codec.WireName("requestGeneration"), Column(
                 primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"
-            ),
-        }
-    )
-    llm_context_digest: str = field(
-        metadata={
-            "wire_name": "llmContextDigest",
-            "sql": Column(
+            )]
+    llm_context_digest: typing.Annotated[str, field_codec.WireName("llmContextDigest"), Column(
                 check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"
-            ),
-        }
-    )
+            )]
     # The native writer stamps the moment this context was committed for a
     # model request: the time the input was shown to the model.
-    committed_at_ms: int = field(
-        metadata={
-            "wire_name": "committedAtMs",
-            "sql": Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
-        }
-    )
+    committed_at_ms: typing.Annotated[int, field_codec.WireName("committedAtMs"), Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991")]
 
     @classmethod
     def from_events(cls, input_id, session_id, input_event, context_event):
@@ -266,8 +254,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return {
             "objects": cls.schema_objects(),
             "columns": [
-                {"name": item.name, "wire": FieldCodec.wire_key(item)}
-                for item in fields(cls)
+                {"name": plan.name, "wire": plan.key}
+                for plan in FieldCodec.field_plans(cls)
             ],
             "insert": cls.insertion_statement(),
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",

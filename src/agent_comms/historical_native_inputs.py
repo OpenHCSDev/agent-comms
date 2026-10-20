@@ -8,23 +8,29 @@ grants no response, recovery, model replay, edit, or current-owner authority.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import typing
 from abc import abstractmethod
-from pathlib import Path
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from agent_comms import field_codec
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
-from .field_codec import FieldCodec, Id128Text
-from .declared_family import DeclaredFamily
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, Id128Text
+from .native_input_record import (
+    FullNativeExecution,
+    NativeInputExecution,
+    NativeInputRecord,
+    NativeInputReference,
+    TriageNativeExecution,
+)
 from .native_pi import NativeContextProof
-from .native_prompt_binding import expected_prompt_matches_journal, expected_prompt_bindings
+from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
 from .native_runtime_input import NativeRuntimeInput
-from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution
-from .message_reference import MessageReference
 from .selected_triage import SelectedTriage
 from .typed_table import TypedRow
 
@@ -37,7 +43,7 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
     wire_root_id: str
     source_seq: int
     source_message_id: str
-    assignment_id: str = field(metadata={"wire_name": "claim_id"})
+    assignment_id: typing.Annotated[str, field_codec.WireName("claim_id")]
     execution: NativeInputExecution
     input_id: str
     owner_lookup: str
