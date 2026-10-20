@@ -53,11 +53,11 @@ class ClaudeHook(HookRecord):
 
     @classmethod
     def read(cls) -> Self:
-        record = json.load(sys.stdin)
-        kind = next(
-            (kind for kind in cls.__subclasses__() if record["hook_event_name"] in kind.events), cls
-        )
-        return kind.decode(record)
+        hook = cls.decode(json.load(sys.stdin))
+        for kind in cls.__subclasses__():
+            if hook.hook_event_name in kind.events:
+                return kind(hook.session_id, hook.hook_event_name)
+        return hook
 
     def warn(self, reason: str) -> None:
         print(
