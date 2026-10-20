@@ -319,6 +319,11 @@ class CheckedRead:
         self.require_open_prefix()
         return ResourceClaims.owner_for(self.connection, resource)
 
+    def claims_for(self, resources: tuple[str, ...]) -> ClaimProjection:
+        """Read only the requested current holders from the checked index."""
+        self.require_open_prefix()
+        return ResourceClaims.claims_for(self.connection, resources)
+
     def claim_operation_used(self, operation_id: str) -> bool:
         self.require_open_prefix()
         return ClaimCommits.operation_used(self.connection, operation_id)

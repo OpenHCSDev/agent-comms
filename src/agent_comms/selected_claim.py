@@ -184,9 +184,9 @@ def publish_selected_resource_claim(
         with bus_lock.current_source(bus.log, metadata) as source:
             existing = source.claim(resource)
             if existing is not None:
-                existing.require_holder(owner.name, str(owner.created_at))
-                # Same-operation lookup; holder identity was already checked above.
-                if claim_scope == existing.claim_scope:
+                superseded = existing.require_holder(owner.name, str(owner.created_at), registry)
+                # A matching operation is idempotent only for its actual current holder.
+                if not superseded and claim_scope == existing.claim_scope:
                     return existing
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
