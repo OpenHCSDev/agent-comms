@@ -329,7 +329,9 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         # prompt bytes sent to Pi (not the bare text hash).
         assert binding.expected_prompt_digest == native_request_digest(calls[0][1])
         session_file = evidence[0].context.session_file
-        assert read_tracked_input_commitment(session_file, evidence[0].input_id) == CommittedInput(
+        assert read_tracked_input_commitment(
+            session_file, evidence[0].input_id, evidence=source_reads.for_source(session_file),
+        ) == CommittedInput(
             binding.expected_prompt_digest
         )
         assert evidence[0].expected_prompt_digest == binding.expected_prompt_digest

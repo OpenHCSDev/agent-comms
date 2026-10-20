@@ -31,9 +31,11 @@ from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.store_files import _store_lock
@@ -49,7 +51,7 @@ tmp_path = private_root_fixture
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
-def _session(tmp_path, *, package=True):
+def _session(tmp_path):
     root = tmp_path / "wire"
     comms = Comms(root)
     comms.registry.declare(
@@ -62,8 +64,7 @@ def _session(tmp_path, *, package=True):
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
-    if package:
-        pass
+        install_native_runtime_schema(store)
     agent = CommsAgent(comms, runtime_enabled=True)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
@@ -242,7 +243,7 @@ async def test_headless_owner_start_launches_no_catalog_discovery(tmp_path, monk
     comms.registry.heartbeat("beta")
     await agent.sessions.start_owner(str(tmp_path), "beta")
     assert drains == ["beta"]
-    assert comms.registry.require("beta").pid == os.getpid()
+    assert comms.registry.require("beta").require_process().pid == os.getpid()
     assert comms.registry.status("beta").active
 
 
@@ -650,8 +651,8 @@ async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, m
     def missing():
         raise NativePackageError("Pinned native package directory is missing")
 
+    comms, agent, root_id = _session(tmp_path)
     monkeypatch.setattr(derivation, "pinned_native_package", missing)
-    comms, agent, root_id = _session(tmp_path, package=False)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
