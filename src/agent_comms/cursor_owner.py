@@ -103,11 +103,6 @@ class CursorState(ABC):
     @abstractmethod
     def cursor(self) -> CurrentNativeCursor | None: ...
 
-    def start(self, floor, witness) -> int:
-        if not floor <= self.covered_seq <= witness.through_seq:
-            raise IdentityConflict("current source coverage regressed or exceeds the bus")
-        return self.covered_seq
-
     @property
     @abstractmethod
     def injected_seq(self) -> int: ...
@@ -225,7 +220,4 @@ class RecordedCursor(CursorState):
         proof.require_reference(owner, self.row)
 
     def source_witness(self, owner, sources, source_reads):
-        coverage = sources.since(self, source_reads=source_reads)
-        with sources.store.session.read():
-            self.require_coverage(owner, sources.store.session._connection, coverage, coverage.proof)
-        return coverage.source_witness
+        return sources.recorded_witness(self)
