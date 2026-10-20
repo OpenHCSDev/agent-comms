@@ -24,6 +24,7 @@ from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
+from .pi_payloads import StorageDenialToolDetails
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -33,6 +34,7 @@ from .selected_tool_broker import (
     verify_sent_full_input,
 )
 from .storage_room import NoRoomNeeded, RoomReservation
+from .storage_rules import StorageDenied
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -174,6 +176,13 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             await asyncio.gather(*tuple(self.completions))
         for call in self.calls.values():
             await asyncio.to_thread(call.progress.room.abandon)
+
+    async def handle_request(self, raw: bytes) -> dict[str, object]:
+        try:
+            return await super().handle_request(raw)
+        except StorageDenied as denial:
+            return {"ok": False, "error": str(denial),
+                    "details": StorageDenialToolDetails(str(denial)).to_wire()}
 
     @staticmethod
     def failure_response(error: Exception) -> dict[str, object]:

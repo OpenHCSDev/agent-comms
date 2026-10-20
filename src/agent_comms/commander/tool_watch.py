@@ -1,10 +1,9 @@
 """Follow live native sessions and print turn digests for commander judgment."""
 import os, time, glob, collections
-from pathlib import Path
 
-from ..native_tool_call import CodingCall, SelectedToolDenied
+from ..native_tool_call import CodingCall
 from ..native_entries import NativeEntry
-from ..pi_payloads import PiMessage, TextContent
+from ..pi_payloads import PiMessage, StorageDenialToolDetails, TextContent
 from ..tool_declaration import one_line
 from ..registration import Registration
 from ..todos import StorageStrikeTodo
@@ -16,21 +15,17 @@ def thread_names(registry: Registration) -> dict[str, str]:
             if thread.session_file}
 
 
-def enforce_storage(ctx: Commander, thread: str, call: CodingCall) -> None:
-    """Core judges its units and records each storage violation once."""
-    registry = ctx.comms.registry
-    if thread not in ctx.units() or thread not in registry:
+def enforce_storage(ctx: Commander, thread: str, call_id: str,
+                    denial: StorageDenialToolDetails) -> None:
+    """Report only the preflight refusal recorded in this call's native result."""
+    if thread not in ctx.units() or thread not in ctx.comms.registry:
         return
-    try:
-        if effects := call.storage_effects(Path(registry.require(thread).worktree)):
-            registry.decide_storage(thread, effects)
-    except SelectedToolDenied as violation:
-        print(f'VIOLATION storage {thread}: {violation}', flush=True)
-        for todo in ctx.held_by(thread)[:1]:
-            ctx.strike(thread, todo.id,
-                         f'{todo.id} broke the storage rule at a tool call: {violation}; '
-                         'storage waste is banned outright', 'tool_watch at tool call',
-                         kind=StorageStrikeTodo)
+    print(f'VIOLATION storage {thread}: {denial.reason}', flush=True)
+    for todo in ctx.held_by(thread)[:1]:
+        ctx.strike(thread, todo.id,
+                   f'{todo.id} broke the storage rule at tool call {call_id}: {denial.reason}; '
+                   'storage waste is banned outright', 'tool_watch at tool call preflight',
+                   kind=StorageStrikeTodo)
 
 
 def emit(turns, thread, final=''):
@@ -48,6 +43,8 @@ def follow(ctx: Commander, turns: dict[str, list[str]], thread: str, data: bytes
     for line in data.splitlines(keepends=True):
         entry = NativeEntry.read(line)
         for message in entry.messages:
+            for call_id, denial in message.storage_refusals():
+                enforce_storage(ctx, thread, call_id, denial)
             if message.assistant:
                 walk(ctx, turns, thread, message)
 
@@ -58,7 +55,6 @@ def walk(ctx: Commander, turns: dict[str, list[str]], thread: str,
         coding_call = CodingCall.decode(pi_call.id, pi_call.name, pi_call.arguments)
         digest = coding_call.digest()
         turns[thread].append(digest)
-        enforce_storage(ctx, thread, coding_call)
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.successful:

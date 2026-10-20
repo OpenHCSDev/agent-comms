@@ -23,7 +23,7 @@ from .thread_status import (
     ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
 )
 from .threads import Thread
-from .storage_rules import StorageRule
+from .storage_rules import StorageProjection, StorageRule
 from .turn_lease import TurnCompletion, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
@@ -188,9 +188,9 @@ class Registration:
                       storage_roots=self.storage_rule.initial_roots(name), **values)
 
     def decide_storage(self, name, effects):
-        current = self.require(name)
+        projection = StorageProjection(self.storage_rule, self.require(name))
         for effect in effects:
-            effect.check(self.storage_rule, current)
+            effect.check(projection)
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         with self.store.editing() as edit:
