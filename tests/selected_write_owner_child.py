@@ -14,6 +14,7 @@ import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 import agent_comms.worker as worker
 from agent_comms.input_drain import InputDrain
 from agent_comms.session_lifecycle import SessionLifecycle
+from delivery_owner_fixture import reply_turn_finished
 from test_coordinated_runtime import _fake_model
 
 
@@ -49,6 +50,7 @@ async def main(base: Path) -> None:
             count = await agent._drain_private_nk(
                 "beta", agent._comms.owners.require_private_launch().wire_root_id
             )
+            await reply_turn_finished(agent, "beta")
             print(
                 json.dumps(
                     {
