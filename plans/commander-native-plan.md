@@ -38,7 +38,7 @@
 | 5 | Board, overdue, silent, spinning | `order.py board`, `overdue`; `fleet-board.md` | `CommsTodoListTool` and the fleet tool, derived | `one_order_owner` |
 | 6 | Branch hygiene | `branches-*.txt` by hand | `CommsWorkBranchesTool` | `one_order_owner` |
 | 7 | Strikes and the strike limit | `order.py strike`; `strikes.jsonl` | `Strike` rows, author-declared `StrikeLimit`, one `comms_fire` | `record_plane` |
-| 8 | Verdicts on a unit's tool calls | `judge.py ok`, `back`; `verdicts.jsonl` | Order `Verdict`; send-back revises the Goal and records its strike atomically | `record_plane` |
+| 8 | Verdicts on a unit's tool calls | `judge.py ok`, `back`; both invoke `CommsVerdictTool` | Order `Verdict`; send-back revises the Goal and records its strike atomically | `record_plane` |
 | 9 | Plain words in verdicts and strikes | judge and order checks | `PlainText` | `record_plane` |
 | 10 | Refuse soft or vague orders | `order.py` | `OrderText` on every order action | `record_plane` |
 | 11 | What a unit did during its order | `tool_watch.py`; `edits.jsonl`; `judge.py show` | `comms_order_work`: both transcript families by `tool_call_id` | `review_queue` |
