@@ -22,8 +22,8 @@ from .lifecycle import (
     verify_order_progress,
 )
 from .load import LoadComparison
-from .verdicts import VerdictComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
+from .verdicts import VerdictComparison
 
 
 class CreateProblemParityRow(ParityRow):
