@@ -22,8 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
-from .maintenance_barrier import MaintenanceBarrier
 from .launch_root import LaunchRoot
+from .maintenance_barrier import MaintenanceBarrier
 from .route_selection import RouteSelection, child_root, selected_write
 
 

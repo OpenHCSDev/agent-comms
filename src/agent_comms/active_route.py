@@ -23,8 +23,8 @@ from typing import Annotated, ClassVar
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
-from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .launch_root import LaunchRoot
+from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 
 
 @dataclass(frozen=True, slots=True)

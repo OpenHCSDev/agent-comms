@@ -11,8 +11,8 @@ from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .launch_root import LaunchRoot
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText, TextRepresentation
+from .launch_root import LaunchRoot
 
 
 class CallingThreadUnavailable(RelationViolationError):

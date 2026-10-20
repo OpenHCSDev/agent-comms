@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,14 +28,16 @@ class LaunchRoot:
     @classmethod
     def current(cls) -> LaunchRoot:
         if cls._current is None:
-            raise RelationViolationError("Comms requires an explicit launch root (--comms-root or --root).")
+            raise RelationViolationError(
+                "Comms requires an explicit launch root (--comms-root or --root)."
+            )
         return cls._current
 
     def install(self) -> None:
         LaunchRoot._current = self
 
     @contextmanager
-    def selected(self):
+    def selected(self) -> Iterator[None]:
         """Borrow a selection without changing later callers."""
         previous = LaunchRoot._current
         self.install()

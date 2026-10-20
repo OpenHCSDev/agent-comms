@@ -8,7 +8,6 @@ the side effect, so a route publication cannot interleave with it.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
