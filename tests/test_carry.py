@@ -685,9 +685,32 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
     assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
 
 
+def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
+    import upgrade_bus
+
+    root = tmp_path / "original"
+    root.mkdir()
+    requested = tmp_path / "copies"
+    requested.mkdir()
+    destinations = []
+
+    def refused_copy(source, destination):
+        assert source == root
+        assert destination.parent.parent == requested
+        destinations.append(destination)
+        raise RuntimeError("copy refused")
+
+    monkeypatch.setattr(upgrade_bus, "copy_bus", refused_copy)
+    with pytest.raises(RuntimeError, match="copy refused"):
+        upgrade_bus.rehearse(root, (), Stack(tmp_path), None, requested)
+    assert len(destinations) == 1
+    assert list(requested.iterdir()) == []
+    assert root.is_dir()
+
+
 def rehearsed(stack: Stack, root: Path) -> dict:
     from upgrade_bus import rehearse
-    return rehearse(root, (), stack, None)
+    return rehearse(root, (), stack, None, root.parent)
 
 
 def installed_live(stack: Stack, root: Path) -> dict:

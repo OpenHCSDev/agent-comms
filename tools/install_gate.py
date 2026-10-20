@@ -577,6 +577,7 @@ def rehearse(
         "--installer",
         "pi-install-gate",
         "--rehearse",
+        *(("--rehearsal-dir", str(work)) if "--rehearsal-dir " in help_text else ()),
     )
     answer = work / "installer-answer.json"
     with (
