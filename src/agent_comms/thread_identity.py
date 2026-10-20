@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Literal, Self, TypeVar, Annotated
+from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
 
 
 from .agent_backend import AgentBackend, RuntimeLocation
@@ -22,14 +22,13 @@ from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
-    NullMember,
     WireValue,
-    boundary_decoder,
     WireName,
     WireOmitDefault,
     WireRequired,
 )
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
+from .thread_text import NoThreadText, ThreadText
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
@@ -254,23 +253,6 @@ class StallWatcherIncarnation(BirthlessIncarnation):
         return "Core's stall watcher"
 
 
-@dataclass(frozen=True, slots=True)
-class NoThreadText(NullMember):
-    """No title or original assignment was supplied for this thread."""
-
-    def __bool__(self) -> Literal[False]:
-        return False
-
-    @classmethod
-    @boundary_decoder
-    def from_input(cls, value: ThreadText | None) -> ThreadText:
-        return cls() if value is None else value
-
-
-ThreadText = str | NoThreadText
-NO_THREAD_TEXT = NoThreadText()
-
-
 @dataclass(frozen=True, kw_only=True)
 class ThreadProvenance:
     """Recorded thread identity, without permission to own a process or start a turn."""
@@ -293,7 +275,7 @@ class ThreadProvenance:
 
     @property
     def display_title(self) -> str:
-        return self.title or self.name
+        return self.title.otherwise(self.name)
 
     @staticmethod
     def require_name(name: str) -> None:

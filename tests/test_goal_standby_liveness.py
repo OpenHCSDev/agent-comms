@@ -23,6 +23,7 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.thread_text import GivenThreadText
 
 
 
@@ -278,7 +279,7 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     fence = _finish(comms, "child", "child-turn")
     assert fence is not None
     child = comms.registry.require("child")
-    comms.registry.register(replace(child, title="New title"), RunningThreadStatus())
+    comms.registry.register(replace(child, title=GivenThreadText("New title")), RunningThreadStatus())
     comms.registry.rename("child", "renamed-child")
     assert (
         comms.goals.release_waits_after_terminal_turn(

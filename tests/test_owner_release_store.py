@@ -3,6 +3,7 @@ from dataclasses import replace
 
 from agent_comms.comms import Comms
 from agent_comms.owner_lifecycle import NoRelease, OwnerReleaseEvidence
+from agent_comms.thread_text import GivenThreadText
 
 
 def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
@@ -14,7 +15,7 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
         comms.owners.stop(thread.name)
     snapshot = comms.registry.snapshot()
     current = snapshot.threads['worker']
-    comms.registry.register(replace(current, title='changed title', task='changed task'),
+    comms.registry.register(replace(current, title=GivenThreadText('changed title'), task=GivenThreadText('changed task')),
                             status=snapshot.statuses['worker'])
     releases = comms.owners.releases
     # An invalid unrelated row must not even be decoded by this lookup.

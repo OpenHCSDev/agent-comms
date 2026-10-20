@@ -26,6 +26,7 @@ from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import current_thread
+from agent_comms.thread_text import GivenThreadText
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -491,12 +492,12 @@ class TestRegistration:
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(
-            registry.new_thread(name='a', tags=frozenset({'x', 'y'}), worktree='/wt', parent='p', task='t', process_identity=ProcessIdentity.capture(os.getpid()))
+            registry.new_thread(name='a', tags=frozenset({'x', 'y'}), worktree='/wt', parent='p', task=GivenThreadText('t'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         registry.unregister("a")
         reloaded = Registration(path)
         thread = reloaded.require("a")
-        assert thread.parent == "p" and thread.task == "t" and thread.process_identity == ProcessIdentity.capture(os.getpid())
+        assert thread.parent == "p" and thread.task == GivenThreadText("t") and thread.process_identity == ProcessIdentity.capture(os.getpid())
         assert thread.tags == frozenset({"x", "y"})
         assert reloaded.status("a") == StoppedThreadStatus()
 
@@ -540,11 +541,11 @@ class TestCurrentThread:
     ):
         registry = Comms(tmp_path).registry
         launched = registry.new_thread(
-            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), parent="lead", task="Ship it"
+            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), parent="lead", task=GivenThreadText("Ship it")
         )
         for name, value in launched.launch().apply(dict(os.environ)).items():
             monkeypatch.setenv(name, value)
         thread = current_thread(registry)
         assert (thread.name, thread.tags, thread.worktree, thread.parent, thread.task) == (
-            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), "lead", "Ship it"
+            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), "lead", GivenThreadText("Ship it")
         )

@@ -20,9 +20,7 @@ from .field_codec import (
     GitCommitText,
     JsonShapeFamily,
     JsonShapeMember,
-    NullMember,
     PathText,
-    SingleFieldValue,
     SubclassUnion,
     TextRepresentation,
     boundary_decoder,
@@ -32,6 +30,7 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .launch_root import LaunchRoot
+from .thread_text import AbsentText, GivenText, NoThreadText, TextChoice, ThreadText
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -171,26 +170,18 @@ class SpecifiedImportPath(ImportPath, JsonShapeMember):
     value: str
 
 
-class EnvironmentValue(SubclassUnion, affix="Variable"):
+class EnvironmentValue(SubclassUnion, TextChoice, affix="Variable"):
     """One inherited environment variable: its text, or unset."""
 
-    @abstractmethod
-    def otherwise[Default](self, default: Default) -> str | Default:
-        """The variable's text; an unset variable takes the reader's own default."""
-
 
 @dataclass(frozen=True, slots=True)
-class SetVariable(SingleFieldValue, EnvironmentValue):
+class SetVariable(GivenText, EnvironmentValue):
     text: str
 
-    def otherwise[Default](self, default: Default) -> str:
-        return self.text
-
 
 @dataclass(frozen=True, slots=True)
-class UnsetVariable(NullMember, EnvironmentValue):
-    def otherwise[Default](self, default: Default) -> Default:
-        return default
+class UnsetVariable(AbsentText, EnvironmentValue):
+    pass
 
 
 @dataclass(frozen=True)
@@ -379,8 +370,8 @@ class ThreadLaunch(EnvironmentRecord):
         EnvironmentValue, WireOmitDefault(), WireName("PI_PARENT_ID")
     ] = UnsetVariable()
     task: Annotated[
-        EnvironmentValue, WireOmitDefault(), WireName("PI_TASK")
-    ] = UnsetVariable()
+        ThreadText, WireOmitDefault(), WireName("PI_TASK")
+    ] = NoThreadText()
     managed: Annotated[
         bool,
         FlagText,
@@ -401,8 +392,7 @@ class ThreadLaunch(EnvironmentRecord):
             thread.worktree,
             frozenset(thread.tags),
             UnsetVariable() if thread.parent is None else SetVariable(thread.parent),
-            # The task's wire text is this variable's; thread_identity imports this module.
-            FieldCodec.decode(EnvironmentValue, FieldCodec.encode(thread.task)),
+            thread.task,
         )
 
     @classmethod

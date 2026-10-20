@@ -8,6 +8,7 @@ from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registration_inheritance import PredicateInheritance
 from agent_comms.threads import Thread
+from agent_comms.thread_text import GivenThreadText
 
 
 def test_unchanged_registration_retains_generated_creation_marker(*, thread_registration):
@@ -44,7 +45,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         model="provider/model",
         thinking_level=HighThinkingLevel,
         auto_title_pending=True,
-        title="retained",
+        title=GivenThreadText("retained"),
     )
     initial = replace(initial, worktree=str(tmp_path))
     comms.registry.declare(initial)
@@ -52,10 +53,10 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
     restored = comms.registry.require("owner")
     assert restored == initial
     assert restored.incarnation == initial.incarnation
-    updated = replace(restored, tags=frozenset({"new"}), title="", auto_title_pending=False)
+    updated = replace(restored, tags=frozenset({"new"}), title=GivenThreadText(""), auto_title_pending=False)
     comms.registry.declare(updated)
     current = comms.registry.require("owner")
-    assert current.tags == frozenset({"new"}) and current.title == ""
+    assert current.tags == frozenset({"new"}) and current.title == GivenThreadText("")
     assert current.auto_title_pending  # Existing pending ownership is retained, not reset.
     assert current.incarnation == initial.incarnation
     assert current.channel_scope_generation == restored.channel_scope_generation + 1
@@ -65,11 +66,11 @@ def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_pat
     comms = wire(tmp_path)
     first = comms.registry.declare(comms.registry.new_thread('before', frozenset({'team'}), str(tmp_path)))
     comms.registry.rename("before", "after")
-    returned = comms.registry.declare(comms.registry.new_thread('before', frozenset(), str(tmp_path), title='new'))
+    returned = comms.registry.declare(comms.registry.new_thread('before', frozenset(), str(tmp_path), title=GivenThreadText('new')))
     assert returned == comms.registry.require("after")
     assert returned.incarnation.created_at == first.created_at
     assert returned.name == "after" and returned.tags == first.tags
-    assert returned.title == "new"
+    assert returned.title == GivenThreadText("new")
 
 
 def test_project_round_trip_excludes_current_project_from_history(tmp_path):

@@ -22,7 +22,9 @@ from agent_comms.agent_runtime import ReadsHistory
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
+from agent_comms.thread_text import ThreadText
 
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
@@ -61,7 +63,7 @@ class OpenCodeHistory(HarnessHistory):
 
     @staticmethod
     def saved(session: Session, messages: Iterable[SavedMessage]) -> Iterator[RuntimeUpdate]:
-        yield SessionFacts(source_id=session.id, project=session.directory, title=session.title or '')
+        yield SessionFacts(source_id=session.id, project=session.directory, title=FieldCodec.decode(ThreadText, session.title))
         for saved in session.revert.kept(messages):
             yield from saved.publications()
 

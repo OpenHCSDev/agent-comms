@@ -9,6 +9,7 @@ from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
+from agent_comms.thread_text import GivenThreadText
 
 
 def transcript(path, count):
@@ -92,7 +93,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent_path))
     )
     comms.registry.declare(
-        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task='Inspect the renderer')
+        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task=GivenThreadText('Inspect the renderer'))
     )
 
     page = comms.transcripts.thread_transcript_page("child")
@@ -126,7 +127,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
         comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent_path))
     )
     comms.registry.declare(
-        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task='Child task')
+        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task=GivenThreadText('Child task'))
     )
     page = comms.transcripts.thread_transcript_page("child", max_messages=5)
     through = page.after

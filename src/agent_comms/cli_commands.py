@@ -117,7 +117,7 @@ from .thread_execution import (
     ThreadCommandAvailability,
     ThreadExecution,
 )
-from .thread_identity import NO_THREAD_TEXT, ThreadText
+from .thread_text import NoThreadText, ThreadText
 from .thread_management import (
     ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
     ThreadDeleted,
@@ -1486,7 +1486,7 @@ class RegisterCliCommand(CliCommand):
     parent: Annotated[str | None, Argument(flags=("--parent",))] = (
         None
     )
-    task: Annotated[ThreadText, Argument(flags=("--task",))] = NO_THREAD_TEXT
+    task: Annotated[ThreadText, Argument(flags=("--task",))] = NoThreadText()
     process: Annotated[
         ProcessState,
         Argument(

@@ -18,6 +18,7 @@ from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import SharedLock
 from agent_comms.threads import Thread
+from agent_comms.thread_text import GivenThreadText
 
 
 def owner(path, registry):
@@ -92,11 +93,11 @@ def test_registry_update_persists_across_reopen(tmp_path):
 
     def change(original):
         modified = original.copy()
-        modified.threads["owner"] = replace(modified.threads["owner"], title="a8 update")
+        modified.threads["owner"] = replace(modified.threads["owner"], title=GivenThreadText("a8 update"))
         return modified
 
     registry.store.update(change)
-    assert Registration(registry.store.path).require("owner").title == "a8 update"
+    assert Registration(registry.store.path).require("owner").title == GivenThreadText("a8 update")
 
 
 def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path, *, thread_registration):
@@ -137,6 +138,7 @@ from agent_comms.field_codec import FieldCodec
 import time
 time.time = lambda: 1000.0
 root=Path(sys.argv[1]);root.mkdir()
+from agent_comms.thread_text import GivenThreadText
 r=Registration(root/'registry.json')
 steps=[]
 def capture():
@@ -149,7 +151,7 @@ def capture():
     steps.append(row)
 r.register(r.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
 r.register(r.new_thread('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
-r.register(replace(r.require('owner'), title='metadata'));capture()
+r.register(replace(r.require('owner'), title=GivenThreadText('metadata')));capture()
 r.lease_local_turn('owner','first');capture()
 r.release_turn(r.require('owner').turn_lease);capture()
 r.rename('owner','renamed');capture()

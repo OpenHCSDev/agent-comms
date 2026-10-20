@@ -35,22 +35,20 @@ from .pi_vocabulary import (
     ThinkingLevelField,
 )
 from .registration_inheritance import (
+    InheritApplied,
     InheritEmpty,
     InheritMissing,
     InheritPrevious,
-    InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
+from .thread_text import NoThreadText, ThreadText
 from .thread_identity import (
-    NO_THREAD_TEXT,
     AgentThreadRole,
-    NoThreadText,
     ThreadProvenance,
     ThreadRole,
-    ThreadText,
     TurnFence,
     TurnId,
     TurnIdentity,
@@ -158,7 +156,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     )
     model: Annotated[str | None, RegistrationPolicy(InheritMissing)] = None
     thinking_level: Annotated[
-        ThinkingLevelField, RegistrationPolicy(InheritThinkingLevel)
+        ThinkingLevelField, RegistrationPolicy(InheritApplied)
     ] = NoThinkingOverride
     service_tier: Annotated[ServiceTier, RegistrationPolicy(InheritPrevious)] = (
         field(default=ServiceTier.PRIORITY, kw_only=True)
@@ -188,7 +186,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     project_resume_due: Annotated[
         bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = False
-    title: Annotated[ThreadText, RegistrationPolicy(InheritMissing)] = field(
+    title: Annotated[ThreadText, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoThreadText, kw_only=True
     )
     role: Annotated[type[ThreadRole], RegistrationPolicy(InheritPrevious)] = (
@@ -523,7 +521,7 @@ def current_thread(registry) -> Thread:
         worktree=launch.worktree,
         # Thread still declares a missing parent as None.
         parent=launch.parent.otherwise(None),
-        task=launch.task.otherwise(NO_THREAD_TEXT),
+        task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
 

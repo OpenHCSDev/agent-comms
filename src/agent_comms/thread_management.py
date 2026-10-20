@@ -53,7 +53,8 @@ from .private_registry_guard import (
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
-from .thread_identity import AgentThreadRole, NoThreadText, ThreadRole
+from .thread_identity import AgentThreadRole, ThreadRole
+from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .thread_owned_state import ThreadOwnedState
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
 
@@ -148,7 +149,7 @@ class NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self, project: str, registry: Registration) -> Thread:
-        return registry.new_thread(name=self.name, task=self.task.text, tags=self.tags.for_new(),
+        return registry.new_thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
                       worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     @contextmanager
@@ -260,7 +261,7 @@ class ThreadManagement:
             tags,
             str(project),
             session_file=str(session_path),
-            title=NoThreadText.from_input(snapshot.title),
+            title=snapshot.title,
         ))
         with _store_lock(self._wire_lock_path):
             if self.registry.snapshot().taken(name):
@@ -348,7 +349,7 @@ class ThreadManagement:
             ):
                 raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
             return self._rename_thread_unlocked(
-                caller.name, new_name, title=new_name.replace("-", " ").replace("_", " ")
+                caller.name, new_name, title=GivenThreadText(new_name.replace("-", " ").replace("_", " "))
             )
 
     def set_project(self, name: str, path: str) -> ProjectChangeResult:
@@ -386,10 +387,10 @@ class ThreadManagement:
                     f"Process {owner_pid} does not own thread {thread.name!r}."
                 )
             new_name = self.registry.snapshot().claim_name(display_name, owner=thread.name)
-            return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
+            return self._rename_thread_unlocked(thread.name, new_name, title=GivenThreadText(display_name))
 
     def _rename_thread(
-        self, name: str, new_name: str, *, title: str | None = None
+        self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
         # Keep direct callers under the same wire lock as public self/managed
         # rename. Private owner migration and ordinary publication share it.
@@ -397,7 +398,7 @@ class ThreadManagement:
             return self._rename_thread_unlocked(name, new_name, title=title)
 
     def _rename_thread_unlocked(
-        self, name: str, new_name: str, *, title: str | None = None
+        self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
         return ThreadRename.chosen(self, self.registry.require(name), new_name).applied(title)
 
@@ -585,15 +586,13 @@ class ThreadRename(ABC):
     def registry_renamed(self) -> tuple[str, str]:
         return self.threads.registry.rename(self.before.name, self.new_name)
 
-    def applied(self, title: str | None) -> RenameThreadResult:
+    def applied(self, title: ThreadText) -> RenameThreadResult:
         previous, current = self.renamed()
         threads = self.threads
         thread = threads.registry.require(current)
-        if thread.auto_title_pending or title is not None:
-            threads.registry.register(
-                replace(thread, auto_title_pending=False, title=title or thread.title),
-                threads.registry.status(current),
-            )
+        titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
+        if titled != thread:
+            threads.registry.register(titled, threads.registry.status(current))
         if previous == current:
             return RenameThreadResult(previous, current, False)
         threads.agents.activity.rename_thread(previous, current)
@@ -667,7 +666,7 @@ class PrivateOwnerRename(ThreadRename):
                     raise uncertain from compensation
                 raise uncertain from error
 
-    def applied(self, title: str | None) -> RenameThreadResult:
+    def applied(self, title: ThreadText) -> RenameThreadResult:
         result = ThreadRename.applied(self, title)
         # The wire lock and the check in renamed() make a present intent this rename's own;
         # it completes only after both authorities and the ancillary stores agree.

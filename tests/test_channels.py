@@ -22,6 +22,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.thread_management import ForkSpec, GivenTags
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_text import GivenThreadText
 
 
 def setup_wire(path):
@@ -137,7 +138,7 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
     for index in range(40):
         comms.registry.declare(comms.registry.new_thread(f'member-{index}', frozenset({'remove', 'keep'}), str(tmp_path)), StoppedThreadStatus())
     originals = tuple(comms.registry.all_threads().values())
-    current = replace(originals[0], title='new title', task='new task', model='selected/model')
+    current = replace(originals[0], title=GivenThreadText('new title'), task=GivenThreadText('new task'), model='selected/model')
     comms.registry.register(current, ArchivedThreadStatus())
     before = comms.registry.snapshot()
     profile = cProfile.Profile()

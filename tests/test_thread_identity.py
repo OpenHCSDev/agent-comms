@@ -16,12 +16,12 @@ from agent_comms.registration import Registration
 from agent_comms.thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
-    NoThreadText,
     RecordedThreadIncarnation,
     TurnIdentity,
 )
 from agent_comms.thread_status import IdleThreadStatus
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
+from agent_comms.thread_text import GivenThreadText, NoThreadText
 
 
 def registry_with_owner(tmp_path):
@@ -34,7 +34,7 @@ def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
     comms = Comms(tmp_path)
     for name, title, task in (
         ("untitled", NoThreadText(), NoThreadText()),
-        ("named", "A title", "An assignment"),
+        ("named", GivenThreadText("A title"), GivenThreadText("An assignment")),
     ):
         thread = comms.registry.new_thread(
             name, frozenset({"team"}), str(tmp_path), title=title, task=task,
@@ -46,7 +46,7 @@ def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
         assert saved.title == title and saved.task == task
         assert FieldCodec.encode(saved.wake_context(comms.goals))["title"] == FieldCodec.encode(title)
         assert FieldCodec.encode(saved.wake_context(comms.goals))["original_assignment"] == FieldCodec.encode(task)
-        assert ("PI_TASK" in saved.launch().encode()) == bool(task)
+        assert saved.launch().task == task
 
 
 def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
@@ -54,7 +54,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     before = registry.snapshot()
     owner = before.threads["owner"]
     identity = before.owner_identity("owner")
-    registry.register(replace(owner, title="new metadata"))
+    registry.register(replace(owner, title=GivenThreadText("new metadata")))
     registry.heartbeat("owner")
     leased, generation = registry.lease_local_turn("owner", "turn")
     assert generation == identity.generation
@@ -263,7 +263,7 @@ def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_
     process = ProcessIdentity.capture(os.getpid())
     thread = thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=process, session_file=str(tmp_path / 'a.jsonl'), model='model-a', created_at=1.0)
 
-    assert thread.same_launch(replace(thread, title="Renamed", tags=frozenset({"team"}), turn_generation=3))
+    assert thread.same_launch(replace(thread, title=GivenThreadText("Renamed"), tags=frozenset({"team"}), turn_generation=3))
     for changed in (
         replace(thread, process_identity=NoProcess()),
         replace(thread, session_file=str(tmp_path / "b.jsonl")),

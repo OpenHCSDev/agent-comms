@@ -31,6 +31,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.thread_text import GivenThreadText
 
 tmp_path = private_root_fixture
 
@@ -98,7 +99,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         with pytest.MonkeyPatch.context() as patch:
             root, root_id, comms, _, people = _root(directory, direct=True)
             owner = people[2]
-            comms.registry.declare(replace(owner, task="x" * 24000))
+            comms.registry.declare(replace(owner, task=GivenThreadText("x" * 24000)))
             patch.setattr(native_prompt_send, "_MAX_SEND_SECONDS", 0.35)
             native_turn = TrackedTurnSession.execute
 

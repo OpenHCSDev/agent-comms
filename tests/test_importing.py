@@ -26,6 +26,7 @@ from agent_comms.thread_identity import ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.transcript_events import ImportedReply, ImportedRequest
 from agent_comms.turn_context import CodexRolloutProvenance
+from agent_comms.thread_text import GivenThreadText, NoThreadText
 
 
 @pytest.fixture
@@ -52,8 +53,8 @@ def bodies(snapshot):
 
 
 @pytest.mark.parametrize("title,display,renamed_display", [
-    (None, "original", "renamed"),
-    ("Authored title", "Authored title", "Authored title"),
+    (NoThreadText(), "original", "renamed"),
+    (GivenThreadText("Authored title"), "Authored title", "Authored title"),
 ])
 def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, title, display, renamed_display, *, thread_registration):
     thread = thread_registration.new_thread('original', frozenset(), str(tmp_path), title=title)
@@ -126,7 +127,7 @@ def test_claude_subagent_keeps_its_task_its_commander_and_its_tools(tmp_path):
         claude_reply("d", "Done."),
     ], tail='{"type":"assistant","uuid":"cut')
     snapshot = read(ClaudeCodeHarness, subagent)
-    assert snapshot.source_id == "agent-a1" and snapshot.title == "Fix the importer"
+    assert snapshot.source_id == "agent-a1" and snapshot.title == GivenThreadText("Fix the importer")
     assert snapshot.project == "/work/project"
     assert bodies(snapshot) == [
         "Your task: fix the importer",
@@ -593,7 +594,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     thread = comms.registry.require("imported")
     assert comms.registry.status(thread.name) == StoppedThreadStatus()
     assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 5
-    assert thread.title == "Current task"
+    assert thread.title == GivenThreadText("Current task")
     assert source.read_bytes() == before
     if os.name == "posix":
         assert stat.S_IMODE(directory.stat().st_mode) == 0o700
@@ -640,7 +641,7 @@ def test_opencode_database_uses_readonly_snapshot(tmp_path):
                    ("part", "message", 1, '{"type":"text","text":"Resume this task"}'))
     before = source.read_bytes()
     snapshot = read(OpenCodeHarness, source, session_id="session")
-    assert bodies(snapshot) == ["Resume this task"] and snapshot.title == "Title"
+    assert bodies(snapshot) == ["Resume this task"] and snapshot.title == GivenThreadText("Title")
     assert source.read_bytes() == before
     with pytest.raises(ValueError):
         read(OpenCodeHarness, source)
@@ -681,7 +682,7 @@ def test_opencode_server_reads_all_messages_including_the_users():
 
     snapshot = asyncio.run(collect())
     assert bodies(snapshot) == ["Live prompt", "Live answer"]
-    assert snapshot.title == "Live task" and connection.queries == [{}]
+    assert snapshot.title == GivenThreadText("Live task") and connection.queries == [{}]
     with pytest.raises(ValueError):
         OnlineHistory.of(OpenCodeHarness, "ses_test", None, Path("/work"))
 

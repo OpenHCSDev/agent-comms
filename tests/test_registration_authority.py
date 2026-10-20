@@ -10,6 +10,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import UserThreadRole
+from agent_comms.thread_text import GivenThreadText
 
 
 def registered(root):
@@ -26,7 +27,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
     captured = initial if capture_idle else leased
     generation = registry.snapshot().owner_generations['owner']
     assert registry.release_turn(leased.turn_lease)[0]
-    registry.register(replace(registry.require('owner'), title='metadata', tags=frozenset({'new'})))
+    registry.register(replace(registry.require('owner'), title=GivenThreadText('metadata'), tags=frozenset({'new'})))
     with pytest.raises(
         RelationViolationError,
     ):
@@ -37,7 +38,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
         captured, 'second', expected_generation=claim_scope,
     )
     assert current_claim == claim_scope
-    assert claimed.title == 'metadata'
+    assert claimed.title == GivenThreadText('metadata')
     assert claimed.turn_record.read().id == 'second'
     assert registry.release_turn(claimed.turn_lease)[0]
 

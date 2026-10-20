@@ -22,6 +22,7 @@ from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.thread_text import GivenThreadText
 
 
 def thinking(options):
@@ -116,7 +117,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     rows = []
     for index, model in enumerate(models):
         name = f'configuration-{index}'
-        service.registry.declare(service.registry.new_thread(name, frozenset(), str(project), model=model, thinking_level=OffThinkingLevel, task='Private provider-free configuration acceptance; never send a prompt'))
+        service.registry.declare(service.registry.new_thread(name, frozenset(), str(project), model=model, thinking_level=OffThinkingLevel, task=GivenThreadText('Private provider-free configuration acceptance; never send a prompt')))
         service.owners.start(
             name, agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
             agent_args=GivenArguments(()),

@@ -10,6 +10,7 @@ from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import NamedViewer
 from bus_history import read_history
+from agent_comms.thread_text import GivenThreadText
 
 
 @pytest.fixture
@@ -21,7 +22,7 @@ def chat(comms):
 
     return declare_test_bus(comms, channels=("ci", "docs"), threads=(
         comms.registry.new_thread('PR111', frozenset({'ci'}), '/tmp/wt1', process_identity=ProcessIdentity.capture(os.getpid())),
-        comms.registry.new_thread('fixer', frozenset({'ci'}), '/tmp/wt1', parent='PR111', task='fix auth'),
+        comms.registry.new_thread('fixer', frozenset({'ci'}), '/tmp/wt1', parent='PR111', task=GivenThreadText('fix auth')),
         comms.registry.new_thread('PR112', frozenset({'docs'}), '/tmp/wt2'),
     ))
 

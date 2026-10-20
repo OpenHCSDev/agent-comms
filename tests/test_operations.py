@@ -27,6 +27,7 @@ from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import ChosenModel, NextTurnConfiguration
+from agent_comms.thread_text import GivenThreadText
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
@@ -275,7 +276,7 @@ class TestThreadOps:
 
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
-        assert attached.task == "fix auth"
+        assert attached.task == GivenThreadText("fix auth")
         assert attached.process_identity == ProcessIdentity.capture(os.getpid())
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"

@@ -613,7 +613,7 @@ class Transcripts:
         return (
             ForkOriginTranscript(f"Forked from @{thread.parent}. This thread started with:",
                                  timestamp=thread.created_at),
-            *((ForkTaskTranscript(thread.task, timestamp=thread.created_at),) if thread.task else ()),
+            *(ForkTaskTranscript(task, timestamp=thread.created_at) for task in thread.task.texts()),
         )
 
     def thread_transcript_page(

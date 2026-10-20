@@ -42,6 +42,7 @@ from .restart_refusals import (
 )
 from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
+from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 from .tool_result import ToolResult
@@ -56,7 +57,9 @@ _LOG = logging.getLogger(__name__)
 
 
 class LaunchInput:
-    text = ""
+    def thread_text(self) -> ThreadText:
+        """No first input, so the thread records no original assignment."""
+        return NoThreadText()
 
     def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
         return launch
@@ -69,6 +72,9 @@ class LaunchInput:
 class TaskLaunchInput(LaunchInput):
     text: str = field()
     input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
+
+    def thread_text(self) -> GivenThreadText:
+        return GivenThreadText(self.text)
 
     def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
         return replace(launch, startup_input=self.input_key)

@@ -45,6 +45,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_arguments import GivenArguments
 from bus_history import read_history
+from agent_comms.thread_text import GivenThreadText
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -480,7 +481,7 @@ async def configured_mixed_routes(arguments):
     stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
     service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
-    service.registry.declare(service.registry.new_thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task='Answer each original route accurately once; do not expose direct-message content to a channel.'))
+    service.registry.declare(service.registry.new_thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
@@ -830,7 +831,7 @@ async def run(arguments):
     for index in range(arguments.registry_size):
         service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:
-        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level=OffThinkingLevel, task='Provider-free isolated restart acceptance; reply to each original once'))
+        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)

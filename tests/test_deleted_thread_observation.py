@@ -13,6 +13,7 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from test_observer_death import readable
+from agent_comms.thread_text import GivenThreadText
 
 
 def declare(comms, *names):
@@ -101,7 +102,7 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
         assert isinstance(missing.results['deleted'], ThreadMissing)
         assert retired.retired.threads == frozenset({original})
         surviving = comms.registry.require('surviving')
-        comms.registry.declare(replace(surviving, title='Still updating after deletion'))
+        comms.registry.declare(replace(surviving, title=GivenThreadText('Still updating after deletion')))
         updated = await until(lambda result: isinstance(result, ThreadsObserved)
                               and 'surviving' in result.changed)
         assert isinstance(updated.activity['surviving'], ObservedActivity)

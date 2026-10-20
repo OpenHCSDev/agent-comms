@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from .pi_vocabulary import ThinkingChoice
+from typing import Protocol, Self
 
 
 class RegistrationInheritance[T](ABC):
@@ -45,11 +45,13 @@ class InheritPrevious[T](PredicateInheritance[T]):
         return True
 
 
-class InheritThinkingLevel(RegistrationInheritance[type[ThinkingChoice]]):
+class AppliesOverPrevious(Protocol):
+    def applied(self, previous: Self, /) -> Self: ...
+
+
+class InheritApplied[T: AppliesOverPrevious](RegistrationInheritance[T]):
+    """The incoming value owns what it keeps of the previous one."""
+
     @classmethod
-    def apply(
-        cls,
-        incoming: type[ThinkingChoice],
-        previous: type[ThinkingChoice],
-    ) -> type[ThinkingChoice]:
+    def apply(cls, incoming: T, previous: T) -> T:
         return incoming.applied(previous)

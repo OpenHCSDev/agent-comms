@@ -24,12 +24,13 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.thread_text import GivenThreadText
 
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monkeypatch) -> None:
     comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
-    declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task='retained task')
+    declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task=GivenThreadText('retained task'))
     comms.registry.declare(declared)
     first = comms.owners.start(
         "worker", agent_bin=GivenBinary("pi"), agent_args=GivenArguments(())
@@ -222,7 +223,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     try:
         for name, arguments, credential in settings:
             goal = Goal("Protected failed original", name + "-goal", published_seq=0, state=BlockedGoal("No replay"))
-            comms.registry.declare(comms.registry.new_thread(name, frozenset({name}), str(tmp_path), model=model, thinking_level=thinking, goal=goal, task='retained task ' + name))
+            comms.registry.declare(comms.registry.new_thread(name, frozenset({name}), str(tmp_path), model=model, thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))

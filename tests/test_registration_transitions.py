@@ -10,6 +10,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.turn_lease import NoFinishedTurn
+from agent_comms.thread_text import GivenThreadText
 
 
 @pytest.mark.parametrize('transition', ['metadata', 'session', 'restart', 'stop', 'new-turn'])
@@ -25,7 +26,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     advances_owner = False
     preserves_record = True
     if transition == 'metadata':
-        updated = replace(leased, title='new title', tags=frozenset({'changed'}))
+        updated = replace(leased, title=GivenThreadText('new title'), tags=frozenset({'changed'}))
     elif transition == 'session':
         updated = replace(leased, session_file=str(tmp_path / 'new.jsonl'))
     elif transition == 'restart':
@@ -71,7 +72,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     original = registry.snapshot()
     expected = original.threads['owner']
     claim_scope = original.claim_generation('owner')
-    registry.register(replace(expected, title='changed'))
+    registry.register(replace(expected, title=GivenThreadText('changed')))
     with pytest.raises(RelationViolationError):
         registry.fence_idle_owners(((expected, claim_scope),))
     current = registry.require('owner')

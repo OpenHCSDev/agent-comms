@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from ..field_codec import NullMember, RecordMember, SubclassUnion, WireName
 from ..goal_states import GoalState
-from ..thread_identity import ThreadText
+from ..thread_text import ThreadText
 
 if TYPE_CHECKING:
     from ..goal_management import Goals

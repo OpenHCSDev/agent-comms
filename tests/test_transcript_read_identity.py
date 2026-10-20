@@ -8,6 +8,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleRevision
+from agent_comms.thread_text import GivenThreadText
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
@@ -42,7 +43,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
         "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
     }}) + "\n")
     comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent)))
-    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task='continue'))
+    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task=GivenThreadText('continue')))
     captured = comms.transcripts.capture_page_read("child")
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:
@@ -100,7 +101,7 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     original = captured.read()
     comms.registry.heartbeat("worker")
     assert captured.current()
-    comms.registry.register(replace(comms.registry.require("worker"), title="Updated annotation"))
+    comms.registry.register(replace(comms.registry.require("worker"), title=GivenThreadText("Updated annotation")))
     # The original source owner still fences native bytes, routes, publication
     # proof and incarnation. A heartbeat changes annotations, not those bytes.
     assert not captured.current()

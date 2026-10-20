@@ -16,6 +16,7 @@ from uuid import uuid4
 from .cli_result import CliResult
 from .field_codec import FieldCodec, WireName
 from .harness_install import Harness
+from .thread_text import NoThreadText, ThreadText
 from .transcript_events import TRUNCATED, ImportedInput, ImportedMessage, ImportedRequest
 from .turn_context import CodexRolloutProvenance, ContextSourceText
 
@@ -72,7 +73,7 @@ class ImportSnapshot:
     harness: type[Harness]
     source_id: str
     project: str
-    title: str | None
+    title: ThreadText
     messages: tuple[ImportedMessage, ...]
     summary: str
     messages_seen: int
@@ -150,7 +151,7 @@ class ImportBuffer:
     latest_request: str = ""
     source_id: str = ""
     project: str = ""
-    title: str = ""
+    title: ThreadText = NoThreadText()
     instructions: set[CodexRolloutProvenance] = field(default_factory=set)
 
     def add(self, events: Iterable[TranscriptEvent]) -> None:
@@ -178,7 +179,7 @@ class ImportBuffer:
     def describe(self, facts: SessionFacts) -> None:
         self.source_id = facts.source_id or self.source_id
         self.project = facts.project or self.project
-        self.title = facts.title or self.title
+        self.title = facts.title.applied(self.title)
 
     def snapshot(self, harness: type[Harness]) -> ImportSnapshot:
         if not self.messages and not self.summary:
@@ -186,7 +187,7 @@ class ImportBuffer:
         if self.instructions:
             self.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return ImportSnapshot(
-            harness, self.source_id, self.project, self.title or None, tuple(self.messages), self.summary,
+            harness, self.source_id, self.project, self.title, tuple(self.messages), self.summary,
             self.seen, self.truncated, tuple(sorted(self.notices)), self.latest_request,
             tuple(sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
         )

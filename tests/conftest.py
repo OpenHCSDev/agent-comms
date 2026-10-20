@@ -21,6 +21,7 @@ from agent_comms.publisher import ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
+from agent_comms.thread_text import GivenThreadText
 
 
 class TranscriptRecords:
@@ -218,7 +219,7 @@ def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
     return declare_test_bus(comms, channels=("base", "auth"), threads=(
         comms.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'),
-        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent='PR111', task='fix auth'),
+        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent='PR111', task=GivenThreadText('fix auth')),
     ))
 
 
