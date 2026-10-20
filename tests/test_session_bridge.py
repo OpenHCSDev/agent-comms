@@ -1,4 +1,4 @@
-"""Socket/admission owners already exercised by the real Claude probe."""
+"""Socket and delivery owners exercised by the real Claude probe."""
 import asyncio
 from contextlib import asynccontextmanager
 import json
@@ -14,6 +14,7 @@ from agent_comms.cli_bridges.monitor import AttachMonitor, EndSession, MonitorSe
 from agent_comms.cli_bridges.shared import Binding, DeliveryRow, MONITOR_FRAME, ObservedMonitor, Options, Serve
 from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, UnconfirmedOutcome
 from agent_comms.messages import InfoKind, Message
+from agent_comms_hooks import ClaudeHook
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
@@ -31,7 +32,7 @@ async def endpoint(tmp_path, monkeypatch):
             acknowledgments.extend(references)
     with Binding.open(tmp_path / 'state') as db, claim.held(WatchRecord('viewer', str(tmp_path), ('bridge', 'watch'))):
         binding = Binding(str(tmp_path), 'viewer', 'session')
-        bridge = ClaudeBridge(Options(Serve(owner, tmp_path / 'session.jsonl'), binding, tmp_path / 'state'), binding, db)
+        bridge = ClaudeBridge(Options(Serve(owner=owner, transcript=tmp_path / 'session.jsonl'), binding, tmp_path / 'state'), binding, db)
         bridge.comms = Core()
         async def run():
             await MonitorService(bridge, owner, asyncio.current_task().cancel).run()
@@ -77,7 +78,7 @@ async def no_line(stream):
 
 
 @pytest.mark.asyncio
-async def test_admission_waits_for_current_probe_then_delivers_once(endpoint):
+async def test_delivery_waits_for_current_probe_then_delivers_once(endpoint):
     bridge, claim, owner, acknowledgments, task = endpoint
     first = message('first')
     delivery = asyncio.create_task(bridge.accept(first))
@@ -173,8 +174,9 @@ def test_enrol_is_idempotent_and_guard_reports_only_missing_reader(tmp_path, mon
     assert claim.state().record == record
     with claim.held(record):
         claim.enrol(record)
-        claim.state().report('PostToolUse')
+        hook = ClaudeHook('session', 'PostToolUse')
+        claim.state().report(hook)
         assert 'Delivery is paused' in capsys.readouterr().out
         with claim.reader_held():
-            claim.state().report('PostToolUse')
+            claim.state().report(hook)
             assert capsys.readouterr().out == ''

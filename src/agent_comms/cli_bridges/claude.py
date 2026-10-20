@@ -132,8 +132,8 @@ class Connect(Enrol):
     def serves(cls, bridge: type) -> bool:
         return issubclass(bridge, ClaudeBridge)
 
-    async def run(self, bridge: LineMonitorBridge) -> None:
-        await super().run(bridge)
+    async def execute(self, bridge: LineMonitorBridge) -> None:
+        await super().execute(bridge)
         SessionHook.current(
             bridge.binding.thread, str(RunningClaude(bridge.binding.thread).source)
         ).start()
