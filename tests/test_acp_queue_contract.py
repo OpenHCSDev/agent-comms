@@ -116,7 +116,7 @@ async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monke
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
     comms.agents.begin_turn("beta", "active", "Held native fixture")
-    inbox = agent.inputs.state("beta").inbox = asyncio.Queue()
+    inbox = agent.inputs.state('beta').open_inbox()
     response = await agent.prompt(
         "beta",
         [{"type": "text", "text": "valid task"}],
@@ -141,7 +141,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
 async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_replay(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
     comms.agents.begin_turn("beta", "active", "Held native fixture")
-    inbox = agent.inputs.state("beta").inbox = asyncio.Queue()
+    inbox = agent.inputs.state('beta').open_inbox()
     requests = [QueuePromptRequest("same"), SteerPromptRequest("same")]
     for request in requests:
         response = await agent.prompt(
@@ -178,7 +178,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
 async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tmp_path, user_text):
     comms, agent, _, _ = _owner(tmp_path)
     comms.agents.begin_turn("beta", "active", "Held native fixture")
-    inbox = agent.inputs.state("beta").inbox = asyncio.Queue()
+    inbox = agent.inputs.state('beta').open_inbox()
     metadata = encode_request(QueuePromptRequest("valid", True))
     metadata["agentComms"]["request"]["user_text"] = user_text
     with pytest.raises(RequestError) as error:
@@ -248,7 +248,7 @@ async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
     agent.inputs.ensure_live_drain("beta")
     drained = agent.inputs.drained["beta"]
     drain = drained.drain_task
-    assert drained.queue_revision == 1 and drained.inbox is not None and drain is not None
+    assert drained.queue_revision == 1 and drained.turn_open() and drain is not None
     await agent.shutdown()
     assert "beta" not in agent.inputs.drained
     assert drain.done()

@@ -415,31 +415,28 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_actual_native_held_input_resumes_from_existing_observer(native_backend):
-    from agent_comms.backend import TurnSession
-    from native_backend_fixture import wait_for
+async def test_actual_native_new_input_refused_during_maintenance_then_fresh_input_works(native_backend):
+    from agent_comms.acp_failure import NativeTurnError
+    from agent_comms.maintenance_barrier import MaintenanceHeldError
 
     owner = native_backend
     async with owner.open_owner(runtime_enabled=True) as (agent, session_id):
         async with owner.original_input(agent, session_id, "Held original input") as turn:
             gate = agent._comms.owners.maintenance
             hold = gate.begin(MaintenanceOperator.current())
-            sending = asyncio.create_task(turn.run_native())
             try:
-                await wait_for(lambda: sending in TurnSession.active and
-                    not TurnSession.active[sending].inputs.queue.ready.is_set())
-                running = TurnSession.active[sending]
-                assert running.native.proc.alive() and not sending.done()
-                assert not running.inputs.pending and owner.provider.posts == 0
-                gate.clear(hold)
-                await asyncio.wait_for(sending, 20)
-                assert owner.provider.posts == 1
-                assert len(owner.saved_inputs()) == 1
-                assert running.inputs.queue.empty() and not running.inputs.pending
-                assert turn.progress.result.ok
+                with pytest.raises(NativeTurnError) as failure:
+                    await asyncio.wait_for(turn.run_native(), 20)
+                assert isinstance(failure.value.__cause__, MaintenanceHeldError)
+                assert owner.provider.posts == 0 and len(owner.saved_inputs()) == 0
             finally:
-                sending.cancel()
-                await asyncio.gather(sending, return_exceptions=True)
+                gate.clear(hold)
+        # The rejected input is never replayed. A separate new input may start
+        # after maintenance releases the same saved owner.
+        async with owner.original_input(agent, session_id, "Fresh after maintenance") as fresh:
+            await asyncio.wait_for(fresh.run_native(), 20)
+            assert owner.provider.posts == 1 and len(owner.saved_inputs()) == 1
+            assert fresh.progress.result.ok
 
 
 async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: Path) -> None:

@@ -100,7 +100,7 @@ class NativeSessionPreparation(backend.NativeSession):
             package=package, root=root, directory=session_directory,
             environment=environment, session_file=session_file,
         ))
-        preparation = cls(launch, persistent_session=persistent,
+        preparation = cls(launch, native_session=persistent,
                           startup=NativeStartup.for_launch(launch))
         async with session_writer_fence(launch.session.session_file):
             try:

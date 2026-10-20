@@ -174,7 +174,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert stored_inputs(owner.inputs.dispositions.root).rows == reopened
             assert (native.session.read_bytes(), native.provider.posts) == before
             assert native.session.read_bytes().startswith(saved)
-            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in owner.inputs.drained.values())
+            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.turn_open() for state in owner.inputs.drained.values())
         finally:
             native.provider.response_gate.set()
             turn.cancel()
@@ -217,7 +217,7 @@ async def test_native_steer_keeps_original_input_and_turn_cleanup(native_backend
             assert len({row.native_id for row in rows.values()}) == 2
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
             assert native.session.read_bytes().startswith(saved)
-            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in owner.inputs.drained.values())
+            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.turn_open() for state in owner.inputs.drained.values())
         finally:
             original_response.set()
             turn.cancel()
@@ -359,7 +359,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 Comms(native.root).messaging.send,
                 "sender", session, "deliver as soon as following input opens",
             ))).message
-            await wait_for(lambda: owner.inputs.state(session).idle_revision is not None)
+            await wait_for(lambda: owner.inputs.state(session).settled())
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert pending.label == "Sent" and not pending.state.working
@@ -633,7 +633,7 @@ async def test_model_change_stored_by_another_process_reaches_the_running_turn(n
             await wait_for(
                 lambda: owner.sessions.config.settings_in_use[session].model
                 == "response-local/fixture-second"
-                and owner.inputs.state(session).inbox.empty()
+                and owner.inputs.state(session).require_inbox().empty()
             )
             await Coordination.run_worker(partial(
                 elsewhere.messaging.send, "sender", session, "still there?"

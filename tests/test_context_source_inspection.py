@@ -158,8 +158,8 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     original = replace(original, thread=owner.incarnation,
         turn=replace(original.turn, occurrence=replace(original.turn.occurrence,
                                                        incarnation=owner.incarnation)))
-    comms.bus.log.record_context(original)
-    page = comms.bus.log.context_manifest_page(owner.name, comms.registry)
+    comms.contexts.record(original)
+    page = comms.contexts.page(owner.name, comms.registry)
     request = ContextRecordedSegmentRuntimeRequest(thread=owner.name, turn=original.turn,
                 request_id=original.require_request_id(), record=page.reference(page.resources[0].value),
                 segment=0, contributors=(0,))
@@ -267,8 +267,8 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
                                  .measured_manifest(),)), thread=owner.incarnation)
     captured = replace(captured, segments=(replace(captured.segments[0],
                                                   captured_text=("Original request system",)),))
-    comms.bus.log.record_context(captured)
-    page = comms.bus.log.context_manifest_page(owner.name, comms.registry)
+    comms.contexts.record(captured)
+    page = comms.contexts.page(owner.name, comms.registry)
     assert tuple(resource.value for resource in page.resources) == (captured,)
     assert read_history(comms) == []
     assert comms.bus.log.latest_sequence() == 0

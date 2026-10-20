@@ -13,13 +13,12 @@ submits native input nor marks a message handled.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -44,15 +43,13 @@ from .locked_store import DurableFile, SQLiteFile
 from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileIdentity, FileRevision
-from .store_files import ExclusiveLock, LockMode, SharedLock
+from .store_files import ExclusiveLock, LockMode
 from .thread_identity import ThreadIncarnation
-from .turn_context import ContextEntryManifest, RecordedContextManifest
 from .typed_table import (
     Column,
     ForeignKey,
     Index,
     SQLiteSchemaObject,
-    SqlStorage,
     SqlValue,
     TypedTable,
 )
@@ -61,10 +58,8 @@ from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .retained_task_facts import ExactTaskFact
-    from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
     from .wire_log import WireLog, WireSnapshot
 
 OriginalSource = TypeVar("OriginalSource")
@@ -575,55 +570,6 @@ class CheckedRead:
             for fact in message.retained_task_facts()
         )
 
-    def context_entry_rows(self, references):
-        """Look up only the candidate entry identities for this turn."""
-        requested = tuple(dict.fromkeys(references))
-        rows = []
-        for start in range(0, len(requested), 200):
-            batch = requested[start:start + 200]
-            where = "(session_id,session_file,entry_id) IN (" + ",".join(
-                "(?,?,?)" for _ in batch
-            ) + ")"
-            parameters = tuple(
-                value
-                for reference in batch
-                for value in (
-                    reference.identity.session_id,
-                    reference.identity.session_file,
-                    reference.entry_id,
-                )
-            )
-            rows.extend(ContextEntrySources.select(
-                self.connection, where=where, parameters=parameters
-            ))
-        return tuple(rows)
-
-    def context_entry_references(self, references):
-        """Find which candidate context entries are already in the checked index."""
-        self.require_current()
-        return frozenset(row.reference for row in self.context_entry_rows(references))
-
-    def context_records(self, manifest, previous=None):
-        """Choose context entries not yet stored and a manifest for this turn."""
-        from .wire_record import (
-            AuthoredObservationWireRecord,
-            ContextEntryManifestWireObservation,
-            RecordedContextManifestWireObservation,
-        )
-
-        if previous is not None and previous.source != self.witness.source_identity:
-            raise RelationViolationError("Context predecessor belongs to another source")
-        recorded, entries = RecordedContextManifest.capture(manifest, previous)
-        known = self.context_entry_references(
-            tuple(entry.reference for entry in entries)
-        )
-        new_entries = tuple(entry for entry in entries if entry.reference not in known)
-        records = (
-            (AuthoredObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
-            if new_entries else ()
-        )
-        return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
-
     @boundary_decoder
     def keyed_message(self, intent: PublicationIntents) -> Message | None:
         """The sealed key filters absence; the original delivery proves the message."""
@@ -884,268 +830,6 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
         from .message_reference import MessageReference
 
         return MessageReference(self.seq, self.message_id)
-
-
-@dataclass(frozen=True)
-class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTable, TypedTable):
-    session_id: str = field(metadata={"sql": Column(primary_key=True)})
-    session_file: str = field(metadata={"sql": Column(primary_key=True)})
-    entry_id: str = field(metadata={"sql": Column(primary_key=True)})
-
-    @classmethod
-    def for_reference(cls, reference, *, offset: int, length: int):
-        return cls(
-            reference.identity.session_id,
-            reference.identity.session_file,
-            reference.entry_id,
-            offset=offset,
-            length=length,
-        )
-
-    @property
-    def reference(self):
-        from .native_session_reopen import NativeSessionIdentity
-        from .turn_context import ContextEntryReference
-
-        return ContextEntryReference(
-            NativeSessionIdentity(self.session_id, self.session_file), self.entry_id
-        )
-
-    def decode_bytes(self, raw: bytes, root_id: str):
-        from .wire_record import WireRecord
-
-        record = WireRecord.from_wire(json.loads(raw), root_id)
-        entries = record.context_entries()
-        matches = tuple(entry for entry in entries if entry.reference == self.reference)
-        if len(matches) != 1:
-            raise RelationViolationError("Context entry pointer differs from original observation")
-        return matches[0]
-
-
-@dataclass(frozen=True)
-class ContextManifestCursor(ABC):
-    """Locate a context manifest in one bus; subclasses choose the read direction."""
-
-    source: PrefixSource
-    offset: int
-    @property
-    @abstractmethod
-    def comparison(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def descending(self) -> bool: ...
-
-    def available(self, connection, owners):
-        exists = RecordedContextManifestSources.exists(connection,
-            where='thread IN (' + ','.join('?' for _ in owners) + ') '
-            f'AND offset {self.comparison} ?', parameters=(*owners, self.offset))
-        return self if exists else None
-
-
-class BeforeContextManifest(ContextManifestCursor):
-    comparison = "<"
-    descending = True
-
-
-class AfterContextManifest(ContextManifestCursor):
-    comparison = ">"
-    descending = False
-
-
-@dataclass(frozen=True)
-class ContextManifestReference:
-    """An exact recorded request, not a turn-name search over all history."""
-
-    source: PrefixSource
-    offset: int
-
-    def read(self, log, name, registry):
-        page = RecordedContextManifestSources.for_owner(log, name, registry,
-            cursor=BeforeContextManifest(self.source, self.offset + 1), limit=1)
-        if len(page.resources) != 1 or page.resources[0].pointer.offset != self.offset:
-            raise MalformedRecord("Recorded context reference is absent from this owner")
-        return page.resources[0].value
-
-
-@dataclass(frozen=True)
-class ContextManifestPage:
-    """One page of original resources and source-bound cuts in either direction."""
-
-    resources: tuple[CapturedWireSource[RecordedContextManifest, ContextManifest], ...]
-    older: BeforeContextManifest | None
-    newer: AfterContextManifest | None
-
-    def has_older(self) -> bool:
-        return self.older is not None
-
-    def has_newer(self) -> bool:
-        return self.newer is not None
-
-    def reference(self, manifest: ContextManifest) -> ContextManifestReference:
-        for resource in self.resources:
-            if resource.value is manifest:
-                return ContextManifestReference(resource.source, resource.pointer.offset)
-        raise ValueError("Recorded context is outside the selected page")
-
-
-@dataclass(frozen=True)
-class RecordedContextManifestSources(
-    WireSourcePointer[RecordedContextManifest], CheckpointTable, TypedTable
-):
-    thread: ThreadIncarnation
-    indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))
-    max_page_rows: ClassVar[int] = 8
-    max_page_bytes: ClassVar[int] = 512 * 1024
-
-    @classmethod
-    def latest(
-        cls, log: WireLog, thread: ThreadIncarnation,
-    ) -> CapturedWireSource[RecordedContextManifest, ContextManifest] | None:
-        with log.checked_read() as source:
-            prefix = source.witness
-            rows = cls.select(source.connection, thread=thread, order_by=("offset",),
-                              descending=True, limit=1)
-            captured = tuple((row, row.read_bytes(source.stream)) for row in rows)
-        resolved = cls.resolve(log, captured, prefix)
-        return next(iter(resolved.values()), None)
-
-    @classmethod
-    def resolve(
-        cls, log: WireLog, captured: tuple[tuple[RecordedContextManifestSources, bytes], ...],
-        prefix: PrefixWitness,
-    ) -> dict[RecordedContextManifestSources, CapturedWireSource[
-        RecordedContextManifest, ContextManifest]]:
-        """Resolve only referenced predecessors and entries, decoding outside locks."""
-        recorded = {row.offset: row.decode_bytes(value, prefix.root_id)
-                    for row, value in captured}
-        dependencies = {(predecessor, position)
-                        for row, _ in captured
-                        for position, segment in enumerate(recorded[row.offset].segments)
-                        for predecessor in segment.predecessors(row.offset)}
-        references = {offset for offset, _ in dependencies} - recorded.keys()
-        if references:
-            with log.checked_read() as source:
-                source.witness.require_read_window(prefix)
-                captured_prior = tuple((row, row.read_bytes(source.stream))
-                                       for offset in references
-                                       for row in cls.select(source.connection, offset=offset))
-            if {row.offset for row, _ in captured_prior} != references:
-                raise RelationViolationError("Recorded context predecessors are incomplete")
-            for row, value in captured_prior:
-                if row.offset + row.length > prefix.offset:
-                    raise RelationViolationError("Context predecessor exceeds its captured prefix")
-                recorded[row.offset] = row.decode_bytes(value, prefix.root_id)
-        segments = tuple(segment for row, _ in captured for segment in recorded[row.offset].segments)
-        segments += tuple(recorded[offset].segments[position] for offset, position in dependencies)
-        references = {reference for segment in segments for reference in segment.entries}
-        entries: dict[ContextEntryReference, SegmentManifest] = {}
-        if references:
-            with log.checked_read() as source:
-                source.witness.require_read_window(prefix)
-                entry_rows = source.context_entry_rows(references)
-                if any(row.offset + row.length > prefix.offset for row in entry_rows):
-                    raise RelationViolationError("Context entry exceeds its captured prefix")
-                geometries = {(row.offset, row.length): row for row in entry_rows}
-                entry_bytes = tuple(row.read_bytes(source.stream) for row in geometries.values())
-            for value in entry_bytes:
-                record = WireRecord.from_wire(json.loads(value), prefix.root_id)
-                for entry in record.context_entries():
-                    if entry.reference in references:
-                        entries[entry.reference] = entry.manifest
-            if entries.keys() != references:
-                raise RelationViolationError("Recorded context entries are incomplete")
-        for row, _ in captured:
-            manifest = recorded[row.offset]
-            if any(recorded[predecessor].thread != manifest.thread
-                   for segment in manifest.segments
-                   for predecessor in segment.predecessors(row.offset)):
-                raise RelationViolationError("Context predecessor belongs to another owner")
-        return {row: CapturedWireSource(prefix.source_identity, row, value,
-                                       recorded[row.offset].restore(entries, recorded))
-                for row, value in captured}
-
-    @classmethod
-    def for_owner(
-        cls, log: WireLog, name: str, registry: Registration, *,
-        cursor: ContextManifestCursor | None = None,
-        previous: tuple[CapturedWireSource[RecordedContextManifest, ContextManifest], ...] = (),
-        limit: int | None = None,
-    ) -> ContextManifestPage:
-        """Acquire one bounded page and its entries; decode outside both locks.
-
-        The budget bounds turn rows. Referenced entry rows are indivisible
-        dependencies of those requests, never a reason to scan other turns.
-        Entry references come from the captured turn records. The second read
-        must contain that same prefix, and every entry must belong to it. Later
-        appends therefore cannot change this observation or fill a missing entry.
-        """
-        from .store_files import _store_lock
-
-        limit = cls.max_page_rows if limit is None else limit
-        if not 1 <= limit <= cls.max_page_rows:
-            raise ValueError("Context page row limit exceeds its source budget")
-        with _store_lock(log.path.parent / "wire", mode=SharedLock()), log.checked_read() as source:
-            snapshot = registry.snapshot()
-            incarnation = snapshot.require(name).incarnation
-            storage = SqlStorage.for_type(ThreadIncarnation)
-            owners = tuple(storage.to_sql(FieldCodec.encode(recorded))
-                           for recorded in incarnation.recorded_names(snapshot))
-            where = "thread IN (" + ",".join("?" for _ in owners) + ")"
-            parameters = owners
-            prefix = source.witness
-            if cursor is not None:
-                if cursor.source != prefix.source_identity:
-                    raise ValueError("Recorded context page changed its source")
-                where += f" AND offset {cursor.comparison} ?"
-                parameters += (cursor.offset,)
-            descending = cursor is None or cursor.descending
-            candidates = cls.iterate(source.connection.execute(
-                f'SELECT * FROM "{cls.declared_name}" WHERE {where} '
-                f'ORDER BY offset {"DESC" if descending else "ASC"} LIMIT ?',
-                (*parameters, limit),
-            ))
-            rows, size = [], 0
-            for row in candidates:
-                # A complete first request always makes progress, even when
-                # its indivisible record exceeds the ordinary page budget.
-                if rows and size + row.length > cls.max_page_bytes:
-                    break
-                rows.append(row)
-                size += row.length
-            candidates.close()
-            rows = tuple(sorted(rows, key=lambda row: row.offset))
-            older = newer = None
-            if rows:
-                older = BeforeContextManifest(prefix.source_identity, rows[0].offset).available(
-                    source.connection, owners)
-                newer = AfterContextManifest(prefix.source_identity, rows[-1].offset).available(
-                    source.connection, owners)
-            # The saved check covers the bus bytes read so far; moving an archive
-            # replaces the file. Rows from the same unchanged file can be reused,
-            # so a refresh needs to read only newly recorded turns.
-            retained = {item.pointer: item for item in previous
-                        if item.source == prefix.source_identity}
-            captured = tuple((row, row.read_bytes(source.stream)) for row in rows
-                             if row not in retained)
-
-        resources = {row: retained[row] for row in rows if row in retained}
-        changed = cls.resolve(log, captured, prefix)
-        for row, resource in changed.items():
-            if resource.value.thread.resolved(snapshot) != incarnation:
-                raise RelationViolationError(
-                    "Context source differs from recorded owner.")
-            resources[row] = resource
-        return ContextManifestPage(tuple(resources[row] for row in rows), older, newer)
-
-    def decode_bytes(self, raw: bytes, root_id: str):
-        from .wire_record import WireRecord
-
-        record = WireRecord.from_wire(json.loads(raw), root_id)
-        manifests = record.recorded_context_manifests()
-        if len(manifests) != 1 or manifests[0].thread != self.thread:
-            raise RelationViolationError("Recorded context pointer differs from original observation")
-        return manifests[0]
 
 
 @dataclass(frozen=True)
