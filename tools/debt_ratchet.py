@@ -62,7 +62,8 @@ class Measure(DeclaredFamily, affix="Measure"):
                    if key.partition(":")[0] == cls.__name__)
 
     @staticmethod
-    def environment(root: str) -> dict[str, str]:
+    def environment(root: str, tree: Path) -> dict[str, str]:
+        """The environment of a tool run in a revision extracted to the tree."""
         return dict(os.environ)
 
     @classmethod
@@ -280,8 +281,8 @@ class CheckedRevision(Measure):
 
     @staticmethod
     @abstractmethod
-    def command(root: str, selected: list[str], side: Side) -> list[str]:
-        """The checker's arguments after `python -m`."""
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+        """The checker's arguments after `python -m`, run in the revision extracted to the tree."""
 
     @staticmethod
     def batches(selected: list[str]) -> list[list[str]]:
@@ -298,18 +299,23 @@ class CheckedRevision(Measure):
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
                  side: Side) -> tuple[Side, Counter[str]]:
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
-            cls.extract(repo, ref, Path(scratch), selected)
-            configuration = Path(scratch) / "pyproject.toml"
+            tree = Path(scratch)
+            cls.extract(repo, ref, tree, selected)
+            configuration = tree / "pyproject.toml"
             configuration.unlink(missing_ok=True)
             if git(repo, "ls-tree", "--name-only", head, "--", "pyproject.toml"):
                 configuration.write_bytes(git(repo, "show", f"{head}:pyproject.toml"))
-            result = subprocess.run([sys.executable, "-m", *cls.command(root, selected, side)],
-                                    cwd=scratch, env=cls.environment(root), capture_output=True, text=True,
-                                    timeout=600)
+            result = subprocess.run([sys.executable, "-m", *cls.command(tree, selected, side)],
+                                    cwd=tree, env=cls.environment(root, tree), capture_output=True,
+                                    text=True, timeout=600)
         if result.returncode not in (0, 1):
             raise ValueError(f"{cls.__name__} could not check {ref}: {result.stderr}")
+        # A checker reports each file under the path it was given, inside the tree or relative to
+        # it; mypy also reports the modules it follows outside the tree, which are not measured.
         output = result.stdout + result.stderr
-        return side, Counter(match[1] for match in cls.finding.finditer(output))
+        reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
+        return side, Counter(path.relative_to(tree).as_posix()
+                             for path in reported if path.is_relative_to(tree))
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
@@ -348,7 +354,7 @@ class Unformatted(CheckedRevision):
             (scratch / path).write_bytes(source)
 
     @staticmethod
-    def command(root: str, selected: list[str], side: Side) -> list[str]:
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
         return ["black", "--check", *selected]
 
 
@@ -358,7 +364,7 @@ class LintFindings(CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+:\d+: ", re.MULTILINE)
 
     @staticmethod
-    def command(root: str, selected: list[str], side: Side) -> list[str]:
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
         return ["ruff", "check", "--no-cache", "--output-format", "concise", *selected]
 
 
@@ -369,20 +375,22 @@ class TypeErrors(CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+: error: ", re.MULTILINE)
 
     @staticmethod
-    def command(root: str, selected: list[str], side: Side) -> list[str]:
-        # Mypy validates each cached module against its file, so the analysis carries from one run
-        # to the next while the checked tree is read fresh. Each side keeps its own cache: the two
-        # revisions run at once, and a base usually matches the previous run's base.
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+        # Mypy reuses a cached module whose path, size and whole-second mtime match its file, and
+        # hashes the file otherwise. Every extracted tree has a new path, so each module is checked
+        # against its content while unchanged analysis carries from one run to the next. Each side
+        # keeps its own cache: the two revisions run at once, and a base usually matches the
+        # previous run's base.
         cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy" / side.value
         return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
-                *selected]
+                *(str(tree / path) for path in selected)]
 
     @staticmethod
-    def environment(root: str) -> dict[str, str]:
+    def environment(root: str, tree: Path) -> dict[str, str]:
         """Module names start at the source directory, as they do when the package is installed.
         Tools import the same revision's ``src`` (``upgrade_bus.py`` puts it first), never the
         installed one."""
-        paths = dict.fromkeys((Path(root).parts[0], "src"))
+        paths = dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src"))
         return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
 
 
@@ -1636,7 +1644,8 @@ class UncarriedRecordFormat(ChangeMeasure):
                 WheelStamp(revision(repo, ref)).write(stamp)
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
-                                     *modules], cwd=scratch, env=cls.environment(root),
+                                     *modules], cwd=scratch,
+                                    env=cls.environment(root, Path(scratch)),
                                     capture_output=True, text=True, check=True, timeout=300)
         return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
