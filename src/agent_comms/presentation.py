@@ -582,6 +582,7 @@ class UncountedRead(InboxRead):
 @dataclass(frozen=True, slots=True)
 class ThreadRecord(CliResult):
     """A thread's wire record; every reader of one thread writes these fields from here."""
+    wire_view = "presence"
     thread: Thread = field(metadata={"wire_inline": True})
     status: Annotated[ThreadStatus, ThreadStatusName]
     activity: ActivityData = field(metadata={"presence_exclude": True})
@@ -606,7 +607,7 @@ class ThreadRecord(CliResult):
         ) for thread in threads)
 
     def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+        return FieldCodec.project(self, self.wire_view)
 
     @projected(view="presence")
     def is_fork(self) -> bool:
