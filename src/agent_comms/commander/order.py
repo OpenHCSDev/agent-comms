@@ -261,7 +261,7 @@ class CommanderContext(CommanderConfig):
         return replace(check, directory=str(directory))
 
     def held_orders(self) -> tuple[Todo, ...]:
-        return self.comms.goals.todos.held_for_commander(self.incarnation)
+        return tuple(todo for todo in self.todos() if todo.holder)
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_by(self.incarnation, unit)
