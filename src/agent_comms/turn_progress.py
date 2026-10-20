@@ -311,7 +311,7 @@ class TurnProgress(events.AgentEventConsumer):
                 self.comms.root,
                 turn_id=self.turn_lease.turn_id,
                 thread=self.thread_name,
-                event={"reason_code": terminal.reason_code, "diagnostic": terminal.diagnostic},
+                event=vars(terminal),
                 sequences=(),
             )
             results = []
@@ -320,7 +320,7 @@ class TurnProgress(events.AgentEventConsumer):
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
-                    f"{prefix}: backend turn did not complete. "
+                    f"{prefix}: {terminal.text} "
                     f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
                     AlertKind,
                     role=NoticeRole(),

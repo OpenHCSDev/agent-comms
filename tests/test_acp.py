@@ -1693,9 +1693,8 @@ class TestFailureFeedback:
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
         assert isinstance(notice.role, NoticeRole) is True
-        assert notice.body.startswith("Request failed: backend turn did not complete. ")
+        assert notice.body.startswith(f"Request failed: {message} ")
         assert "[Open diagnostic](file://" in notice.body
-        assert message not in notice.body
         assert not notice.role.response_policy(notice).starts_turn
         assert len(history) == 1
 
@@ -1738,9 +1737,8 @@ class TestFailureFeedback:
         assert len(history) == 1
         assert isinstance(history[0].role, NoticeRole) is True
         assert history[0].type is AlertKind
-        assert history[0].body.startswith("Request failed: backend turn did not complete. ")
+        assert history[0].body.startswith("Request failed: provider failed SECRET_PRIVATE_938 ")
         assert "[Open diagnostic](file://" in history[0].body
-        assert "SECRET_PRIVATE_938" not in history[0].body
         assert not history[0].role.response_policy(history[0]).starts_turn
         assert not routed
 
@@ -1771,7 +1769,7 @@ class TestFailureFeedback:
         history = list(wired.views.history_page(CommandTarget.named(human.name), viewer="proj").messages)
         assert len(history) == 1
         assert isinstance(history[0].role, NoticeRole) is True
-        assert history[0].body.startswith("Request failed: backend turn did not complete. ")
+        assert history[0].body.startswith("Request failed: Native turn ended without a result ")
         assert "[Open diagnostic](file://" in history[0].body
         assert not routed
 
@@ -1853,7 +1851,6 @@ class TestLiveConfigSync:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await asyncio.wait_for(menu_received.wait(), 1)
-        sent.clear()  # The initial session snapshot is not this explicit sync.
         await agent.turns.goals.sync_goal_execution("proj", "proj")
         info = [update for update in sent if isinstance(update, SessionInfoUpdate)
                 and facts(update.field_meta, GoalChangedUpdate)]

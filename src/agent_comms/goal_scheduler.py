@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -45,13 +46,27 @@ if TYPE_CHECKING:
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 
 
+@dataclass(eq=False, slots=True)
+class GoalSessionPublication:
+    """One session's last published goal and its publication lifetime."""
+
+    snapshot: GoalSnapshot | None = None
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    def in_standby(self) -> bool:
+        snapshot = self.snapshot
+        return snapshot is not None and snapshot.execution.standby()
+
+
 class GoalScheduler:
     def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
         self.pending_goal_origins: dict[str, str] = {}
-        self.goal_snapshots: dict[str, GoalSnapshot] = {}
-        self._snapshot_locks: dict[str, asyncio.Lock] = {}
+        self.publications: dict[str, GoalSessionPublication] = {}
+
+    def publication(self, session_id: str) -> GoalSessionPublication:
+        return self.publications.setdefault(session_id, GoalSessionPublication())
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
@@ -68,6 +83,15 @@ class GoalScheduler:
             return
         scheduled = await Coordination.run_worker(partial(self.prepare_goal, session_id))
         if scheduled is None:
+            # A prior READY grant may still be queued while a failed turn
+            # blocks its goal. The current goal decides whether it survives;
+            # independent incoming turns are never discarded.
+            current = await Coordination.run_worker(lambda: self.comms.registry.require(
+                self.sessions.require(session_id)
+            ).goal.active())
+            WakeScheduleCheck._retain_goal_turns(
+                self.inputs.state(session_id).pending_turns, current,
+            )
             return
         # A worker wait cannot reserve the process-local queue. Its original
         # rules recheck that resource before the authorized work is bound.
@@ -207,18 +231,16 @@ class GoalScheduler:
         return resumed
 
     def in_standby(self, session_id: str) -> bool:
-        snapshot = self.goal_snapshots.get(session_id)
-        return snapshot is not None and snapshot.execution.standby()
+        return self.publication(session_id).in_standby()
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        # The snapshot must advance only after publication, with no concurrent
-        # reader publishing the same previous snapshot while that await runs.
-        async with self._snapshot_locks.setdefault(session_id, asyncio.Lock()):
+        # A publication advances this session's snapshot only after delivery.
+        record = self.publication(session_id)
+        async with record.lock:
             event = await Coordination.run_worker(partial(
-                self.comms.goals.goal_changed,
-                thread_name, self.goal_snapshots.get(session_id),
+                self.comms.goals.goal_changed, thread_name, record.snapshot,
             ))
             if event is None:
                 return
             await self.effects._emit_event(session_id, event)
-            self.goal_snapshots[session_id] = event.snapshot
+            record.snapshot = event.snapshot
