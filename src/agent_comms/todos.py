@@ -593,12 +593,13 @@ class PresentCheckout(ProgressCheckout):
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
         """Read the bounded distance trend only from explicitly recorded check results."""
-        readings = []
+        readings: list[DistanceReading] = []
         for tip in source.commits("origin/HEAD"):
             base = self.git("merge-base", tip.sha, "origin/HEAD").strip()
             commits = [ProgressPoint.listed(line) for line in reversed(self.git(
                 "log", f"--max-count={DistanceReadings.window}", "--first-parent",
-                "--extended-regexp", "--regexp-ignore-case", f"--grep={source.todo.reference_pattern}",
+                "--extended-regexp", "--regexp-ignore-case",
+                f"--grep={source.todo.reference_pattern}",
                 f"--format={ProgressPoint.format}", tip.sha, "--not", base).splitlines())]
             points = [ProgressPoint(base, source.since), *commits][-DistanceReadings.window:]
             readings.extend(reading for point in points for reading in self.recorded_distances(

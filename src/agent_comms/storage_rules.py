@@ -96,7 +96,7 @@ class StorageRule(RoomAllocation):
     def owns_checkout(self, name: str, path: Path) -> bool:
         problem = path.name.removeprefix(f'{name}--')
         return (path == self.checkout_base.resolve() / name
-                or (re.fullmatch(r'P[1-9][0-9]*', problem) is not None
+                or (bool(re.fullmatch(r'P[1-9][0-9]*', problem))
                     and path == self.order_checkout(name, problem)))
 
     def checkout_paths(self, name: str) -> tuple[Path, ...]:
