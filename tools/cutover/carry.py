@@ -268,18 +268,21 @@ class Step:
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef):
                 for base in node.bases:
-                    if ((parent := parent_name(base)) is not None
-                            and (family := parents.get(parent)) is not None):
-                        return cls(name, revision, node.name, family, cls.declared_columns(source))
+                    if (parent := parent_name(base)) in parents:
+                        return cls(
+                            name, revision, node.name, parents[parent], cls.declared_columns(source)
+                        )
         raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
 
-def parent_name(base: ast.expr) -> str | None:
-    """The class a step names as its parent, bare or through its module."""
+def parent_name(base: ast.expr) -> str:
+    """Decode a static parent reference; an unsupported expression is not absence."""
     match base:
         case ast.Name(id=name) | ast.Attribute(attr=name):
             return name
-    return None
+        case ast.Subscript(value=parent):
+            return parent_name(parent)
+    raise ValueError(f"Unsupported carry parent expression: {ast.dump(base)}")
 
 
 def carry_parents(source: bytes) -> dict[str, type[Carry]]:
