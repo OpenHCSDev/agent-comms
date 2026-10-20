@@ -145,7 +145,9 @@ class Stack:
                 "import agent_comms; from pathlib import Path; "
                 "print(Path(agent_comms.__file__).parent)",
                 cwd=checkout, env=built.environment()).strip())
-            shutil.copytree(native, package / "_native" / native.relative_to(checkout / "stack"))
+            destination = package / "_native" / native.relative_to(checkout / "stack")
+            destination.parents[2].mkdir(mode=0o700, parents=True)
+            shutil.copytree(native, destination)
             RuntimeResolution.capture(built.python, core).save(prefix)
             built.imports()
             built.prepare_native()
@@ -186,8 +188,9 @@ publish_active_route(ActiveRoute(root, marker.root_id))
         environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
         if paths:
             imports = SpecifiedImportPath(os.pathsep.join(map(str, paths)))
-            return replace(RestartEnvironment.inherit(environment),
-                           pythonpath=imports).apply_runtime(environment)
+            configuration: RestartEnvironment = replace(
+                RestartEnvironment.inherit(environment), pythonpath=imports)
+            return configuration.apply_runtime(environment)
         return environment
 
     def cli(self, root: Path, *arguments: str) -> dict:
@@ -444,12 +447,15 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
-        staged.owners(root, "start", running)
+        try:
+            staged.owners(root, "start", running)
+        except BaseException:
+            staged.owners(root, "stop", running)
+            raise
     except BaseException as error:
         state = maintenance.read()
         recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
         os.environ[HOLDER_NONCE] = recovery.nonce
-        staged.owners(root, "stop", running)
         if not backup.original():
             backup.restore()
         restored = maintenance.read()
