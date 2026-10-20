@@ -48,6 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import publish_runtime
 from cutover.backup import (
+    NoBackup,
     RestoreSpace,
     SavedFile,
     StoreBackup,
@@ -83,8 +84,18 @@ class RehearsalFiles:
 
     identical: int
     rewritten: int
-    names: list[str]
+    names: tuple[str, ...]
     restore_bytes: int
+
+    @staticmethod
+    def declared(steps: list[dict]) -> frozenset[str]:
+        return frozenset({CarryLedger.name, *(name for step in steps
+                                              for name in step["rewritten"])})
+
+    def require_rehearsal(self, rehearsal: RehearsalFiles) -> None:
+        outside = sorted(set(self.names) - set(rehearsal.names) - {CarryLedger.name})
+        if outside:
+            raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
 
 
 def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) -> str:
@@ -97,7 +108,7 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
 
 
 def carried(root: Path, before: dict[str, SavedFile], steps: list[dict],
-            expected: frozenset[str] = frozenset()) -> dict:
+            expected: frozenset[str]) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
     physical = {name for name in before.keys() | after.keys()
@@ -105,16 +116,16 @@ def carried(root: Path, before: dict[str, SavedFile], steps: list[dict],
     # SQLite's committed WAL belongs to its database declaration, not a second carry.
     changed = {name[:-4] if name.endswith('-wal') and name[:-4] in before.keys() | after.keys()
                else name for name in physical}
-    unnamed = sorted(changed - {CarryLedger.name}
-                     - {name for step in steps for name in step["rewritten"]})
+    unnamed = sorted(changed - RehearsalFiles.declared(steps))
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
-    outside = sorted(changed - expected) if expected else []
+    outside = sorted(changed - expected)
     if outside:
-        raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
-    return asdict(RehearsalFiles(
-        identical=len(before.keys() - changed), rewritten=len(changed), names=sorted(changed),
-        restore_bytes=sum(before[name].size for name in physical & before.keys())))
+        raise UpgradeRefused(f"Carries changed files outside the expected set: {outside}")
+    return RehearsalFiles(
+        identical=len(before.keys() - changed), rewritten=len(changed),
+        names=tuple(sorted(changed)),
+        restore_bytes=sum(before[name].size for name in physical & before.keys()))
 
 
 @dataclass(frozen=True)
@@ -359,13 +370,13 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> 
 
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[Step, ...],
                    staged: Stack, reader: Stack, revisions: Revisions,
-                   stopping: list[dict], expected: frozenset[str] = frozenset()) -> dict:
+                   stopping: list[dict]) -> dict:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
     steps = [*stopping, *carry_all(root, pending, staged, revisions)]
-    return {"steps": steps, "files": carried(root, before, steps, expected),
-            "read": reader.verify(root)}
+    files = carried(root, before, steps, RehearsalFiles.declared(steps))
+    return {"steps": steps, "files": files, "read": reader.verify(root)}
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool,
@@ -460,12 +471,11 @@ class UnchangedInstall(Install):
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
          installed: Stack, staged: Stack, revisions: Revisions, installer: str,
-         spill_dir: Path, rehearsal_files: dict) -> dict:
+         spill_dir: Path, rehearsal_files: RehearsalFiles) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    files = RehearsalFiles(**rehearsal_files)
-    restore = RestoreSpace.measure(files.restore_bytes, root.parent)
-    expected = frozenset((*files.names, CarryLedger.name))
+    restore = RestoreSpace.measure(rehearsal_files.restore_bytes, root.parent)
+    expected = frozenset((*rehearsal_files.names, CarryLedger.name))
     selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore.require()
     stopping = before_stop(root, pending, staged, revisions)
@@ -477,9 +487,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         staged.owners(root, "stop", running)
         with transcripts_held(root):
             before = bus_files(root)
-            backup = (StoreBackup.take(root, ROUTE, selected,
+            backup = (StoreBackup if selected else NoBackup).take(
+                root, ROUTE, selected,
                 spill_dir / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
-                if selected else None)
     except BaseException as error:
         maintenance.clear(held)
         installed.owners(root, "start", running)
@@ -490,8 +500,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Revisions.prepare(checkout)
         staged.prepare_native()
-        passed = carry_and_read(root, before, pending, staged, staged, revisions, stopping,
-                                expected)
+        passed = carry_and_read(root, before, pending, staged, staged, revisions, stopping)
+        passed["files"].require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
@@ -505,7 +515,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         state = maintenance.read()
         recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
         os.environ[HOLDER_NONCE] = recovery.nonce
-        if backup and not backup.original():
+        if not backup.original():
             backup.restore()
         restored = maintenance.read()
         restored_hold = restored.phase.hold_for(maintenance, restored, MaintenanceOperator.current())
@@ -515,14 +525,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.owners(root, "start", running)
         print(f"upgrade-bus: restored after failure ({type(error).__name__}: {error}); "
               f"original runtime selected and {running} restarted; "
-              f"backup: {backup.path if backup else None}",
+              f"backup: {backup.description}",
               file=sys.stderr)
         raise
     return {"stopped_and_started": running, **passed, "services": services,
             "restore_space": {"needed": restore.needed, **asdict(restore)},
-            "backup": str(backup.path) if backup else None,
-            "backup_bytes": sum(path.stat().st_size for path in backup.data_root.rglob('*')
-                                if path.is_file()) if backup else 0}
+            **backup.report()}
 
 
 def detached_live(command: tuple[str, ...], root: Path) -> int:
@@ -578,7 +586,7 @@ def main() -> None:
         signal.signal(signum, stopped)
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse,
-                                 args.spill_dir), indent=2))
+                                 args.spill_dir), indent=2, default=asdict))
     except UpgradeRefused as error:
         raise SystemExit(error.output)
 

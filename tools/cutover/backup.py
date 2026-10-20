@@ -187,6 +187,15 @@ class StoreBackup(ResourceBackup[str]):
     """Snapshot declared databases through SQLite; restore only the selected files."""
     contents: ClassVar[type] = str
 
+    def report(self) -> dict[str, object]:
+        return {"backup": str(self.path),
+                "backup_bytes": sum(path.stat().st_size for path in self.data_root.rglob('*')
+                                    if path.is_file())}
+
+    @property
+    def description(self) -> str:
+        return str(self.path)
+
     @property
     def data_root(self) -> Path:
         return self.path / 'stores'
@@ -297,3 +306,26 @@ class StoreBackup(ResourceBackup[str]):
         if not self.original():
             raise UpgradeRefused('Selected stores differ after backup restoration')
         self.restore_route()
+
+
+class NoBackup(StoreBackup):
+    """A runtime-only install takes no snapshot and cannot restore files."""
+
+    @classmethod
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], path: Path) -> Self:
+        if files:
+            raise UpgradeRefused('NoBackup cannot select files')
+        return cls(root, route, path)
+
+    def original(self) -> bool:
+        return True
+
+    def restore(self) -> None:
+        pass
+
+    def report(self) -> dict[str, object]:
+        return {"backup": None, "backup_bytes": 0}
+
+    @property
+    def description(self) -> str:
+        return 'none'
