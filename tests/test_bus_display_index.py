@@ -11,7 +11,9 @@ from agent_comms.bus_display_index import BusDisplayIndex, DisplaySnapshot
 from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
-from agent_comms.read_basis import ChannelDisplayScope
+from agent_comms.read_basis import (
+    AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope,
+)
 from agent_comms.wire_log import AbsentWireSnapshot, CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
 
@@ -102,6 +104,31 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
         assert completed.activity == {"#team": ChannelActivity(last_message=2.0)}
         assert completed.offset == len(first) + len(second)
         assert parsed == [2]
+
+
+@pytest.mark.parametrize("scopes", [
+    semantics(),
+    (AllChannelDisplayScope('#any'),),
+    (MemberActivityDisplayScope('#focus', participant_names=frozenset({'sender'})),),
+])
+def test_reopened_display_restores_scope_behavior_without_rebuilding(tmp_path, monkeypatch, scopes):
+    path = tmp_path / 'bus.jsonl'
+    path.write_bytes(row(1))
+    with opened(path, index := BusDisplayIndex(path, 'viewer')) as source:
+        initial = index.snapshot(source, scopes)
+    restored = BusDisplayIndex(path, 'viewer').read()
+    assert restored.scopes == scopes
+    probes = (Message('sender', '#outside', 'member', InfoKind),
+              Message('outsider', '#outside', 'other', InfoKind))
+    assert [scope.includes(message) for scope in restored.scopes for message in probes] == [
+        scope.includes(message) for scope in scopes for message in probes]
+
+    def unexpected_rebuild(*args, **kwargs):
+        pytest.fail('Unchanged saved metrics must not rebuild after reopening')
+
+    monkeypatch.setattr(BusPageIndex, 'display_snapshot', unexpected_rebuild)
+    with opened(path, reopened := BusDisplayIndex(path, 'viewer')) as source:
+        assert reopened.snapshot(source, scopes) == initial
 
 
 def test_activity_uses_the_same_complete_line_cut(tmp_path):

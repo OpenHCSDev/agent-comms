@@ -33,7 +33,7 @@ class DisplaySnapshot:
 
 @dataclass(frozen=True)
 class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
-    schema: Literal[6] = field(default=6, kw_only=True)
+    schema: Literal[7] = field(default=7, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()

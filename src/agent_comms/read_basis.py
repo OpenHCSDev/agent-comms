@@ -793,7 +793,7 @@ class DMDisplayBasis:
         self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
-class MessageDisplayScope(ABC):
+class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
     """Captured inclusion and its sound candidate reduction for the page index."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
@@ -951,7 +951,7 @@ class ChannelDisplayScope(MessageDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class AllTargetsDisplayScope(ChannelDisplayScope):
+class AllTargetsDisplayScope(ChannelDisplayScope, declared_name=None):
     """A scope that may match any target cannot reduce cursors to target names."""
 
     targets: frozenset[str] = frozenset()
