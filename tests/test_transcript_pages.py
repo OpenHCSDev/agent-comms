@@ -104,7 +104,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         "Forked from @parent. This thread started with:",
         "Inspect the renderer",
     ]
-    assert [event.declared_name for event in page.events[-2:]] == ["notice", "user"]
+    assert [event.declared_name for event in page.events[-2:]] == ["fork_origin", "fork_task"]
     assert [event.text for event in comms.transcripts.thread_transcript_page("child").events][-2:] == [
         "Forked from @parent. This thread started with:",
         "Inspect the renderer",

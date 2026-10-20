@@ -8,6 +8,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.routing import ScheduledTurn, TurnRouting
 from agent_comms.threads import Thread
+from agent_comms.transcript_events import IncomingTranscript, UserTranscript
 
 
 def append_input(path, native_id, text, *, role="user"):
@@ -47,7 +48,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     )
     reopened = wire(comms.root)
     events = reopened.transcripts.thread_transcript_page("worker").events
-    inputs = [event for event in events if event.declared_name == "user"]
+    inputs = [event for event in events if isinstance(event, (IncomingTranscript, UserTranscript))]
     assert inputs[0].text == second.body and inputs[0].routing.requests == (second.reference,)
     assert inputs[1].text == quote and inputs[1].routing is None
 
