@@ -39,8 +39,8 @@ from ..external_transcript import ExternalTranscript
 from ..field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import OrderCheck, ProblemGoalOrder
-from ..native_tool_call import SelectedToolDenied
 from ..message_reference import MessageReference
+from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
