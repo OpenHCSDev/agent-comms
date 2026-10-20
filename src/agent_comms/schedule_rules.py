@@ -9,6 +9,7 @@ from acp import RequestError
 
 from .coordinator import Coordination
 from .drain_failures import drain_failures
+from .activity import FailedWakeDiagnostic
 from .errors import RelationViolationError
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
@@ -160,7 +161,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
         hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
         if hold.turn_pending:
             return hold
-        async with drain_failures(inputs.comms, self.thread, self.owner):
+        async with drain_failures(inputs.comms, self.thread, self.owner, FailedWakeDiagnostic):
             before = await inputs._observe_private_revision(session_id, root_id)
             result = await effects.turns.run_selected(session_id, self.execution)
             if result is not None:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
-import time
 from contextlib import asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
@@ -34,6 +33,7 @@ async def drain_failures(
     comms: Comms,
     thread: str,
     owner: OwnerIdentity,
+    unavailable: type[UnavailableDrainDiagnostic] = UnavailableDrainDiagnostic,
 ):
     """Record and propagate failures; the observation owner waits for real change."""
     snapshot = await Coordination.run_worker(comms.registry.snapshot)
@@ -42,9 +42,7 @@ async def drain_failures(
     ))
 
     async def record(kind, error) -> None:
-        diagnostic = kind(
-            owner, type(error).__name__, str(error), recorded_at=time.time()
-        )
+        diagnostic = kind.from_error(owner, error)
         await Coordination.run_worker(partial(
             comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
             source_error=error,
@@ -61,18 +59,10 @@ async def drain_failures(
         await record(NativeInputDrainDiagnostic, error)
         raise
     except UNAVAILABLE_DRAIN_ERRORS as error:
-        await record(UnavailableDrainDiagnostic, error)
+        await record(unavailable, error)
         raise
     except ValueError as error:
-        diagnostic = StoppedDrainDiagnostic(
-            owner, type(error).__name__, str(error), recorded_at=time.time()
-        )
-        await Coordination.run_worker(partial(
-            comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
-            source_error=error,
-        ))
+        await record(StoppedDrainDiagnostic, error)
         raise
     else:
-        current = await Coordination.run_worker(partial(comms.registry.require, thread))
-        if not current.turn_record.read().executing:
-            await comms.agents.recover_drain(thread, owner, observed)
+        await comms.agents.recover_drain(thread, owner, observed)
