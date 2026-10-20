@@ -276,8 +276,10 @@ class StoreOwner(DeclaredFamily):
     @classmethod
     def is_staging(cls, path: Path) -> bool:
         pattern = cls.staging_name.format(name="*", token="*")
-        return any(fnmatchcase(path.name, pattern + suffix)
-                   for suffix in (cls.staging_suffix, cls.rollback_suffix))
+        return any(
+            fnmatchcase(path.name, pattern + suffix)
+            for suffix in (cls.staging_suffix, cls.rollback_suffix)
+        )
 
 
 class StoreLockOwner(StoreOwner, declared_name=None):

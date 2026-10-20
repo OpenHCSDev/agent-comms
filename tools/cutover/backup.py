@@ -169,6 +169,7 @@ class StoreBackup(Backup):
         cls, source: Path, target: Path, *, excluded: Collection[Path] = ()
     ) -> None:
         """Copy committed files; their owners declare transient names before any stat."""
+
         def transient(directory: str, names: list[str]) -> set[str]:
             omitted: set[str] = set()
             for name in sorted(names):
@@ -178,8 +179,14 @@ class StoreBackup(Backup):
                     continue
                 if stat.S_ISSOCK(path.lstat().st_mode):
                     omitted.add(name)
-                elif path.is_file() and not path.is_symlink() and CoordinationStore.is_database(path):
-                    omitted.update(companion.name for companion in CoordinationStore.files(path)[1:])
+                elif (
+                    path.is_file()
+                    and not path.is_symlink()
+                    and CoordinationStore.is_database(path)
+                ):
+                    omitted.update(
+                        companion.name for companion in CoordinationStore.files(path)[1:]
+                    )
             return omitted
 
         shutil.copytree(
