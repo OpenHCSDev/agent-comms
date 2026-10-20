@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import subprocess
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from ..child_process import BoundedRun
 from ..commander.config import CommanderConfig
 from ..field_codec import FieldCodec
 from ..private_path import FileRevision
@@ -55,19 +56,17 @@ class CommandComparison(ParityComparison):
         before = state_files(config.state)
         # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
         # HOME and the environment stay unchanged; the actual CLI main runs.
-        try:
-            current = subprocess.run(
+        current = asyncio.run(
+            BoundedRun.run(
                 (str(config.cli.parent / "python"), "-I", *arguments),
-                capture_output=True,
-                text=True,
                 timeout=cls.timeout,
             )
-        except subprocess.TimeoutExpired as error:
+        )
+        if not current.outcome.successful:
             return UnverifiedParity(
-                f"{cls.__name__}: configured native owner timed out after {error.timeout} seconds"
+                f"{cls.__name__}: configured native owner {current.outcome.summary}; "
+                f"bound={cls.timeout}s; {current.stderr.decode(errors='replace')}"
             )
-        if current.returncode:
-            return UnverifiedParity(current.stderr)
         observed = FieldCodec.decode(MeasuredOutput, FieldCodec.parse(current.stdout))
         source = Path(observed.source)
         if (
