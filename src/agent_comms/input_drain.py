@@ -231,8 +231,7 @@ class FullTick:
                 current = await Coordination.run_worker(partial(observation.comms.registry.require, thread))
                 if (
                     current.turn_record.read().executing
-                    or session_id in observation.effects.turns.turn_tasks
-                    or observation.state(session_id).turn_open()
+                    or observation.turn_live(session_id)
                 ):
                     return UnsettledTick()
                 if observation._quiescent(session_id):
@@ -297,6 +296,9 @@ class InputObservation:
     sessions: SessionLifecycle
     closing: bool
 
+    def turn_live(self, session_id: str) -> bool:
+        return self.state(session_id).turn_open() or session_id in self.effects.turns.turn_tasks
+
     def _tick_paths(self) -> TickRevisionPaths:
         configuration = self.sessions.config.configuration
         return TickRevision.paths(
@@ -354,9 +356,7 @@ class InputObservation:
             return False
         if state.pending_turns:
             return False
-        if session_id in self.effects.turns.turn_tasks:
-            return False
-        return not state.turn_open()
+        return not self.turn_live(session_id)
 
     def _indexed_changes_for_owner(
         self, settled: SettledTick, revision: TickRevision, lookup: str,
@@ -401,8 +401,7 @@ class InputObservation:
             state.settled()
             and not self.effects.cursors.delivery(session_id).needs_refresh
             and not state.pending_turns
-            and session_id not in self.effects.turns.turn_tasks
-            and not state.turn_open()
+            and not self.turn_live(session_id)
             and not state.wake_pending()
         )
 
@@ -618,8 +617,7 @@ class InputDrain(InputObservation):
         """An attached turn can take follow-ups; a predecessor cannot."""
         return (
             owner.turn_record.read().phase.busy
-            or self.state(session_id).turn_open()
-            or session_id in self.effects.turns.turn_tasks
+            or self.turn_live(session_id)
         )
 
     def __init__(
