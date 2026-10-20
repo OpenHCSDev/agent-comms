@@ -2075,7 +2075,8 @@ class MissedDeadlineStrike(ObjectiveStrike):
     @classmethod
     def late(cls, todo: Todo, at: EventTime, detail: str) -> tuple[Self, ...]:
         lateness = at.lateness(todo.deadline)
-        if not lateness.late():
+        if not lateness.late() or todo.deadline.before(
+                todo.order.checked().at.recorded_at("An order")):
             return ()
         strike = cls.make(todo, at.recorded_at("A deadline failure"),
             f"{todo.id} order {todo.order.checked().id} late by {lateness.seconds:g} s {detail}; "
@@ -2564,7 +2565,9 @@ class Todo(TypedTable):
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
-        """After assignment validation, fold its strike and release into the same row write."""
+        """Strike a replaced holder, never invent another release for already-unowned work."""
+        if self.assignment is None:
+            return assigned
         owner, at = self.held(), RecordedEventTime(time.time())
         reason = StrikeReason(f"{owner.owner} stopped making progress on {self.id}; "
                               f"Core reassigned the order to {assigned.held().owner}.")
@@ -2787,13 +2790,17 @@ class TodoStore(TypedStore):
                 for strike in current.order.observe_objective(failure, goals, current, now, pulls):
                     strike.record(goals, current.id)
 
-    def stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
-        """Observe active held orders without changing owners, strikes or releases."""
-        held = tuple(todo for todo in self.held_orders() if todo.pending)
+    def reassignable(self, storage: StorageRule) -> tuple[Todo, ...]:
+        """Include Core-released work, never a commander's deliberately released backlog."""
+        pending = tuple(todo for todo in self._open("1", (), OpenTodoState) if todo.pending)
+        released = tuple(todo for todo in pending if not todo.holder and todo.released
+                         and todo.released[-1].actor == StallWatcherIncarnation.watcher())
+        held = tuple(todo for todo in pending if todo.holder)
         pulls = PullRequests(held)
-        return tuple(todo for todo in held
-                     if OrderProgress.from_source(source := ProgressSource.of(todo, storage, pulls))
-                     .stalled(source.since, time.time()))
+        return released + tuple(todo for todo in held
+                                if OrderProgress.from_source(
+                                    source := ProgressSource.of(todo, storage, pulls))
+                                .stalled(source.since, time.time()))
 
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:
