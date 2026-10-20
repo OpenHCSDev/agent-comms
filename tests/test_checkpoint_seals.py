@@ -14,7 +14,8 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.checkpoint_seals import FinalSeal, PendingSeal
 from agent_comms.errors import CheckpointNeedsRepairError, RelationViolationError
 from agent_comms.wire_log import WireLog
-from agent_comms.private_bus_checkpoint import PrefixWitness
+from agent_comms.private_bus_checkpoint import PrefixWitness, opened_private_checkpoint_unlocked
+from agent_comms.store_files import SharedLock, _store_lock
 from test_private_bus_checkpoint import _page, _root
 
 
@@ -228,7 +229,9 @@ def test_restored_checkpoint_copy_reopens(tmp_path, change):
     assert checkpoint.stat().st_mtime_ns == before.st_mtime_ns
     error = RelationViolationError if change == "corrupt" else CheckpointNeedsRepairError
     with pytest.raises(error):
-        with bus.checked_read():
+        with _store_lock(bus.path, mode=SharedLock()), opened_private_checkpoint_unlocked(
+            bus, bus.private_marker_unlocked(), mode=SharedLock()
+        ):
             pass
     assert bus.metadata_path.read_bytes() == marker  # Shared reads never reseal.
     if change == "corrupt":
