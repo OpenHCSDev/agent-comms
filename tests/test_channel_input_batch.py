@@ -74,7 +74,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
                     row.context_provenance() for row in turn.original.batch.originals
                 )
                 assert turn.original.keys == turn.original_keys
-                assert agent.inputs.state(session_id).first_source is turn.original
+                assert agent.inputs.state(session_id).require_first_source() is turn.original
                 return turn.original_keys
 
             async with native.original_input(agent, session_id, "Original direct input") as turn:
@@ -114,7 +114,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
             assert all(isinstance(row, NotSentInput) and not row.has_native_binding
                        for row in originals)
             assert not comms.registry.require(agent.sessions.require(session_id)).active_turn.executing
-            assert not any(state.first_source for state in agent.inputs.drained.values()) and not any(state.inbox for state in agent.inputs.drained.values())
+            assert not any(state.turn_started() for state in agent.inputs.drained.values()) and not any(state.turn_open() for state in agent.inputs.drained.values())
         assert native.session.read_bytes() == saved
         assert native.provider.posts == 0 and native.starts == []
     assert all(not child.alive() and not child.platform.group_members(child.identity)

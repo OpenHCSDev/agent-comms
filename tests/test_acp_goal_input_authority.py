@@ -178,7 +178,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         assert "Persistent goal" in args[2]
         public_id, command = await queue_followup(agent, kwargs)
         observed["public_id"] = public_id
-        original = agent.inputs.state("project").first_source
+        original = agent.inputs.state('project').require_first_source()
         assert original.notice_keys == ()  # Internal continuation is not a user echo.
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert isinstance(allowed, GrantedSend)

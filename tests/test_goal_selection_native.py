@@ -62,5 +62,5 @@ async def test_native_settlement_selects_only_original_goal(native_backend, repl
             assert original_attempt.number == 2
             assert original_attempt.lifecycle == ReadyGeneration()
         assert not agent.turns.turn_tasks
-        assert not any(state.inbox for state in agent.inputs.drained.values())
+        assert not any(state.turn_open() for state in agent.inputs.drained.values())
     assert all(child.retired for child in native.children)

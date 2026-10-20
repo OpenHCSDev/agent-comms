@@ -30,6 +30,7 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import AsyncExitStack, aclosing, contextmanager
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -172,7 +173,7 @@ async def stream_agent_events(
                         send_boundary=send_boundary,
                         native_start=native_start,
                         interrupt_boundary=interrupt_boundary,
-                        persistent_session=persistent_session,
+                        native_session=persistent_session,
                         ui_request=ui_request,
                         request_observer=request_observer,
                         startup=NativeStartup.for_launch(launch),
@@ -183,6 +184,51 @@ async def stream_agent_events(
     finally:
         if owner is not None:
             await terminate_task_process(owner)
+
+
+class InputStartListener(ABC):
+    """The listener owns acknowledgement and the corresponding start notification."""
+
+    started_events: tuple[events.AgentEvent, ...]
+
+    @abstractmethod
+    def __call__(self, public_id, native_id, text) -> bool: ...
+
+
+class NoInputStartListener(InputStartListener):
+    started_events = ()
+
+    def __call__(self, public_id, native_id, text) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class ReportInputStart(InputStartListener):
+    report: Callable[[str | None, str, str], bool]
+    started_events = (events.OriginalInputStarted(),)
+
+    def __call__(self, public_id, native_id, text) -> bool:
+        return self.report(public_id, native_id, text)
+
+
+class FinishSignal(ABC):
+    """Own the optional external finish wait, without a nullable task in the reader."""
+
+    @abstractmethod
+    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]: ...
+
+
+class NoFinishSignal(FinishSignal):
+    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class EventFinishSignal(FinishSignal):
+    event: asyncio.Event
+
+    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]:
+        return () if settling else (asyncio.create_task(self.event.wait()),)
 
 
 class NativeSession(MroDispatch, ABC):
@@ -205,15 +251,13 @@ class NativeSession(MroDispatch, ABC):
         send_boundary: SendBoundary | None = None,
         interrupt_boundary: SendBoundary | None = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
-        persistent_session: PersistentPiSession | None = None,
-        native_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
-        *, startup: NativeStartup,
+        *, startup: NativeStartup, native_session: PersistentPiSession,
     ):
         self.launch = launch
         self.tool_socket: ToolTransport
-        self.finish_event = finish_event
+        self.finish_signal = NoFinishSignal() if finish_event is None else EventFinishSignal(finish_event)
         self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
             model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS,
@@ -222,14 +266,8 @@ class NativeSession(MroDispatch, ABC):
         self.rpc_abort_grace = rpc_abort_grace
         self.send_boundary = send_boundary
         self.interrupt_boundary = interrupt_boundary
-        self.native_start = native_start
-        # persistent_session: an owned turn keeps its child for the next input.
-        # A tracked (selected) turn borrows the owner's child without that retention.
-        self.persistent_session = persistent_session
-        session = persistent_session if persistent_session is not None else native_session
-        if session is None:
-            raise ValueError("A Pi turn runs on its thread's Pi session child")
-        self.native_session: PersistentPiSession = session
+        self.input_start = NoInputStartListener() if native_start is None else ReportInputStart(native_start)
+        self.native_session = native_session
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup
         self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
@@ -276,12 +314,8 @@ class NativeSession(MroDispatch, ABC):
             await self.stats.request(self)
         return ()
 
-    @property
-    def has_start_listener(self):
-        return self.native_start is not None
-
     def notify_input_started(self, public_id, native_id, text):
-        return self.native_start is None or self.native_start(public_id, native_id, text)
+        return self.input_start(public_id, native_id, text)
 
     def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
         """Publish the actual observer phase without storing another phase copy."""
@@ -421,7 +455,7 @@ class NativeSession(MroDispatch, ABC):
         async with AsyncExitStack() as resources:
             try:
                 self.native = await self.acquire_native(
-                    resources, reuse=self.persistent_session is not None
+                    resources, reuse=True
                 )
                 async with self.native.failures():
                     self.output.sensitive |= self.native.sensitive_diagnostics
@@ -487,8 +521,7 @@ class NativeSession(MroDispatch, ABC):
                     ),
                     "spawn_ms": self.watchdog.spawn_ms,
                 }
-                if self.watchdog.session_bytes is not None:
-                    self.output.diagnostic["session_bytes"] = self.watchdog.session_bytes
+                self.output.diagnostic.update(self.watchdog.session_load.diagnostic)
                 self.output.record_failure(
                     failures.InputIdUnavailable(
                         "Pi native input-ID capability preflight ended before attestation."
@@ -555,8 +588,7 @@ class NativeSession(MroDispatch, ABC):
         await self.native.finish_input()
         identity = self.native.attestation.identity
         if (
-            self.persistent_session is not None
-            and identity is not None
+            identity is not None
             and self.prompt_state.permits_retention(self)
         ):
             self.native.sensitive_diagnostics = self.output.sensitive
@@ -635,7 +667,7 @@ class TurnSession(NativeSession):
                 return ()
             self.prompt_state = self.prompt_state.start(event)
             self.ensure_input_forwarding()
-            return (events.OriginalInputStarted(),) if self.has_start_listener else ()
+            return self.input_start.started_events
         if self.started_input:
             matched, input_id = self.inputs.mark_started(self, event)
             if matched:

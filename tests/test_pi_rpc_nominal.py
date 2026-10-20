@@ -67,6 +67,9 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
 
 
 def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
+    from agent_comms.turn_watchdog import ModelWait, UnboundedWait
+
+    bounded, unbounded = ModelWait(), UnboundedWait()
     stalled = PromptAcceptancePhase().stalled(False)
     assert isinstance(stalled, PromptAcceptancePhase)
     assert (stalled.stall_reason, stalled.declared_name) == (
@@ -74,7 +77,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     )
     phase = pi.CompactionStart().on(ModelWaitPhase())
     assert isinstance(phase, CompactionPhase) and phase.pauses_input_clock
-    assert phase.model_wait(360.0) is None
+    assert phase.model_wait(bounded, unbounded) is unbounded
     assert CompactionPhase.model_wait is ToolRunningPhase.model_wait
     # Compaction completion exits even if a tool was already present.
     assert isinstance(pi.CompactionEnd().on(phase), ModelWaitPhase)
@@ -82,14 +85,14 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     phase = pi.ToolExecutionStart(tool_call_id="b").on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("a", "b")
-    assert phase.model_wait(360.0) is None
+    assert phase.model_wait(bounded, unbounded) is unbounded
     assert phase.model_progress() is phase
     phase = pi.ToolExecutionEnd(tool_call_id="a").on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("b",)
     finished = pi.ToolExecutionEnd(tool_call_id="b").on(phase)
     assert isinstance(finished, ModelWaitPhase)
-    assert finished.model_wait(360.0) == 360.0
+    assert finished.model_wait(bounded, unbounded) is bounded
 
 
 @pytest.mark.parametrize(

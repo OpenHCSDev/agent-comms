@@ -186,7 +186,7 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
                 await asyncio.sleep(0.01)
         child = owner.children[-1]
         session = backend.TurnSession.active[turn]
-        forwarding = session.native.forwarding_task
+        forwarding = session.native.forwarding.task
         if termination == "cancel":
             turn.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -228,7 +228,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_resources(
                 assert not turn.done()
                 await asyncio.sleep(0.01)
         session = backend.TurnSession.active[turn]
-        forwarding = session.native.forwarding_task
+        forwarding = session.native.forwarding.task
 
         async def held_close(child, *, graceful):
             if child is session.native:
@@ -252,7 +252,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_resources(
         assert not session.native.proc.alive()
         await session.native.proc.stderr_tail()
         assert forwarding.done()
-        assert session.native.forwarding_task is None
+        assert session.native.forwarding.tasks == ()
         assert turn not in backend.TurnSession.active
         assert owner.provider.posts == len(owner.saved_inputs()) == 1
     finally:
@@ -334,7 +334,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             assert stored_inputs(agent.inputs.dispositions.root).lookup(user_key) == cleared
             assert stored_inputs(agent.inputs.dispositions.root).lookup(bus_key).has_started
             assert not forwarding.pending and not forwarding.accepted
-            assert agent.inputs.state(session).inbox is None
+            assert not agent.inputs.state(session).turn_open()
             assert session not in agent.turns.turn_tasks
             assert not comms.registry.require(session).active_turn.phase.busy
             assert native.session.read_bytes().startswith(saved)

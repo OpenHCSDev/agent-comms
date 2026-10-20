@@ -365,9 +365,11 @@ class TurnRunner:
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
-    async def active_backend_inbox(self, session_id: str) -> TurnInbox | None:
+    async def active_backend_turn(self, session_id: str):
+        from .input_drain import NoDrainTurn
+
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
-        return self.inputs.state(session_id).inbox if state.active.phase.accepts_followup else None
+        return self.inputs.state(session_id).turn if state.active.phase.accepts_followup else NoDrainTurn()
 
     async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
         async with self.idle_backend(session_id, thread) as persistent:

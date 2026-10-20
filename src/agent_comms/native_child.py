@@ -24,13 +24,62 @@ if TYPE_CHECKING:
     from .turn_context import Provenance
 
 
+class InputForwarder(ABC):
+    """The child's forwarding state owns task admission and retirement."""
+
+    @property
+    @abstractmethod
+    def tasks(self) -> tuple[asyncio.Task[None], ...]: ...
+
+    @abstractmethod
+    def start(self, operation: Callable[[], Coroutine[None, None, None]]) -> InputForwarder: ...
+
+    @abstractmethod
+    async def finish(self) -> None: ...
+
+    def raise_failure(self) -> None:
+        pass
+
+
+class NoInputForwarder(InputForwarder):
+    @property
+    def tasks(self) -> tuple[asyncio.Task[None], ...]:
+        return ()
+
+    def start(self, operation: Callable[[], Coroutine[None, None, None]]) -> InputForwarder:
+        return RunningInputForwarder(asyncio.create_task(operation()))
+
+    async def finish(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class RunningInputForwarder(InputForwarder):
+    task: asyncio.Task[None]
+
+    @property
+    def tasks(self) -> tuple[asyncio.Task[None], ...]:
+        return (self.task,)
+
+    def start(self, operation: Callable[[], Coroutine[None, None, None]]) -> InputForwarder:
+        return self
+
+    async def finish(self) -> None:
+        self.task.cancel()
+        await asyncio.gather(self.task, return_exceptions=True)
+
+    def raise_failure(self) -> None:
+        if not self.task.cancelled():
+            self.task.result()
+
+
 @dataclass
 class PiChild:
     proc: AttachedChild
     reader: PiRpcChannel
     resources: ExitStack = field(default_factory=ExitStack, repr=False, kw_only=True)
     transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False, kw_only=True)
-    forwarding_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
+    forwarding: InputForwarder = field(default_factory=NoInputForwarder, init=False, repr=False)
     _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
 
     async def reply_ui(self, response) -> None:
@@ -58,17 +107,14 @@ class PiChild:
         return not job.cancelled() and job.exception() is None and isinstance(job.result(), ChildOutcome)
 
     def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
-        if self.forwarding_task is None:
-            self.forwarding_task = asyncio.create_task(operation())
+        self.forwarding = self.forwarding.start(operation)
 
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""
         await self.reader.finish_input()
         await self.transport.aclose()
-        forwarding, self.forwarding_task = self.forwarding_task, None
-        if forwarding is not None:
-            forwarding.cancel()
-            await asyncio.gather(forwarding, return_exceptions=True)
+        forwarding, self.forwarding = self.forwarding, NoInputForwarder()
+        await forwarding.finish()
 
     async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
         """Join the one gateway, ingress, process, pipe and resource retirement.

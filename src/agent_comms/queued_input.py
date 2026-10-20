@@ -469,10 +469,11 @@ class DeliveredInput(QueuedInput):
         Pi takes each one after its current tool batch. A turn that cannot take
         follow-ups leaves them pending for the ordinary wake after it ends.
         """
-        inbox = await inputs.effects.turns.active_backend_inbox(session_id)
-        # A turn takes later inputs once its first one is in.
-        if inbox is None or not inputs.state(session_id).turn_started():
+        turn = await inputs.effects.turns.active_backend_turn(session_id)
+        # Only the started member owns both the inbox and its original input.
+        if not turn.has_source:
             return
+        inbox = turn.require_inbox()
         store_path = inputs.comms.root / "coordination.sqlite3"
         lookup = owner.incarnation.lookup
 

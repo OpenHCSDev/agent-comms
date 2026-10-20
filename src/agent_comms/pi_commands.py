@@ -210,8 +210,6 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
                 if not session.native.attestation.uncertain:
                     context.context_window.update_size(session.usage)
             yield session.context_info()
-            if session.persistent_session is None:
-                session.finished = True
 
 
 CATALOG_TIMEOUT = 10  # seconds for one metadata child to start and answer

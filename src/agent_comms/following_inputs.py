@@ -30,7 +30,9 @@ class FollowingInputs:
     async def ready(inputs: InputDrain, session_id: str, after_seq: int = 0) -> None:
         """Take accepted work when a running turn opens or frees following capacity."""
         async with inputs.state(session_id).lock:
-            inputs.state(session_id).idle_revision = None
+            from .input_drain import NoPrivateObservation
+
+            inputs.state(session_id).idle_revision = NoPrivateObservation()
             owner = await Coordination.run_worker(partial(
                 inputs.comms.registry.require, inputs.sessions.require(session_id),
             ))
@@ -101,7 +103,7 @@ class OwnerFollowingInputs(FollowingInputs):
             ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
             thread.require_process().pid,
         )
-        inputs.state(self.session_id).first_source = original
+        inputs.state(self.session_id).capture_first_source(original)
         session.forward_inbox(self.inbox, sender)
         await self.ready(
             inputs, self.session_id,

@@ -66,7 +66,7 @@ class AttemptStart:
 
     def validate(self, snapshot: RecoverySnapshot, participant: ParticipantSnapshot) -> None:
         execution = snapshot.execution
-        ordinal = (execution.lifecycle.current_attempt_ordinal or 0) + 1
+        ordinal = execution.lifecycle.next_attempt_ordinal
         if not participant.committed or (
             participant.owner_thread,
             participant.participant_generation,
@@ -77,25 +77,16 @@ class AttemptStart:
             self.expected_pointer_revision,
         ):
             raise StaleRevision("execution or pointer revision changed")
-        if participant.pointer.execution_id is not None:
-            raise StaleFence("owner has a current attempt")
-        if not execution.lifecycle.starts_attempt:
-            raise IdentityConflict("execution cannot start an attempt")
+        participant.pointer.require_idle()
+        execution.lifecycle.require_attempt_start()
         if bool(snapshot.publication_intents):
             raise PublicationUncertain("no authorized bus-keyed publication resolution")
-        if execution.lifecycle.retry and snapshot.attempt is None:
-            raise RecoveryBlocked("frozen v2 cannot resume an unstarted deferral")
-        if execution.lifecycle.retry and not snapshot.can_retry:
-            raise RecoveryBlocked("retry requires final death, replay proof, and budget")
+        execution.lifecycle.require_retry_start(snapshot)
         if ordinal != self.attempt_ordinal:
             raise IdentityConflict("attempt ordinal must be contiguous")
         if ordinal > execution.max_attempts:
             raise RecoveryBlocked("retry budget exhausted")
-        if (
-            snapshot.attempt is not None
-            and self.owner_generation <= snapshot.attempt.owner_generation
-        ):
-            raise StaleFence("retry must use a strictly newer owner generation")
+        snapshot.previous_attempt.require_newer_owner(self.owner_generation)
 
     def activate(self, session, snapshot: RecoverySnapshot) -> None:
         """Publish attempt, execution and current pointer in the authorized transaction."""
