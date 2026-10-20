@@ -249,8 +249,8 @@ class TodoRows(StoreCarry):
         *,
         apply: bool,
         convert: Callable[[sqlite3.Connection], object] = lambda db: (),
-    ) -> Iterator[sqlite3.Connection | None]:
-        """Old steps use the context body; new steps supply conversion at the same boundary."""
+    ):
+        """Yield the store_transaction owner's connection type; preserve old context bodies."""
         with cls.store_transaction(root, apply=apply) as db:
             yield db
             if db is not None:
