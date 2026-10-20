@@ -22,11 +22,10 @@ from dataclasses import asdict, dataclass
 from ..comms import Comms
 from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, Derivation, SupersededVerdict
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
-from ..field_codec import FieldCodec
+from ..field_codec import FieldCodec, option
 from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
-from ..cli_commands import option
 from .order import CommanderVerb, RuledVerb
 from .config import CommanderConfig
 

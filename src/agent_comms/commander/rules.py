@@ -15,8 +15,8 @@ actions are refused until its own review is answered, and all three of a fork's 
 import glob, os, random, re, sys
 from dataclasses import dataclass
 
-from ..cli_commands import option
 
+from ..field_codec import option
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller

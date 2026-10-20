@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..cli_commands import option
+from ..field_codec import option
 from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder

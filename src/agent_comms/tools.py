@@ -15,11 +15,9 @@ from pydantic import JsonValue
 from .progress_claims import ProgressClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .cli_commands import (
-    ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
-    PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
-    ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
-    HistoryCliCommand,
-    _json_object, option,
+    ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand, PinChannelCliCommand,
+    PinThreadCliCommand, StartCliCommand, StopCliCommand, ThreadArchivedResult, ThreadCreatedResult,
+    ThreadStoppedResult, ThreadsCliCommand, HistoryCliCommand,
 )
 from .thread_execution import (
     ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
@@ -31,7 +29,7 @@ from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, View
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, option
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
@@ -68,7 +66,7 @@ from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, Order
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
                     TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
-from .messages import InfoKind, MessageKind, NoticeRole
+from .messages import InfoKind, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import NativeToolDeclaration, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .thread_identity import ThreadIncarnation
@@ -1071,7 +1069,7 @@ class CommsSendTool(ToolRequest):
         "Threads a channel message is for; no other member is woken", default=()
     )
     type: Type[MessageKind] = tool_field(
-        "Message kind", default=InfoKind, choices=MessageKind.sendable_names
+        "Message kind", default=InfoKind, choices=SendableMessageKind.names
     )
     report: ChangeReport | None = tool_field(
         "Change report fields; required for the change-report kind", default=None
@@ -1366,7 +1364,7 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
     tool: str = option("--tool")
     arguments: dict[str, object] = option(
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
-        parser_default="{}", normalize=_json_object)
+        parser_default="{}")
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return invoke_tool(ctx, self.tool, self.arguments,
