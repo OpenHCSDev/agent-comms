@@ -6,7 +6,7 @@ from typing import Annotated, Type
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, NullMember
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
@@ -170,6 +170,27 @@ def test_new_row_declaration_needs_no_other_edit():
             AddedTableRow.update(db, where="1", child=FieldCodec.decode(
                 TableChildRow, {TableChildRow.family_discriminator: TableChildRow.declared_name}
             ))
+
+
+@dataclass(frozen=True)
+class NoTableNote(NullMember):
+    """The row was stored without a note."""
+
+
+def test_null_member_column_stores_sql_null():
+    @dataclass(frozen=True)
+    class NotedTableRow(TypedTable):
+        key: Annotated[str, Column(primary_key=True)]
+        note: str | NoTableNote = field(default_factory=NoTableNote)
+
+    with sqlite3.connect(":memory:") as db:
+        NotedTableRow.create(db)
+        assert '"note" TEXT,' in NotedTableRow.ddl()[0] + ","
+        NotedTableRow("silent").insert(db)
+        NotedTableRow("said", "hello").insert(db)
+        assert db.execute("SELECT key FROM noted_table WHERE note IS NULL").fetchall() == [("silent",)]
+        assert NotedTableRow.one(db, key="silent") == NotedTableRow("silent")
+        assert NotedTableRow.one(db, key="said").note == "hello"
 
 
 def test_declared_values_and_partial_insertions_share_the_sqlite_boundary():

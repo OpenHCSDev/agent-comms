@@ -36,6 +36,7 @@ from .field_codec import (
     FieldDirective,
     FieldPlan,
     MalformedRecord,
+    NullMember,
     ValueDecoder,
     compile_decoder,
 )
@@ -50,13 +51,18 @@ def _identifier(name: str) -> str:
     return f'"{name}"'
 
 
+def _absent(member: object) -> bool:
+    """SQL NULL stores this union member: None, or a declared null member."""
+    return member is types.NoneType or (isinstance(member, type) and issubclass(member, NullMember))
+
+
 def _base_type(annotation: object) -> tuple[object, bool]:
     if get_origin(annotation) is Annotated:
         annotation = get_args(annotation)[0]
     if get_origin(annotation) in (Union, types.UnionType):
         members = get_args(annotation)
-        if types.NoneType in members and len(members) == 2:
-            return next(member for member in members if member is not types.NoneType), True
+        if len(members) == 2 and sum(map(_absent, members)) == 1:
+            return next(member for member in members if not _absent(member)), True
     return annotation, False
 
 
