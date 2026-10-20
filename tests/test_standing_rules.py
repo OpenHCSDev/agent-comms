@@ -444,7 +444,8 @@ def test_the_read_tool_returns_every_members_lines(commander, standing):
     comms, caller = commander
     read = CommsStandingRulesTool().apply(comms, caller)
     assert read.broken == tuple(rule.line() for rule in StandingRule.broken(comms, "lead"))
-    assert "HUNT DUE: read a hot path and order the fix this wake" in read.broken
+    assert any(isinstance(rule, HuntDue) and rule.line() in read.broken
+               for rule in StandingRule.broken(comms, 'lead'))
 
 
 def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_path):
