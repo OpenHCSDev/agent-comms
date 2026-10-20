@@ -28,9 +28,10 @@ async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None, **kw
     """Close the independent session after its actual native stream has ended."""
     session = PersistentPiSession()
     try:
-        async for event in session_turn_events(
+        async with aclosing(session_turn_events(
             session, agent_bin, agent_args, task, cwd, env_extra, **kwargs,
-        ):
-            yield event
+        )) as stream:
+            async for event in stream:
+                yield event
     finally:
         await session.close()
