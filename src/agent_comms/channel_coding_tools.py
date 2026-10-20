@@ -196,8 +196,10 @@ class CodingToolSocket(ToolTransport[CodingCall]):
 
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
-        _, call = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
-        if not event.is_error:
+        _, call = self.calls.require_current(
+            FieldCodec.encode(event.tool_call_id), 'Missing completed tool'
+        )
+        if not event.is_error.value_or(False):
             self.owner.tool_completed(call, event.result)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)

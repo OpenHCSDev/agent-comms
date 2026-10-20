@@ -15,7 +15,7 @@ from uuid import uuid4
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, boundary_decoder, WireAbsentNone, WireName, WireOmitDefault
+from .field_codec import FieldCodec, WireAbsentNone, WireName, WireOmitDefault
 from .image_inputs import ImageInput
 from .native_package import VerifiedNativePackage
 from .native_session_reopen import NativeSessionIdentity
@@ -25,8 +25,11 @@ from .pi_payloads import (
     CompactionData,
     EmptyData,
     ModelsData,
+    PiOmitted,
+    PiRequestId,
     PiResponseData,
     QueueClearedData,
+    RequestId,
     SessionStatsData,
     SessionSwitchData,
     StateData,
@@ -46,7 +49,7 @@ class SessionSnapshot:
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return bool(
-            response.success
+            response.succeeded
             and response.data.conflicts_attestation(session.native.attestation)
         ) or super().invalidates_identity(response, session)
 
@@ -65,16 +68,13 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: Annotated[str | None, WireAbsentNone()] = field(
-        default_factory=lambda: uuid4().hex
+    id: Annotated[PiRequestId, WireAbsentNone()] = field(
+        default_factory=lambda: RequestId(uuid4().hex)
     )
 
-    @boundary_decoder
     def require_id(self) -> str:
         """Operations that correlate an input require the command's actual ID."""
-        if self.id is None:
-            raise ValueError("A correlated native input requires its command ID")
-        return self.id
+        return self.id.require()
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -88,7 +88,7 @@ class PiCommand(DeclaredFamily):
             await writer.drain()
             yield future
         finally:
-            channel.pending.discard(type(self), self.id)
+            self.id.release_from(channel.pending, type(self))
             future.cancel()
 
     async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
@@ -145,12 +145,11 @@ class UnknownCommand(PiCommand):
 @dataclass(frozen=True, kw_only=True)
 class Prompt(PiCommand):
     input_id: Annotated[
-        str | None, WireOmitDefault(), WireName("inputId")
-    ] = None
+        str | PiOmitted, WireOmitDefault(), WireName("inputId")
+    ] = PiOmitted()
     message: Annotated[str, WireOmitDefault()] = None
-    images: Annotated[tuple[ImageInput, ...] | None, WireOmitDefault()] = (
-        None
-    )
+    # Pi never receives an empty image list: no images and omission are one value.
+    images: Annotated[tuple[ImageInput, ...], WireOmitDefault()] = ()
     context_contributions: Annotated[
         tuple[InputContributionCoordinates, ...],
         WireOmitDefault(),
@@ -169,7 +168,7 @@ class Prompt(PiCommand):
     ) -> Iterable[events.AgentEvent]:
         if response.id == session.command.id:
             session.watchdog.progress()
-            if response.success:
+            if response.succeeded:
                 session.prompt_state = session.prompt_state.acknowledge(response)
                 session.watchdog.prompt_accepted = True
                 session.watchdog.phase = phases.ModelWaitPhase()
@@ -197,11 +196,11 @@ class GetState(SessionSnapshot, NativeQuery):
     def on_response(
         cls, response: Response, session: TurnSession
     ) -> Iterable[events.AgentEvent]:
-        if response.success:
+        if response.succeeded:
             state = response.data.require_payload()
             session.native.attestation = session.native.attestation.observe(state)
             session.model_name = state.model.display_name
-            session.active_session_file = state.session_file or session.active_session_file
+            session.active_session_file = state.session_file.text_or(session.active_session_file)
             state.model.context_window.observe_size(session.usage)
             yield state.agent_info(session)
 
@@ -214,9 +213,8 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
     def on_response(
         cls, response: Response, session: TurnSession
     ) -> Iterable[events.AgentEvent]:
-        if response.success:
-            context = response.data.require_payload().context_usage
-            if context is not None:
+        if response.succeeded:
+            for context in response.data.require_payload().context_usage.present():
                 context.token_total.confirm(session.usage)
                 if not session.native.attestation.uncertain:
                     context.context_window.update_size(session.usage)
@@ -268,9 +266,9 @@ class CatalogQuery(NativeQuery):
 
         async with self.catalog(agent_bin, arguments, root=root, package=package) as (channel, writer):
             response = await self.exchange(channel, writer)
-            if response.success is True:
+            if response.succeeded:
                 return response.data.require_payload()
-            raise NativePiUnavailable(response.error or "Native catalog query was refused")
+            raise NativePiUnavailable(response.error.text_or("Native catalog query was refused"))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -294,12 +292,12 @@ class InterruptSteering(PiCommand):
     def on_response(
         cls, response: Response, session: TurnSession
     ) -> Iterable[events.AgentEvent]:
-        if response.success is False:
-            yield events.Error(text=str(response.error or "Send now was refused"))
+        if response.refused:
+            yield events.Error(text=response.error.text_or("Send now was refused"))
 
     input_ids: Annotated[
-        list[str] | None, WireOmitDefault(), WireName("inputIds")
-    ] = None
+        list[str] | PiOmitted, WireOmitDefault(), WireName("inputIds")
+    ] = PiOmitted()
 
 
 class SettingCommand(CatalogQuery):
@@ -325,11 +323,13 @@ class SettingCommand(CatalogQuery):
         catalog = self.catalog(agent_bin, arguments, package=package, worktree=worktree, root=root)
         async with catalog as (channel, writer):
             response = await self.exchange(channel, writer)
-            if response.success is not True:
-                raise NativePiUnavailable(response.error or self.error_message)
+            if not response.succeeded:
+                raise NativePiUnavailable(response.error.text_or(self.error_message))
             state = await GetState().exchange(channel, writer)
-            if state.success is not True:
-                raise NativePiUnavailable(state.error or "Native configuration was not reported")
+            if not state.succeeded:
+                raise NativePiUnavailable(
+                    state.error.text_or("Native configuration was not reported")
+                )
             return state.data.require_payload()
 
     @classmethod
@@ -338,8 +338,8 @@ class SettingCommand(CatalogQuery):
     ) -> Iterable[events.AgentEvent]:
         yield cls.result_type(
             id=response.id,
-            ok=bool(response.success),
-            error=response.error or cls.error_message,
+            ok=response.succeeded,
+            error=response.error.text_or(cls.error_message),
         )
 
 
@@ -354,24 +354,24 @@ class SetModel(SettingCommand):
 
     result_type = events.ModelChanged
     error_message = "Model change failed"
-    provider: Annotated[str | None, WireOmitDefault()] = None
+    provider: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
     model_id: Annotated[
-        str | None, WireOmitDefault(), WireName("modelId")
-    ] = None
+        str | PiOmitted, WireOmitDefault(), WireName("modelId")
+    ] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetThinkingLevel(SettingCommand):
     result_type = events.ThinkingChanged
     error_message = "Thinking level change failed"
-    level: Annotated[str | None, WireOmitDefault()] = None
+    level: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetSteeringMode(PiCommand):
     """How many waiting steers Pi hands the model at one step: "all" or "one-at-a-time"."""
 
-    mode: Annotated[str | None, WireOmitDefault()] = None
+    mode: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -389,15 +389,15 @@ class Compact(NativeQuery):
     response_payload = CompactionData
     writes_session = True
     custom_instructions: Annotated[
-        str | None, WireOmitDefault(), WireName("customInstructions")
-    ] = None
+        str | PiOmitted, WireOmitDefault(), WireName("customInstructions")
+    ] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
 class ExtensionUiResponse(PiCommand):
-    cancelled: Annotated[bool | None, WireOmitDefault()] = None
-    confirmed: Annotated[bool | None, WireOmitDefault()] = None
-    value: Annotated[str | None, WireOmitDefault()] = None
+    cancelled: Annotated[bool | PiOmitted, WireOmitDefault()] = PiOmitted()
+    confirmed: Annotated[bool | PiOmitted, WireOmitDefault()] = PiOmitted()
+    value: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)

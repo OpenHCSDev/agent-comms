@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from enum import StrEnum
 
 from agent_comms import field_codec
@@ -20,7 +21,9 @@ from agent_comms.typed_table import (
     Column,
     ForeignKey,
     Index,
+    RowId,
     TypedTable,
+    UnallocatedRowId,
 )
 
 
@@ -99,8 +102,8 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
     elapsed_ms: Annotated[int, Column(check="elapsed_ms>=0")]
     observed_at_ms: Annotated[int, Column(check="observed_at_ms>=0")]
     audit_id: Annotated[
-        int | None, Column(primary_key=True, auto_increment=True), field_codec.SnapshotExclude()
-    ] = None
+        RowId, Column(primary_key=True, auto_increment=True), field_codec.SnapshotExclude()
+    ] = dataclass_field(default_factory=UnallocatedRowId)
     indexes = (Index(("execution_id", "audit_id")),)
 
     @classmethod

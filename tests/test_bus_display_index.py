@@ -25,7 +25,7 @@ def opened(path, *indexes):
     log = WireLog(path)
     for index in indexes:
         log.register_append_index(index)
-    log.write_metadata_unlocked(WireMetadata(last_seq=2, claimed_after_seq=2, writer_protocol_version=1, wire_root_id="0" * 32))
+    log.write_metadata_unlocked(WireMetadata.private_root("0" * 32, last_seq=2, claimed_after_seq=2))
     with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         yield source
 

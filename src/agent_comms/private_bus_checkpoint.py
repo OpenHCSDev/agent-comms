@@ -49,6 +49,7 @@ from .thread_identity import ThreadIncarnation
 from .typed_table import (
     Column,
     ForeignKey,
+    Generated,
     Index,
     SQLiteSchemaObject,
     SqlValue,
@@ -276,11 +277,11 @@ class CheckedRead:
         self.require_current()
         if bus.path.resolve() == self.path.resolve():
             raise RelationViolationError("Carry destination must differ from its source")
-        expected = replace(self.marker, checkpoint_version=None, checkpoint_seal=None)
+        expected = self.marker.unsealed()
         with bus.locked() as lock:
             prior = lock.checked_read
             prior.require_current_on(bus)
-            if replace(prior.marker, checkpoint_version=None, checkpoint_seal=None) != expected:
+            if prior.marker.unsealed() != expected:
                 raise RelationViolationError("Carry changed destination marker facts")
             with tempfile.TemporaryDirectory(prefix=".checkpoint-carry-", dir=bus.path.parent) as stage:
                 staged = Path(stage) / bus.path.name
@@ -614,16 +615,18 @@ class ClaimCommits(CheckpointTable, TypedTable):
     """
 
     transition: ClaimTransition
-    seq: Annotated[
-        int | None, Column(unique=True, generated="json_extract(transition,'$.seq')")
-    ] = field(default=None, init=False, compare=False)
-    operation_id: Annotated[
-        str | None,
+    seq: ClassVar[Generated] = Generated(
+        int,
+        Column(unique=True, generated="json_extract(transition,'$.seq')", nullable=True),
+    )
+    operation_id: ClassVar[Generated] = Generated(
+        str,
         Column(
             unique=True,
             generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')",
+            nullable=True,
         ),
-    ] = field(default=None, init=False, compare=False)
+    )
 
     @classmethod
     def latest_sequence(cls, db: sqlite3.Connection) -> int:
@@ -1124,7 +1127,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
                 "Checkpoint installation needs a claim-enabled private root."
             )
         path = WritableCheckpoint.path_in(bus.path.parent)
-        if path.exists() or path.is_symlink() or marker.checkpoint_seal is not None:
+        if path.exists() or path.is_symlink() or marker.requires_checkpoint:
             raise RelationViolationError("Private bus checkpoint is already installed.")
         if not bus.path.exists():
             if marker.last_seq != 0:

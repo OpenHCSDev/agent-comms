@@ -27,7 +27,7 @@ from .field_codec import (
 )
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
-from .pi_payloads import PiMessage, PiPayload
+from .pi_payloads import PiMessage, PiOmitted, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
@@ -42,12 +42,17 @@ class TranscriptProjection:
     input_display: InputDisplay | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class RootEntry(PiOmitted):
+    """Pi writes a null parentId on a session's first entry."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
 
     id: str | None = None
-    parent_id: Annotated[str | None, WireName("parentId")] = None
+    parent_id: Annotated[str | RootEntry, WireName("parentId")] = RootEntry()
     timestamp: Annotated[RecordedTimestamp, TimestampText]
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
@@ -496,13 +501,13 @@ class NativeEvidenceScope(ExitStack):
 class SessionEntry(NativeEntry):
     @property
     def child_parent(self) -> object:
-        return self.parent_id
+        return FieldCodec.encode(self.parent_id)
 
     version: int | None = None
-    cwd: Annotated[str | None, WireOmitDefault()] = None
+    cwd: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
     parent_session: Annotated[
-        str | None, WireName("parentSession"), WireOmitDefault()
-    ] = None
+        str | PiOmitted, WireName("parentSession"), WireOmitDefault()
+    ] = PiOmitted()
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
@@ -549,19 +554,20 @@ class MessageEntry(NativeEntry):
 
     @property
     def input_id(self) -> str | None:
-        return self.message.input_id
+        # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
+        return self.message.input_id.value_or(None)
 
     @property
     def tracked_user(self) -> MessageEntry | None:
         from .field_codec import Id128Text, Sha256Text
 
-        if self.message.input_id is None:
-            return None
-        Id128Text.decode(self.message.input_id)
-        if not self.message.user or self.message.input_digest is None or not self.id:
-            raise MalformedRecord("Native Pi session has ambiguous tracked user input")
-        Sha256Text.from_text(self.message.input_digest)
-        return self
+        for input_id in self.message.input_id.present():
+            Id128Text.decode(input_id)
+            if not self.message.user or not self.message.input_digest.reported or not self.id:
+                raise MalformedRecord("Native Pi session has ambiguous tracked user input")
+            Sha256Text.from_text(self.message.input_digest.require())
+            return self
+        return None
 
     def require_failed_terminal(self, parent_id: str) -> None:
         if self.parent_id != parent_id:

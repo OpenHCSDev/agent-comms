@@ -1210,24 +1210,54 @@ class NextContextTurn(ContextTurn):
         return hashlib.sha256(json.dumps(owner.to_wire(), sort_keys=True).encode()).hexdigest()
 
 
+class DispatchRequest(SubclassUnion, affix="DispatchRequest"):
+    """The original request a captured context answered, or its unobserved dispatch.
+
+    It permits neither new input nor replay.
+    """
+
+    @abstractmethod
+    def names(self, request_id: str) -> bool: ...
+
+    @abstractmethod
+    def require_id(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class UnobservedDispatchRequest(NullMember, DispatchRequest):
+    """Previews and captures that never observed dispatch."""
+
+    def names(self, request_id: str) -> bool:
+        return False
+
+    def require_id(self) -> str:
+        raise ValueError("Original request ID was not captured by this historical context")
+
+
+@dataclass(frozen=True)
+class ObservedDispatchRequest(SingleFieldValue, DispatchRequest):
+    request_id: str
+
+    def names(self, request_id: str) -> bool:
+        return self.request_id == request_id
+
+    def require_id(self) -> str:
+        return self.request_id
+
+
 @dataclass(frozen=True)
 class ContextManifest:
     thread: ThreadIncarnation
     turn: ContextTurn
     segments: tuple[SegmentManifest, ...]
     counter: str
-    # Original request-owner correlation, absent for previews and captures that
-    # never observed dispatch. It permits neither new input nor replay.
-    request_id: Annotated[str | None, WireOmitDefault()] = None
+    request_id: Annotated[DispatchRequest, WireOmitDefault()] = field(
+        default_factory=UnobservedDispatchRequest)
 
     @property
     def public_text_recorded(self) -> bool:
         return bool(self.segments) and all(segment.public_text_recorded for segment in self.segments)
 
-    def require_request_id(self) -> str:
-        if not self.request_id:
-            raise ValueError("Original request ID was not captured by this historical context")
-        return self.request_id
 
     def selected_segment(self, position: int, contributors: tuple[int, ...] = ()) -> SegmentManifest:
         if not 0 <= position < len(self.segments):
@@ -1244,7 +1274,7 @@ class ContextManifest:
     def for_request(cls, history, turn: RecordedContextTurn, request_id: str) -> ContextManifest:
         """Select the original indexed publication, never today's preview."""
         selected = tuple(record for record in history
-                         if record.turn == turn and record.request_id == request_id)
+                         if record.turn == turn and record.request_id.names(request_id))
         if not request_id or len(selected) != 1:
             raise ValueError("Original context request is absent or ambiguous")
         return selected[0]
@@ -1277,7 +1307,8 @@ class RecordedContextIdentity:
     thread: ThreadIncarnation
     turn: ContextTurn
     counter: str
-    request_id: Annotated[str | None, WireOmitDefault()] = None
+    request_id: Annotated[DispatchRequest, WireOmitDefault()] = field(
+        default_factory=UnobservedDispatchRequest)
     recording_turn: Annotated[int, WireOmitDefault()] = 1
 
     def with_segments(

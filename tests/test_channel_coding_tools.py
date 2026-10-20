@@ -1,5 +1,6 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
+from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import json
 import os
 import secrets
@@ -221,10 +222,14 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
     socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
     socket.turn = object()
     socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
-    socket.tool_started(ToolExecutionStart(tool_call_id="late", tool_name="read", args={"path": "a"}))
+    socket.tool_started(ToolExecutionStart(
+        tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), args={"path": "a"}
+    ))
     pending = asyncio.create_task(socket.handle_request(_request(socket, "late", "read", {"path": "a"})))
     await checking.wait()
-    socket.tool_finished(ToolExecutionEnd(tool_call_id="late", tool_name="read", is_error=True), owner.input_id)
+    socket.tool_finished(ToolExecutionEnd(
+        tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), is_error=ReportedFlag(True)
+    ), owner.input_id)
     release.set()
     with pytest.raises(ValueError):
         await pending
@@ -265,7 +270,9 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
         # has seen the tool start, which is what its answer waits for.
         writer.transport.abort()
         await asyncio.sleep(0.1)
-        socket.tool_started(ToolExecutionStart(tool_call_id=call[0], tool_name=call[1], args=call[2]))
+        socket.tool_started(ToolExecutionStart(
+            tool_call_id=ReportedText(call[0]), tool_name=ReportedText(call[1]), args=call[2]
+        ))
         async with asyncio.timeout(5):
             await answered.wait()
             while socket._handlers:

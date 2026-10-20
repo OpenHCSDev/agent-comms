@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 import asyncio
 import json
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from .pending_requests import PendingRequests
 from .sealed import Sealed
@@ -114,20 +113,14 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
 
     def track(self, command: PiCommand) -> asyncio.Future[Response]:
         """Expose the same pending response to the request's lifecycle owner."""
-        key = command.id if command.id is not None else uuid4().hex
-        return self.pending.add(type(command), key, request=command)
+        return command.id.track_in(self.pending, type(command), command)
 
     @staticmethod
     def command_bytes(command: PiCommand) -> bytes:
         return (json.dumps(command.to_rpc()) + "\n").encode()
 
     def correlate(self, response) -> PiCommand:
-        owner = response.command
-        command = (
-            self.pending.take(owner, response.id, response)
-            if response.id is not None
-            else self.pending.take_anonymous(owner, response)
-        )
+        command = response.id.take_from(self.pending, response.command, response)
         if command is None:
             raise MalformedRecord("Pi RPC response has no pending command")
         return command

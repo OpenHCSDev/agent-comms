@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from dataclasses import field as dataclass_field
 from typing import Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
@@ -22,6 +21,7 @@ from agent_comms.typed_table import (
     Column,
     ExactStorage,
     ForeignKey,
+    Generated,
     TypedTable,
 )
 
@@ -114,8 +114,9 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
 
-    obligation_intent_required: Annotated[int | None, Column(generated="1")] = (
-        dataclass_field(init=False, compare=False)
+    obligation_intent_required: ClassVar[Generated] = Generated(
+        int,
+        Column(generated="1", nullable=True),
     )
 
     @classmethod
@@ -220,9 +221,10 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
         ),
     ]
     received_at_ms: Annotated[int, Column(check="received_at_ms >= 0")]
-    obligation_publication_required: Annotated[
-        int | None, WireName("obligation_receipt_required"), Column(record_key=True, generated="1")
-    ] = dataclass_field(init=False, compare=False)
+    obligation_publication_required: ClassVar[Generated] = Generated(
+        Annotated[int, WireName("obligation_receipt_required")],
+        Column(record_key=True, generated="1", nullable=True),
+    )
 
     @classmethod
     def references(cls):

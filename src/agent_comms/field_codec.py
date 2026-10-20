@@ -452,10 +452,6 @@ class FieldPlan:
             policy.rejects_null(self.declared) for policy in NullPolicy.single(self.annotation)
         )
 
-    @property
-    def choices(self) -> Callable[[], Iterable[str]] | None:
-        return WireChoices.read(self.annotation, None)
-
     @cached_property
     def value(self) -> ValueDecoder[object]:
         return compile_decoder(self.annotation)
@@ -555,8 +551,10 @@ class FieldPlan:
         value = captured[self.name]
         if self.reject_null and value is None:
             raise MalformedRecord(f"Null field {self.key}")
-        if self.choices is not None and value not in self.choices():
-            raise MalformedRecord(f"Field {self.key} must be one of: {', '.join(self.choices())}")
+        for choices in WireChoices.single(self.annotation):
+            if value not in choices.value():
+                raise MalformedRecord(
+                    f"Field {self.key} must be one of: {', '.join(choices.value())}")
         return {self.name: decode(value)}
 
     def read(self, data: object) -> object:
@@ -585,8 +583,16 @@ class TransientFieldPlan(DeclaredFieldPlan):
     records = False
 
 
-class MissingNoneFieldPlan(DeclaredFieldPlan):
-    """Wire absence is None, independently of the constructor's default factory."""
+class NullMemberOmission(DeclaredFieldPlan):
+    """A declared null member is absent from the wire, as its key's absence."""
+
+    def omitted(self, value: object) -> bool:
+        return isinstance(value, NullMember) or super().omitted(value)
+
+
+class MissingNoneFieldPlan(NullMemberOmission):
+    """Wire absence is None or the declared null member, independently of the
+    constructor's default factory."""
 
     directives = (WireAbsentNone,)
 
@@ -643,8 +649,10 @@ class InlineFieldPlan(DeclaredFieldPlan):
     @cached_property
     def inlined(self) -> type:
         declared, representation = FieldCodec._representation(self.annotation)
-        inline = cast("type[InlineRecord] | None", representation)
-        return cast(type, declared) if inline is None else inline.wire_record()
+        match representation:
+            case type() as inline if issubclass(inline, InlineRecord):
+                return inline.wire_record()
+        return cast(type, declared)
 
     @cached_property
     def record(self):

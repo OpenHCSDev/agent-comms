@@ -1,3 +1,5 @@
+import json
+
 from conftest import transcript_records
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -152,6 +154,31 @@ def test_wire_absence_is_none_without_running_the_constructor_factory():
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(Record, {"id": 3})
     assert created == ["created"]
+
+
+@dataclass(frozen=True)
+class NoAbsentLabel(NullMember):
+    """No label was recorded."""
+
+
+def test_wire_absent_null_member_is_omitted_and_none_bytes_are_unchanged():
+    @dataclass(frozen=True)
+    class Labelled:
+        label: Annotated[str | NoAbsentLabel, WireAbsentNone()] = field(
+            default_factory=NoAbsentLabel
+        )
+
+    @dataclass(frozen=True)
+    class NoneLabelled:
+        label: Annotated[str | None, WireAbsentNone()] = None
+
+    assert FieldCodec.encode(Labelled()) == {}
+    assert FieldCodec.encode(Labelled("named")) == {"label": "named"}
+    for raw in ({}, {"label": None}):
+        assert FieldCodec.decode(Labelled, raw) == Labelled()
+    assert FieldCodec.decode(Labelled, {"label": "named"}) == Labelled("named")
+    assert json.dumps(FieldCodec.encode(NoneLabelled())) == json.dumps(FieldCodec.encode(Labelled())) == "{}"
+    assert FieldCodec.encode(NoneLabelled("named")) == {"label": "named"}
 
 
 def test_json_shape_schema_uses_the_same_member_annotations_as_decode():

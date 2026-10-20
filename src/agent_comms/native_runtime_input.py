@@ -165,7 +165,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         """
         entry = record.entry
         originals, publications = (), ()
-        if user is not None and user.input_id is not None and db is not None:
+        if user and user.message.input_id.reported and db:
             originals = cls.for_native_user(db, reader, user, session_id=session_id)
             if entry.final_reply:
                 for original in originals:

@@ -19,7 +19,13 @@ if TYPE_CHECKING:
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
-from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
+from .native_entries import (
+    NativeEntry,
+    RecordedEntry,
+    RootEntry,
+    SessionEntry,
+    TranscriptProjection,
+)
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
@@ -336,7 +342,7 @@ class NativeTranscript(TranscriptSource):
         lend another input's publication proof.
         """
         found = [None] * len(records)
-        waiting: dict[str | None, list[int]] = defaultdict(list)
+        waiting: dict[str | RootEntry, list[int]] = defaultdict(list)
         latest = 0
         for position, record in enumerate(records):
             entry = record.entry
@@ -348,7 +354,7 @@ class NativeTranscript(TranscriptSource):
                 waiting[entry.parent_id].append(position)
                 latest = max(latest, record.start)
         # A chain that reaches a root (no parent) has no input.
-        waiting.pop(None, None)
+        waiting.pop(RootEntry(), [])
         if waiting:
             for ancestor in self.reverse(latest):
                 entry = ancestor.entry
@@ -360,7 +366,7 @@ class NativeTranscript(TranscriptSource):
                         found[position] = ancestor
                 else:
                     waiting[entry.parent_id].extend(chain)
-                    waiting.pop(None, None)
+                    waiting.pop(RootEntry(), [])
                 if not waiting:
                     break
         return tuple(found)

@@ -37,7 +37,7 @@ def test_selected_command_decodes_original_native_error_envelope(command):
                     "success": False, "error": "Selected preparation source changed"})
     assert isinstance(event, Response)
     assert event.command is PiCommand.member_named(command)
-    assert event.success is False and isinstance(event.data, MissingData)
+    assert event.refused and isinstance(event.data, MissingData)
     assert event.rejection_details() == {"command": command, "id": "original",
         "success": False, "error": "Selected preparation source changed"}
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
 
 
@@ -11,7 +11,15 @@ from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import Id128Text, WireName, WireOmitDefault, WireRequired
+from .field_codec import (
+    Id128Text,
+    NullMember,
+    SingleFieldValue,
+    WireName,
+    WireOmitDefault,
+    WireRequired,
+    WireValue,
+)
 from .locked_store import DurableFile
 
 if TYPE_CHECKING:
@@ -75,6 +83,49 @@ class ArchivedAccess(WireAccess):
         return saved
 
 
+class MarkerFact(WireValue):
+    """One optional bus_meta.json fact; each member answers whether the marker declares it."""
+
+    __slots__ = ()
+    declared: ClassVar[bool] = True
+
+
+@dataclass(frozen=True, slots=True)
+class UndeclaredMarker(NullMember, MarkerFact):
+    """bus_meta.json leaves this protocol out; it is written back out the same way."""
+
+    declared: ClassVar[bool] = False
+
+    def root(self) -> str:
+        raise RelationViolationError("Private bus writer has no durable protocol marker.")
+
+    def seal(self) -> CheckpointSeal:
+        raise RelationViolationError("Private checkpoint lacks durable marker binding.")
+
+
+@dataclass(frozen=True)
+class DeclaredVersion(SingleFieldValue, MarkerFact):
+    """The marker declares a protocol at its one version."""
+
+    version: Literal[1] = 1
+
+
+@dataclass(frozen=True)
+class DeclaredRoot(SingleFieldValue, MarkerFact):
+    root_id: str
+
+    def root(self) -> str:
+        return self.root_id
+
+
+@dataclass(frozen=True)
+class DeclaredSeal(SingleFieldValue, MarkerFact):
+    checkpoint_seal: CheckpointSeal
+
+    def seal(self) -> CheckpointSeal:
+        return self.checkpoint_seal
+
+
 @dataclass
 class WireMetadata(DurableFile):
     filename: ClassVar[str] = "bus_meta.json"
@@ -86,17 +137,19 @@ class WireMetadata(DurableFile):
         default_factory=WritableAccess
     )
     writer_protocol_version: Annotated[
-        Literal[1] | None, WireOmitDefault()
-    ] = None
-    wire_root_id: Annotated[str | None, WireOmitDefault()] = None
-    claim_envelopes_version: Annotated[
-        Literal[1] | None, WireOmitDefault()
-    ] = None
-    checkpoint_version: Annotated[Literal[1] | None, WireOmitDefault()] = (
-        None
+        DeclaredVersion | UndeclaredMarker, WireOmitDefault()
+    ] = UndeclaredMarker()
+    wire_root_id: Annotated[DeclaredRoot | UndeclaredMarker, WireOmitDefault()] = (
+        UndeclaredMarker()
     )
-    checkpoint_seal: Annotated[CheckpointSeal | None, WireOmitDefault()] = (
-        None
+    claim_envelopes_version: Annotated[
+        DeclaredVersion | UndeclaredMarker, WireOmitDefault()
+    ] = UndeclaredMarker()
+    checkpoint_version: Annotated[DeclaredVersion | UndeclaredMarker, WireOmitDefault()] = (
+        UndeclaredMarker()
+    )
+    checkpoint_seal: Annotated[DeclaredSeal | UndeclaredMarker, WireOmitDefault()] = (
+        UndeclaredMarker()
     )
 
     def __post_init__(self) -> None:
@@ -104,44 +157,61 @@ class WireMetadata(DurableFile):
             raise ValueError("Bus sequence is outside the durable range")
         if not 0 <= self.claimed_after_seq <= self.last_seq:
             raise ValueError("Claim floor is outside the durable source range")
-        if self.private != (self.wire_root_id is not None):
+        if self.private != self.wire_root_id.declared:
             raise ValueError("Private bus protocol needs its root identity")
-        if self.wire_root_id is not None:
-            Id128Text.from_text(self.wire_root_id)
+        if self.private:
+            Id128Text.from_text(self.root_id)
         if self.claims and not self.private:
             raise ValueError("Claim marker requires private protocol")
-        if (self.checkpoint_version is not None) != (self.checkpoint_seal is not None):
+        if self.checkpoint_version.declared != self.requires_checkpoint:
             raise ValueError("Checkpoint requires its durable marker binding")
-        if self.checkpoint_seal is not None and not self.claims:
+        if self.requires_checkpoint and not self.claims:
             raise ValueError("Private checkpoint lacks its claim read barrier")
+
+    @classmethod
+    def private_root(cls, root_id: str, *, claims: bool = False, **facts) -> WireMetadata:
+        """A private bus marker for one root, optionally with the claim read barrier."""
+        return cls(
+            writer_protocol_version=DeclaredVersion(),
+            wire_root_id=DeclaredRoot(root_id),
+            claim_envelopes_version=DeclaredVersion() if claims else UndeclaredMarker(),
+            **facts,
+        )
 
     @property
     def private(self) -> bool:
-        return self.writer_protocol_version is not None
+        return self.writer_protocol_version.declared
 
     @property
     def claims(self) -> bool:
-        return self.claim_envelopes_version is not None
+        return self.claim_envelopes_version.declared
 
     @property
     def requires_checkpoint(self) -> bool:
         """The original marker declares whether its durable seal is required."""
-        return self.checkpoint_seal is not None
+        return self.checkpoint_seal.declared
 
     @property
     def root_id(self) -> str:
-        if self.wire_root_id is None:
-            raise RelationViolationError("Private bus writer has no durable protocol marker.")
-        return self.wire_root_id
+        return self.wire_root_id.root()
 
     @property
     def seal(self) -> CheckpointSeal:
-        if self.checkpoint_seal is None:
-            raise RelationViolationError("Private checkpoint lacks durable marker binding.")
-        return self.checkpoint_seal
+        return self.checkpoint_seal.seal()
 
     def seal_with(self, seal: CheckpointSeal) -> None:
         if not self.claims:
             raise RelationViolationError("Checkpoint requires the claim read barrier.")
-        self.checkpoint_version = 1
-        self.checkpoint_seal = seal
+        self.checkpoint_version = DeclaredVersion()
+        self.checkpoint_seal = DeclaredSeal(seal)
+
+    def unseal(self) -> None:
+        """Drop the checkpoint binding so a fresh checkpoint can be installed."""
+        self.checkpoint_version = UndeclaredMarker()
+        self.checkpoint_seal = UndeclaredMarker()
+
+    def unsealed(self) -> WireMetadata:
+        """This marker's facts apart from its checkpoint binding."""
+        return replace(
+            self, checkpoint_version=UndeclaredMarker(), checkpoint_seal=UndeclaredMarker()
+        )

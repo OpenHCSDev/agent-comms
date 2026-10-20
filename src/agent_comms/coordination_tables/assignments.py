@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, ClassVar
 from dataclasses import dataclass, replace
-from dataclasses import field as dataclass_field
 
 from agent_comms.assignment_states import AssignmentState
 from agent_comms.coordination_contracts import (
@@ -23,6 +22,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
+    Generated,
     Index,
     TypedTable,
 )
@@ -172,47 +172,44 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def durable_key(self) -> tuple[str, int]:
         return (self.recipient_lookup, self.wire_seq)
 
-    exact_target: Annotated[
-        str | None,
-        SnapshotExclude(),
+    exact_target: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated="json_extract(lifecycle, '$.decision.exact_target')",
             check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    wake_mode: Annotated[
+    )
+    wake_mode: ClassVar[Generated] = Generated(
         str,
-        SnapshotExclude(),
         Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    triage_verdict: Annotated[
-        str | None,
-        SnapshotExclude(),
+    )
+    triage_verdict: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated="({assignment_verdict})",
             check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    disposition: Annotated[
+    )
+    disposition: ClassVar[Generated] = Generated(
         str,
-        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.kind')",
             check="disposition IN ({assignment_names})",
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    execution_id: Annotated[
-        str | None,
-        SnapshotExclude(),
+    )
+    execution_id: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated="json_extract(lifecycle, '$.decision.execution_id')",
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    claim_status_kind: Annotated[
-        str | None,
-        SnapshotExclude(),
-        Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END"),
-    ] = dataclass_field(init=False, default=None, compare=False)
+    )
+    claim_status_kind: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END", nullable=True),
+    )
     checks = ("COALESCE(({assignment_binding}), 0)",)
     unique = (("recipient_lookup", "wire_seq"), ("assignment_id", "execution_id"))
     indexes = (Index(("execution_id",), unique=False, where=None),)
