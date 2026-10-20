@@ -42,9 +42,9 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     if changed == "claim_scope":
         claim_scope += 1
     elif changed == "pid":
-        owner = replace(owner, process_identity=ProcessIdentity(owner.pid + 1, owner.process_identity.start_time))
+        owner = replace(owner, process_identity=ProcessIdentity(owner.require_process().pid + 1, owner.process_identity.start_time))
     elif changed == "process_birth":
-        owner = replace(owner, process_identity=ProcessIdentity(owner.pid, owner.process_identity.start_time + 1))
+        owner = replace(owner, process_identity=ProcessIdentity(owner.require_process().pid, owner.process_identity.start_time + 1))
     else:
         comms.registry.rename("parent", "renamed")
     old_grant = store.ready_grant(goal.id, 1)
@@ -167,12 +167,14 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     )
     comms.agents.begin_turn("carol", "carol-turn")
     carol_thread = comms.registry.require("carol")
-    assert carol_thread.active_turn.executing
+    assert carol_thread.turn_record.executing
+    record = carol_thread.turn_record
+    record.begin(record.registry_path, record.identity,
+                 replace(record.read().require_active(), owner_pid=999999999))
     comms.registry.register(
         replace(
             carol_thread,
             process_identity=ProcessIdentity(999999999, 1),
-            active_turn=replace(carol_thread.active_turn, owner_pid=999999999),
         ),
         comms.registry.status("carol"),
     )
@@ -218,7 +220,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
             (GoalWaitTarget(peer.incarnation.require_recorded()),),
             owner=owner.incarnation.require_recorded(),
             target_turn_generations=(peer.turn_generation,),
-            report_turn_id=owner.active_turn.id,
+            report_turn_id=owner.turn_record.read().require_active().id,
             report_turn_generation=owner.turn_generation,
         )
     )

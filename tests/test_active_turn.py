@@ -27,12 +27,12 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     assert after.owner_generations == before.owner_generations
     assert after.claimed_generations == before.claimed_generations
     assert after.threads["worker"].turn_lease == first
-    assert comms.registry.require("worker").pid == os.getpid()
+    assert comms.registry.require("worker").require_process().pid == os.getpid()
     comms.agents.activity.emit(
         Activity("worker", ActivityState.WORKING, "Still working", time.time() - 1000)
     )
     view = comms.views.thread_views()[0]
-    assert view.thread.active_turn.executing and view.presentation.status.working
+    assert view.thread.turn_record.executing and view.presentation.status.working
     current = comms.agents.activity_of("worker", snapshot=comms.registry.snapshot())
     assert current.state is ActivityState.THINKING
     assert current.detail == "Long-running work"
@@ -55,6 +55,6 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     assert not comms.views.thread_views()[0].presentation.status.working
     comms.agents.begin_turn("worker", "second")
     comms.agents.finish_turn(first)
-    assert comms.registry.require("worker").active_turn.id == "second"
+    assert comms.registry.require("worker").turn_record.read().require_active().id == "second"
     comms.owners.stop("worker")
-    assert not comms.registry.require("worker").active_turn.executing
+    assert not comms.registry.require("worker").turn_record.executing
