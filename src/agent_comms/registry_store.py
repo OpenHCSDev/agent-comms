@@ -16,7 +16,7 @@ from typing import Any, ClassVar
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .locked_store import DocumentConversion, DurableFile, LockedStore
+from .locked_store import DocumentConversion, LockedStore, RegistryFile
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
@@ -169,8 +169,7 @@ class RegistryGoalConversion(DocumentConversion):
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(DurableFile, LockedStore[RegistryDocument]):
-    filename = "registry.json"
+class RegistryStore(RegistryFile, LockedStore[RegistryDocument]):
     json_indent = 2
     conversion = RegistryGoalConversion
     cache: RegistryCache = field(init=False, compare=False, repr=False)

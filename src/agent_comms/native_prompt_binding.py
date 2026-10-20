@@ -20,7 +20,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .locked_store import DurableFile
+from .locked_store import DurableFile, SQLiteFile
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .private_send_rules import NativeIdentityCheck
@@ -44,7 +44,7 @@ def binding_store_path(store: Coordination) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding(DurableFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
+class PromptBinding(DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     filename = "native_prompt_bindings.sqlite3"
     @classmethod
     def install(cls, store) -> None:

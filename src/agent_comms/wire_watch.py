@@ -7,9 +7,6 @@ notification is unavailable.
 
 from __future__ import annotations
 
-from .registry_store import RegistryStore
-from .wire_log import WireLog
-
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -39,14 +36,6 @@ _MASK = (
     | _IN_DELETE_SELF | _IN_MOVE_SELF
 )
 _HEADER = struct.Struct("=iIII")
-_AUTHORITY_FILES = frozenset({
-    WireLog.filename.encode(),
-    RegistryStore.filename.encode(),
-    b".registry-owner-guard",
-    GoalWaits.filename.encode(),
-})
-
-
 @dataclass(frozen=True)
 class WatchSource(ABC):
     """Files in one directory whose declared writes wake a reader."""
@@ -62,7 +51,14 @@ class WatchSource(ABC):
 
     @classmethod
     def wire(cls, root: Path) -> WatchSource:
-        return ReplacedWatchSource(root, _AUTHORITY_FILES)
+        from .private_registry_guard import PrivateRegistryGuard
+        from .registry_store import RegistryStore
+        from .wire_log import WireLog
+
+        return ReplacedWatchSource(root, frozenset(
+            owner.filename.encode()
+            for owner in (WireLog, RegistryStore, PrivateRegistryGuard, GoalWaits)
+        ))
 
     @classmethod
     def file(cls, path: Path) -> WatchSource:

@@ -6,7 +6,7 @@ its Pi command when it writes it to the running child.
 
 from __future__ import annotations
 
-from .registry_store import RegistryStore
+from .locked_store import RegistryFile
 import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -128,7 +128,7 @@ class InputForwarding:
         if not candidates:
             return True
         first = self.pending[candidates[0]]
-        async with MaintenanceBarrier(RegistryStore.path_in(session.startup.root)).ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_running(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
                 completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
                     session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
@@ -155,7 +155,7 @@ class InputForwarding:
             self.pending[native_id] = command
             self.generation += 1
 
-        async with MaintenanceBarrier(RegistryStore.path_in(session.startup.root)).ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_running(session.send_boundary, public_id, native_id, text) as outcome:
                 completion = outcome.dispatch(self, session, item, write)
         return await completion

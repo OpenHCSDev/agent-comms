@@ -7,8 +7,7 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
-from .registry_store import RegistryStore
-from .locked_store import DurableFile
+from .locked_store import DurableFile, RegistryFile
 import asyncio
 import calendar
 import json
@@ -2885,7 +2884,7 @@ class TodoStore(TypedStore):
         self, *, check_same_thread: bool = True
     ) -> Iterator[sqlite3.Connection]:
         with (
-            MaintenanceBarrier(RegistryStore.path_in(self.root)).allow_input(),
+            MaintenanceBarrier(RegistryFile.path_in(self.root)).allow_input(),
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection

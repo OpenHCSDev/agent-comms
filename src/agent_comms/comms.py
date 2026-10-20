@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .registry_store import RegistryStore
+from .locked_store import RegistryFile
 from .wire_log import WireLog
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -37,7 +37,7 @@ class Comms:
         self.route.observe_root()
         publisher.prepare_root(self.root)
         self._wire_lock_path = self.root / "wire"
-        self.registry = Registration(RegistryStore.path_in(self.root))
+        self.registry = Registration(RegistryFile.path_in(self.root))
         self.bus = MessageBus(
             WireLog.path_in(self.root),
             self.registry,
@@ -90,6 +90,6 @@ def client_wire(root: CommsRoute | Path) -> Iterator[Comms]:
     route = resolve_comms_route(root)
     # Refuse before borrowing a route or opening stores held by maintenance.
     # This grants nothing: writes still check under their determining locks.
-    MaintenanceBarrier(RegistryStore.path_in(route.root)).assert_open_unlocked()
+    MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()
     with route.hold_client_route():
         yield Comms(route, projection=CompletingRouteCounts)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .locked_store import RegistryFile
 from .wire_log import WireLog
 import sqlite3
 import time
@@ -112,12 +113,11 @@ class NativeCoordinationSession(CoordinationSession):
     @cached_property
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
-        from .registry_store import RegistryStore
         from . import message_bus, publisher, registration
 
         return message_bus.MessageBus(
             WireLog.path_in(self.path.parent),
-            registration.Registration(RegistryStore.path_in(self.path.parent)),
+            registration.Registration(RegistryFile.path_in(self.path.parent)),
             publisher.ClaimWrites,
         )
 

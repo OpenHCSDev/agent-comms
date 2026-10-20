@@ -269,6 +269,14 @@ class StoreOwner(DeclaredFamily):
         )
         return descriptor, Path(name)
 
+    @staticmethod
+    def snapshot_lock(path: Path) -> Path:
+        return path.with_name(f".{path.name}.snapshot-lock")
+
+    @staticmethod
+    def snapshot_intent(path: Path) -> Path:
+        return path.with_name(f".{path.name}.pending")
+
     @classmethod
     def rollback_file(cls, staged: Path) -> Path:
         return staged.with_suffix(cls.rollback_suffix)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .registry_store import RegistryStore
 import json
 from abc import ABC, abstractmethod
 from collections import deque
@@ -13,7 +12,7 @@ from pathlib import Path
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .locked_store import DurableFile
+from .locked_store import DurableFile, RegistryFile, RootFile
 from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
 from .errors import UnregisteredThreadError
@@ -245,7 +244,7 @@ class HistorySource:
         root = Path(self.root)
         if (
             FileRevision.capture(WireLog.path_in(root)) != self.snapshot_bus_revision
-            or FileRevision.capture(RegistryStore.path_in(root)) != self.snapshot_registry_revision
+            or FileRevision.capture(RegistryFile.path_in(root)) != self.snapshot_registry_revision
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
 
@@ -372,6 +371,15 @@ class HistoryArchive(DurableFile):
         self.bus_path = bus_path
         self.path = self.path_in(bus_path.parent)
 
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        declared = super().files_in(root)
+        for source in cls(WireLog.path_in(root)).sources():
+            archived = Path(source.root)
+            if archived.is_relative_to(root):
+                declared |= RootFile.paths_in(archived)
+        return declared
+
     def sources(self) -> tuple[HistorySource, ...]:
         with self.read_sources() as sources:
             return sources
@@ -428,14 +436,14 @@ class HistoryArchive(DurableFile):
                     source_root / name
                     for name in (
                         WireLog.filename,
-                        RegistryStore.filename,
+                        RegistryFile.filename,
                         ChannelCatalog.filename,
                         WireMetadata.filename,
                     )
                 ]
                 revisions = tuple(FileRevision.capture(path) for path in paths)
                 if source_read is None:
-                    with Registration(RegistryStore.path_in(source_root)).store.reading() as original:
+                    with Registration(RegistryFile.path_in(source_root)).store.reading() as original:
                         provenance = RegistryProvenance.capture(original)
                 else:
                     source_read.require_original(source_root)
@@ -460,7 +468,7 @@ class HistoryArchive(DurableFile):
                     marker.access = ArchivedAccess()
                     marker.checkpoint_version = None
                     marker.checkpoint_seal = None
-                    guard = PrivateRegistryGuard(RegistryStore.path_in(stage), marker.root_id)
+                    guard = PrivateRegistryGuard(RegistryFile.path_in(stage), marker.root_id)
                     guard.create_pending()
                     archived.write_metadata_unlocked(marker)
                     # The installer borrows this real stage lock; it never opens
@@ -474,7 +482,7 @@ class HistoryArchive(DurableFile):
                     RecordedBusIdentity.capture(WireLog.path_in(source_root)),
                     bus_info.st_size if bus_info else 0,
                     FileRevision.capture(WireLog.path_in(stage)),
-                    FileRevision.capture(RegistryStore.path_in(stage)),
+                    FileRevision.capture(RegistryFile.path_in(stage)),
                     provenance,
                 )
                 declarations = source.provenance.threads

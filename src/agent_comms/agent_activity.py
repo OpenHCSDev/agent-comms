@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .locked_store import RegistryFile
 import logging
 import time
 from collections.abc import Callable, Iterable, Mapping
@@ -118,12 +119,11 @@ class AgentActivity:
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
-        from .registry_store import RegistryStore
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             # A tool-use hook runs outside any watch; maintenance refuses it like a send.
-            MaintenanceBarrier(RegistryStore.path_in(self._wire_lock_path.parent)).assert_open_unlocked()
+            MaintenanceBarrier(RegistryFile.path_in(self._wire_lock_path.parent)).assert_open_unlocked()
             self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:

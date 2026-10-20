@@ -1,7 +1,7 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-from ..registry_store import RegistryStore
+from ..locked_store import RegistryFile
 import argparse
 import builtins
 import asyncio
@@ -504,7 +504,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def registered_watch(self, operation: Inbox) -> None:
         from agent_comms.registration import Registration
         registry = await asyncio.to_thread(
-            Registration, RegistryStore.path_in(Path(self.binding.root)))
+            Registration, RegistryFile.path_in(Path(self.binding.root)))
         with ExitStack() as endpoint:
             await self.comms.bus.when_open(lambda: endpoint.enter_context(
                 registry.external_process(self.binding.bus, ProcessIdentity.capture(os.getpid()))))

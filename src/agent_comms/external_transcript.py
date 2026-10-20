@@ -10,7 +10,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from .registry_store import RegistryStore
+from .locked_store import RegistryFile
 from collections.abc import Generator, Iterable, Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
@@ -247,7 +247,7 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
             yield DraftPublication()
             return
         from .registration import Registration
-        thread = Registration(RegistryStore.path_in(root)).require(original.owner_thread)
+        thread = Registration(RegistryFile.path_in(root)).require(original.owner_thread)
         original.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:

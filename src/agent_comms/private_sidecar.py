@@ -14,6 +14,8 @@ arbitrary code running as the same uid, nor protection from a malicious filesyst
 
 from __future__ import annotations
 
+from .store_files import StoreOwner
+
 import hashlib
 import json
 import os
@@ -124,7 +126,7 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
             ancestors.append((current, _identity(os.fstat(fd))))
         directory = _PinnedDirectory(path.parent, fd, tuple(ancestors))
         directory.check()
-        lock_name = f".{path.name}.snapshot-lock"
+        lock_name = StoreOwner.snapshot_lock(path).name
         lock = os.open(
             lock_name,
             os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
@@ -138,7 +140,7 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))
-        if directory.stat(f".{path.name}.pending") is not None:
+        if directory.stat(StoreOwner.snapshot_intent(path).name) is not None:
             raise SidecarCommitUnknown("Private sidecar has an unresolved commit intent; no retry.")
         yield directory
         directory.unchanged(lock_name, os.fstat(lock))
@@ -262,7 +264,7 @@ def _publish(
     if not 100 <= len(raw) <= _MAX_SIDECAR_BYTES:
         raise IdentityConflict("Private sidecar snapshot exceeds its bounded capacity.")
     directory.unchanged(name, expected)
-    intent = f".{name}.pending"
+    intent = StoreOwner.snapshot_intent(Path(name)).name
     staging = f".{name}.{secrets.token_hex(16)}.staging"
     # An intent is never auto-repaired. Failure/crash after this point requires
     # explicit diagnosis, never replay of a reserved input or a guessed rollback.

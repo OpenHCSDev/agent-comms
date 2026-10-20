@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from .locked_store import RegistryFile
 from .coordination_database import CoordinationStore
-from .registry_store import RegistryStore
 import os
 import shutil
 import time
@@ -230,7 +230,7 @@ class RecoveryMonitorCapability:
                                 for attempt in AttemptRecord.select(store.session._connection))
         inputs = InputDispositions(root)
         if inputs.path.is_file():
-            names = frozenset(Registration(RegistryStore.path_in(root)).snapshot().threads)
+            names = frozenset(Registration(RegistryFile.path_in(root)).snapshot().threads)
             uncertain = uncertain or bool(inputs.unresolved(names).rows)
         if uncertain:
             destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")

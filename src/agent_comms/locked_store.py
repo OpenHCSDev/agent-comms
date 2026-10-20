@@ -185,6 +185,13 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
+class RegistryFile(DurableFile):
+    """Registry location usable by record types without importing their decoder."""
+
+    __slots__ = ()
+    filename = "registry.json"
+
+
 class SQLiteFile(RootFile):
     """A database and SQLite's companion files share their existing file owner."""
 
@@ -197,7 +204,10 @@ class SQLiteFile(RootFile):
 
     @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
-        return super().files_in(root) | frozenset(cls.files(cls.path_in(root)))
+        path = cls.path_in(root)
+        return super().files_in(root) | frozenset((
+            *cls.files(path), StoreOwner.snapshot_lock(path), StoreOwner.snapshot_intent(path),
+        ))
 
 
 class RuntimeFile(RootFile):
