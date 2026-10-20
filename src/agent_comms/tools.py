@@ -92,6 +92,7 @@ from .restart_queue import (
     status as restart_status,
 )
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
+from .threads import KeptServiceTier, ModelChoice, ServiceTierChoice
 from .transcript_events import SentTranscript
 from .todos import (
     CorrectCheckTodo,
@@ -516,8 +517,8 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
         str, *tool_field("Optional Pi thinking level", choices=ThinkingLevel.names)
     ] = ""
     service_tier: Annotated[
-        ServiceTier | None, *tool_field("Optional provider request service tier")
-    ] = None
+        ServiceTierChoice, *tool_field("Optional provider request service tier")
+    ] = KeptServiceTier()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ModelChanged:
         """Change this thread's model or another thread's model for future turns."""
@@ -527,11 +528,10 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
             raise RelationViolationError(
                 f"{thread_name} is running; change its settings through its own session"
             )
-        model = self.model.strip()
         thinking_level = FieldCodec.decode(ThinkingLevelField, self.thinking_level.strip() or None)
         thread = comms.threads.set_thread_configuration(
             original,
-            model=model or None,
+            model=ModelChoice.from_text(self.model),
             thinking_level=thinking_level,
             service_tier=self.service_tier,
         )

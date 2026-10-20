@@ -99,7 +99,7 @@ from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
-from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
@@ -119,10 +119,13 @@ from .thread_execution import (
 )
 from .thread_identity import NoThreadText
 from .thread_management import (
-    ForkSpec, GivenTags, InheritedTags, NewThreadSpec, TagChoice, ThreadDeleted,
+    ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
+    ThreadDeleted,
 )
 from .thread_status import ThreadStatus
-from .threads import Thread
+from .threads import (
+    KeptModel, KeptServiceTier, ModelChoice, ServiceTierChoice, Thread,
+)
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -860,18 +863,18 @@ class ImportingCliCommand(CliCommand):
     """Where an imported thread works and how much of its source conversation it keeps."""
 
     worktree: Annotated[
-        str | None,
+        ImportDirectory,
         Argument(
             flags=("--worktree",), options={"help": "Override the source project directory"}
         ),
-    ] = None
+    ] = SourceDirectory()
     model: Annotated[
-        str | None,
+        ModelChoice,
         Argument(
             flags=("--model",),
             options={"help": "Target Pi provider/model; not inferred from foreign model IDs"},
         ),
-    ] = None
+    ] = KeptModel()
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),
@@ -955,8 +958,8 @@ class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-r
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        directory = Path(self.worktree).expanduser() if self.worktree else Path.cwd()
-        return self.imported(ctx, OnlineHistory.of(self.harness, self.thread, self.address, directory), self.name)
+        return self.imported(ctx, OnlineHistory.of(
+            self.harness, self.thread, self.address, self.worktree.local_directory()), self.name)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1015,33 +1018,27 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
 class ConfigureCliCommand(CliCommand, declared_name="configure"):
     help = "Set a stopped thread's model, thinking level, or service tier for its next start"
     name: Annotated[str, Argument(flags=("--name",))]
-    model: Annotated[str | None, Argument(flags=("--model",))] = (
-        None
-    )
-    thinking: Annotated[str | None, Argument(flags=("--thinking",))] = (
-        None
+    model: Annotated[ModelChoice, Argument(flags=("--model",))] = KeptModel()
+    thinking: Annotated[ThinkingLevelField, Argument(flags=("--thinking",))] = (
+        NoThinkingOverride
     )
     service_tier: Annotated[
-        ServiceTier | None, Argument(flags=("--service-tier",))
-    ] = None
+        ServiceTierChoice, Argument(flags=("--service-tier",))
+    ] = KeptServiceTier()
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.name)
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
-        level = FieldCodec.decode(ThinkingLevelField, self.thinking)
         candidate = thread.with_model_configuration(
             model=self.model,
-            thinking_level=level,
+            thinking_level=self.thinking,
             service_tier=self.service_tier,
         )
         asyncio.run(ConfigOptions.configured().validate(candidate))
         updated = ctx.threads.set_thread_configuration(
-            thread,
-            model=candidate.model,
-            thinking_level=candidate.thinking_level,
-            service_tier=candidate.service_tier,
+            thread, model=self.model, thinking_level=self.thinking, service_tier=self.service_tier,
         )
         return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
                                       updated.service_tier)

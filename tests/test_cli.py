@@ -8,6 +8,7 @@ import pytest
 
 from agent_comms.channel_targets import ChannelSelection, CommandTarget
 from agent_comms.cli import main
+from agent_comms.threads import ChosenServiceTier
 
 
 @pytest.fixture
@@ -57,7 +58,7 @@ class TestCliSuccess:
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native")
         comms = Comms(tmp_path)
         for tier in ServiceTier:
-            comms.threads.set_thread_configuration(comms.registry.require("a"), service_tier=tier)
+            comms.threads.set_thread_configuration(comms.registry.require("a"), service_tier=ChosenServiceTier(tier))
             code, catalog = cli(tmp_path, "tools", "--name", "a")
             assert code == 0
             code, detail = cli(tmp_path, "thread", "--name", "a", "--no-pending")

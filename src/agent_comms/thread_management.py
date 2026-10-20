@@ -36,13 +36,13 @@ from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .input_disposition import InputDispositions
-from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
-from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
+from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
     PrivateOwnerRenameIntent,
     PrivateRegistryGuard,
@@ -55,7 +55,9 @@ from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import AgentThreadRole, NoThreadText, ThreadRole
 from .thread_owned_state import ThreadOwnedState
-from .threads import Thread, current_thread
+from .threads import (
+    KeptModel, KeptServiceTier, ModelChoice, ServiceTierChoice, Thread, current_thread,
+)
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
@@ -99,6 +101,37 @@ class InheritedTags(NullMember, TagChoice):
 
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return parent
+
+
+class ImportDirectory(SubclassUnion, affix="Directory"):
+    """Where an imported thread works: a given directory, or its source's project."""
+
+    @abstractmethod
+    def project(self, snapshot: ImportSnapshot) -> str: ...
+
+    @abstractmethod
+    def local_directory(self) -> Path:
+        """The directory a running harness's session is asked for."""
+
+
+@dataclass(frozen=True, slots=True)
+class GivenDirectory(SingleFieldValue, ImportDirectory):
+    path: str
+
+    def project(self, snapshot: ImportSnapshot) -> str:
+        return self.path
+
+    def local_directory(self) -> Path:
+        return Path(self.path).expanduser()
+
+
+@dataclass(frozen=True, slots=True)
+class SourceDirectory(NullMember, ImportDirectory):
+    def project(self, snapshot: ImportSnapshot) -> str:
+        return snapshot.project
+
+    def local_directory(self) -> Path:
+        return Path.cwd()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -210,28 +243,27 @@ class ThreadManagement:
         history: History,
         *,
         name: str,
-        worktree: str | None = None,
-        model: str | None = None,
+        worktree: ImportDirectory = SourceDirectory(),
+        model: ModelChoice = KeptModel(),
         tags: frozenset[str] = frozenset(),
         limits: ImportLimits | None = None,
     ) -> ThreadImported:
         """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
         snapshot = ImportSnapshot.read(history, limits or ImportLimits())
-        directory = worktree or snapshot.project
+        directory = worktree.project(snapshot)
         if not directory:
             raise ValueError("The source has no project directory; supply --worktree.")
         project = Path(directory).expanduser().resolve()
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
         session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
-        thread = self.registry.new_thread(
+        thread = model.configured(self.registry.new_thread(
             name,
             tags,
             str(project),
             session_file=str(session_path),
             title=NoThreadText.from_input(snapshot.title),
-            model=model,
-        )
+        ))
         with _store_lock(self._wire_lock_path):
             if self.registry.snapshot().taken(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
@@ -376,8 +408,9 @@ class ThreadManagement:
             self.registry.heartbeat(name)
 
     def set_thread_configuration(
-        self, original: Thread, *, model: str | None = None,
-        thinking_level: type[ThinkingChoice] = NoThinkingOverride, service_tier: ServiceTier | None = None,
+        self, original: Thread, *, model: ModelChoice = KeptModel(),
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
+        service_tier: ServiceTierChoice = KeptServiceTier(),
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 

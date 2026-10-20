@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Annotated
@@ -15,7 +16,10 @@ from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, RegistrationPolicy, WireOmitDefault, WireRequired
+from .field_codec import (
+    FieldCodec, NullMember, RegistrationPolicy, SingleFieldValue, SubclassUnion, WireOmitDefault,
+    WireRequired, boundary_decoder,
+)
 from .goals import (
     GoalDeclaration,
     NoGoal,
@@ -64,6 +68,58 @@ class _GeneratedCreationTime(float):
 
 def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
+
+
+class NextTurnSetting(ABC):
+    """One next-turn setting a configuration request either sets or keeps."""
+
+    @abstractmethod
+    def configured(self, thread: Thread) -> Thread: ...
+
+
+class KeptSetting(NextTurnSetting):
+    """The request leaves the thread's current value in place."""
+
+    def configured(self, thread: Thread) -> Thread:
+        return thread
+
+
+class ModelChoice(NextTurnSetting, SubclassUnion, affix="Model"):
+    @classmethod
+    @boundary_decoder
+    def from_text(cls, text: str) -> ModelChoice:
+        """A blank model identifier keeps the thread's model."""
+        return ChosenModel(text.strip()) if text.strip() else KeptModel()
+
+
+@dataclass(frozen=True, slots=True)
+class ChosenModel(SingleFieldValue, ModelChoice):
+    name: str
+
+    def configured(self, thread: Thread) -> Thread:
+        return replace(thread, model=self.name.strip())
+
+
+@dataclass(frozen=True, slots=True)
+class KeptModel(NullMember, KeptSetting, ModelChoice):
+    pass
+
+
+class ServiceTierChoice(NextTurnSetting, SubclassUnion, affix="ServiceTier"):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ChosenServiceTier(SingleFieldValue, ServiceTierChoice):
+    tier: ServiceTier
+
+    def configured(self, thread: Thread) -> Thread:
+        return replace(thread, service_tier=self.tier)
+
+
+@dataclass(frozen=True, slots=True)
+class KeptServiceTier(NullMember, KeptSetting, ServiceTierChoice):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,16 +315,12 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None,
+        self, *, model: ModelChoice = KeptModel(),
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
-        service_tier: ServiceTier | None = None,
+        service_tier: ServiceTierChoice = KeptServiceTier(),
     ) -> Thread:
-        return replace(
-            self,
-            model=self.model if model is None else model.strip(),
-            thinking_level=thinking_level.applied(self.thinking_level),
-            service_tier=self.service_tier if service_tier is None else service_tier,
-        )
+        thought = replace(self, thinking_level=thinking_level.applied(self.thinking_level))
+        return service_tier.configured(model.configured(thought))
 
     def needs_model_observation(self) -> bool:
         """Only an unset declaration needs a saved or live model observation."""
