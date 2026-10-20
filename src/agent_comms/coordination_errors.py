@@ -47,6 +47,10 @@ class IdentityConflict(CoordinationError):  # noqa: N818
     """A requested operation conflicts with frozen coordination identity."""
 
 
+class UnrecordedNativeContext(IdentityConflict):  # noqa: N818 - nominal outcome name
+    """A native input row recorded no context acknowledgement."""
+
+
 class ParticipantNotRegistered(IdentityConflict):  # noqa: N818 - nominal outcome name
     """No participant aggregate is recorded for the lookup."""
 
