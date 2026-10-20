@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from asyncio import CancelledError
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
 
 from .coordination_errors import StaleFence
 from .coordinator import Coordination
+from .drain_failures import UNAVAILABLE_DRAIN_ERRORS
 from .native_pi import NativePiTerminalFailure, NativeRequestFailure
 from .private_send_claim import PrivateSendClaim
 from .selected_participant import SelectedParticipant
@@ -49,12 +51,12 @@ class SelectedRequest:
         except NativeRequestFailure as error:
             await self._native_failure(error)
             raise
-        except BaseException:
-            # Every abandoned request leaves UNKNOWN after child/tool cleanup,
-            # including failures in local context publication, not just native errors.
+        except (CancelledError, *UNAVAILABLE_DRAIN_ERRORS):
+            # A failed read abandons the request after child/tool cleanup,
+            # including reads during local context publication.
             try:
                 await self._settle_unknown()
-            except Exception as error:
+            except UNAVAILABLE_DRAIN_ERRORS as error:
                 raise SystemExit(1) from error
             raise
 
