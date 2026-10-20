@@ -728,7 +728,8 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     body = order_body(repo, 'grep -c two count.txt -> 1')
     problem(script, body)
-    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
+    script.strike('worker', 'P1',
+                  f'P1 was sent back once before its check was corrected at {repo / "count.txt"}:1')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
@@ -1460,9 +1461,11 @@ VERDICT_LINES = {
 }
 
 
-def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander, commander_script):
+def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander, commander_script, monkeypatch):
     """Every verdict member refuses a line missing any fact it declares, and its verdict reads back from the order."""
-    script, _ = commander_script
+    script, repo = commander_script
+    (repo / 'a.py').write_text('value = 1\n')
+    monkeypatch.chdir(repo)
     comms, caller = commander
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     assert set(judge.VerdictVerb.names()) == set(VERDICT_LINES)
