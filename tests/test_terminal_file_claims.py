@@ -4,6 +4,8 @@ from bus_history import read_history
 import asyncio
 import json
 import os
+import shutil
+from pathlib import Path
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -101,8 +103,30 @@ def test_terminal_release_spans_the_existing_envelope_bound():
         assert sum(m.body.count("file-") for m in notices) == 35
 
 
+@pytest.fixture
+def source_worker_runtime(monkeypatch, native_runtime_package):
+    """Run a subprocess from this checkout against its already-prepared native pin."""
+    from agent_comms.launch_runtime import LaunchRuntime
+
+    source = Path(__file__).resolve().parents[1] / "src"
+    package = native_runtime_package.path.parents[2]
+    pinned = source.parent / "stack" / package.name
+    assert not pinned.exists()
+    shutil.copytree(package, pinned, copy_function=shutil.copy2)
+    original_environment = LaunchRuntime.environment
+
+    def use_source(runtime, environment):
+        return {**original_environment(runtime, environment), "PYTHONPATH": str(source)}
+
+    monkeypatch.setattr(LaunchRuntime, "environment", use_source)
+    try:
+        yield
+    finally:
+        shutil.rmtree(pinned)
+
+
 @pytest.mark.asyncio
-async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_path, native_runtime_package):
+async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_path, native_runtime_package, source_worker_runtime):
     from agent_comms.comms import Comms
     from agent_comms.coordinator import Coordination
     from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -110,7 +134,15 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
     from native_backend_fixture import native_backend_fixture
 
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
-        target = native.project / "module.py"
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.storage_rules import StorageRule
+
+        (native.root / "storage.json").write_text(json.dumps(FieldCodec.encode(StorageRule(
+            scratch_base=native.project.parent,
+            checkout_base=native.project.parent / "checkouts",
+        ))))
+        target = native.project.parent / "worker" / "module.py"
+        target.parent.mkdir()
         target.write_text("value = 1\n")
         comms = Comms(native.root)
         comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(native.project), session_file=str(native.session), model='response-local/fixture'))
@@ -124,7 +156,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
 
         native.provider.response_chunks = claim_then_hold
         native.provider.tool_call = ("write", {"path": str(target), "content": "value = 2\n"})
-        arguments = native.native_arguments()
+        arguments = native.native_arguments(options=())
         first = await asyncio.to_thread(comms.owners.start, "worker", agent_args=arguments)
         try:
             comms.messaging.send("sender", "worker", "Change the value").message
