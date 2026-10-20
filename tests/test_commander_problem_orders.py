@@ -1384,7 +1384,7 @@ def test_each_verdict_kind_reaches_its_unit_and_the_threads_whose_goal_the_order
 
 def test_each_send_target_preserves_collective_body_and_prefixes_named_audience(commander):
     comms, caller = commander
-    channel = CommandTarget.parse('#all')
+    channel = CommandTarget.named('#all')
     assert channel.addressed((), 'Read the order') == 'Read the order'
     assert channel.addressed(('worker', 'lead'), 'Read the order') == '@worker @lead Read the order'
     for target, audience in (('worker', ()), ('#all', ()), ('#all', ('worker',)),
