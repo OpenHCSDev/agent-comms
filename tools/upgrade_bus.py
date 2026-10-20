@@ -202,6 +202,10 @@ class Revisions:
         run("git", "-C", path, "submodule", "update", "--init", "--recursive", "--checkout")
 
     def tree(self, revision: str) -> Path:
+        if run("git", "-C", self.repo, "rev-parse", f"{revision}^{{commit}}").strip() == run(
+            "git", "-C", self.repo, "rev-parse", "HEAD"
+        ).strip():
+            return self.repo
         if revision not in self.trees:
             path = self.scratch / f"tree-{revision[:12]}"
             run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
