@@ -483,7 +483,14 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         if backup is not None and not complete:
             restored = False
             try:
+                state = maintenance.read()
+                state.phase.hold_restore(
+                    maintenance, MaintenanceOperator.current(),
+                    lambda: staged.owners(root, "stop", running),
+                )
                 backup.restore()
+                held = maintenance.read()
+                os.environ[HOLDER_NONCE] = held.nonce
                 run("git", "-C", checkout, "switch", "--detach", current)
                 saved_lock = backup.path / "uv.lock"
                 if saved_lock.exists():
