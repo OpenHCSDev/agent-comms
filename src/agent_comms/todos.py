@@ -1371,6 +1371,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
+    def require_withdrawal(self) -> None:
+        raise ValueError("Only an undelivered order can be withdrawn.")
+
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return ()
 
@@ -1539,7 +1542,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise ValueError("Closing requires recorded installed application evidence.")
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
-        raise ValueError("Only an undelivered order can be withdrawn.")
+        self.require_withdrawal()
+        return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
+                            superseded_by=superseded_by)
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         """How this order retired its problem without delivery, as the record and board say."""
@@ -1583,9 +1588,8 @@ class PendingProblemOrder(CheckedProblemOrder):
         """An undelivered order waits on install once its PR merged."""
         return read[todo.id].waiting_on_install(todo)
 
-    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
-        return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
-                            superseded_by=superseded_by)
+    def require_withdrawal(self) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)

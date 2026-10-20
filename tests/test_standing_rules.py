@@ -40,7 +40,7 @@ def standing(commander, commander_script):
     for module in (judge, capacity):
         importlib.reload(module)
     module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
-    state = CommanderConfig.installed().state
+    state = CommanderConfig.read_root(commander[0].root).state
     return commander[0], state, module
 
 
@@ -244,6 +244,7 @@ def test_unjudged_follows_the_unjudged_edits(commander, standing):
     assert lines(comms, module.Unjudged) == ["UNJUDGED 70 edits -> judge or fork a judge slice"]
 
 
+
 def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monkeypatch):
     comms, caller = commander
 
@@ -379,9 +380,9 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    CommanderConfig.installed().model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)}).write(Path.home())
-    CommanderConfig.installed.cache_clear()
+    config = CommanderConfig.read_root(comms.root).model_copy(update={"repos": (
+        Repo(checkout=checkout, github="fleet/growth"),)})
+    config.write(tmp_path / 'growth-home')
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "

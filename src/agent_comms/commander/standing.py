@@ -84,7 +84,7 @@ class WheelSpin(StandingRule, declared_name=None):
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
         """Units with a recent turn in their own transcript and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
-        excluded = held | CommanderConfig.installed().parked | {commander, ""}
+        excluded = held | CommanderConfig.read_root(comms.root).parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((thread for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
@@ -227,45 +227,34 @@ class MergeGrowth(DatedStandingRule):
         ).stdout
 
     @classmethod
-    def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
-        """Read first-parent growth from one captured, already-fetched Git history.
+    def numstat(cls, checkout: Path, sha: str, path: str) -> tuple[int, int]:
+        diff = cls.git(checkout, "diff", "--numstat", f"{sha}^1", sha, "--", path)
+        counted = [
+            (int(a), int(d))
+            for a, d, _ in (row.split("\t", 2) for row in diff.splitlines())
+            if a.isdigit()
+        ]
+        return sum(a for a, _ in counted), sum(d for _, d in counted)
 
-        Fetch belongs to the checkout's update owner, not a standing-rule read.
-        Git emits each commit's first-parent diff in this same process.
-        """
+    @classmethod
+    def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
+        """Each first-parent commit on the repository's main inside the window, newest first."""
+        cls.git(repo.checkout, "fetch", "-q", "origin", "main")
         log = cls.git(
             repo.checkout,
             "log",
             "--first-parent",
             f"--since={cls.window}",
-            "--format=%x1e%H%x00%ct%x00%s",
-            "--numstat",
-            "--no-renames",
-            "--diff-merges=first-parent",
+            "--format=%H %ct %s",
             "origin/main",
-            "--",
-            repo.source,
-            "tests",
         )
-        for record in log.split("\x1e")[1:]:
-            header, _, diff = record.partition("\n")
-            sha, at, subject = header.split("\x00", 2)
-            src, tests = [0, 0], [0, 0]
-            for row in diff.splitlines():
-                if not row:
-                    continue
-                added, deleted, path = row.split("\t", 2)
-                if not (added.isdigit() and deleted.isdigit()):
-                    continue
-                for root, counts in ((repo.source, src), ("tests", tests)):
-                    if path == root or path.startswith(root.rstrip("/") + "/"):
-                        counts[0] += int(added)
-                        counts[1] += int(deleted)
-            yield cls(repo.github, sha, subject, float(at), (src[0], src[1]), (tests[0], tests[1]))
+        for sha, at, subject in (line.split(" ", 2) for line in log.splitlines()):
+            src, tests = (cls.numstat(repo.checkout, sha, path) for path in (repo.source, "tests"))
+            yield cls(repo.github, sha, subject, float(at), src, tests)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
-        return tuple(growth for repo in CommanderConfig.installed().repos
+        return tuple(growth for repo in CommanderConfig.read_root(comms.root).repos
                      for growth in cls.merges(repo) if growth.over)
 
     @property
