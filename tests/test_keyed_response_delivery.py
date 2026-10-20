@@ -267,8 +267,9 @@ def test_duplicate_json_key_is_typed_and_never_enters_unchecked_read(tmp_path):
         before = case.bus.log.path.read_bytes()
         with pytest.raises(StoredHistoryUnreadable, match="Unreadable bus row") as raised:
             list(case.bus.log.verified_records_unlocked(marker))
-        assert type(raised.value.__cause__) is MalformedRecord
-        assert 'Duplicate JSON field' in str(raised.value.__cause__)
+        assert type(raised.value.__cause__) is StoredHistoryUnreadable
+        assert type(raised.value.__cause__.__cause__) is MalformedRecord
+        assert 'Duplicate JSON field' in str(raised.value.__cause__.__cause__)
         assert case.bus.log.path.read_bytes() == before
     finally:
         case.close()

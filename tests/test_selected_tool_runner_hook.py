@@ -62,7 +62,8 @@ def nominal_broker_stub(monkeypatch):
     return intent_type, mode_type, bound
 
 
-def test_owner_configuration_requires_nominal_intent_and_private_binding(
+@pytest.mark.asyncio
+async def test_owner_configuration_requires_nominal_intent_and_private_binding(
     private_directory, private_comms, nominal_broker_stub
 ):
     intent_type, _mode_type, _bound = nominal_broker_stub
@@ -74,7 +75,10 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
     with pytest.raises(PublicationActivationBlocked, match="private bus root"):
         CommsAgent(comms, private_selected_tool_intent=intent_type())
     agent = CommsAgent(private_comms, private_selected_tool_intent=intent_type())
-    assert type(agent._private_selected_tool_intent) is intent_type
+    try:
+        assert type(agent._private_selected_tool_intent) is intent_type
+    finally:
+        await agent.shutdown()
 
 
 @pytest.mark.asyncio

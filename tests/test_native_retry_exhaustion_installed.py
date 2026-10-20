@@ -66,6 +66,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
         "compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.setenv("PI_PROVIDER", "limit-offline")
     monkeypatch.setenv("PI_MODEL", "fixture")

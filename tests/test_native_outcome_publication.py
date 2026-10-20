@@ -39,6 +39,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
         "compaction": {"enabled": False}, "retry": {"enabled": False, "maxRetries": 0,
             "provider": {"maxRetries": 0}},
     }))
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.setenv("PI_PROVIDER", "outcome-offline")
     monkeypatch.setenv("PI_MODEL", "fixture")
