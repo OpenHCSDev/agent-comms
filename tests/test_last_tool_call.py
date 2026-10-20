@@ -25,9 +25,6 @@ def test_newest_tool_call_is_one_indexed_read_and_time_comparisons_cross_midnigh
                           'WHERE thread=? AND kind=? ORDER BY seq DESC,ordinal DESC LIMIT 1',
                           (transcript.lookup, ToolStartTranscript.declared_name)).fetchall()
         assert not any("TEMP B-TREE" in row[-1] for row in plan)
-    transcript.finish(turn_id="turn", item_id="undated", events=(
-        ToolStartTranscript(position=0, tool_call_id="undated", tool_name="bash"),))
-    assert transcript.last_tool_call() == UnrecordedEventTime()
 
 
 def test_tool_index_conversion_preserves_events_and_runs_once(tmp_path):

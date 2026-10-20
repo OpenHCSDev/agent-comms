@@ -2,11 +2,10 @@
 
 from agent_comms.external_transcript import ExternalEventRow
 
-from .carry import StoreCarry
 from .carry_tool_call_index import ToolCallIndex
 
 
-class ExternalEventIndexes(ToolCallIndex, StoreCarry):
+class ExternalEventIndexes(ToolCallIndex):
     allowed_indexes = frozenset(ExternalEventRow.schema_objects()) - {
         ExternalEventRow.declared_name
     }
