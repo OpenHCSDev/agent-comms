@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, cast
 
 from cutover.backup import UpgradeRefused
+from cutover.carry import CarryLedger
 from cutover.carry_maintenance_identity import OldMarker, StoredMaintenanceState
 from install_snapshot import SnapshotHome
 
@@ -277,7 +278,7 @@ class PracticeCopy:
         if shutil.disk_usage(self.into.parent).free < storage_floor():
             raise GateError("Insufficient free space before building the retained-tail copy")
         with CheckRoot(self.source, names, self.into).open() as copied:
-            self.copy_maintenance(copied.root)
+            self.copy_install_state(copied.root)
             size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
             if size > self.max_bytes:
                 raise GateError(
@@ -287,8 +288,11 @@ class PracticeCopy:
                 raise GateError(f"Insufficient free space for rehearsal of {size} copied bytes")
             yield copied, PracticeMeasurement(size, time.monotonic() - started)
 
-    def copy_maintenance(self, into: Path) -> None:
-        """Preserve source formats, using the carry owner's declared old shapes."""
+    def copy_install_state(self, into: Path) -> None:
+        """Preserve applied carries and maintenance source formats in the practice bus."""
+        ledger = CarryLedger(self.source.root).path
+        if ledger.exists():
+            shutil.copy2(ledger, CarryLedger(into).path)
         original = MaintenanceBarrier(self.source.root / "registry.json")
         copied = MaintenanceBarrier(into / "registry.json")
         records = (

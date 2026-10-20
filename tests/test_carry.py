@@ -770,7 +770,9 @@ def test_practice_preserves_old_maintenance_format_until_before_stop(tmp_path):
         path.write_text(json.dumps(FieldCodec.encode(record)))
         path.chmod(0o600)
     original = tuple(path.read_bytes() for path in old.witness_paths)
-    PracticeCopy(Comms(source), destination).copy_maintenance(destination)
+    CarryLedger(source).record("carry_external_pages")
+    PracticeCopy(Comms(source), destination).copy_install_state(destination)
+    assert CarryLedger(destination).applied() == CarryLedger(source).applied()
     copied = MaintenanceBarrier(destination / "registry.json")
     for path in copied.witness_paths:
         assert json.loads(path.read_bytes())["version"] == 1
