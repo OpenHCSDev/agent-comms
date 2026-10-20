@@ -1259,12 +1259,6 @@ class Slop:
                             'fix: use an ID from the packaged pattern catalog.')
         if len(self.fact.split()) < 4:
             problems.append('fact: fix: describe the duplicated fact in at least four words')
-        for name, reference in (('at', self.at), ('by', self.by)):
-            try:
-                with MalformedRecord.refusing(name):
-                    reference.require_exists()
-            except MalformedRecord as error:
-                problems.append(f'{name}: {error}; fix: cite an existing source line')
         if problems:
             raise ValueError('\n'.join(problems))
 
@@ -1879,7 +1873,7 @@ class Hunt(DeclaredFamily, affix="Hunt"):
         self.at.require_recorded("A hunt")
 
     def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
-        self.where.require_exists()
+        """The commander boundary validates source references before recording a hunt."""
 
 
 @dataclass(frozen=True)
@@ -2004,13 +1998,13 @@ class Assignment:
     def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
 
-    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+    def require_trace(self, owner: str, traced: FileLine | None, root: Path) -> None:
         owners = {self.owner, *(previous.name for previous in self.previous_owners)}
         if owner != self.owner and len(owners) >= 2 and traced is None:
             raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
                              "and pass --traced PATH:LINE.")
         if traced is not None:
-            traced.require_exists()
+            traced.require_exists(root)
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation:
@@ -2799,10 +2793,12 @@ class Todo(TypedTable):
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
         self.order.require_transfer(self)
         if self.assignment is not None:
-            self.assignment.require_trace(proposed.owner, traced)
+            self.assignment.require_trace(
+                proposed.owner, traced, Path(self.order.checked().check.directory))
             proposed = self.assignment.successor(proposed, self)
         elif self.released:
-            self.released[-1].previous.require_trace(proposed.owner, traced)
+            self.released[-1].previous.require_trace(
+                proposed.owner, traced, Path(self.order.checked().check.directory))
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:

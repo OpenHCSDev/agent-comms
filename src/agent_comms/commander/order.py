@@ -326,7 +326,7 @@ class Commander(CommanderContext):
             problems.append('problems: fix: omit IDs when creating a new problem')
         if not new and (missing := [pid for pid in group if pid not in listed]):
             problems.append(f'{missing} not open problems; fix: name existing open problem IDs')
-        for label, validate in (('order.owner', order.owner.require_exists),
+        for label, validate in (('order.owner', lambda: order.owner.require_exists(Path(check.directory))),
                                ('order.check.directory', check.require_directory)):
             try:
                 with MalformedRecord.refusing(label):
@@ -345,11 +345,15 @@ class Commander(CommanderContext):
                     problems += check.result.distance(ran).unproven(check.command, 0)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
-        references = FileLine.scan('\n'.join((document.prose, *edits)))
+        references = tuple(dict.fromkeys((
+            *FileLine.scan('\n'.join((document.prose, *edits))),
+            *(reference for slop in document.slop for reference in (slop.at, slop.by)),
+        )))
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists()
+                    reference.require_exists(self.source_repository(
+                        Path(check.directory) / reference.file).checkout)
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         deleted = {Path(module).stem for module in order.deletes.modules}
@@ -377,7 +381,8 @@ class Commander(CommanderContext):
                     if replacing:
                         listed[pid].require_replacement(replaces)
                     if pid in listed and listed[pid].assignment:
-                        listed[pid].assignment.require_trace(unit, trace)
+                        listed[pid].assignment.require_trace(
+                            unit, trace, Path(listed[pid].order.checked().check.directory))
             except MalformedRecord as error:
                 problems.append(str(error))
         if replaces and not replacing:
@@ -462,9 +467,11 @@ class Commander(CommanderContext):
     def problem(self, order_file, unit, due, where, disk=False,
                 answers: tuple[MessageReference, ...] = ()):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
-        location = FileLine.from_wire(where)
-        location.require_exists()
         document = OrderFile.read(Path(order_file).read_text())
+        location = FileLine.from_wire(where)
+        checkout = self.source_repository(
+            self.repo_directory(document.order.check.directory) / location.file).checkout
+        location.require_exists(checkout)
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
         self.send(unit, due, document, new=(pid, document.defect),
@@ -600,12 +607,13 @@ class Commander(CommanderContext):
 
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
-        path, _, line = where.rpartition(':')
-        if not os.path.exists(path) or not line.isdigit() or int(line) > sum(1 for _ in open(path)):
-            sys.exit(f'Refused: {where} is not a real file:line')
+        ref = FileLine.from_wire(where)
+        checkout = self.source_repository(Path(ref.file)).checkout
+        ref.require_exists(checkout)
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
-        ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
+        ref = FileLine(str((checkout / ref.file).resolve()), ref.line)
+        at = RecordedEventTime(time.time())
         self.comms.goals.todos.record_hunt(self.incarnation,
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
         print(f'hunt recorded: {where} -> {sent or "clean"}')
