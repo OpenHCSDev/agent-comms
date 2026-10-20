@@ -715,8 +715,8 @@ class Commander(CommanderContext):
         moved = RecordedEventTime(time.time()).at_clock(at)
         self.call(CommsChangeProblemTool(problem=pid, operation=AssignTodo(
             todo.revision, todo.assignment, moved, todo.order, todo.goal)))
-        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
-                  f'{todo.deadline.clock()} moved to {moved.clock()}): {why}', 'Deadline',
+        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} '
+                  f'deadline changed): {why}', 'Deadline',
                   VerdictAudience.of(todo.held().owner, todo.goal))
         print(f'{pid}: due {moved.clock()}')
 
