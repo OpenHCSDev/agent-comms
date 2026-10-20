@@ -1033,7 +1033,8 @@ class CheckPrinted(DeclaredFamily, affix="Printed"):
     def require(self, expected: object) -> None: ...
 
     @abstractmethod
-    def project[T](self, counted: Callable[[int], T], uncounted: Callable[[], T]) -> T: ...
+    def project[T](self, counted: Callable[[int], T],
+                   uncounted: Callable[[NoIntegerPrinted], T]) -> T: ...
 
 
 @dataclass(frozen=True)
@@ -1050,7 +1051,8 @@ class CountPrinted(CheckPrinted):
         if self.count:
             raise ValueError(f"The order check is {self.count} away from {expected}.")
 
-    def project[T](self, counted: Callable[[int], T], uncounted: Callable[[], T]) -> T:
+    def project[T](self, counted: Callable[[int], T],
+                   uncounted: Callable[[NoIntegerPrinted], T]) -> T:
         return counted(self.count)
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
@@ -1069,16 +1071,33 @@ class NoIntegerPrinted(CheckPrinted):
     def require(self, expected: object) -> None:
         raise ValueError(f"The order check cannot prove {expected}: it printed no integer.")
 
-    def project[T](self, counted: Callable[[int], T], uncounted: Callable[[], T]) -> T:
-        return uncounted()
+    def project[T](self, counted: Callable[[int], T],
+                   uncounted: Callable[[NoIntegerPrinted], T]) -> T:
+        return uncounted(self)
+
+    def progress(self, command: str) -> str:
+        return f"; check prints no integer: {command}"
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
 
 
+class NoCountYetPrinted(NoIntegerPrinted):
+    """An unfinished child contributes no count, including digits in partial stdout."""
+
+    def require(self, expected: object) -> None:
+        raise ValueError(f"The order check has no count yet; cannot prove {expected}.")
+
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
+        return (f"the check has no count yet: `{command}` did not finish",)
+
+    def progress(self, command: str) -> str:
+        return "; no count yet"
+
+
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
     def printed_count(self, stdout: bytes) -> CheckPrinted:
-        raise ValueError("The order check did not exit, so it printed no count.")
+        return NoCountYetPrinted()
 
     @property
     @abstractmethod

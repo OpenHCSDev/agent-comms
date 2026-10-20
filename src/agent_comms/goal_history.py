@@ -70,8 +70,13 @@ class GoalHistoryStore:
 
     def __init__(self, registry_path: Path):
         self.registry_path = registry_path
-        self.path = registry_path.parent / "goal_history.sqlite3"
+        self.path = self.path_for(registry_path)
         self._initialize()
+
+    @classmethod
+    def path_for(cls, registry_path: Path) -> Path:
+        """The journal shares its registry's directory."""
+        return registry_path.with_name("goal_history.sqlite3")
 
     @classmethod
     def acquire_read_only(cls, registry_path: Path) -> tuple[GoalHistoryEntry, ...]:
@@ -81,7 +86,7 @@ class GoalHistoryStore:
         current goals or reconciles pending writes. Missing/foreign storage is a
         refusal, not permission to manufacture a history baseline.
         """
-        path = registry_path.parent / "goal_history.sqlite3"
+        path = cls.path_for(registry_path)
         try:
             before = path.lstat()
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()

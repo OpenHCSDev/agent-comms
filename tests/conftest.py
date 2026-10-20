@@ -282,6 +282,12 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
+    import sys
+    from agent_comms.commander.config import CommanderConfig
+    CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
+        state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
+        repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
+        disk=tmp_path).write(tmp_path)
     return comms, ThreadCaller("lead")
 
 
@@ -300,14 +306,15 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     repo.mkdir()
     for command in (("init", "-q"), ("remote", "add", "origin", "https://github.com/OpenHCSDev/agent-comms.git")):
         subprocess.run(["git", "-C", str(repo), *command], check=True)
-    CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
-        state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
-        repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
-        disk=tmp_path).write(tmp_path)
-    CommanderConfig.installed.cache_clear()
     from agent_comms.commander import order
-    yield importlib.reload(order), repo
-    CommanderConfig.installed.cache_clear()
+    context = order.Commander.read_root(comms.root)
+    from agent_comms.rule_reviews import DrawnRuleReviewEntry, AnsweredRuleReviewEntry
+    from agent_comms.tools import CommsRuleReviewTool
+    from agent_comms.tool_caller import ThreadCaller
+    caller = ThreadCaller('lead')
+    caller.invoke(CommsRuleReviewTool(entry=DrawnRuleReviewEntry(('Read the command root from its one declared owner.',))), comms)
+    caller.invoke(CommsRuleReviewTool(entry=AnsweredRuleReviewEntry(1, '"Read the command root from its one declared owner." P701')), comms)
+    yield context, repo
 
 
 @pytest.fixture
@@ -316,8 +323,7 @@ def tool_watch(commander_script):
     import importlib
 
     from agent_comms.commander import judge, tool_watch
-    importlib.reload(judge)
-    return importlib.reload(tool_watch)
+    return tool_watch
 
 
 @pytest.fixture

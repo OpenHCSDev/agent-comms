@@ -152,6 +152,8 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
             return
         from .acp_failure import NativeMessageFailureSource
 
+        for diagnostic in message.diagnostics:
+            session.watchdog.phase = diagnostic.turn_phase(session.watchdog.phase)
         error = session.output.error(
             (message.error_message or "").strip() or f"Model request {cls.declared_name}",
             message.diagnostics, source=NativeMessageFailureSource(message),

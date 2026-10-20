@@ -27,17 +27,18 @@ from .goal_states import (
 from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import (
     Goal,
-    ReportedTurn,
     GoalDeclaration,
     GoalOrder,
     NoGoal,
     ProblemGoalOrder,
+    ReportedTurn,
     RequestDirective,
     RequestGoalOrder,
     UnorderedGoalOrder,
 )
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
@@ -490,12 +491,12 @@ class DirectiveGoalAction(GoalAction[GoalDeclaration], RuntimeInvocable):
     def create(self, ctx: GoalActionContext) -> GoalDeclaration:
         return ctx.thread.goal
 
-    def directive(self, served: int) -> RequestDirective:
-        return RequestDirective(self.seq, self.at + RequestDirective.window, served)
+    def directive(self) -> RequestDirective:
+        return RequestDirective(self.seq, self.at + RequestDirective.window)
 
     def request(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         ReplacementGoalAction.retire(goal, ctx)
-        order = RequestGoalOrder((self.directive(0),))
+        order = RequestGoalOrder((self.directive(),))
         return SetGoalAction(text=self.text, order=order).change(goal, ctx)
 
 
@@ -506,6 +507,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     request: str
     deadline: EventTime
     commander: str
+
+    @abstractmethod
+    def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction: ...
 
     @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
@@ -542,12 +546,17 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(ProblemOrderGoalAction):
+    """The order's commander gives the problem to this thread."""
     expected_revision: int
     traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
+    assigner: ThreadIncarnation
+
+    def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:
+        return replace(self, commander=actor.name, assigner=actor)
 
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
-            owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
+            owner=ctx.thread, assigner=self.assigner,
             generation=generation, goal=goal, deadline=self.deadline, order=self.order,
             traced=self.traced)
 
@@ -556,6 +565,9 @@ class OrderGoalAction(ProblemOrderGoalAction):
 class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: str
     text: str
+
+    def bound_to(self, actor: ThreadIncarnation) -> CreateProblemGoalAction:
+        return replace(self, commander=actor.name)
 
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
