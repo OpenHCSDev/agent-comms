@@ -10,14 +10,21 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type
+from typing import TYPE_CHECKING, ClassVar, Type, cast
 
 from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
+from .field_codec import (
+    FieldCodec,
+    InlineRecord,
+    MalformedRecord,
+    NullMember,
+    compile_decoder,
+    projected,
+)
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
@@ -90,7 +97,7 @@ class InfoKind(SendableMessageKind):
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:
         """Committed info rows include the original claim-bearing envelopes."""
-        return FieldCodec.decode(Message | ClaimMessage, data)
+        return cast(Message, compile_decoder(Message | ClaimMessage).decode(data))
 
 
 class QuestionKind(SendableMessageKind):
