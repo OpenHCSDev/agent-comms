@@ -1,11 +1,11 @@
-"""Move retained restart interpreters onto their owning selections once."""
+"""Reset settled runtime restart records; never convert or replay requests."""
 
 import json
 from pathlib import Path
 
-from agent_comms.field_codec import FieldCodec
-from agent_comms.restart_queue import DIRECTORY, QueuedRestart
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.restart_queue import DIRECTORY, RestartQueue, RestartState
+from agent_comms.thread_identity import OwnerIdentity
 
 from .carry import Carried, Carry
 
@@ -17,20 +17,28 @@ class RestartSelectionInterpreters(Carry):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        rewritten = []
+        settled = []
         for path in cls.backup_files(root):
             payload = json.loads(path.read_text())
-            if "source_interpreter" not in payload:
-                continue
-            selection = payload["selection"]
-            if "interpreter" in selection:
-                raise ValueError("Restart record has two interpreter owners")
-            selection["interpreter"] = payload.pop("source_interpreter")
-            FieldCodec.decode(QueuedRestart, payload)
-            rewritten.append(str(path.relative_to(root)))
-            if apply:
-                _atomic_write_text(path, json.dumps(payload, sort_keys=True), fsync_parent=True)
-        return Carried(len(rewritten), rewritten=tuple(rewritten) if apply else ())
+            state = FieldCodec.decode(RestartState, payload["state"])
+            if state.active:
+                owner = FieldCodec.decode(OwnerIdentity, payload["selection"]["identity"])
+                try:
+                    RestartQueue(root / DIRECTORY).read(path)
+                except MalformedRecord as error:
+                    raise ValueError(
+                        f"Pending restart for {owner.incarnation.name} is incompatible: {error}"
+                    ) from error
+            else:
+                settled.append(path)
+        # Check every retained request before deleting any settled runtime state.
+        if apply:
+            for path in settled:
+                path.unlink()
+        return Carried(
+            len(settled), {"settled_deleted": len(settled)},
+            tuple(str(path.relative_to(root)) for path in settled) if apply else (),
+        )
 
 
 if __name__ == "__main__":
