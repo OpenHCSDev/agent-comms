@@ -75,6 +75,10 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
         return comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation)
 
+    @staticmethod
+    def pending_todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
+        return tuple(todo for todo in StandingRule.todos(comms, commander) if todo.pending)
+
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
         """Every member's violations for one commander that began after ``after``."""
@@ -161,9 +165,7 @@ class FirstCallMissing(HeldOrderDue):
     @classmethod
     def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]:
         now = time.time()
-        for todo in cls.todos(comms, commander):
-            if not todo.pending:
-                continue
+        for todo in cls.pending_todos(comms, commander):
             order = todo.order.checked()
             if not order.first_call_deadline.before(now):
                 continue
@@ -188,7 +190,7 @@ class OwnerIdle(DatedStandingRule):
         now = time.time()
         threads = (comms.registry.require(holder)
                    for holder in sorted({todo.held().owner
-                                         for todo in cls.todos(comms, commander)}))
+                                         for todo in cls.pending_todos(comms, commander)}))
         calls = (
             (thread.name,
              thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call())
