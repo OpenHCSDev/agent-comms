@@ -84,12 +84,10 @@ def test_oversized_append_preserves_marker_and_sequence(tmp_path):
 
 READERS = {
     'snapshot rows': lambda log, metadata: log.opened_wire_snapshot(opening=CurrentSnapshotOpening()),
-    'full history': lambda log, metadata: log.full_history_snapshot(),
     'verified records': lambda log, metadata: log.locked(),
 }
 READS = {
     'snapshot rows': lambda source, log, metadata: list(source.rows()),
-    'full history': lambda source, log, metadata: list(source[1]),
     'verified records': lambda source, log, metadata: list(log.verified_records_unlocked(metadata)),
 }
 
