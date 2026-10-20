@@ -24,6 +24,7 @@ from .native_entries import ImportedSessionWriter, NativeEntry
 from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility
 from .storage_rules import StorageRoots
+from .thread_identity import NoThreadText
 from .threads import Thread
 from .transcript_routes import TranscriptRoutes
 
@@ -117,7 +118,7 @@ class CheckRoot:
                 original.without_turn(),
                 worktree=str(project),
                 parent=original.parent if original.parent in selected else None,
-                task=None,
+                task=NoThreadText(),
                 goal=NoGoal(),
                 process_identity=NoProcess(),
                 session_file=session,
