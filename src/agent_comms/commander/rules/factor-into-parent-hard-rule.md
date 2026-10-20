@@ -4,4 +4,6 @@ description: "siblings keep only irreducible differences; anything shared moves 
 type: hard-rule
 ---
 
+**Why:** Composition and forwarding supply the same pairs as multiple inheritance, but outside the declaration, so each forwarder is a defect the hierarchy can absorb.
+
 Every order, review and hunt that touches a subclass family diffs the siblings. An edit that adds behaviour to one sibling only goes back with a roast.
