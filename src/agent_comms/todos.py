@@ -210,7 +210,8 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         verified = await super().verified(todo, registry)
         merge = await self.merge_state(todo, registry)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
-                                     at=verified.at, evidence=self.evidence, merge=merge)
+                                     at=verified.at, evidence=self.evidence, merge=merge,
+                                     proof_build=verified.proof_build)
 
     async def merge_state(self, todo: Todo, registry: Registration) -> DeliveryMerge:
         """Observe integration, not merely publication, at the time of completion.
