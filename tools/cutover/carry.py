@@ -226,11 +226,10 @@ class TodoRows(StoreCarry):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        with cls.store_transaction(root, apply=apply) as db:
+        with cls.todo_rows(root, apply=apply) as db:
             if db is None:
                 return cls.carried(root, 0, {}, apply=apply)
-            with cls.todo_rows(db):
-                return cls.carry_rows(root, db, apply=apply)
+            return cls.carry_rows(root, db, apply=apply)
 
     @classmethod
     @abstractmethod
@@ -239,10 +238,12 @@ class TodoRows(StoreCarry):
 
     @classmethod
     @contextmanager
-    def todo_rows(cls, db: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        yield db
-        for _row in Todo.stream(db):
-            pass
+    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
+        with cls.store_transaction(root, apply=apply) as db:
+            yield db
+            if db is not None:
+                for _row in Todo.stream(db):
+                    pass
 
 
 @dataclass(frozen=True)

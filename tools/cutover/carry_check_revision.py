@@ -17,7 +17,7 @@ from . import carry
 from .carry import Carried
 
 from agent_comms.goals import OrderCheck
-from agent_comms.todos import Todo
+from agent_comms.todos import Todo, TodoStore
 
 LEADING: frozenset[str] = frozenset({"fetch", *OrderCheck.REVISION_COMMANDS})
 
@@ -38,16 +38,20 @@ class CheckRevisions(carry.TodoRows):
 
 
     @classmethod
-    def carry_rows(cls, root: Path, db: sqlite3.Connection, *, apply: bool) -> Carried:
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
         changed = 0
-        for todo in cast("list[Todo]", Todo.select(db)):
-            check = todo.order.check
-            command = revision_free(check.command)
-            if not todo.pending or command == check.command:
-                continue
-            changed += 1
-            order = replace(todo.order, check=replace(check, command=command))
-            Todo.update(db, where="{id} = ?", parameters=(todo.id,), order=order)
+        if not TodoStore.path_in(root).exists():
+            return Carried(0)
+        with cls.todo_rows(root, apply=apply) as db:
+            rows = cast("sqlite3.Connection", db)  # the store exists, so its rows are open
+            for todo in cast("list[Todo]", Todo.select(rows)):
+                check = todo.order.check
+                command = revision_free(check.command)
+                if not todo.pending or command == check.command:
+                    continue
+                changed += 1
+                order = replace(todo.order, check=replace(check, command=command))
+                Todo.update(rows, where="{id} = ?", parameters=(todo.id,), order=order)
         return cls.carried(root, changed, {"open": changed}, apply=apply)
 
 
