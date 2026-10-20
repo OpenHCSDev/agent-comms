@@ -33,10 +33,9 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
+    ContextManifest,
     RecordedContextManifest,
-    RecordedSegmentManifest,
     SegmentManifest,
-    TranscriptSegment,
 )
 from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from agent_comms.wire_log import WireLog
@@ -97,16 +96,8 @@ class ContextEnvelope:
     strict_fields = True
 
 
-@dataclass
-class MovedRequest:
-    record_id: int
-    recorded: RecordedContextManifest
-    values: tuple[SegmentManifest, ...]
-    references: tuple[tuple[ContextEntryReference, ...], ...]
-
-
 class ContextMove:
-    """One bounded look-behind per owner; original predecessor reads stay on the input."""
+    """Decode old positions once; the context store owns recording and predecessors."""
 
     def __init__(
         self,
@@ -115,13 +106,10 @@ class ContextMove:
         store: ContextStore,
     ) -> None:
         self.source, self.context_db, self.store = source, context_db, store
-        self.previous: dict[ThreadIncarnation, MovedRequest] = {}
-        self.entries: set[ContextEntryReference] = set()
         self.count = 0
 
     def entry(self, entry: ContextEntryManifest) -> None:
         ContextEntry.capture(entry).insert_if_absent(self.context_db)
-        self.entries.add(entry.reference)
 
     def original(self, offset: int) -> RecordedContextManifest:
         here = self.source.tell()
@@ -154,50 +142,23 @@ class ContextMove:
         return header, tuple(references)
 
     def request(self, record: RecordedContextManifest, offset: int) -> None:
-        old = self.previous.get(record.thread)
-        ordinal = 1 if old is None else old.recorded.recording_turn + 1
-        parts: list[RecordedSegmentManifest] = []
-        values: list[SegmentManifest] = []
-        all_references: list[tuple[ContextEntryReference, ...]] = []
+        segments = []
         for position, _part in enumerate(record.segments):
             header, references = self.value(record, position, offset)
-            compiled, entries = header.kind.record_manifest(header)
-            if entries:
-                for entry in entries:
-                    self.entry(entry)
-                references = compiled.entries
-                header = replace(header, contributors=())
-            if any(reference not in self.entries for reference in references):
-                raise RelationViolationError("Original context request has missing entry records")
-            previous = None
-            if old is not None and position < len(old.recorded.segments):
-                candidate = old.recorded.segments[position]
-                if candidate.manifest.kind is header.kind:
-                    previous = candidate
             if references:
-                prior: tuple[ContextEntryReference, ...] = ()
-                keyframe: int | None = None
-                if (
-                    old is not None
-                    and previous is not None
-                    and ordinal % TranscriptSegment.keyframe_interval
-                ):
-                    prior, keyframe = previous.reference_keyframe(
-                        old.references[position], old.record_id
-                    )
-                rewritten = RecordedSegmentManifest.entry_delta(header, references, prior, keyframe)
-            elif old is not None and previous is not None:
-                rewritten = previous.record_text(header, old.values[position], old.record_id)
-            else:
-                rewritten = RecordedSegmentManifest(header)
-            parts.append(rewritten)
-            values.append(header)
-            all_references.append(references)
-        converted = replace(record, segments=tuple(parts), recording_turn=ordinal)
-        # The store owns logical IDs; legacy byte positions never become keys.
-        record_id = self.store.append(self.context_db, converted)
-        self.previous[record.thread] = MovedRequest(
-            record_id, converted, tuple(values), tuple(all_references)
+                header = replace(
+                    header,
+                    contributors=tuple(
+                        ContextEntry.original(self.context_db, reference)
+                        for reference in references
+                    ),
+                )
+            segments.append(header)
+        self.store.record_in(
+            self.context_db,
+            ContextManifest(
+                record.thread, record.turn, tuple(segments), record.counter, record.request_id
+            ),
         )
         self.count += 1
 
@@ -308,8 +269,8 @@ class ContextManifests(Carry):
                         # Keep every original message byte, including its kind label.
                         record = scan.read(raw)
                         for delivery in record.deliveries():
-                            row = DeliverySources.one(index_db, seq=delivery.message.seq)
-                            if row is None or (row.offset, row.length) != (offset, len(raw)):
+                            row = DeliverySources.require(index_db, seq=delivery.message.seq)
+                            if (row.offset, row.length) != (offset, len(raw)):
                                 raise RelationViolationError("Original message SQL pointer differs")
                             DeliverySources.update(
                                 index_db,

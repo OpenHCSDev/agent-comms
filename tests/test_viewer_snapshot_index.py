@@ -693,7 +693,7 @@ def test_checked_display_retains_original_cut_and_persists_changed_scope(tmp_pat
 @pytest.mark.parametrize('kind', ['recorded_context_manifest', 'unknown'])
 def test_opened_cut_rejects_context_and_unknown_observations(tmp_path, kind, *, thread_registration):
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.turn_context import RecordedContextManifest
+    from agent_comms.context_store import AbsentContext
     from agent_comms.wire_log import WireLog
     from test_turn_context_wire import manifest
 
@@ -702,7 +702,7 @@ def test_opened_cut_rejects_context_and_unknown_observations(tmp_path, kind, *, 
     from agent_comms.wire_metadata import WireMetadata
     log.write_metadata_unlocked(WireMetadata(writer_protocol_version=1, wire_root_id='0' * 32))
     owner = thread_registration.new_thread('author', frozenset(), str(tmp_path), created_at=17003.0)
-    recorded, _entries = RecordedContextManifest.capture(manifest(owner))
+    recorded, _entries = AbsentContext().capture(manifest(owner))
     row = {'observation': {'kind': kind, 'manifest': FieldCodec.encode(recorded)}}
     log.path.write_text(json.dumps(row) + '\n')
     log.path.chmod(0o600)

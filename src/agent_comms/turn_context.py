@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
@@ -21,7 +21,7 @@ from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .context_store import CapturedContext
+    from .context_store import RecordedContextState
     from .input_attempt import StoredInput
     from .presentation import ThreadView
     from .relationships import PeerRelation
@@ -449,7 +449,7 @@ class RecordedSegmentManifest:
             prior = predecessors[self.previous].segments[position]
         except (KeyError, IndexError) as error:
             raise ValueError("Recorded segment predecessor is missing") from error
-        if prior.previous is not None:
+        if prior.predecessors(self.previous):
             raise ValueError("Recorded segment predecessor is not a direct keyframe")
         if prior.manifest.kind is not self.manifest.kind:
             raise ValueError("Recorded segment predecessor has a different kind")
@@ -483,6 +483,39 @@ class RecordedSegmentManifest:
             provenance=(*original.provenance, *membership),
             contributors=contributors,
         )
+
+
+class SegmentRecording(ABC):
+    """The previous value needed to record one segment, or its first value."""
+
+    @abstractmethod
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest: ...
+
+    @abstractmethod
+    def keyframe(
+        self,
+    ) -> tuple[tuple[ContextEntryReference, ...], int | None]: ...
+
+
+class UnrecordedSegment(SegmentRecording):
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
+        return RecordedSegmentManifest(original)
+
+    def keyframe(self) -> tuple[tuple[ContextEntryReference, ...], int | None]:
+        return (), None
+
+
+@dataclass(frozen=True)
+class PreviouslyRecordedSegment(SegmentRecording):
+    recorded: RecordedSegmentManifest
+    value: SegmentManifest
+    record_id: int
+
+    def record_text(self, original: SegmentManifest) -> RecordedSegmentManifest:
+        return self.recorded.record_text(original, self.value, self.record_id)
+
+    def keyframe(self) -> tuple[tuple[ContextEntryReference, ...], int | None]:
+        return self.recorded.keyframe(self.value, self.record_id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -522,14 +555,10 @@ class ContextSegment(
 
     @classmethod
     def record_manifest(
-        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
-        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        cls, original: SegmentManifest, previous: SegmentRecording = UnrecordedSegment(),
         *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
-        recorded = RecordedSegmentManifest(original)
-        if previous is not None and previous_value is not None:
-            recorded = previous.record_text(original, previous_value, previous_offset)
-        return recorded, ()
+        return previous.record_text(original), ()
 
     def public_text(self) -> str:
         return self.text()
@@ -812,13 +841,11 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
 
     @classmethod
     def record_manifest(
-        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
-        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        cls, original: SegmentManifest, previous: SegmentRecording = UnrecordedSegment(),
         *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
         if not original.contributors:
-            return super().record_manifest(original, previous, previous_value, previous_offset,
-                                           recording_turn=recording_turn)
+            return super().record_manifest(original, previous, recording_turn=recording_turn)
         provenance = tuple(source for source in original.provenance
                            for source in source.turn_recording())
         header = replace(original, provenance=provenance, contributors=(), captured_text=())
@@ -826,9 +853,8 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
                            for child in original.contributors)
         prior: tuple[ContextEntryReference, ...] = ()
         keyframe_offset = None
-        if (previous is not None and previous_value is not None
-                and recording_turn % cls.keyframe_interval):
-            prior, keyframe_offset = previous.keyframe(previous_value, previous_offset)
+        if recording_turn % cls.keyframe_interval:
+            prior, keyframe_offset = previous.keyframe()
         recorded = RecordedSegmentManifest.entry_delta(header, references, prior, keyframe_offset)
         entries = tuple(ContextEntryManifest(child)
                         for child in original.contributors[recorded.inherited_entries:])
@@ -1154,25 +1180,13 @@ class RecordedContextManifest(RecordedContextIdentity):
     @classmethod
     def capture(
         cls, manifest: ContextManifest,
-        previous: CapturedContext | None = None,
+        previous: RecordedContextState,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
-        recording_turn = 1
-        prior: tuple[RecordedSegmentManifest, ...] = ()
-        if previous is not None:
-            previous_record = previous.recorded
-            prior = previous_record.segments
-            recording_turn += previous_record.recording_turn
+        recording_turn = previous.next_recording_turn()
         parts = []
         for position, segment in enumerate(manifest.segments):
-            old = value = offset = None
-            if previous is not None and position < len(previous.value.segments):
-                candidate = previous.value.segments[position]
-                if candidate.kind is segment.kind:
-                    value = candidate
-                    old = prior[position]
-                    offset = previous.record_id
             parts.append(segment.kind.record_manifest(
-                segment, old, value, offset, recording_turn=recording_turn))
+                segment, previous.segment(position, segment), recording_turn=recording_turn))
         return (
             cls(
                 thread=manifest.thread,

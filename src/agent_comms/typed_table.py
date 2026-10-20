@@ -671,6 +671,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return next(iter(rows), None)
 
     @classmethod
+    def require(cls, db: sqlite3.Connection, **key: object) -> Self:
+        """Read one required row at the same boundary that decodes its fields."""
+        rows = cls.select(db, **key)
+        if len(rows) != 1:
+            raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
+        return rows[0]
+
+    @classmethod
     def present(cls, db: sqlite3.Connection) -> bool:
         return SqlValue.for_annotation(bool).read(db.execute(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",

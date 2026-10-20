@@ -10,7 +10,7 @@ import pytest
 from tools.cutover import carry_context_store as conversion
 
 from agent_comms.checkpoint_seals import FinalSeal
-from agent_comms.context_store import ContextRequest
+from agent_comms.context_store import AbsentContext, ContextRequest
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.errors import HumanClaimBlockedError
 from agent_comms.field_codec import FieldCodec
@@ -28,7 +28,6 @@ from agent_comms.private_bus_checkpoint import (
 )
 from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
-from agent_comms.turn_context import RecordedContextManifest
 from agent_comms.typed_table import TypedTable
 from agent_comms.wire_log import WireLog
 from conftest import publish_initial
@@ -93,7 +92,7 @@ def old_copy(tmp_path):
                         db, where="seq=?", parameters=(second.seq,), offset=output.tell()
                     )
                 output.write(messages[number])
-                recorded, entries = RecordedContextManifest.capture(manifest)
+                recorded, entries = AbsentContext().capture(manifest)
                 envelope = conversion.ContextEnvelope(
                     conversion.ContextEntryManifestObservation(entries)
                 )

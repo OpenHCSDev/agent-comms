@@ -6,9 +6,10 @@ import json
 
 import pytest
 
+from agent_comms.context_store import AbsentContext
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_identity import TurnId, TurnIdentity
-from agent_comms.turn_context import ContextManifest, RecordedContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
+from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.image_inputs import ImageInput
@@ -127,7 +128,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
 
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
     comms,root_id=_root(tmp_path)
-    recorded, _entries = RecordedContextManifest.capture(manifest(comms.registry.require('Alice')))
+    recorded, _entries = AbsentContext().capture(manifest(comms.registry.require('Alice')))
     row = {'observation': {'kind': 'recorded_context_manifest',
                            'manifest': FieldCodec.encode(recorded)}}
     # Only the one-time conversion accepts the old context envelope. Runtime
