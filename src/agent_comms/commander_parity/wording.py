@@ -217,13 +217,13 @@ class UnitWordingComparison:
             )
             after = run.commander.comms.goals.todos.get(before.id)
             with run.commander.comms.bus.log.opened_wire_snapshot() as source:
-                published = result.message.core_message(source)
+                (published,) = source.messages_for_references((result.message.source,))
             return LifecycleObservation(
                 owner=CommsCorrectWordingTool.apply.__qualname__,
                 invocations=sum(item.request is request for item in run.commander.invocations),
                 checks=(
                     ("native correction returned its actual wire message",
-                     published.message_id == result.id),
+                     published.message_id == result.id and result.message.matches(published)),
                     ("correction addressed its unit", published.target == unit),
                     ("correction names the actual message", original.message_id in published.body),
                     ("correction names the open order", before.id in published.body),
