@@ -35,7 +35,6 @@ class OwnerRestartRequest:
     agent_args: tuple[str, ...] | None = None
     expected: OwnerRestartSelection | None = None
     runtime: RestartEnvironment | None = None
-    source_interpreter: str | None = None
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
@@ -44,6 +43,9 @@ class OwnerRestartRequest:
                     for candidate in thread.restart_candidates(snapshot.status(thread.name))]
         return list({snapshot.require_active(name).name: snapshot.require_active(name)
                      for name in self.names}.values())
+
+    def owner_selection(self, snapshot: RegistrySnapshot, owner: Thread) -> OwnerRestartSelection:
+        return self.expected or OwnerRestartSelection.capture(snapshot, owner.name)
 
     def require_selection(self, snapshot: RegistrySnapshot, threads: list[Thread]) -> None:
         if self.expected is not None:
@@ -306,7 +308,7 @@ class ClaimedOwnerBatch:
                 captured.append((thread, generation))
             runtime = request.environment(lifecycle)
             launches = tuple(RetainedOwnerLaunch.capture(
-                thread, snapshot, interpreter=request.source_interpreter,
+                cutover.owner_selection(snapshot, thread, request), snapshot,
             ) for thread, _ in captured)
             if captured:
                 cutover.require_launch(lifecycle)

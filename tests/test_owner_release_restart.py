@@ -100,8 +100,9 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
                 await agent.shutdown()
             return comms.registry.require(name)
         original = await attach_current()
-        launch = RetainedOwnerLaunch.capture(original, comms.registry.snapshot(),
-                                            interpreter=source_python)
+        selection = OwnerRestartSelection.capture(comms.registry.snapshot(), name)
+        assert selection.interpreter == source_python
+        launch = RetainedOwnerLaunch.capture(selection, comms.registry.snapshot())
         files = (native.session, native.config/'settings.json', native.config/'models.json',
                  native.config/'auth.json', InputDispositions.path_in(native.root))
         baseline = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
@@ -110,13 +111,13 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
                                   VIRTUAL_ENV=str(Path(sys.executable).parent.parent))
         results = await asyncio.to_thread(comms.owners.restart_owners, (name,),
             agent_bin=str(Path(sys.executable).with_name('pi-comms-native')),
-            runtime=RestartEnvironment.inherit(target_environment),
-            source_interpreter=source_python)
+            runtime=RestartEnvironment.inherit(target_environment), expected=selection)
         assert len(results) == 1 and results[0].previous_pid == original.require_process().pid
         assert not original.process_alive
         current = await attach_current()
-        replacement = RetainedOwnerLaunch.capture(current, comms.registry.snapshot(),
-                                                 interpreter=sys.executable)
+        replacement = RetainedOwnerLaunch.capture(
+            OwnerRestartSelection.capture(comms.registry.snapshot(), name), comms.registry.snapshot())
+        assert replacement.interpreter == sys.executable
         assert current.incarnation == original.incarnation
         assert current.worktree == original.worktree and current.session_file == original.session_file
         assert current.goal == original.goal and current.goal.state.declared_name == 'blocked'

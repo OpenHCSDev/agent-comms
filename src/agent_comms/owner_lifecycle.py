@@ -13,7 +13,7 @@ from functools import cached_property
 from pathlib import Path
 from uuid import uuid4
 
-from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, ProcessState
+from .child_process import ObservedProcess, ParentedProcess, Platform, ProcessIdentity, ProcessState
 from .turn_lease import NoTurnRecord
 from .cli_result import CliResult
 from .tool_result import ToolResult
@@ -67,14 +67,21 @@ class OwnerRestartSelection:
     identity: OwnerIdentity
     process: ProcessIdentity
     claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    interpreter: str
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str):
         owner = snapshot.require_active(name)
+        process = owner.require_process()
+        platform = Platform.current()
+        platform.require(process)
+        interpreter = os.fsdecode(Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0])
+        if not interpreter:
+            raise RelationViolationError("Selected source owner interpreter is unavailable")
+        platform.require(process)
         return cls(
-            snapshot.owner_identity(owner.name),
-            owner.require_process(),
-            snapshot.claimed_generations[owner.name],
+            snapshot.owner_identity(owner.name), process,
+            snapshot.claimed_generations[owner.name], interpreter,
         )
 
     @classmethod
@@ -334,7 +341,6 @@ class OwnerLifecycle:
         agent_args: Sequence[str] | None = None,
         expected: OwnerRestartSelection | None = None,
         runtime: RestartEnvironment | None = None,
-        source_interpreter: str | None = None,
         cutover: OwnerCutover = PreserveOwnerRuntime(),
     ) -> tuple[OwnerRestartResult, ...]:
         """Retain one batch through stop, optional quiet maintenance and launch.
@@ -348,7 +354,7 @@ class OwnerLifecycle:
         request = OwnerRestartRequest(
             tuple(names) if names is not None else None, agent_bin,
             tuple(agent_args) if agent_args is not None else None,
-            expected, runtime, source_interpreter,
+            expected, runtime,
         )
         return cutover.restart(self, request)
 

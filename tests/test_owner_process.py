@@ -309,7 +309,11 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
             current = comms.registry.require(acknowledgement.thread)
             ready(current)
-            launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
+            from agent_comms.owner_lifecycle import OwnerRestartSelection
+
+            launch = RetainedOwnerLaunch.capture(
+                OwnerRestartSelection.capture(comms.registry.snapshot(), current.name),
+                comms.registry.snapshot())
             assert launch.binary == str(target_binary.resolve())
             assert launch.arguments == arguments
             assert launch.environment["BATCH_OWNER_CREDENTIAL"] == credential

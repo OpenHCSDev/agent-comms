@@ -33,6 +33,9 @@ class OwnerCutover(ABC):
 
         return ClaimedOwnerBatch.restart(lifecycle, request, self)
 
+    def owner_selection(self, snapshot: RegistrySnapshot, owner: Thread, request: OwnerRestartRequest):
+        return request.owner_selection(snapshot, owner)
+
     @abstractmethod
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:
         pass

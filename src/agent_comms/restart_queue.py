@@ -147,7 +147,6 @@ class RestartTarget:
 class QueuedRestart:
     id: str
     selection: OwnerRestartSelection
-    source_interpreter: str
     target: RestartTarget
     state: RestartState
 
@@ -262,7 +261,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
         owner = selection.require_current(snapshot)
         status = snapshot.status(owner.name)
         owner.require_restart_owner(status)
-        launch = RetainedOwnerLaunch.capture(owner, snapshot)
+        launch = RetainedOwnerLaunch.capture(selection, snapshot)
         target = RestartTarget.capture(comms, launch.environment, launch_runtime)
         target.require_available(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
@@ -274,7 +273,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
                 queue.save(result)
             else:
                 result = QueuedRestart(
-                    uuid.uuid4().hex, selection, launch.interpreter, target, PendingRestart()
+                    uuid.uuid4().hex, selection, target, PendingRestart()
                 )
                 queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
@@ -353,7 +352,6 @@ def step(comms: Comms) -> None:
                 expected=record.selection,
                 runtime=record.target.runtime,
                 agent_bin=record.target.agent_bin,
-                source_interpreter=record.source_interpreter,
                 launch_runtime=record.target.launch_runtime,
             )
             (acknowledgement,) = PreserveOwnerRuntime().restart(comms.owners, request)
