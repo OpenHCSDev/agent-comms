@@ -1256,11 +1256,15 @@ class Slop:
 
     PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
 
+    @staticmethod
+    def catalog() -> Path:
+        """The pinned refactor-audit pattern catalog that slop citations name."""
+        return Path(str(files(skills) / 'refactor-audit' / 'references' / 'patterns'))
+
     @classmethod
     @cache
     def patterns(cls) -> frozenset[str]:
-        root = files(skills) / 'refactor-audit' / 'references' / 'patterns'
-        return frozenset(found[1] for source in root.iterdir() if source.name.endswith('.md')
+        return frozenset(found[1] for source in cls.catalog().glob('*.md')
                          for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
 
     def __post_init__(self):

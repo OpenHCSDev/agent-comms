@@ -9,7 +9,12 @@ The commander spends its tokens on judgment: what is stupid, what changes where 
 
 All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-comms/commander.json`, written by `agent-comms install` (bus root, commander name, state dir, board, repos, worktree and scratch dirs). Rerun install to change it; never edit the tools for one project.
 
-## Start of session
+## Start of session, and after every compaction
+
+Read these files themselves, in full, before acting. A summary or memory note of them is a paraphrase that drifts; it never counts as having read them:
+- `src/agent_comms/commander/indictment.md`
+- every file in `src/agent_comms/commander/rules/`
+- the refactor-audit pattern catalog at the pinned submodule, `src/agent_comms/skills/refactor-audit/references/patterns/`: `README.md` and every rung file it lists. Orders, send-backs and hunts cite its IDs, so a commander that has not read it guesses them.
 
 Arm one Monitor per loop, each printing to the session:
 - `agent-comms-claude-bridge watch` (messages to the commander; see the `comms` skill for the first binding)
