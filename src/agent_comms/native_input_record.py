@@ -104,6 +104,10 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def matches_execution(self, execution, owner_lookup: str) -> bool:
         return False
 
+    def retried_in(self, db) -> bool:
+        """TRIAGE has no attempts, so a later attempt never replaces it."""
+        return False
+
     def proves_full_source(self, proof) -> bool:
         return False
 
@@ -226,6 +230,13 @@ class FullNativeExecution(NativeInputExecution):
             and execution.owner_lookup == owner_lookup
             and execution.lifecycle.current_attempt_ordinal == self.attempt_ordinal
         )
+
+    def retried_in(self, db) -> bool:
+        """A transient provider failure leaves this input behind a later attempt."""
+        from .coordination_tables.executions import ExecutionRecord
+
+        execution = ExecutionRecord.one(db, execution_id=self.execution_id)
+        return execution.lifecycle.current_attempt_ordinal != self.attempt_ordinal
 
     def published_replies(self, db, owner_lookup):
         from .coordination_tables.executions import ExecutionRecord

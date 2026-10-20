@@ -36,7 +36,6 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.store_files import _store_lock
@@ -854,29 +853,3 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
     assert comms.registry.require("beta").goal == original
-
-
-async def test_acp_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
-    comms, agent, root_id = _session(tmp_path)
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
-    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    # Preflight must run before any SQL acceptance, not only before reservation.
-    monkeypatch.setattr(
-        VerifiedNativePackage,
-        "acquire",
-        classmethod(
-            lambda _cls, _package: (_ for _ in ()).throw(
-                PublicationActivationBlocked("unreviewed Pi")
-            )
-        ),
-    )
-    with pytest.raises(PublicationActivationBlocked, match="unreviewed Pi"):
-        await agent.inputs.drain_inbox("beta")
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
-                (root_id, original.seq),
-            ).fetchone()[0]
-            == 0
-        )

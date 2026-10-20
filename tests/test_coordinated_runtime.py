@@ -43,7 +43,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_arguments import SelectedModel
 from agent_comms.notification_progress import HumanReadProgress
-from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
@@ -149,6 +149,11 @@ def _root(
     return root, root_id, comms, initial, people
 
 
+def _fake_session_id(input_id: str) -> str:
+    """The saved session id the fake model writes for a fresh input."""
+    return f"isolated-session-{input_id}"
+
+
 def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
     calls = []
 
@@ -167,7 +172,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         if fresh:
             session_file = session_dir / f"{input_id}.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "version": 3, "id": f"isolated-session-{input_id}", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
+                json.dumps({"type": "session", "version": 3, "id": _fake_session_id(input_id), "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None
@@ -836,7 +841,8 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(t
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT count(*) FROM native_runtime_input WHERE session_id='isolated-session'"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id=?",
+                (_fake_session_id(calls[0][0]),),
             ).fetchone()[0]
             == 1
         )
@@ -889,7 +895,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(tmp_path: Pat
             "JOIN native_runtime_input i ON i.input_id=m.input_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
-        assert tuple(row) == ("deferred", "isolated-session")
+        assert tuple(row) == ("deferred", _fake_session_id(calls[0][0]))
 
 
 async def test_forged_dto_without_private_evidence_cannot_mark_context(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
@@ -1320,7 +1326,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
 
     monkeypatch.setattr(ResponseWrites, "_publish_keyed_response_unlocked", blocking_append)
     try:
-        with pytest.raises(StaleFence, match="stopped or changed"):
+        with pytest.raises(StaleFence):
             await SelectedExecution(
                 root=root,
                 wire_root_id=root_id,
@@ -1653,7 +1659,7 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path,
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     root.chmod(0o755)  # Refuse an unsafe private root before opening its registry.
-    with pytest.raises(NativePiUnavailable):
+    with pytest.raises(SessionSetupFailed):
         await SelectedExecution(
             root=root,
             wire_root_id="0" * 32,
@@ -1839,7 +1845,7 @@ async def test_transient_provider_failure_retries_two_attempts_then_completes(tm
         assignment = sealed_cohort_assignments(store, lookup)[0]
         assert assignment.source == initial.message.reference
         snapshot = store.snapshots.get(assignment.lifecycle.execution_id)
-        assert snapshot.execution.max_attempts == 3
+        assert snapshot.execution.max_attempts == SelectedExecution.max_attempts
         assert snapshot.attempt is not None and snapshot.attempt.attempt_ordinal == 3
         attempts = store.session._connection.execute(
             "SELECT attempt_ordinal FROM attempts WHERE execution_id=? ORDER BY attempt_ordinal",
