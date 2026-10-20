@@ -24,16 +24,20 @@ class HeartbeatReview:
     violations: frozenset[StandingRule]
     turn: int = 0
 
-    def wake_restarted(self, comms: Comms, sender: str, unit: Thread,
-                       orders: tuple[Todo, ...]) -> None:
+    def wake_restarted(
+        self, comms: Comms, sender: str, unit: Thread, orders: tuple[Todo, ...]
+    ) -> None:
         if self.process == unit.process_identity:
             return
         # Record before publication: a failed append must never replay a wake.
         self.process = unit.process_identity
         if orders:
-            identities = ", ".join(sorted(todo.order.id for todo in orders))
-            comms.messaging.send(sender, unit.name,
-                f"Restarted holding {identities}; continue them from your branch")
+            identities = ", ".join(
+                sorted(order.id for todo in orders for order in todo.order.declarations)
+            )
+            comms.messaging.send(
+                sender, unit.name, f"Restarted holding {identities}; continue them from your branch"
+            )
 
     def wake(self, comms: Comms, sender: str, commander: Thread) -> None:
         rules = StandingRule.broken(comms, commander.name)
@@ -87,14 +91,18 @@ class CommanderHeartbeat:
                 )
             )
             for commander in commanders:
-                comms.goals.todos.reconcile_merges(commander.incarnation, comms.registry.storage_rule)
+                comms.goals.todos.reconcile_merges(
+                    commander.incarnation, comms.registry.storage_rule
+                )
             commanding = {thread.incarnation for thread in commanders}
             held = {
                 thread.incarnation: tuple(
-                    todo for commander in commanders
+                    todo
+                    for commander in commanders
                     for todo in comms.goals.todos.held_by(commander.incarnation, thread.name)
                     if todo.pending and todo.held().owner_identity == thread.incarnation
-                ) for thread in threads.values()
+                )
+                for thread in threads.values()
             }
             # Baseline all declared owners, including stopped ones. This distinguishes
             # a later process start from merely receiving a first order in the same process.
@@ -109,7 +117,8 @@ class CommanderHeartbeat:
                     self.reviews[thread.incarnation] = HeartbeatReview(
                         thread.process_identity,
                         frozenset(StandingRule.broken(comms, thread.name))
-                        if thread.incarnation in commanding else frozenset(),
+                        if thread.incarnation in commanding
+                        else frozenset(),
                     )
                 elif thread.process_alive:
                     review = self.reviews[thread.incarnation]
