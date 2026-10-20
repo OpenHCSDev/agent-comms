@@ -103,7 +103,11 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
 
     def absent(thread: Thread) -> None:
         assert thread.goal == NoGoal()
-        assert thread.wake_context(comms.goals)["current_goal"] is None
+        from agent_comms.context_segments.wake_values import NoWakeGoalContext
+
+        context = thread.wake_context(comms.goals)
+        assert isinstance(context.current_goal, NoWakeGoalContext)
+        assert FieldCodec.encode(context)["current_goal"] is None
         assert thread.task_scope == TurnTaskScope(project=str(tmp_path))
         with pytest.raises(RelationViolationError, match="No goal is set"):
             thread.goal.require()
@@ -112,8 +116,14 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Ship the release"))
     thread = stored()
     assert thread.goal.require() == thread.goal.require().require_id(goal.id) == goal
-    assert thread.wake_context(comms.goals)["current_goal"] == {
-        "text": "Ship the release", "status": "active", "progress": goal.progress,
+    from agent_comms.context_segments.wake_values import WakeGoalContext
+
+    context = thread.wake_context(comms.goals)
+    assert context.current_goal == WakeGoalContext(
+        text="Ship the release", state=goal.state, progress=goal.progress,
+    )
+    assert FieldCodec.encode(context)["current_goal"] == {
+        "text": "Ship the release", "status": {"kind": "active"}, "progress": goal.progress,
     }
     scope = thread.task_scope
     assert scope == GoalTaskScope(project=str(tmp_path), goal=goal.revision_key)

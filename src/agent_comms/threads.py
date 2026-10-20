@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
+from .context_segments.wake_values import WakeWorkContext
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .goals import (
@@ -303,12 +304,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     def task_scope(self) -> TaskScope:
         return TaskScope.for_goal(self.worktree, self.goal)
 
-    def wake_context(self, goals: Goals) -> dict[str, object]:
-        return {
-            "name": self.name, "title": self.title, "tags": sorted(self.tags),
-            "original_assignment": self.task,
-            "current_goal": self.goal.wake_context(goals, self.incarnation),
-        }
+    def wake_context(self, goals: Goals) -> WakeWorkContext:
+        return WakeWorkContext.from_thread(self, goals)
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
         """The current active goal still belongs to this captured project/goal."""
