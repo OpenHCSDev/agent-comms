@@ -15,6 +15,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     SchemaVersionError,
     StaleRevision,
+    TranscriptChanged,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import StoredHistoryUnreadable
@@ -118,6 +119,23 @@ def test_store_read_only_retains_the_named_busy_state(comms, error_type):
     else:
         assert isinstance(answer, ReadRefused)
         assert answer.error is error
+
+
+@pytest.mark.parametrize("error, answered", [
+    (StaleRevision("inputs changed during preparation"), ReadBusy),
+    (TranscriptChanged(), ReadRefused),
+])
+def test_a_read_that_defers_staleness_answers_a_reload(comms, error, answered):
+    # Retrying bounds that name a replaced source never succeeds; deferring it
+    # left an agent tab blank with no error.
+    @dataclass(frozen=True)
+    class DeferringRead(ReadRequest):
+        deferred_reads = UnreadableHistory.DEFERRED_READS
+
+        def read(self, comms):
+            raise error
+
+    assert isinstance(DeferringRead(str(comms.root)).answer(comms), answered)
 
 
 @pytest.mark.parametrize(
