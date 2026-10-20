@@ -77,7 +77,7 @@ if TYPE_CHECKING:
     from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
-    from .registry_provenance import RegistryProvenance
+    from .registry_provenance import DeletedThread, RegistryProvenance
     from .ui_model.observation import ThreadsObserved
 
 
@@ -849,7 +849,7 @@ class WireRevision(ReadState):
                 and not self.changed_since(BusSourceView(), earlier))
 
     def changed_threads(self, previous: ThreadsObserved, comms: Comms,
-                        activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
+                        activity: Mapping[str, ObservedActivity | DeletedThread]) -> frozenset[str]:
         """Attribute changes using the retained observation and existing route rows."""
         earlier = previous.revision
         names = previous.results.keys()
