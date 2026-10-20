@@ -40,6 +40,7 @@ from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
+    ReloadRequired,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError
@@ -344,6 +345,8 @@ class ReadRequest(AwaitedRead):
             self.require_root(comms)
             try:
                 value = self.read(comms)
+            except ReloadRequired:
+                raise
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
             return ReadAnswered(self.request_id, value)

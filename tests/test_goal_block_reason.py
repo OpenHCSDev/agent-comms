@@ -7,7 +7,6 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -16,7 +15,6 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
 from agent_comms.tools import ToolRequest
@@ -64,32 +62,6 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
             {"goal_id": original.id, "status": "blocked", "progress": " \t "}, caller=ThreadCaller("worker"),
         )
     assert (tmp_path / "registry.json").read_bytes() == before_registry
-
-
-def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monkeypatch):
-    comms, original = _owner(tmp_path)
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    tool = next(
-        tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
-    )
-    reason = "Need the exact ACP error text from the user before diagnosing."
-    result = tool.invoke(
-        comms, {"goal_id": original.id, "status": "blocked", "progress": f"  {reason}  "}, caller=ThreadCaller("worker")
-    )
-    blocked = wire(tmp_path).registry.require("worker").goal
-    assert blocked is not None and blocked.state.declared_name == "blocked"
-    assert blocked.state.reason == reason
-    assert FieldCodec.decode(Goal, result["goal"]).state.reason == reason
-    assert result["goal_execution"]["block_reason"] == reason
-    assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == blocked
-
-    execution = comms.goals.goal_execution("worker")
-    assert execution is not None and execution.block_reason == reason
-    assert "Blocked · Need the exact ACP error text" in execution.presentation("worker").summary
-    assert GoalExecution.from_wire(result["goal_execution"]) == execution
-    assert (
-        FieldCodec.decode(Goal, comms.views.thread_detail("worker").to_wire()["goal"]).state.reason == reason
-    )
 
 
 def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):

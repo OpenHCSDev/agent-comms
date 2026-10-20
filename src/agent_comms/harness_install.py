@@ -1,26 +1,23 @@
 """What `agent-comms install` writes for each coding harness found on this machine.
 
 Each harness declares where it reads skills and what it needs to reach the bus;
-install and runtime publication both read those declarations.
+runtime publication links and configures it, and install registers its bus threads.
 """
 from __future__ import annotations
 
 import json
 import os
-import shlex
 import shutil
 import sys
 import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
-from importlib.metadata import distribution
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram
 
-from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .thread_execution import ExternalThreadExecution
 
@@ -55,14 +52,6 @@ def merge_json(path: Path, merge) -> None:
 
 
 @dataclass(frozen=True)
-class HarnessInstalled:
-    """What one harness's install linked, configured and registered."""
-    links: tuple[str, ...]
-    config: tuple[str, ...]
-    registered: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class Harness(DeclaredFamily, affix="Harness"):
     home: Path
 
@@ -90,16 +79,14 @@ class Harness(DeclaredFamily, affix="Harness"):
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
 
-    def install(self, comms: Comms, commander: str, project: Path) -> HarnessInstalled:
-        for link, target in self.links().items():
-            replace_link(link, target)
+    def register(self, comms: Comms, commander: str, project: Path) -> tuple[str, ...]:
+        """Declare this harness's bus threads; publication already linked and configured it."""
         names = comms.registry.snapshot()
-        registered = [name for name in self.bus_threads(commander) if not names.taken(name)]
+        registered = tuple(name for name in self.bus_threads(commander) if not names.taken(name))
         for name in registered:
             comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project),
                                                                 execution=ExternalThreadExecution))
-        return HarnessInstalled(tuple(sorted(map(str, self.links()))),
-                                tuple(sorted(map(str, self.configure()))), tuple(registered))
+        return registered
 
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:
@@ -124,23 +111,11 @@ class ClaudeCodeHarness(Harness):
         settings = self.home / '.claude/settings.json'
 
         def reconcile_hooks(document: dict) -> None:
-            scripts = {point.name for point in distribution('agent-comms').entry_points.select(
-                group='console_scripts')}
             events = document.setdefault('hooks', {})
             for event, entries in events.items():
-                retained_entries = []
-                for entry in entries:
-                    hooks = entry.get('hooks', ())
-                    retained = []
-                    for hook in hooks:
-                        arguments = shlex.split(hook.get('command', ''))
-                        if not arguments or Path(arguments[0]).name not in scripts:
-                            retained.append(hook)
-                    if retained or not hooks:
-                        if len(retained) != len(hooks):
-                            entry.update(hooks=retained)
-                        retained_entries.append(entry)
-                events[event] = retained_entries
+                events[event] = [
+                    entry for entry in entries if not ClaudeHookProgram.owns_entry(entry)
+                ]
             for program in ClaudeHookProgram.members():
                 for event in program.events:
                     events.setdefault(event, []).append(program.entry())

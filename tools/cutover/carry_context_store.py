@@ -9,10 +9,16 @@ from abc import abstractmethod
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import BinaryIO, ClassVar
+from typing import ClassVar
 
 from agent_comms.checkpoint_seals import FinalSeal
-from agent_comms.context_store import ContextEntry, ContextStore
+from agent_comms.context_store import (
+    AbsentContext,
+    ContextEntry,
+    ContextStore,
+    ContextStoreInfo,
+    RecordedContextState,
+)
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -40,7 +46,7 @@ from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTabl
 from agent_comms.wire_log import WireLog
 from agent_comms.wire_record import WireRecord, WireScan
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 # These two old declarations exist only at this one-time format boundary.
@@ -96,29 +102,31 @@ class ContextEnvelope:
 
 
 class ContextMove:
-    """Decode old positions once; the context store owns recording and predecessors."""
+    """Decode old positions once; the context store owns recording and predecessors.
 
-    def __init__(
-        self,
-        source: BinaryIO,
-        context_db: sqlite3.Connection,
-        store: ContextStore,
-    ) -> None:
-        self.source, self.context_db, self.store = source, context_db, store
+    Rows arrive in log order, so every predecessor and every entry a request names
+    was resolved earlier in the same scan; each is kept by its offset or reference
+    and never read back from the log or the store."""
+
+    def __init__(self, context_db: sqlite3.Connection, store: ContextStore) -> None:
+        self.context_db, self.store = context_db, store
+        self.source = ContextStoreInfo.source_in(context_db).initialized(context_db).source
+        self.entries: dict[ContextEntryReference, SegmentManifest] = {}
+        self.requests: dict[int, RecordedContextManifest] = {}
+        self.values: dict[int, tuple[tuple[SegmentManifest, tuple[ContextEntryReference, ...]], ...]] = {}
+        self.priors: dict[ThreadIncarnation, RecordedContextState] = {}
         self.count = 0
 
     def entry(self, entry: ContextEntryManifest) -> None:
-        ContextEntry.capture(entry).insert_if_absent(self.context_db)
+        # The first value of a journal identity wins, as insert_if_absent keeps it.
+        if entry.reference not in self.entries:
+            self.entries[entry.reference] = entry.manifest
+            ContextEntry.capture(entry).insert_if_absent(self.context_db)
 
-    def original(self, offset: int) -> RecordedContextManifest:
-        here = self.source.tell()
-        try:
-            self.source.seek(offset)
-            raw = self.source.readline(WireRecord.max_row_bytes + 1)
-            WireRecord.require_row_size(raw)
-            return FieldCodec.decode(ContextEnvelope, FieldCodec.parse(raw)).observation.recorded()
-        finally:
-            self.source.seek(here)
+    def original(self, reference: ContextEntryReference) -> SegmentManifest:
+        if reference not in self.entries:
+            raise RelationViolationError("Recorded context names an entry the log never held")
+        return self.entries[reference]
 
     def value(
         self,
@@ -129,10 +137,11 @@ class ContextMove:
         part = record.segments[position]
         header, references = part.manifest, part.entries
         for predecessor in part.predecessors(offset):
-            prior = self.original(predecessor)
-            if prior.thread != record.thread:
+            if predecessor not in self.requests:
+                raise RelationViolationError("Context predecessor is not a recorded request")
+            if self.requests[predecessor].thread != record.thread:
                 raise RelationViolationError("Context predecessor belongs to another owner")
-            old, old_references = self.value(prior, position, predecessor)
+            old, old_references = self.values[predecessor][position]
             if part.inherited_entries > len(old_references):
                 raise RelationViolationError("Recorded context inherited entries are incomplete")
             references = (*old_references[: part.inherited_entries], *references)
@@ -141,23 +150,21 @@ class ContextMove:
         return header, tuple(references)
 
     def request(self, record: RecordedContextManifest, offset: int) -> None:
-        segments = []
-        for position, _part in enumerate(record.segments):
-            header, references = self.value(record, position, offset)
-            if references:
-                header = replace(
-                    header,
-                    contributors=tuple(
-                        ContextEntry.original(self.context_db, reference)
-                        for reference in references
-                    ),
-                )
-            segments.append(header)
-        self.store.record_in(
+        values = tuple(
+            self.value(record, position, offset) for position in range(len(record.segments))
+        )
+        self.requests[offset], self.values[offset] = record, values
+        segments = tuple(
+            replace(header, contributors=tuple(self.original(ref) for ref in references))
+            if references
+            else header
+            for header, references in values
+        )
+        self.priors[record.thread] = self.store.record_after(
             self.context_db,
-            ContextManifest(
-                record.thread, record.turn, tuple(segments), record.counter, record.request_id
-            ),
+            self.source,
+            self.priors.get(record.thread, AbsentContext()),
+            ContextManifest(record.thread, record.turn, segments, record.counter, record.request_id),
         )
         self.count += 1
 
@@ -265,7 +272,7 @@ class ContextManifests(Carry):
             scan = WireScan(marker)
             with store.writing() as context_db, output_path.open("w+b") as output, index_db:
                 os.chmod(output_path, 0o600)
-                move = ContextMove(stream, context_db, store)
+                move = ContextMove(context_db, store)
                 stream.seek(0)
                 for offset, raw in WireRecord.rows(stream, end=witness.offset):
                     old_digest = _chain(old_digest, raw)

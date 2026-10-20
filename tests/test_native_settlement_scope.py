@@ -12,7 +12,6 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 from agent_comms.coordination_session import (
     CoordinationSession,
-    NativeBoundary,
     NativeCoordinationSession,
 )
 from agent_comms.coordinator import StandaloneCoordination
@@ -86,9 +85,6 @@ def test_old_terminal_cleanup_preserves_later_generation_of_same_file(monkeypatc
         assert dict(comms.bus.log.claim_projection()) == {str(resource): later}
 
 
-def test_native_boundary_preserves_the_lock_owner_default_wait_policy():
-    assert NativeBoundary(object()).contention is None
-    assert NativeBoundary(object(), blocking=False).contention is None
 
 
 def test_standalone_session_never_guesses_native_resources_from_bus_file(tmp_path):

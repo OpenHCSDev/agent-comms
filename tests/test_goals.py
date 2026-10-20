@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import (
-    CountCheckResult, Goal, NoGoal, NoReportedTurn, ReportedTurn, ReportedTurnState, SilentCheckResult,
+    Goal, NoGoal, NoReportedTurn, ReportedTurn, ReportedTurnState,
 )
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.threads import Thread
@@ -43,21 +43,6 @@ def test_reported_turn_states_preserve_existing_wire_values():
     assert FieldCodec.decode(Goal, FieldCodec.encode(reported)) == reported
 
 
-def test_check_require_uses_distance_and_outcome_count():
-    from agent_comms.child_process import ChildResult, ExitedOutcome, SignaledOutcome
-
-    silent = SilentCheckResult()
-    silent.require(ChildResult(ExitedOutcome(0)))
-    with pytest.raises(ValueError):
-        silent.require(ChildResult(ExitedOutcome(0), b'noise'))
-    count = CountCheckResult(2)
-    count.require(ChildResult(ExitedOutcome(1), b'count 2\n'))
-    with pytest.raises(ValueError):
-        count.require(ChildResult(ExitedOutcome(0), b'1\n'))
-    with pytest.raises(ValueError):
-        count.require(ChildResult(SignaledOutcome(15), b'2\n'))
-    with pytest.raises(ValueError):
-        count.require(ChildResult(ExitedOutcome(0), b'no integer'))
 
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):

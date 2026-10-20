@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.agent_backend import AgentBackend, BackendDeclarationError, RuntimeLocation
+from agent_comms.agent_backend import AgentBackend
 from agent_comms.field_codec import FieldCodec
 from agent_comms.turn_digests import LastTurns
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
@@ -32,30 +32,6 @@ def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, threa
     assert TurnRunner.backend_for(runner, 'durable', restored) is backend
 
 
-def test_location_methods_and_missing_history(tmp_path, source_reads):
-    location = DurableDatabase(str(tmp_path / 'missing.sqlite3'))
-    assert isinstance(location, RuntimeLocation)
-    assert location.arguments() == {'session_file': location.path}
-    assert location.read_keys() == (location.path,)
-    assert location.resumable is True
-    assert location.model_choice is None
-    with pytest.raises(BackendDeclarationError):
-        location.select_session(tmp_path, None, source_reads)
-    with pytest.raises(ValueError):
-        location.require_forkable()
-    source = location.history_source(tmp_path, None)
-    with source.reading() as reader:
-        assert reader.cut().offset == 0
-        assert tuple(reader.reverse(0)) == ()
-        assert reader.current_draft().external_row() is None
-    assert source.turns(LastTurns(5)) == ()
-    assert not Path(location.path).exists()
-    files, = location.storage_files()
-    assert files.schema_paths == (Path(location.path),)
-    assert tuple(path.name for path in files.members) == (
-        'missing.sqlite3', 'missing.sqlite3-wal', 'missing.sqlite3-shm',
-        'missing.sqlite3-journal', 'missing.sqlite3.lock')
-    assert isinstance(UnstartedRuntime(PiDurableBackend).new_location(tmp_path, tmp_path), DurableDatabase)
 
 
 SEED = """

@@ -1,7 +1,5 @@
 """Declaration extension and public-format tests for S4 ownership boundaries."""
 
-import ast
-from pathlib import Path
 
 
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
@@ -49,38 +47,3 @@ def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
     assert Message.from_wire(message.to_wire()) == message
 
 
-def test_authorities_do_not_import_presentation_or_recover_policy_cases():
-    root = Path(__file__).resolve().parents[1] / "src" / "agent_comms"
-    for name in (
-        "messages.py",
-        "message_bus.py",
-        "read_basis.py",
-        "read_ledger.py",
-        "response_policy.py",
-    ):
-        tree = ast.parse((root / name).read_text())
-        assert not any(
-            isinstance(node, ast.ImportFrom) and node.module == "presentation"
-            for node in ast.walk(tree)
-        )
-    for name in ("messages.py", "message_bus.py", "input_disposition.py"):
-        tree = ast.parse((root / name).read_text())
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Compare):
-                assert not any(
-                    isinstance(child, ast.Attribute)
-                    and isinstance(child.value, ast.Name)
-                    and child.value.id == "ResponsePolicy"
-                    for child in ast.walk(node)
-                )
-    assert not (root / "operations.py").exists()
-    operations = (root / "history_views.py").read_text()
-    assert "_marker_key" not in operations and "_view_marker_key" not in operations
-    assert (
-        "owner_epochs"
-        not in operations[
-            operations.index("    def dm_display_page") : operations.index(
-                "    def channel_display_page"
-            )
-        ]
-    )

@@ -59,7 +59,12 @@ class StaleRevision(CoordinationError):  # noqa: N818 - nominal outcome name
     """The supplied CAS revision is not the authoritative revision."""
 
 
-class TranscriptChanged(StaleRevision):  # noqa: N818 - nominal outcome name
+class ReloadRequired(StaleRevision):  # noqa: N818 - nominal outcome name
+    """The read's own bounds name a source that is gone; retrying them never succeeds,
+    so the caller is answered and re-reads from fresh bounds."""
+
+
+class TranscriptChanged(ReloadRequired):  # noqa: N818 - nominal outcome name
     """A transcript page cursor no longer matches its thread's session file."""
 
     def __init__(self) -> None:
@@ -70,11 +75,11 @@ class DMPaintedBoundChanged(TranscriptChanged):
     """The painted bound advanced beyond its fetched DM references."""
 
 
-class DMScopeChanged(StaleRevision):
+class DMScopeChanged(ReloadRequired):
     """A DM read belongs to another root, peer or incarnation."""
 
 
-class HistoricalSourceChanged(StaleRevision):
+class HistoricalSourceChanged(ReloadRequired):
     """The attached archive no longer contains the displayed historical source."""
 
 

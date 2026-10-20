@@ -19,7 +19,6 @@ from .declared_family import DeclaredFamily
 from .plan_phases import PlanPhase
 from .recorded_time import EventTime, RecordedEventTime
 from .repo import Repo
-from .rule_reviews import RuleReviews
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -307,28 +306,6 @@ class DirectiveUnacted(DatedStandingRule):
             f"oldest {oldest.seq} due {oldest.due_time}; "
             f"newest {newest.seq} due {newest.due_time} "
             "-> order the next step or mark the request done"
-        )
-
-
-@dataclass(frozen=True)
-class RulesDue(DatedStandingRule):
-    """A reviewer whose last review is stale or has an unanswered drawn rule; reported, never refused."""
-
-    max_age: ClassVar[int] = 20 * 60
-    why: str = field(compare=False)
-    since: float
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return RuleReviews(comms.root).review(commander).due(cls, commander)
-
-    def began(self) -> float:
-        return self.since
-
-    def line(self) -> str:
-        return (
-            f"RULES DUE ({self.why}) -> agent-comms-commander rules review"
-            " and answer the drawn rules"
         )
 
 

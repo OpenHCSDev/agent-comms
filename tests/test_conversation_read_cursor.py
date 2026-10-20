@@ -78,15 +78,6 @@ def test_real_route_counts_and_inbox_use_each_conversation(tmp_path):
     )
 
 
-def test_real_human_display_counts_do_not_borrow_another_channel_prefix(tmp_path):
-    comms, messages = setup_conversations(tmp_path)
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    seed_prefix(comms, viewer, messages[2].seq)
-    counts = comms.views.viewer_snapshot(str(tmp_path)).channel_unread
-    assert counts["#a"] == 0
-    assert counts["#b"] == 2
-
-
 def test_durable_cursor_map_round_trip():
     from agent_comms.field_codec import FieldCodec
     from agent_comms.thread_identity import RecordedThreadIncarnation

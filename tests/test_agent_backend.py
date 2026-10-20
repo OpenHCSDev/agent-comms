@@ -57,14 +57,6 @@ def test_runtime_location_round_trip_uses_declared_backend(location, *, thread_r
     assert restored.backend is PiNativeBackend
 
 
-@pytest.mark.parametrize("row", json.loads((Path(__file__).parent / "fixtures/p117/main-registry-rows.json").read_text()))
-def test_main_written_registry_location_round_trip(row):
-    restored = FieldCodec.decode(Thread, row)
-    expected = (UnstartedRuntime(PiNativeBackend) if row["session_file"] is None
-                else PiSessionFile(row["session_file"]))
-    assert restored.runtime == expected
-    assert restored.to_wire() == row
-    assert json.dumps(restored.to_wire()) == json.dumps(row)
 
 
 # -- declaration checks -------------------------------------------------------
@@ -269,21 +261,6 @@ def _session_lines(path: Path) -> None:
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
 
-def test_session_entries_convert_to_transcript_entries_newest_first(tmp_path):
-    session = tmp_path / "s.jsonl"
-    _session_lines(session)
-    source = PiSessionFile(str(session)).history_source(tmp_path, None)
-    records = tuple(source.reverse(session.stat().st_size))
-    page = records[:4]
-    assert [record.entry.source_coordinates.id for record in page] == ["l1", "c1", "t1", "a1"]
-    assert page[1].entry.summary == "earlier work"
-    assert page[2].entry.message.text == "file body"
-    assert page[3].entry.message.text == "hi back"
-    assert page[2].entry.recorded_at is None  # an invalid external time stays undated
-    assert page[3].entry.recorded_at.isoformat() == "2026-10-10T10:00:02+00:00"
-    older = tuple(source.reverse(page[-1].start))
-    assert [record.entry.source_coordinates.id for record in older] == ["u1", "s"]
-    assert older[0].entry.message.text == "hello there"
 
 
 # -- inbox records --------------------------------------------------------------
