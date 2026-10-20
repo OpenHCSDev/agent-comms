@@ -24,6 +24,7 @@ import sys
 import tarfile
 import tempfile
 import tomllib
+import time
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager
@@ -239,6 +240,12 @@ def affected(repo: Path, base: str, head: str) -> list[str]:
 
 
 @dataclass(frozen=True)
+class PracticeMeasurement:
+    bytes: int
+    seconds: float
+
+
+@dataclass(frozen=True)
 class PracticeCopy:
     """A real retained tail, native session tails and the production indexes they build."""
 
@@ -247,7 +254,8 @@ class PracticeCopy:
     max_bytes: ClassVar[int] = 3 * 1024**3
 
     @contextmanager
-    def open(self) -> Iterator[Comms]:
+    def open(self) -> Iterator[tuple[Comms, PracticeMeasurement]]:
+        started = time.monotonic()
         roster = self.source.registry.snapshot()
         with self.source.bus.log.opened_wire_snapshot() as source:
             names = tuple(
@@ -272,7 +280,7 @@ class PracticeCopy:
                 )
             if shutil.disk_usage(self.into.parent).free < 2 * size + storage_floor():
                 raise GateError(f"Insufficient free space for rehearsal of {size} copied bytes")
-            yield copied
+            yield copied, PracticeMeasurement(size, time.monotonic() - started)
 
     def rehearse(
         self, target: Path, previous: Path, head: str, python: Path, log: Path, work: Path

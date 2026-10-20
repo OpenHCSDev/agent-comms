@@ -38,7 +38,7 @@ import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 # This file's tree is the target revision: the tool and every step it runs import that
@@ -247,12 +247,7 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
     parent = source.registry.storage_rule.initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch:
-        started = time.monotonic()
-        with PracticeCopy(source=source, into=Path(scratch) / "bus").open() as copied:
-            size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
-            elapsed = time.monotonic() - started
-            print(f"upgrade-bus: rehearsal copy {size} bytes in {elapsed:.3f} seconds",
-                  file=sys.stderr, flush=True)
+        with PracticeCopy(source=source, into=Path(scratch) / "bus").open() as (copied, measurement):
             home = Path(scratch) / "home"
             prepare_runtime_home(home)
             marker = copied.bus.log.private_marker_unlocked()
@@ -266,7 +261,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
             with transcripts_held(copied.root):
                 before = bus_files(copied.root)
             stopping = before_stop(copied.root, pending, stack, revisions)
-            return carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
+            report = carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
+            return {**report, "copy": asdict(measurement)}
 
 
 def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
