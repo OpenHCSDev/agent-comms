@@ -199,7 +199,7 @@ async def run_configured(options):
         original_snapshot = original_service.registry.snapshot()
         selection = OwnerRestartSelection.capture(original_snapshot, options.configured_source_name)
         source = selection.require_current(original_snapshot)
-        retained = RetainedOwnerLaunch.capture(source, original_snapshot)
+        retained = RetainedOwnerLaunch.capture(selection, original_snapshot)
         original_file = Path(source.require_saved_session())
         original_digest = hashlib.sha256(original_file.read_bytes()).hexdigest()
         acknowledgement.update(model=source.model, thinking=source.thinking_level.declared_name,

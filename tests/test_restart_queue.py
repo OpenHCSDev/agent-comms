@@ -62,7 +62,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         owner = comms.registry.require('worker')
         snapshot = comms.registry.snapshot()
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
-        launch = RetainedOwnerLaunch.capture(owner, snapshot)
+        launch = RetainedOwnerLaunch.capture(selection, snapshot)
         target = queue.RestartTarget.capture(comms, launch.environment, LaunchRuntime.running())
         old_runtime = LaunchRuntime(Path('/retained-old/bin/python'))
         old_target = queue.RestartTarget.capture(comms, launch.environment, old_runtime)
@@ -70,7 +70,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         assert old_target.agent_bin == comms.owners.restart_entrypoint(launch.binary, old_runtime)
         assert old_target != target
         old = queue.QueuedRestart(
-            uuid.uuid4().hex, selection, launch.interpreter, old_target, queue.PendingRestart()
+            uuid.uuid4().hex, selection, old_target, queue.PendingRestart()
         )
         store = queue.RestartQueue(comms.root / queue.DIRECTORY)
         with store.locked():
@@ -241,7 +241,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             await asyncio.wait_for(entered.wait(), 15)
             request = queue.enqueue(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), "worker"), launch_runtime=LaunchRuntime.running())
             assert request.state.pending and request.selection.process == original.process_identity
-            assert request.source_interpreter == str(source_runtime / "bin/python")
+            assert request.selection.interpreter == str(source_runtime / "bin/python")
             assert request.target.interpreter == target_interpreter
             assert request.target.runtime.package == str(target_package)
             assert request.target.agent_bin == str(
@@ -272,7 +272,8 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             and replacement.thinking_level == original.thinking_level
         )
         replacement_env = RetainedOwnerLaunch.capture(
-            replacement, comms.registry.snapshot(), interpreter=target_interpreter
+            OwnerRestartSelection.capture(comms.registry.snapshot(), replacement.name),
+            comms.registry.snapshot(),
         ).environment
         assert replacement_env["QUEUE_FIXTURE_AUTH_SENTINEL"] == "source-auth-only"
         assert replacement_env["PI_CODING_AGENT_DIR"] == str(fixture.config)

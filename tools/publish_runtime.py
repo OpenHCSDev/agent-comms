@@ -30,6 +30,8 @@ from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceStat
 from agent_comms.owner_cutover import StoppedOwnerInstallation, MaintainedOwnerCutover
 from agent_comms.owner_lifecycle import OwnerRestartSelection, OwnerRestartResult
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
+from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.threads import Thread
 from agent_comms.store_files import _atomic_write_text, _store_lock
 from .cutover.carry import PendingConversion, PreparedCarries
 from .cutover.backup import StoreBackup
@@ -156,8 +158,7 @@ class RuntimePublication:
         root = comms.root
         snapshot = comms.registry.snapshot()
         remaining = [original.name for original in OwnerRestartSelection.live(intent.owners, snapshot)]
-        request = OwnerRestartRequest(names=tuple(remaining),
-            source_interpreter=intent.previous + '/bin/python')
+        request = OwnerRestartRequest(names=tuple(remaining))
         if not carries.original():
             if OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):
                 raise RuntimeError('Cannot restore data while an original worker is running')
@@ -221,11 +222,15 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
         object.__setattr__(self, 'route_descriptor', descriptor)
         return self.route_ownership
 
+    def owner_selection(
+        self, snapshot: RegistrySnapshot, owner: Thread, request: OwnerRestartRequest,
+    ) -> OwnerRestartSelection:
+        return next(original for original in self.selection if original.name == owner.name)
+
     def require_selection(self, snapshot, owners) -> None:
-        expected = {original.name: original for original in self.selection}
         for thread in owners:
-            original = expected[thread.name]
-            snapshot.require_owner_process(original.identity, original.process)
+            original = next(original for original in self.selection if original.name == thread.name)
+            original.require_current(snapshot)
 
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         request = StoppedPublication(RuntimePublication(self.runtime, self.links),

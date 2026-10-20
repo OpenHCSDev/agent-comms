@@ -101,7 +101,8 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     assert owner.require_current(snapshot) is thread
-    selection = OwnerRestartSelection(owner.owner, launch.process, owner.claim_scope.claimed_generation)
+    selection = OwnerRestartSelection(owner.owner, launch.process, owner.claim_scope.claimed_generation,
+                                      launch.interpreter)
     with pytest.raises(RelationViolationError):
         selection.require_current(snapshot)
     changed = (

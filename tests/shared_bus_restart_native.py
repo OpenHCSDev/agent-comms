@@ -62,7 +62,9 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     project = stage/'project'
     if not continue_existing:
         project.mkdir(mode=0o700)
-    retained = RetainedOwnerLaunch.capture(configured, snapshot)
+    from agent_comms.owner_lifecycle import OwnerRestartSelection
+
+    retained = RetainedOwnerLaunch.capture(OwnerRestartSelection.capture(snapshot, configured.name), snapshot)
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
     _, environment = NativePiRpcLaunch.bootstrap(

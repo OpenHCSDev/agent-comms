@@ -13,7 +13,7 @@ from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from .maintenance_barrier import MaintenanceState
-    from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
+    from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult, OwnerRestartSelection
     from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -32,6 +32,11 @@ class OwnerCutover(ABC):
         from .owner_restart import ClaimedOwnerBatch
 
         return ClaimedOwnerBatch.restart(lifecycle, request, self)
+
+    def owner_selection(
+        self, snapshot: RegistrySnapshot, owner: Thread, request: OwnerRestartRequest,
+    ) -> OwnerRestartSelection:
+        return request.owner_selection(snapshot, owner)
 
     @abstractmethod
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:
