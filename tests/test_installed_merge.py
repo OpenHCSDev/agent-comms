@@ -16,7 +16,7 @@ from agent_comms.tools import CommsOrderDoneTool, CommsOrderServeTool
 from agent_comms.recorded_time import RecordedEventTime
 from cutover.carry_merged_orders import MergedOrders
 from test_commander_problem_orders import working
-from test_order_progress import checkout, commit, deadline_lines, git
+from test_order_progress import checkout, commit, order_alarms, git
 
 
 @pytest.mark.parametrize('delivered', (False, True))
@@ -60,7 +60,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     assert script.held_orders() == (todo,)
     assert comms.goals.todos.get(todo.id) == todo
     if not delivered:
-        assert 'waiting on install' in deadline_lines(script)[0]
+        assert order_alarms(script) == []
 
     git(installed, 'checkout', '-q', '-B', 'main', sha)
     assert repo.contains(sha)
@@ -105,7 +105,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
         assert comms.goals.todos.get(todo.id) == closed
     script.write_board()
     assert f'| {todo.id}:' not in (tmp_path / 'board.md').read_text()
-    assert deadline_lines(script) == []
+    assert order_alarms(script) == []
     assert comms.goals.todos.get(todo.id) == closed
 
     class TickComplete(Exception):
@@ -117,7 +117,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     monkeypatch.setattr(time, 'sleep', next_tick)
     with pytest.raises(TickComplete):
         script.overdue()
-    assert 'OVERDUE:' not in capsys.readouterr().out
+    assert capsys.readouterr().out == ''
 
 
 def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
@@ -187,7 +187,7 @@ def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
     assert isinstance(closed.order, MergedProblemOrder)
     assert closed.order.sha == sha
     assert script.todos() == ()
-    assert 'OVERDUE:' not in capsys.readouterr().out
+    assert capsys.readouterr().out == ''
 
 
 def test_new_revision_is_not_closed_from_an_old_merge_observation(

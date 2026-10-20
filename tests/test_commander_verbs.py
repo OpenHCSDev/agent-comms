@@ -1,6 +1,5 @@
 """Every commander verb parses its documented command line from its declared option() fields."""
 import importlib
-import re
 import shlex
 
 import pytest
@@ -62,15 +61,3 @@ def test_every_verb_parses_its_documented_command_line(commander_script, tool, l
     verb = family.parse(shlex.split(line), "")
     assert verb.declared_name == line.split()[0]
     assert {name: getattr(verb, name) for name in fields} == fields
-
-
-def test_the_hunt_prompt_prints_a_command_line_the_hunt_parser_accepts(commander_script):
-    order = importlib.import_module("agent_comms.commander.order")
-    printed = order.HuntVerb.due("a.py").split("then ", 1)[1]
-    tool, verb, *usage = re.sub(r"\[[^]]*\]", "", printed).split()
-    assert (tool, verb) == ("order", "hunt")
-    argv = [verb, *(re.sub(r"^[A-Z:]+$", "x", token) for token in usage)]
-    parsed = order.OrderVerb.parse(argv, "")
-    assert type(parsed) is order.HuntVerb and parsed.sent == ""
-    ordered = order.OrderVerb.parse([*argv, "--sent", "existing-order"], "")
-    assert type(ordered) is order.HuntVerb and ordered.sent == "existing-order"

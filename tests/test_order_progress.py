@@ -22,7 +22,7 @@ from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgre
     MeasuredProgressSource, MergedPullRequest, ProgressPoint, ProgressSource, PullRequest, PullRequests,
     PushedProgress, Todo, UnmergedListedPullRequest, UnmergedPullRequest, UnreadProgress)
 
-from agent_comms.messages import InfoKind
+from agent_comms.standing_rules import OrderOverdue
 from agent_comms.storage_rules import StorageRule
 from agent_comms.work_branches import WorkBranchError
 from test_commander_problem_orders import create, order, working
@@ -111,10 +111,8 @@ def test_unfinished_check_keeps_other_overdue_orders_visible(
     work = OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), Listed())
     assert work.line.endswith("; no count yet")
     second = create(commander, "P2", deadline=1)
-    lines = script.deadline_lines([todo, second],
-                                 {todo.id: work, second.id: NoCommitProgress()}, time.time())
-    assert len(lines) == 1
-    assert "no count yet" in lines[0] and "no commit since the order" in lines[0]
+    alarms = OrderOverdue.violations(script.comms, script.commander)
+    assert {alarm.problem for alarm in alarms} == {todo.id, second.id}
     with pytest.raises(ValueError, match="no count yet"):
         todo.order.check.result.require(run)
 
@@ -167,13 +165,10 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
 
     progress = read((comms.goals.todos.get('P1'), unit))
     assert progress.line.endswith("; check prints no integer: printf 'no count here'")
-    lines = deadline_lines(script)
-    alarm = next(line for line in lines if line.startswith('OVERDUE: P1 '))
-    assert len(lines) == 2
-    assert 'order order-P1' in alarm
-    assert any(line.startswith('OVERDUE: P2 ') and 'order order-P2' in line for line in lines)
-    assert "check prints no integer: printf 'no count here'" in alarm
-    assert 'distance 0' not in alarm and 'projected done' not in alarm
+    alarms = order_alarms(script)
+    assert len(alarms) == 2
+    assert any(line.startswith('ORDER OVERDUE P1 ') and 'order order-P1' in line for line in alarms)
+    assert any(line.startswith('ORDER OVERDUE P2 ') and 'order order-P2' in line for line in alarms)
     missing = NoIntegerPrinted()
     assert missing.distance(1) is missing and missing.plus(3) is missing
     assert DistanceReadings((DistanceReading(1, missing, 'printf missing'),)).trend == UncountedTrend(missing, 'printf missing')
@@ -323,7 +318,7 @@ def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_
     create(commander, 'P1', deadline=1)
     merged = (MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
-    assert "waiting on install" in deadline_lines(script)[0]
+    assert order_alarms(script) == []
     script.write_board()
     assert '| merged as ddddddddd, waiting on install |' in (tmp_path / 'board.md').read_text()
 
@@ -416,31 +411,26 @@ def test_work_that_stops_moving_stalls(progress, now, stalled):
     assert progress.stalled(100.0, now) is stalled
 
 
-def deadline_lines(script, since=0.0):
-    """One watch tick's deadline lines: the pending orders and their progress, read once."""
-    pending = [t for t in script.held_orders() if t.pending]
-    return script.deadline_lines(pending, script.progress(), since)
+def order_alarms(script):
+    return [rule.line() for rule in OrderOverdue.violations(script.comms, script.commander)]
 
 
-def test_a_stalled_order_prints_stall_with_its_progress(commander, commander_script):
+def test_future_order_has_no_deadline_alarm(commander, commander_script):
     script, _ = commander_script
     create(commander, 'P1', deadline=time.time() + 3600)
-    assert deadline_lines(script) == [
-        'STALL P1 worker: no commit since the order -> push it now or reassign']
+    assert order_alarms(script) == []
 
 
-def test_overdue_remains_announced_until_recorded(commander, commander_script):
+def test_overdue_remains_current_until_its_deadline_moves(commander, commander_script):
     comms, _ = commander
     script, _ = commander_script
-    create(commander, 'P1')  # ordered at 100 and due at 1000; it stalled at 700, before the watch
-    polls, since = [], 800.0
-    for _ in range(3):
-        polls, since = polls + deadline_lines(script, since), time.time()
-    assert len(polls) == 3 and all(line.startswith('OVERDUE: P1 worker (due ') for line in polls)
-    comms.messaging.send('worker', 'lead', 'on it', InfoKind).message
-    replied = deadline_lines(script, since)
-    assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
-    assert deadline_lines(script, time.time())[0].startswith("OVERDUE: P1 worker")
+    todo = create(commander, 'P1')
+    readings = [order_alarms(script) for _ in range(3)]
+    assert all(len(lines) == 1 and lines[0].startswith('ORDER OVERDUE P1 worker, due ')
+               for lines in readings)
+    with comms.goals.todos.writing() as db:
+        replace(todo, deadline=RecordedEventTime(time.time() + 3600)).upsert(db)
+    assert order_alarms(script) == []
 
 
 def test_install_due_reads_the_schedule_time_alone(commander):
@@ -478,14 +468,8 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     p1, p2, p3 = (comms.goals.todos.get(pid) for pid in ('P1', 'P2', 'P3'))
     held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', 'p3.png')))
     read = script.progress()
-    assert script.install_lines(held, read, 1000.0) == ['INSTALL not planned; waiting: P1 worker, P2 worker']
-    PlannedInstallDeadline(RecordedEventTime(2000.0), 'worker').plan(comms.root)
-    due = time.strftime('%H:%M', time.localtime(2000.0))
-    assert script.install_lines(held, read, 1000.0) == [f'INSTALL due {due}; waiting: P1 worker, P2 worker']
-    assert script.install_lines(held, read, 2001.0) == [
-        f'INSTALL LATE (due {due}), not the orders; waiting: P1 worker, P2 worker']
-    assert script.install_lines(held[2:], read, 2001.0) == []
-    assert "waiting on install" in deadline_lines(script)[0]
+    assert [t.id for t in held for t in t.order.waiting_on_install(t, read)] == ['P1', 'P2']
+    assert order_alarms(script) == []
 
 
 @pytest.mark.parametrize("pid,branch,number,subject", [
@@ -528,6 +512,4 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     assert work == MergedProgress("d" * 40)
     script.write_board()
     assert "merged as ddddddddd, waiting on install" in (tmp_path / "board.md").read_text()
-    for state in (work, PushedProgress("b" * 9, at=500.0), NoCommitProgress()):
-        alarms = script.deadline_lines([todo], {pid: state}, time.time() + 100)
-        assert alarms[0].startswith("OVERDUE:") and state.line in alarms[0]
+    assert order_alarms(script) == []

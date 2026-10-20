@@ -19,9 +19,9 @@ from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, Unplanne
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
 from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, HuntDue, MemoryLow, PlanIdle,
-    RulesDue, StandingRule)
+    RulesDue, StandingRule, OrderOverdue, FirstCallMissing, OwnerIdle)
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DirectiveText, MergedProgress,
     MergedPullRequest, NoCommitProgress, OpenPrProgress, OrderProgress, PullRequests, StrikeReason,
@@ -118,15 +118,121 @@ def test_plan_idle_names_a_ready_phase_until_an_order_serving_it_is_open(command
     assert RecordPlanePhase not in idle()
 
 
-def test_hunt_due_until_a_hunt_is_recorded(commander):
+def test_hunt_due_until_a_hunt_is_recorded(commander, commander_script):
     comms, caller = commander
+    _, repo = commander_script
+    hot = repo / 'src' / 'hot.py'
+    hot.parent.mkdir()
+    hot.write_text('counter = 1\n')
+    for command in (('add', '.'), ('-c', 'user.name=t', '-c', 'user.email=t@t',
+                    'commit', '-q', '-m', 'hot source'),
+                    ('update-ref', 'refs/remotes/origin/main', 'HEAD')):
+        subprocess.run(['git', '-C', str(repo), *command], check=True, capture_output=True)
     todo = create(commander, "P1")
-    assert lines(comms, HuntDue) == ["HUNT DUE: read a hot path and order the fix this wake"]
+    with comms.goals.todos.writing() as db:
+        replace(todo, order=replace(todo.order,
+            check=replace(todo.order.check, directory=str(repo)))).upsert(db)
+    assert HuntDue.next_hunt(comms, 'lead') == (str(hot),)
+    assert lines(comms, HuntDue) == [f'HUNT DUE: read {hot} and order the fix this wake']
     hunt = CleanHunt(FileLine(__file__, 1), "This source reads the same rows on every event "
                      "without changing any owned fact.", RecordedEventTime(time.time()))
     actor = comms.registry.require("lead").incarnation
     comms.goals.todos.record_hunt(actor, hunt)
     assert lines(comms, HuntDue) == []
+
+
+@pytest.mark.parametrize('execution', (NativeThreadExecution, ExternalThreadExecution),
+                         ids=('native', 'external'))
+async def test_order_alarm_family_is_delivered_once_without_a_monitor_and_resolves(
+        commander, standing, tmp_path, monkeypatch, execution):
+    from contextlib import nullcontext
+    from datetime import UTC, datetime
+    from agent_comms.commander_heartbeat import CommanderHeartbeat
+    from agent_comms.coordinator import Coordination
+    from agent_comms.transcript_events import ToolStartTranscript
+
+    comms, _ = commander
+    now = [9000.0]
+    monkeypatch.setattr(time, 'time', lambda: now[0])
+    for created, name in enumerate(('late', 'missing', 'idle'), 3):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path), created_at=float(created), execution=execution))
+
+    def tool_call(name, timestamp):
+        identity = f'{name}-{timestamp}'
+        if execution is ExternalThreadExecution:
+            comms.transcripts.external(name).finish(turn_id=identity, item_id=identity, events=(
+                ToolStartTranscript(position=0, tool_call_id=identity,
+                                    tool_name='bash', timestamp=timestamp),))
+            return
+        path = tmp_path / f'{name}-native.jsonl'
+        stamp = datetime.fromtimestamp(timestamp, UTC).isoformat()
+        if not path.exists():
+            path.write_text(json.dumps({'type': 'session', 'version': 3, 'id': name,
+                                        'timestamp': stamp}) + '\n')
+            path.chmod(0o600)
+        with path.open('a') as stream:
+            stream.write(json.dumps({
+                'type': 'message', 'id': identity, 'timestamp': stamp,
+                'message': {'role': 'assistant', 'content': [
+                    {'type': 'toolCall', 'id': identity, 'name': 'bash',
+                     'arguments': {'command': 'pwd'}}]}}) + '\n')
+        comms.registry.register(replace(comms.registry.require(name), session_file=str(path)))
+
+    tool_call('late', 8990)
+    tool_call('idle', 8000)
+    create(commander, 'P901', owner='late', deadline=11000)
+    create(commander, 'P902', owner='missing', deadline=11000)
+    create(commander, 'P903', owner='idle', deadline=11000)
+    # Another order held by the idle owner must not duplicate the owner alarm.
+    create(commander, 'P904', owner='idle', deadline=11000)
+    families = (OrderOverdue, FirstCallMissing, OwnerIdle)
+
+    def alarms():
+        broken = StandingRule.broken(comms, 'lead')
+        return {family: tuple(rule for rule in broken if type(rule) is family)
+                for family in families}
+
+    first = comms.goals.todos.get('P902')
+    with comms.goals.todos.writing() as db:
+        replace(first, order=replace(first.order,
+            first_call_deadline=RecordedEventTime(11000))).upsert(db)
+    assert all(not rules for rules in alarms().values())
+    heartbeat = CommanderHeartbeat()
+    lead = replace(comms.registry.require('lead'), execution=ExternalThreadExecution)
+    comms.registry.register(lead)
+    with comms.registry.external_process('lead', ProcessIdentity.capture(os.getpid())):
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+        now[0] = 10000.0
+        overdue = comms.goals.todos.get('P901')
+        missing = comms.goals.todos.get('P902')
+        with comms.goals.todos.writing() as db:
+            replace(overdue, deadline=RecordedEventTime(9999)).upsert(db)
+            replace(missing, order=replace(missing.order,
+                first_call_deadline=RecordedEventTime(9998))).upsert(db)
+        found = alarms()
+        assert all(len(found[family]) == 1 for family in families)
+        assert found[OrderOverdue][0].began() == 9999
+        assert found[FirstCallMissing][0].began() == 9998
+        assert found[OwnerIdle][0].began() == 9200
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+        messages = comms.bus.inbox('lead')
+        assert len(messages) == 1 and messages[0].sender == 'commander-heartbeat'
+        assert messages[0].body.count('RULE ORDER OVERDUE P901 late') == 1
+        assert messages[0].body.count('RULE FIRST CALL MISSING P902 missing') == 1
+        assert messages[0].body.count('RULE OWNER IDLE idle') == 1
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+        assert len(comms.bus.inbox('lead')) == 1
+        with comms.goals.todos.writing() as db:
+            replace(overdue, deadline=RecordedEventTime(11000)).upsert(db)
+        tool_call('missing', 10000)
+        tool_call('idle', 10000)
+        assert all(not rules for rules in alarms().values())
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+        resolved = comms.bus.inbox('lead')[-1].body
+        assert 'NO LONGER CURRENT: ORDER OVERDUE P901 late' in resolved
+        assert 'NO LONGER CURRENT: FIRST CALL MISSING P902 missing' in resolved
+        assert 'NO LONGER CURRENT: OWNER IDLE idle' in resolved
 
 
 def test_bridge_down_while_the_commander_endpoint_receives_nothing(commander, tmp_path):
