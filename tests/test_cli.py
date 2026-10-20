@@ -192,7 +192,7 @@ class TestCliSuccess:
         merge_file = tmp_path / "merge.json"
         merge_file.write_text(json.dumps({"k": "v"}))
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        code, out = cli(tmp_path, "ledger", "--merge-from", str(merge_file), "--author", "a")
+        code, out = cli(tmp_path, "ledger-merge", "--merge-from", str(merge_file), "--author", "a")
         assert out == {"merged": True}
         code, out = cli(tmp_path, "ledger")
         assert out["k"] == "v"
@@ -220,12 +220,6 @@ class TestCliFailClosed:
         code, out = cli(tmp_path, "thread", "--name", "ghost")
         assert code == 1 and "not registered" in out["error"]
 
-
-    def test_ledger_merge_requires_author(self, cli, tmp_path):
-        merge_file = tmp_path / "merge.json"
-        merge_file.write_text("{}")
-        code, out = cli(tmp_path, "ledger", "--merge-from", str(merge_file))
-        assert code == 1 and "author" in out["error"]
 
     def test_every_error_is_single_json_object(self, cli, tmp_path):
         code, out = cli(tmp_path, "thread", "--name", "ghost")

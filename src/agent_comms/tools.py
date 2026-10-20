@@ -86,6 +86,7 @@ from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaratio
 from .page_traversal import NewestCursor, PageCursor
 from .owner_lifecycle import OwnerStartResult, OwnerRestartSelection
 from .presentation import ChannelView
+from .read_basis import NamedViewer
 from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
 from .restart_queue import (
     QueuedRestart,
@@ -1395,7 +1396,7 @@ class CommsHistoryTool(ReadTool, ToolRequest):
         target = CommandTarget.named(self.peer)
         return HistoryCliCommand(
             target=target.canonical_name(lambda name: comms.registry.require(name).name),
-            me=caller.subject(self.participant),
+            me=NamedViewer(caller.subject(self.participant)),
             limit=self.limit, before=self.before,
         ).apply(comms)
 

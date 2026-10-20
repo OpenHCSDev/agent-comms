@@ -101,7 +101,7 @@ from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
-from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
+from .read_basis import AnonymousViewer, DisplayViewer, OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
 from .repo import Repo
 from .runtime import RuntimeConnection, socket_path
@@ -117,7 +117,7 @@ from .thread_execution import (
     ThreadCommandAvailability,
     ThreadExecution,
 )
-from .thread_identity import NoThreadText
+from .thread_identity import NO_THREAD_TEXT, ThreadText
 from .thread_management import (
     ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
     ThreadDeleted,
@@ -1313,11 +1313,11 @@ class HistoryCliCommand(CliCommand):
         str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
     ] = ANY_CHANNEL.name
     me: Annotated[
-        str | None,
+        DisplayViewer,
         Argument(
             flags=("--as",), options={"help": "Participant, required only for DM history"}
         ),
-    ] = None
+    ] = AnonymousViewer()
     limit: Annotated[
         int,
         Argument(flags=("--limit",), options={"help": "Maximum messages in this page"}),
@@ -1485,7 +1485,7 @@ class RegisterCliCommand(CliCommand):
     parent: Annotated[str | None, Argument(flags=("--parent",))] = (
         None
     )
-    task: Annotated[str | None, Argument(flags=("--task",))] = None
+    task: Annotated[ThreadText, Argument(flags=("--task",))] = NO_THREAD_TEXT
     process: Annotated[
         ProcessState,
         Argument(
@@ -1508,7 +1508,7 @@ class RegisterCliCommand(CliCommand):
             tags=self.tags,
             worktree=self.worktree,
             parent=self.parent,
-            task=NoThreadText.from_input(self.task),
+            task=self.task,
             process_identity=self.process,
             execution=self.execution,
         )
@@ -1893,24 +1893,21 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 
 @dataclass(frozen=True, kw_only=True)
 class LedgerCliCommand(CliCommand):
-    help = "Read or merge ledger state"
-    merge_from: Annotated[str | None, Argument(flags=("--merge-from",))] = (
-        None
-    )
-    author: Annotated[str | None, Argument(flags=("--author",))] = (
-        None
-    )
+    help = "Read ledger state"
 
-    def apply(self, ctx: Comms) -> CliResult:
-        if self.merge_from is not None:
-            if not self.author:
-                raise ValueError("ledger merge requires --author")
-            updates = json.loads(Path(self.merge_from).read_text())
-            ctx.ledger.merge(updates, self.author)
-            return LedgerMergedResult()
-        else:
-            document: LedgerDocument = ctx.ledger.read()
-            return document
+    def apply(self, ctx: Comms) -> LedgerDocument:
+        return ctx.ledger.read()
+
+
+@dataclass(frozen=True, kw_only=True)
+class LedgerMergeCliCommand(CliCommand, declared_name="ledger-merge"):
+    help = "Merge ledger updates from a JSON file"
+    merge_from: Annotated[str, Argument(flags=("--merge-from",))]
+    author: Annotated[str, Argument(flags=("--author",))]
+
+    def apply(self, ctx: Comms) -> LedgerMergedResult:
+        ctx.ledger.merge(json.loads(Path(self.merge_from).read_text()), self.author)
+        return LedgerMergedResult()
 
 
 @dataclass(frozen=True, kw_only=True)

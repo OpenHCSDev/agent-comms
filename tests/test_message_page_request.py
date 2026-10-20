@@ -7,7 +7,7 @@ from agent_comms.comms import wire
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import NewerTraversal, OlderTraversal
-from agent_comms.read_basis import MessageDisplayScope
+from agent_comms.read_basis import MessageDisplayScope, NamedViewer
 from agent_comms.threads import Thread
 
 
@@ -63,7 +63,7 @@ def test_dm_and_channel_pages_by_default_and_explicit_bounds(tmp_path, conversat
 
     def page(bounds=PageBounds()):
         if conversation == "dm":
-            return comms.views.history_page(CommandTarget.named("recipient"), bounds, viewer="sender")
+            return comms.views.history_page(CommandTarget.named("recipient"), bounds, viewer=NamedViewer("sender"))
         return comms.views.history_page(CommandTarget.named("#review"), bounds)
 
     everything = page()

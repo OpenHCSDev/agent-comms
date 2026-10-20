@@ -206,7 +206,7 @@ class HistoryViews:
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
 
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
-                     *, viewer: str | None = None) -> MessagePage:
+                     *, viewer: DisplayViewer = AnonymousViewer()) -> MessagePage:
         """The decoded target selects its scope and participant requirements."""
         view = target.history_view(viewer, self.bus.require_channel, ChannelHistory, DMHistory)
         return view.page(self.presentation, bounds)

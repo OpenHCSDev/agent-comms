@@ -31,6 +31,7 @@ from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.channels import ANY_CHANNEL
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.pi_counts import PiCount
+from agent_comms.read_basis import NamedViewer
 from delivery_owner_fixture import canonical_agent
 
 
@@ -509,7 +510,7 @@ class TestTargetPrefix:
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
         assert wired.bus.pending_count("peer") == 1
         assert wired.bus.pending_count("PR111") == 0
-        assert [m.body for m in list(wired.views.history_page(CommandTarget.named("peer"), viewer="proj").messages)] == ["hi peer"]
+        assert [m.body for m in list(wired.views.history_page(CommandTarget.named("peer"), viewer=NamedViewer("proj")).messages)] == ["hi peer"]
 
 
 

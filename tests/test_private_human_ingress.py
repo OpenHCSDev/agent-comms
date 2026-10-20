@@ -24,6 +24,7 @@ from agent_comms.errors import (
 )
 from agent_comms.messages import Message, InfoKind
 from agent_comms.thread_identity import UserThreadRole
+from agent_comms.read_basis import NamedViewer
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
@@ -67,7 +68,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert acknowledgement.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
     dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
-    assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=channel.sender).messages)[-1] == dm
+    assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=NamedViewer(channel.sender)).messages)[-1] == dm
     dm_initial = comms.bus.log.read_delivery_cohort(root_id, dm.seq)
     assert [
         (member.canonical_thread, member.recipient_lookup)

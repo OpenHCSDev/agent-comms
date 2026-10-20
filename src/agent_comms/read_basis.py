@@ -25,15 +25,18 @@ from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .private_path import FileRevision
 from .recorded_bus import RecordedBusIdentity
 from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
-class DisplayViewer(ABC):
+class DisplayViewer(SubclassUnion, affix="Viewer"):
     """The reader owns read evidence, aliases and cursor selection."""
+
+    @abstractmethod
+    def direct_history(self, direct: type[DMHistory], peer: str) -> DMHistory: ...
 
     @abstractmethod
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
@@ -45,7 +48,7 @@ class DisplayViewer(ABC):
     def cursor(self, reads, snapshot, document, source) -> ReadCursor: ...
 
     @abstractmethod
-    def names(self, snapshot) -> frozenset[str]: ...
+    def aliases(self, snapshot) -> frozenset[str]: ...
 
     @abstractmethod
     def require_name(self, snapshot) -> str: ...
@@ -55,9 +58,12 @@ class DisplayViewer(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class AnonymousViewer(DisplayViewer):
+class AnonymousViewer(NullMember, DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
+
+    def direct_history(self, direct: type[DMHistory], peer: str) -> DMHistory:
+        raise ValueError("DM history requires --as <participant>.")
 
     def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> NoDisplaySelection:
         return NoDisplaySelection()
@@ -65,7 +71,7 @@ class AnonymousViewer(DisplayViewer):
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return ReadCursor()
 
-    def names(self, snapshot) -> frozenset[str]:
+    def aliases(self, snapshot) -> frozenset[str]:
         return frozenset()
 
     def require_name(self, snapshot) -> str:
@@ -76,11 +82,14 @@ class AnonymousViewer(DisplayViewer):
 
 
 @dataclass(frozen=True, slots=True)
-class NamedViewer(DisplayViewer):
+class NamedViewer(SingleFieldValue, DisplayViewer):
     name: str
 
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
+
+    def direct_history(self, direct: type[DMHistory], peer: str) -> DMHistory:
+        return direct(self.name, peer)
 
     def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalSelection:
         historical.validate()
@@ -91,7 +100,7 @@ class NamedViewer(DisplayViewer):
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return document.cursor(self.name, snapshot, source)
 
-    def names(self, snapshot) -> frozenset[str]:
+    def aliases(self, snapshot) -> frozenset[str]:
         return snapshot.names_for(self.name)
 
     def require_name(self, snapshot) -> str:
@@ -292,7 +301,7 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
     from .channels import TagChannel
-    from .historical_views import HistoryArchive, HistorySource
+    from .historical_views import DMHistory, HistoryArchive, HistorySource
     from .history_views import HistoryViews
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -1087,7 +1096,7 @@ class CapturedSelection:
 
     @property
     def viewer_names(self) -> frozenset[str]:
-        return self.viewer.names(self.registry)
+        return self.viewer.aliases(self.registry)
 
     def require_viewer(self) -> str:
         return self.viewer.require_name(self.registry)

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .channels import Channel
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .messages import Message
-    from .read_basis import ChannelConversation, Conversation, DMConversation
+    from .read_basis import ChannelConversation, Conversation, DisplayViewer, DMConversation
     from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
     from .threads import Thread
@@ -132,7 +132,7 @@ class CommandTarget(ABC):
     @abstractmethod
     def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog): ...
 
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+    def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         raise ValueError("History requires a #channel or DM peer.")
 
@@ -217,11 +217,9 @@ class ThreadTarget(NamedTarget):
     def require_dm_peer(self):
         return self.name
 
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+    def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        if viewer is None:
-            raise ValueError("DM history requires --as <participant>.")
-        return direct(viewer, self.name)
+        return viewer.direct_history(direct, self.name)
 
     def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
@@ -307,7 +305,7 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+    def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         return channel(require_channel(self.name).history_scope())
 
