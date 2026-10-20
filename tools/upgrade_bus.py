@@ -37,10 +37,12 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from typing import TextIO, cast
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src the checkout being upgraded has installed.
@@ -250,7 +252,9 @@ publish_active_route(ActiveRoute(root, marker.root_id))
         return result
 
     @contextmanager
-    def practice_copy(self, root: Path, into: Path):
+    def practice_copy(
+        self, root: Path, into: Path
+    ) -> Iterator[tuple[Comms, PracticeMeasurement]]:
         """Let the installed reader create and hold an old-format copy until carry finishes.
 
         The staged reader cannot open the old sealed index before its carry runs.
@@ -262,29 +266,32 @@ from dataclasses import asdict
 from pathlib import Path
 from agent_comms.comms import Comms
 from install_gate import PracticeCopy
-with PracticeCopy(source=Comms(Path(sys.argv[1])), into=Path(sys.argv[2])).open() as (_, measurement):
+with PracticeCopy(
+    source=Comms(Path(sys.argv[1])), into=Path(sys.argv[2])
+).open() as (_, measurement):
     print(json.dumps(asdict(measurement)), flush=True)
     sys.stdin.readline()
 """
         child = subprocess.Popen(
             [str(self.python), "-c", worker, str(root), str(into)],
-            cwd=self.checkout, env=self.environment(self.checkout / "tools"),
+            cwd=self.checkout, env=self.environment(Path(__file__).resolve().parent),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         try:
-            assert child.stdout is not None
-            ready = child.stdout.readline()
+            # PIPE was supplied for both streams; Popen's optional annotations
+            # do not describe this constructed child.
+            ready = cast(TextIO, child.stdout).readline()
             if not ready:
-                assert child.stderr is not None
-                raise UpgradeRefused(f"Installed practice copy failed: {child.stderr.read()}")
+                raise UpgradeRefused(
+                    f"Installed practice copy failed: {cast(TextIO, child.stderr).read()}"
+                )
             measurement = FieldCodec.decode(PracticeMeasurement, FieldCodec.parse(ready))
             yield Comms(into), measurement
         finally:
-            if child.poll() is None:
-                # The staged reader can own background work on the copied bus;
-                # finish it before the installed reader retires the directory.
-                drain_candidate_catchup(into)
-                child.communicate(input="\n", timeout=60)
+            # The staged reader can own background work on the copied bus;
+            # finish it before the installed reader retires the directory.
+            drain_candidate_catchup(into)
+            child.communicate(input="\n", timeout=60)
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""

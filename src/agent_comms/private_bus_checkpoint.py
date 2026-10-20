@@ -611,8 +611,8 @@ class CheckedRead:
         )
         return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
-    def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
-        """The sealed key filters absence; the original delivery proves the receipt."""
+    def keyed_message(self, intent: PublicationIntents) -> Message | None:
+        """The sealed key filters absence; the original delivery proves the message."""
         self.require_current()
         if not ResponseKeys.one(self.connection, key=intent.publication_key):
             return None

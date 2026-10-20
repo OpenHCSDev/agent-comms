@@ -878,14 +878,14 @@ class WireLog(StoreLockOwner):
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
         with opened_private_checkpoint_unlocked(self, metadata) as source:
-            matched = source.keyed_receipt(intent)
+            matched = source.keyed_message(intent)
             source.require_current()
             return matched, source.witness.through_seq, metadata
 
     def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
         """Read-only exact acknowledgement resolution; never append or repair an absent row."""
         with self.checked_read() as source:
-            return source.keyed_receipt(intent)
+            return source.keyed_message(intent)
 
     def _prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...]:
         """Read registered index candidates before taking any source locks."""
