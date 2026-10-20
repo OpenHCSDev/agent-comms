@@ -18,8 +18,12 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from os import fstat
 from pathlib import Path
-from agent_comms.commander.config import CommanderConfig
+from typing import TYPE_CHECKING
+
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
+
+if TYPE_CHECKING:
+    from agent_comms.commander.config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -37,6 +41,10 @@ class WatchRecord:
 class Claim(ABC):
     """The kernel-held lifetime and saved re-arm command of one watched process."""
 
+    @classmethod
+    def directory(cls) -> Path:
+        return Path.home() / ".local/state/agent-comms/cli-watch"
+
     @property
     @abstractmethod
     def path(self) -> Path: ...
@@ -44,7 +52,7 @@ class Claim(ABC):
     @abstractmethod
     def lapsed_warning(self, record: WatchRecord) -> str: ...
 
-    def live_warning(self, record: WatchRecord):
+    def live_warning(self, record: WatchRecord) -> str | None:
         return None
 
     @contextmanager
@@ -86,7 +94,7 @@ class WatchClaim(Claim):
     @property
     def path(self) -> Path:
         key = hashlib.sha256(self.thread.encode()).hexdigest()
-        return Path.home() / ".local/state/agent-comms/cli-watch" / f"{key}.lock"
+        return self.directory() / f"{key}.lock"
 
     @property
     def socket_path(self) -> Path:
@@ -123,7 +131,7 @@ class WatchClaim(Claim):
             with self.held(record):
                 pass
 
-    def live_warning(self, record: WatchRecord):
+    def live_warning(self, record: WatchRecord) -> str | None:
         if self.has_reader():
             return None
         return (
@@ -146,9 +154,13 @@ class LoopClaim(Claim):
     path: Path
 
     @classmethod
-    def for_command(cls, state: Path, command: Sequence[str]) -> LoopClaim:
+    def directory(cls) -> Path:
+        return super().directory() / "loops"
+
+    @classmethod
+    def for_command(cls, command: Sequence[str]) -> LoopClaim:
         key = hashlib.sha256(shlex.join(command[1:]).encode()).hexdigest()
-        return cls(state / "loops" / f"{key}.lock")
+        return cls(cls.directory() / f"{key}.lock")
 
     def lapsed_warning(self, record: WatchRecord) -> str:
         return (
@@ -252,8 +264,5 @@ def main() -> None:
     A failure exits nonzero, which Claude Code reports without blocking the session."""
     hook = ClaudeHook.read()
     WatchClaim(hook.session_id).state().report(hook)
-    path = CommanderConfig.path()
-    if path.exists():
-        config = CommanderConfig.read(path)
-        for path in sorted((config.state / "loops").glob("*.lock")):
-            LoopClaim(path).state().report(hook)
+    for claim_path in sorted(LoopClaim.directory().glob("*.lock")):
+        LoopClaim(claim_path).state().report(hook)

@@ -64,7 +64,7 @@ def main(a, ctx):
     names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)
     last_names = time.time()
-    with LoopClaim.for_command(ctx.state, sys.argv).held(
+    with LoopClaim.for_command(sys.argv).held(
         WatchRecord(ctx.commander, str(ctx.root), tuple(sys.argv))
     ):
         while True:

@@ -24,7 +24,7 @@ def test_killed_holder_warns_with_original_command(claim_kind, tmp_path, monkeyp
         "commander", "/bus", ("agent-comms-commander", "tool-watch", "--root", "/bus with spaces")
     )
     claim = (WatchClaim("session") if claim_kind is WatchClaim
-             else LoopClaim.for_command(tmp_path, record.command))
+             else LoopClaim.for_command(record.command))
     context = multiprocessing.get_context("fork")
     ready, release = context.Event(), context.Event()
     child = context.Process(target=hold_claim, args=(claim, record, ready, release))

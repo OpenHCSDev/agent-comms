@@ -1137,7 +1137,7 @@ class OverdueVerb(OrderVerb):
     help = "loop: every minute, name units past their deadline"
 
     def run(self, ctx: Commander) -> None:
-        with LoopClaim.for_command(ctx.state, sys.argv).held(
+        with LoopClaim.for_command(sys.argv).held(
             WatchRecord(ctx.commander, str(ctx.root), tuple(sys.argv))
         ):
             ctx.overdue()
