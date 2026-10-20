@@ -2,29 +2,35 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import subprocess
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
 from ..comms import Comms
+from ..coordinator import Coordination
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
+from ..repo import Repo
 from ..standing_rules import (
     DatedStandingRule,
     ReasonedStandingRule,
     StandingRule,
     UndatedStandingRule,
 )
+from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
-from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
+from ..todos import (
+    FlatTrend, OrderProgress, PullRequests, Todo,
+)
+from ..tools import CommsUnjudgedTool
 from ..turn_digests import TurnDigestRead, TurnsSince
-from . import judge
-from .config import CommanderConfig, Repo
-
-CONFIG = CommanderConfig.installed()
+from .config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -56,7 +62,8 @@ class RequestStalled(UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
         return tuple(cls(request) for goal in thread.goal.active()
-                     for request, served in goal.order.open_requests(goal, comms.goals, thread.incarnation)
+                     for request, served in goal.order.open_requests(
+                         goal, comms.goals, thread.incarnation)
                      if not served)
 
     def line(self) -> str:
@@ -77,21 +84,22 @@ class WheelSpin(StandingRule, declared_name=None):
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
         """Units with a recent turn in their own transcript and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
-        excluded = held | CONFIG.parked | {commander, ""}
+        excluded = held | CommanderConfig.read_root(comms.root).parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((thread for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
                        and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
-    def assign(self, comms: Comms, commander: str, unit: Thread) -> None:
+    def assign(self, comms: Comms, commander: str, unit: Thread,
+               assigner: ThreadIncarnation) -> None:
         """The order sent again to ``unit`` through its Goal, with the order's own text."""
-        todo = comms.goals.todos.get(self.todo.id)
+        todo = self.todo
         order = todo.order.reissued(time.time())
         comms.goals.update_goal(unit.name, OrderGoalAction(
             problem=todo.id, expected_revision=todo.revision, order=order,
             request=todo.goal.request(), deadline=todo.deadline, commander=commander,
-            traced=todo.order.owner))
+            assigner=assigner, traced=todo.order.owner))
         comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(todo)}")
 
 
@@ -122,15 +130,8 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 " to an idle unit")
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        todo = comms.goals.todos.get(self.todo.id)
-        held = todo.held()
-        if not todo.struck_on_order(held.owner):
-            comms.goals.change_problem(todo.id, StrikeTodo(
-                todo.revision, comms.registry.require(commander).incarnation, held,
-                f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
-                " across two readings"), commander)
         for unit in self.idle(comms, commander)[:1]:
-            self.assign(comms, commander, unit)
+            self.assign(comms, commander, unit, StallWatcherIncarnation.watcher())
 
 
 @dataclass(frozen=True)
@@ -141,17 +142,57 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        rows = (todo for todo in comms.goals.todos.for_commander(
-            comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
-        idle = cls.idle(comms, commander)
-        return tuple(cls(todo, unit.name) for unit, todo in zip(idle, rows, strict=False))
+        return cls.paired(comms, commander, (todo for todo in
+            comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
+            if not todo.holder))
+
+    @classmethod
+    def paired(cls, comms: Comms, commander: str,
+               todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
+        """Each pending row with the first idle unit not struck on it."""
+        idle, found = cls.idle(comms, commander), []
+        for todo in (todo for todo in todos if todo.pending):
+            for unit in idle:
+                if not todo.live_strikes(unit.name):
+                    idle.remove(unit)
+                    found.append(cls(todo, unit.name))
+                    break
+        return tuple(found)
 
     def line(self) -> str:
         return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
                 f" -> Core gives it to {self.unit}")
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        self.assign(comms, commander, comms.registry.require(self.unit))
+        self.assign(comms, commander, comms.registry.require(self.unit),
+                    comms.registry.require(commander).incarnation)
+
+    @classmethod
+    def after_stall(cls, comms: Comms) -> None:
+        """Assign first: refused or unavailable replacements leave the old holder untouched."""
+        stalled = comms.goals.todos.stalled(comms.registry.storage_rule)
+        for commander in {todo.creator_identity.name for todo in stalled}:
+            mine = (todo for todo in stalled if todo.creator_identity.name == commander)
+            for rule in cls.paired(comms, commander, mine):
+                rule.assign(comms, commander, comms.registry.require(rule.unit),
+                            StallWatcherIncarnation.watcher())
+
+    @classmethod
+    def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        """The worker borrows the root for this pass, never while the timer is idle."""
+        with opened_wire() as comms:
+            cls.after_stall(comms)
+
+    @classmethod
+    async def watch(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        """Run a pass each minute; failures go to the existing service log."""
+        while True:
+            (outcome,) = await asyncio.gather(
+                Coordination.run_worker(lambda: cls.watch_pass(opened_wire)),
+                return_exceptions=True)
+            if isinstance(outcome, Exception):
+                logging.error("Stall watcher pass failed", exc_info=outcome)
+            await asyncio.sleep(60)
 
 
 @dataclass(frozen=True)
@@ -161,7 +202,7 @@ class Unjudged(ReasonedStandingRule, UndatedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = len(judge.Edit.unjudged(comms, commander))
+        total = CommsUnjudgedTool.count(comms, commander)
         return str(total) if total > cls.limit else None
 
 
@@ -186,45 +227,35 @@ class MergeGrowth(DatedStandingRule):
         ).stdout
 
     @classmethod
-    def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
-        """Read first-parent growth from one captured, already-fetched Git history.
+    def numstat(cls, checkout: Path, sha: str, path: str) -> tuple[int, int]:
+        diff = cls.git(checkout, "diff", "--numstat", f"{sha}^1", sha, "--", path)
+        counted = [
+            (int(a), int(d))
+            for a, d, _ in (row.split("\t", 2) for row in diff.splitlines())
+            if a.isdigit()
+        ]
+        return sum(a for a, _ in counted), sum(d for _, d in counted)
 
-        Fetch belongs to the checkout's update owner, not a standing-rule read.
-        Git emits each commit's first-parent diff in this same process.
-        """
+    @classmethod
+    def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
+        """Each first-parent commit on the repository's main inside the window, newest first."""
+        cls.git(repo.checkout, "fetch", "-q", "origin", "main")
         log = cls.git(
             repo.checkout,
             "log",
             "--first-parent",
             f"--since={cls.window}",
-            "--format=%x1e%H%x00%ct%x00%s",
-            "--numstat",
-            "--no-renames",
-            "--diff-merges=first-parent",
+            "--format=%H %ct %s",
             "origin/main",
-            "--",
-            repo.source,
-            "tests",
         )
-        for record in log.split("\x1e")[1:]:
-            header, _, diff = record.partition("\n")
-            sha, at, subject = header.split("\x00", 2)
-            src, tests = [0, 0], [0, 0]
-            for row in diff.splitlines():
-                if not row:
-                    continue
-                added, deleted, path = row.split("\t", 2)
-                if not (added.isdigit() and deleted.isdigit()):
-                    continue
-                for root, counts in ((repo.source, src), ("tests", tests)):
-                    if path == root or path.startswith(root.rstrip("/") + "/"):
-                        counts[0] += int(added)
-                        counts[1] += int(deleted)
-            yield cls(repo.github, sha, subject, float(at), (src[0], src[1]), (tests[0], tests[1]))
+        for sha, at, subject in (line.split(" ", 2) for line in log.splitlines()):
+            src, tests = (cls.numstat(repo.checkout, sha, path) for path in (repo.source, "tests"))
+            yield cls(repo.github, sha, subject, float(at), src, tests)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
-        return tuple(growth for repo in CONFIG.repos for growth in cls.merges(repo) if growth.over)
+        return tuple(growth for repo in CommanderConfig.read_root(comms.root).repos
+                     for growth in cls.merges(repo) if growth.over)
 
     @property
     def over(self) -> bool:
