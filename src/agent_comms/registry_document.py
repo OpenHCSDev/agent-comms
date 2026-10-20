@@ -678,12 +678,12 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     @property
     def known_names(self) -> tuple[str, ...]:
         """Every declared name, including live, renamed and deleted participants."""
-        return tuple(self._claimed_generations)
+        return tuple(dict.fromkeys((*self._claimed_generations, *self.aliases)))
 
     @property
     def retired_names(self) -> tuple[str, ...]:
         """Deleted declarations keep their generation without exposing its store."""
-        return tuple(name for name in self.known_names if name not in self.threads)
+        return tuple(name for name in self._claimed_generations if name not in self.threads)
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
