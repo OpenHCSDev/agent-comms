@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, cast
 
 from pydantic import BaseModel
 
@@ -21,8 +21,12 @@ from .field_codec import (
     JsonShapeMember,
     PathText,
     TextRepresentation,
+    boundary_decoder,
 )
 from .launch_root import LaunchRoot
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -337,6 +341,14 @@ class ThreadLaunch(EnvironmentRecord):
         default=None,
         metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_STARTUP_INPUT_KEY"},
     )
+
+    @classmethod
+    @boundary_decoder
+    def from_thread(cls, thread: Thread) -> ThreadLaunch:
+        return cls(
+            thread.name, thread.worktree, frozenset(thread.tags), thread.parent,
+            cast(str | None, FieldCodec.encode(thread.task)),
+        )
 
     @classmethod
     def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:

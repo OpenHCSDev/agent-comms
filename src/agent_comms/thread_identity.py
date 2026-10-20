@@ -259,6 +259,7 @@ class NoThreadText(NullMember):
 
 
 ThreadText = str | NoThreadText
+NO_THREAD_TEXT = NoThreadText()
 
 
 @dataclass(frozen=True, kw_only=True)

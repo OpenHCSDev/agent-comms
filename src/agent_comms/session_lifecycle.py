@@ -23,7 +23,7 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from . import agent_events as events
 from .acp_extension import (
     CoordinationChangedUpdate,
@@ -39,7 +39,7 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
-from .thread_identity import AcpThreadRole, ThreadText
+from .thread_identity import NO_THREAD_TEXT, AcpThreadRole, ThreadText
 from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
@@ -305,20 +305,21 @@ class SessionLifecycle:
                 or self.display_titles.get(session_id) != thread.title
                 or self.worktrees.get(session_id) != thread.worktree
             ):
-                await self.publish_metadata(
-                    session_id, title=cast(str | None, FieldCodec.encode(thread.title)),
-                )
+                await self.publish_metadata(session_id, title=thread.title)
                 self.titles[session_id], self.display_titles[session_id] = name, thread.title
                 self.worktrees[session_id] = thread.worktree
             return name
 
-    async def publish_metadata(self, session_id: str, *, title: str | None = None) -> None:
-        """Publish the complete current session state through its existing transport."""
+    @boundary_decoder
+    async def publish_metadata(
+        self, session_id: str, *, title: ThreadText = NO_THREAD_TEXT,
+    ) -> None:
+        """Encode the thread's title once for the ACP metadata boundary."""
         await self.runtime.session_update(
             session_id=session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",
-                title=title,
+                title=cast(str | None, FieldCodec.encode(title)),
                 field_meta=await self.metadata(self.require(session_id), session_id=session_id),
             ),
         )

@@ -7,7 +7,7 @@ import os
 import time
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -199,10 +199,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """The launch environment this thread's owner process carries."""
         from .launch_runtime import ThreadLaunch
 
-        return ThreadLaunch(
-            self.name, self.worktree, frozenset(self.tags), self.parent,
-            cast(str | None, FieldCodec.encode(self.task)),
-        )
+        return ThreadLaunch.from_thread(self)
 
     def native_session_directory(self, root: Path) -> Path:
         return self.path_in(root, lookup=self.incarnation.require_recorded().lookup, name="")
