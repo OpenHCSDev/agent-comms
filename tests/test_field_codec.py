@@ -793,6 +793,14 @@ def test_refused_record_data_raises_the_declared_error(wire, refusal):
     assert 'fix:' in str(raised.value)
 
 
+def test_record_reports_missing_unknown_and_malformed_siblings_together():
+    from agent_comms.field_codec import RecordProblems
+    with pytest.raises(RecordProblems) as raised:
+        FieldCodec.decode(_SavedRow, {'path': 7, 'at': 1.5, 'extra': 0})
+    assert set(raised.value.problems) == {'path', 'at', 'count', 'extra'}
+    assert all('fix:' in problem for problem in raised.value.problems.values())
+
+
 def test_declaration_bug_passes_through_a_data_boundary_as_type_error():
     from agent_comms.bus_source_page import SourcePage
 

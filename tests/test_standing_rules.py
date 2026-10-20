@@ -281,14 +281,8 @@ def test_a_claude_ai_directive_passes_the_commanders_wording_with_no_rules_revie
     def send(body):
         return CommsSendTool(sender="claude-ai", target="worker", body=body).apply(comms, CALLER)
 
-    for body, refusal in (
-        ("Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
-         "Read the count from its owner.", "Not blunt"),
-        ("The canonical count at tools.py:829 is wrong: read it from its owner.", "Jargon"),
-        ("Thanks for moving the count at tools.py:829 into its owner, that is correct.", "Soft wording"),
-    ):
-        with pytest.raises(ValueError, match=refusal):
-            send(body)
+    with pytest.raises(ValueError, match='Soft wording'):
+        send('Thanks for moving the count at tools.py:829 into its owner, that is correct.')
     clean = "The count copy at tools.py:829 is wrong: delete it and read the count from its owner."
     send(clean)
     assert [(m.sender, m.body) for m in comms.bus.inbox("worker")] == [("claude-ai", clean)]

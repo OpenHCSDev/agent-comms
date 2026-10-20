@@ -344,10 +344,7 @@ class Commander(CommanderContext):
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
-            f'Problems: {", ".join(group)}', f'Owner: {order.owner.to_wire()}',
-            f'Check: {check.directory} :: {check.command}', *order.run.instructions(),
-            *order.deletes.instructions(), *(f'{n}. {edit}' for n, edit in enumerate(edits, 1)),
-            'Banned: ' + '; '.join(order.banned), 'Report: ' + order.report))
+            f'Problems: {", ".join(group)}', *order.work_instructions()))
         message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                    + '\nStart now and push as you go.')  # a unit shown a due time takes until then
         taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}

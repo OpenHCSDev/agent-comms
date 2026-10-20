@@ -1089,7 +1089,7 @@ class BluntText(BluntWords, OrderWords):
 class FairText(OrderWords):
     """Paper 1 proves multiple parents derive every required pair with nothing outside, which composition and
     forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
-    A Banned: line may name it."""
+    Only explanatory prose is checked; code and banned-action fields are not prose."""
 
     REFUSED = re.compile(r"composition over inheritance|(prefer|favou?r|use) composition|inherits (two|both|multiple|several|\d+)\b"
                          r"|multiple (inheritance|parents) (is (bad|wrong|dangerous|confusing|fragile|slop)|causes|creates|smells|complicates)"
@@ -1101,8 +1101,8 @@ class FairText(OrderWords):
 
 
 class HierarchyText(OrderWords):
-    """A forwarder restates an implementation pair, so the cure is the hierarchy, never a route: text may not keep
-    a forwarder, and a Banned: item may forbid removing classes, bases or parents but not adding them."""
+    """A forwarder restates an implementation pair: explanatory prose must fix the
+    hierarchy rather than preserve a forwarding route."""
 
     REFUSED = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through", re.I)
     refusal = ("{1} keeps a forwarder or bans fixing the hierarchy: fold the false owner into the real one or compose "
@@ -1200,7 +1200,7 @@ class DirectiveText:
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
-    label: ClassVar[str] = "Application run:"
+    label: ClassVar[str] = "Works when:"
     mechanical: ClassVar[bool] = False
 
     def require_artifact(self, path: str) -> None:
@@ -1476,15 +1476,17 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return (f"Open the PR with agent-comms-commander order pr {problem} "
                 "--title '<title>' --body-file <file>; Core writes its required order identity.")
 
+    def work_instructions(self) -> tuple[str, ...]:
+        return (f"Owner: {self.owner.to_wire()}",
+                f"Check: {self.check.directory} :: {self.check.command}",
+                *self.deletes.instructions(), *self.run.instructions(),
+                *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
+                "Banned: " + "; ".join(self.banned), "Report: " + self.report)
+
     def instructions(self, todo):
-        return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(), f"Order: {self.id}",
-            f"Owner: {self.owner.to_wire()}", self.pull_request_instruction(todo.id),
-            f"Check: {self.check.directory} :: {self.check.command}",
-            *self.deletes.instructions(),
-            *self.run.instructions(),
-            f"Deadline: {FieldCodec.encode(todo.deadline)}",
-            *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
-            "Banned: " + "; ".join(self.banned), "Report: " + self.report))
+        return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
+            f"Order: {self.id}", self.pull_request_instruction(todo.id),
+            *self.work_instructions(), f"Deadline: {FieldCodec.encode(todo.deadline)}"))
 
     def delivered(self, delivery):
         delivery.at.require_delivery()

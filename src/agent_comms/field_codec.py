@@ -1796,8 +1796,9 @@ class _RecordDecoder(ValueDecoder[Any]):
         missing = dict.fromkeys(
             key for key in (*plan.required_keys, *plan.init_required_keys) if key not in data
         )
-        schemas = {key: schema for entry in plan.bindings
-                   for key, schema in entry.schema_fields().items()} if missing else {}
+        schemas = {}
+        if missing:
+            plan.schema_fields(schemas, [])
         problems = {key: f"Missing required fields for {self.target.__name__}: {key}; "
                          f"fix: supply {json.dumps(schemas[key])}" for key in missing}
         problems.update({key: "Unknown fields; fix: remove this field"

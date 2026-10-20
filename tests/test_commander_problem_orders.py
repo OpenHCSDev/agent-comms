@@ -635,7 +635,7 @@ def test_missing_check_repo_refuses_before_recording(
         problem(script, order_body(repo))
     before = comms.goals.todos.for_commander(comms.registry.require('lead').incarnation)
     missing = tmp_path / 'missing-repo'
-    with pytest.raises(SystemExit, match='is not a directory'):
+    with pytest.raises(SystemExit, match='is not a directory|directory does not exist'):
         if entrypoint == 'send':
             body = order_body(repo)
             Path(body).write_text(Path(body).read_text().replace(f'"directory": "{repo}"', f'"directory": "{missing}"'))
@@ -1509,7 +1509,7 @@ def test_close_quotes_the_works_line(commander):
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
     delivered = comms.goals.todos.get('P1')
-    with pytest.raises(ValueError, match='consecutive words of: Application run:'):
+    with pytest.raises(ValueError, match='consecutive words of: Works when:'):
         CommsProblemCloseTool(problem='P1', artifact=str(artifact),
             works='The installed application kept both queued orders through tab returns.').apply(comms, caller)
     assert comms.goals.todos.get('P1') == delivered

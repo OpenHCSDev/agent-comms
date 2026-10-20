@@ -22,8 +22,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, OrderRun, ProblemOrder, Todo
 from agent_comms.typed_table import TypedRow
 
-# This is the frozen pre-P511 storage format, not the current order input.
-DECLARED = re.compile(r"(?m)^\s*Works when:\s*(.+?)\s*$")
+DECLARED = re.compile(rf"(?m)^\s*{re.escape(OrderRun.label)}\s*(.+?)\s*$")
 
 
 @dataclass(frozen=True)
