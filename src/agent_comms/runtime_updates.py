@@ -50,8 +50,9 @@ class DraftAccumulator:
         raise ValueError("Received a text delta for a non-text item")
 
     def finish(self, update: CompletedItem) -> tuple[ClosedDraft, FinishedItem]:
-        """Close with the completed record's own already decoded event times."""
-        return ClosedDraft(self.started_at), FinishedItem(update.turn_id, update.item_id, update.events)
+        """Keep the observed source prefix's clock; completions are already dated."""
+        events = tuple(self.started_at.stamp(event) for event in update.events)
+        return ClosedDraft(self.started_at), FinishedItem(update.turn_id, update.item_id, events)
 
 
 class NoPrefixDraft(DraftAccumulator):
@@ -96,7 +97,7 @@ class TextDraft(DraftAccumulator):
         )
         return (
             (self.event_type(text, position=self.position,
-                             timestamp=self.started_at.transcript_timestamp()),) if text else ()
+                             timestamp=self.started_at.recorded_at("A transcript event")),) if text else ()
         )
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
