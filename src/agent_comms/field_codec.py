@@ -1628,13 +1628,13 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
 
     def argument_options(self) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
-        return {"choices": list(self.target.names())}
+        return self.target.argument_options()
 
     def argument_text(self, encoded: object) -> object:
-        return cast(Mapping[str, object], encoded)[self.target.family_discriminator]
+        return self.target.argument_text(cast(dict[str, object], encoded))
 
     def argument_payload(self, text: object) -> object:
-        return {self.target.family_discriminator: text}
+        return self.target.argument_payload(text)
 
     def member(self, data: object) -> tuple[type[Member], dict]:
         if not isinstance(data, dict):

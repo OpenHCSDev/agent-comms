@@ -71,6 +71,7 @@ from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .owner_restart import AllRestartableThreads, NamedRestartThreads
 from .page_traversal import OlderTraversal, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
@@ -1611,9 +1612,9 @@ class StopCliCommand(NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleC
 @dataclass(frozen=True, kw_only=True)
 class RestartCliCommand(CliCommand):
     help = "Restart process"
-    name: str | None = option(
-        "--name", help="One running thread (aliases supported)", group="scope", default=None,
-        target_bound=True,
+    name: NamedRestartThreads = option(
+        "--name", help="One running thread (aliases supported)", group="scope",
+        default_factory=NamedRestartThreads, target_bound=True,
     )
     all_: bool = option(
         "--all",
@@ -1645,11 +1646,13 @@ class RestartCliCommand(CliCommand):
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         if thread.turn_record.read().executing:
             return ()
-        return (cls(name=thread.name),) if thread.restart_candidates(status) else ()
+        return ((cls(name=NamedRestartThreads((thread.name,))),)
+                if thread.restart_candidates(status) else ())
 
     def apply(self, ctx: Comms) -> CliResult:
         results = ctx.owners.restart_owners(
-            None if self.all_ else (self.name,), agent_bin=self.agent_bin, agent_args=self.agent_args
+            AllRestartableThreads() if self.all_ else self.name,
+            agent_bin=self.agent_bin, agent_args=self.agent_args
         )
         return OwnersRestartedResult(results)
 

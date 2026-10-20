@@ -14,7 +14,9 @@ def run_login(provider: str = "") -> int:
         raise ValueError("Invalid provider identifier")
     package = ConfigOptions.configured().package
     record = LoginLaunchRecord.from_record(LaunchRecord.current(), login_provider=provider)
-    env = record.runtime.environment(package.node_environment(os.environ), configuration=record.configuration)
+    env = record.runtime.environment(
+        package.node_environment(os.environ), configuration=record.configuration
+    )
     env.update(record.configuration.encode_native())
     command = [
         *package.node(),

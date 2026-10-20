@@ -11,6 +11,10 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
 from uuid import uuid4
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .owner_restart import RestartThreadSelection
 
 from .active_route import resolve_comms_route
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, ProcessState
@@ -335,7 +339,7 @@ class OwnerLifecycle:
 
     def restart_owners(
         self,
-        names: Sequence[str] | None = None,
+        selection: RestartThreadSelection,
         *,
         agent_bin: NoLaunchChange | CommandLaunchChange = _NO_LAUNCH_CHANGE,
         agent_args: NoLaunchChange | ArgumentsLaunchChange = _NO_LAUNCH_CHANGE,
@@ -353,7 +357,7 @@ class OwnerLifecycle:
         from .owner_restart import OwnerRestartRequest
 
         request = OwnerRestartRequest(
-            names=names, command=agent_bin, arguments=agent_args, expected=expected,
+            selection=selection, command=agent_bin, arguments=agent_args, expected=expected,
             runtime=runtime, source_interpreter=source_interpreter,
             launch_runtime=LaunchRuntime.running(),
         )

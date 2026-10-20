@@ -100,6 +100,18 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
+    @classmethod
+    def argument_options(cls) -> dict[str, object]:
+        return {"choices": list(cls.names())}
+
+    @classmethod
+    def argument_text(cls, encoded: dict[str, object]) -> object:
+        return encoded[cls.family_discriminator]
+
+    @classmethod
+    def argument_payload(cls, text: object) -> object:
+        return {cls.family_discriminator: text}
+
     def __init_subclass__(
         cls,
         *,

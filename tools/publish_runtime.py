@@ -39,7 +39,7 @@ from agent_comms.launch_runtime import ExactSourceInterpreter, LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.owner_cutover import MaintainedOwnerCutover, StoppedOwnerInstallation
 from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelection
-from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
+from agent_comms.owner_restart import NamedRestartThreads, OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.store_files import _atomic_write_text, _store_lock
 
 from .cutover.backup import StoreBackup
@@ -167,7 +167,7 @@ class RuntimePublication:
         root = comms.root
         snapshot = comms.registry.snapshot()
         remaining = [original.name for original in OwnerRestartSelection.live(intent.owners, snapshot)]
-        request = OwnerRestartRequest(names=tuple(remaining),
+        request = OwnerRestartRequest(selection=NamedRestartThreads(tuple(remaining)),
             source_interpreter=ExactSourceInterpreter(intent.previous + '/bin/python'))
         if not carries.original():
             if OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):

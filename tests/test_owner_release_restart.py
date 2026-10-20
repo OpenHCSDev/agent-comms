@@ -134,7 +134,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.launch_runtime import ArgumentsLaunchChange, CommandLaunchChange, EnvironmentLaunchChange, ExactSourceInterpreter
 from agent_comms.owner_lifecycle import OwnerRestartSelection
-from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
+from agent_comms.owner_restart import FencedOwnerBatch, NamedRestartThreads, StoppedOwnerFailure
 from agent_comms.store_files import _store_lock
 
 
@@ -245,7 +245,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         comms.owners.stop("worker")
     else:
         (result,) = comms.owners.restart_owners(
-            ("worker",), agent_bin=CommandLaunchChange(sys.executable),
+            NamedRestartThreads(("worker",)), agent_bin=CommandLaunchChange(sys.executable),
             agent_args=ArgumentsLaunchChange(("-c", "print('local')")), **arguments
         )
         replacement = comms.registry.require("worker")

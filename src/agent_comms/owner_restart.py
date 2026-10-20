@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import os
 import stat
-from collections.abc import Sequence
+from abc import abstractmethod
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
+from .declared_family import DeclaredFamily
 from .launch_runtime import (
     AnySourceInterpreter,
     ArgumentsLaunchChange,
@@ -40,9 +41,44 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+class RestartThreadSelection(DeclaredFamily, affix="RestartThreads"):
+    @abstractmethod
+    def threads(self, snapshot: RegistrySnapshot) -> list[Thread]: ...
+
+
+@dataclass(frozen=True)
+class AllRestartableThreads(RestartThreadSelection):
+    def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
+        return [candidate for thread in snapshot.threads.values()
+                for candidate in thread.restart_candidates(snapshot.statuses[thread.name])]
+
+
+@dataclass(frozen=True)
+class NamedRestartThreads(RestartThreadSelection):
+    names: tuple[str, ...] = ()
+
+    def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
+        return list({snapshot.require_active(name).name: snapshot.require_active(name)
+                     for name in self.names}.values())
+
+    @classmethod
+    def argument_options(cls) -> dict[str, object]:
+        return {}
+
+    @classmethod
+    def argument_text(cls, encoded: dict[str, object]) -> object:
+        return encoded
+
+    @classmethod
+    def argument_payload(cls, text: object) -> object:
+        if isinstance(text, dict):
+            return text
+        return {cls.family_discriminator: cls.declared_name, "names": [text]}
+
+
 @dataclass(frozen=True)
 class OwnerRestartRequest:
-    names: Sequence[str] | None = None
+    selection: RestartThreadSelection = field(default_factory=AllRestartableThreads)
     command: NoLaunchChange | CommandLaunchChange = field(default_factory=NoLaunchChange)
     arguments: NoLaunchChange | ArgumentsLaunchChange = field(default_factory=NoLaunchChange)
     expected: OwnerRestartSelection | None = None
@@ -51,11 +87,7 @@ class OwnerRestartRequest:
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
-        if self.names is None:
-            return [candidate for thread in snapshot.threads.values()
-                    for candidate in thread.restart_candidates(snapshot.statuses[thread.name])]
-        return list({snapshot.require_active(name).name: snapshot.require_active(name)
-                     for name in self.names}.values())
+        return self.selection.threads(snapshot)
 
     def require_selection(self, snapshot: RegistrySnapshot, threads: list[Thread]) -> None:
         if self.expected is not None:

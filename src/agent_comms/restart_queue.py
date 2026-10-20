@@ -37,7 +37,7 @@ from .launch_runtime import (
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
-from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
+from .owner_restart import NamedRestartThreads, OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .store_files import _atomic_write_text, _store_lock
@@ -356,7 +356,7 @@ def step(comms: Comms) -> None:
             continue
         try:
             request = OwnerRestartRequest(
-                names=(owner.name,),
+                selection=NamedRestartThreads((owner.name,)),
                 expected=record.selection,
                 runtime=EnvironmentLaunchChange(record.target.runtime),
                 command=CommandLaunchChange(record.target.agent_bin),
