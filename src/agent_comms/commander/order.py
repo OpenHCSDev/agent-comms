@@ -228,11 +228,6 @@ class CommanderContext(CommanderConfig):
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
 
-    @classmethod
-    def read_root(cls, root: Path | str) -> CommanderContext:
-        config = CommanderConfig.read_root(root)
-        return cls.model_validate(config.model_dump())
-
     @property
     def comms(self) -> Comms:
         return self._comms

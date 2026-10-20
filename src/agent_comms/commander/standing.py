@@ -138,9 +138,9 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
         if idle := self.idle(comms, commander):
             current.assign(comms, commander, idle[0], actor)
         else:
-            CommanderContext.read_root(comms.root).post(VerdictAudience(()),
+            CommanderContext.read_root(comms.root).post(VerdictAudience(("#comms",)),
                 f"STALL with no idle unit: {todo.holder} on {todo.id}, distance not falling "
-                f"since {RecordedEventTime(self.since).clock()}; struck, still held")
+                f"since {time.strftime('%H:%M', time.localtime(self.since))}; struck, still held")
 
 
 @dataclass(frozen=True)
@@ -156,7 +156,7 @@ class CommanderAlarm(DatedStandingRule, declared_name=None):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         CommanderContext.read_root(comms.root).post(
-            VerdictAudience(()), f"COMMANDER {commander}: {self.line()}")
+            VerdictAudience(("#comms",)), f"COMMANDER {commander}: {self.line()}")
 
     @classmethod
     def observed(cls, comms: Comms, commander: str) -> Iterator[tuple[Todo, OrderProgress]]:
