@@ -189,8 +189,9 @@ class Registration:
 
     def decide_storage(self, name, effects):
         current = self.require(name)
+        rule, storage = self.storage_rule, None
         for effect in effects:
-            effect.check(self.storage_rule, current)
+            storage = effect.check(rule, current, storage)
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         with self.store.editing() as edit:
