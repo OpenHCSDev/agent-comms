@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.child_process import OrderCheckFailed
+from agent_comms.child_process import OrderCheckFailedError
 from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
@@ -68,7 +68,7 @@ def test_objective_family_records_once_posts_minutes_and_uses_existing_takeaway(
     done = CommsOrderDoneTool(problem='P2', order_id=todo.order.id,
         delivery=CommitDelivery(commit=sha, delivered_commit=sha), claims=working(comms))
     for _ in range(2):
-        with pytest.raises(OrderCheckFailed):
+        with pytest.raises(OrderCheckFailedError):
             done.apply(comms, caller)
         assert len(store.get('P2').strikes) == 1
     assert len(lines()) == 3

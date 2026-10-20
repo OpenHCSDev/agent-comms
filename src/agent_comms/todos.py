@@ -27,7 +27,9 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
-from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailed
+from .child_process import (
+    BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
+)
 from .bus_publication import AgentOrigin
 from .external_transcript import ExternalTranscript
 from .messages import InfoKind, Message
@@ -113,7 +115,7 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
-    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailed) -> None:
+    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
         """Only a commit delivery can fail a check on delivered source."""
 
     def strikes(
@@ -143,7 +145,7 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     def work(self) -> str:
         return f"delivered commit {self.delivered}"
 
-    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailed) -> None:
+    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
         if self.commit != self.delivered:
             return  # A failed integration check is not evidence that the unit's commit failed.
         now = time.time()
@@ -2092,7 +2094,8 @@ class MissedFirstCallStrike(ObjectiveStrike):
         if transcript.tool_call_between(order.at.recorded_at("An order"), due):
             return ()
         return (cls.make(todo, now,
-            f"made no first tool call before its first-call deadline; cost {(now - due) / 60:.1f} minutes late"),)
+            f"made no first tool call before its first-call deadline; "
+            f"cost {(now - due) / 60:.1f} minutes late"),)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2382,7 +2385,7 @@ class DeliverTodo(TodoOperation):
         verified = self.delivery.verified(current, goals.registry)
         try:
             delivered = asyncio.run(verified)
-        except OrderCheckFailed as error:
+        except OrderCheckFailedError as error:
             self.delivery.check_failed(goals, current, error)
             raise
         return replace(self, delivery=delivered)
