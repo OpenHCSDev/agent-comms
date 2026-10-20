@@ -1258,10 +1258,11 @@ class ApplicationOrderRun(OrderRun):
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):
-    """The decision family an order deletes, decoded as declared fields."""
+    """The deletion an order declares, decoded as its own fields."""
 
     label: ClassVar[str] = "Deletes:"
     checks: ClassVar[tuple[OrderCheck, ...]] = ()
+    modules: ClassVar[tuple[str, ...]] = ()
 
     def instructions(self) -> tuple[str, ...]:
         return ()
@@ -1270,6 +1271,14 @@ class OrderDeletion(DeclaredFamily, affix="Deletion"):
 @dataclass(frozen=True)
 class NoOrderDeletion(OrderDeletion):
     pass
+
+
+@dataclass(frozen=True)
+class ModuleDeletion(OrderDeletion):
+    modules: tuple[str, ...]
+
+    def instructions(self) -> tuple[str, ...]:
+        return (f"{self.label} {', '.join(self.modules)}",)
 
 
 @dataclass(frozen=True)
