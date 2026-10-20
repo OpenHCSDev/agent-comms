@@ -47,6 +47,10 @@ class DeliveryOverview(ToolResult):
     current_scope: Literal["owner_queue", "unobserved"] = field(
         metadata={"wire_name": "currentScope"})
 
+    @property
+    def owner_queue(self) -> bool:
+        return self.current_scope == "owner_queue"
+
 
 @dataclass(frozen=True, slots=True)
 class InputDocument:

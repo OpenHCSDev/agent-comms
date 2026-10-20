@@ -36,7 +36,6 @@ from .bus_projection import (
 )
 from .bus_publication import (
     CommittedDelivery,
-    has_private_wire_fields,
 )
 from .bus_source_page import AddressedPage
 from .child_process import Platform
@@ -192,17 +191,6 @@ class WireSnapshot(ObservedPath):
             raise RelationViolationError("Notification reference is not its original source")
         return tuple(messages[reference] for reference in references)
 
-    @classmethod
-    def public_page_records(cls, record: Mapping, raw_size: int,
-                            metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
-        """Silent facts consume physical bytes, never message/display budgets."""
-        for message in cls.messages(record):
-            if has_private_wire_fields(record):
-                yield message, len(json.dumps(message.to_wire()).encode()) + 1
-            else:
-                message.require_retained_claim(metadata.claimed_after_seq)
-                yield message, raw_size
-
 
 class AbsentWireSnapshot(WireSnapshot, AbsentPath):
     """No descriptor existed at acquisition; later appends stay outside this cut."""
@@ -347,11 +335,8 @@ class OpenedWireSnapshot(WireSnapshot):
         if not 0 <= before_offset <= self.boundary:
             raise RelationViolationError("Indexed read exceeds its opened wire cut")
         for row in rows:
-            (message, size), = self.public_page_records(
-                *row.record(self.stream, max_bytes=before_offset - row.offset),
-                self.metadata,
-            )
-            yield message, size
+            record, size = row.record(self.stream, max_bytes=before_offset - row.offset)
+            yield from record.page_records(size, self.metadata)
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | NoCheckpoint:
         """Validate the captured candidate only when a consumer reads this cut."""
@@ -401,7 +386,7 @@ class OpenedWireSnapshot(WireSnapshot):
         for record, raw_size in _iter_jsonl_stream(
             self.stream, boundary=boundary, label="wire snapshot"
         ):
-            yield from self.public_page_records(record, raw_size, self.metadata)
+            yield from WireRecord.public_page_records(record, raw_size, self.metadata)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationSourceWindowRequest:

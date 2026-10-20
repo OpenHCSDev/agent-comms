@@ -20,7 +20,7 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
 )
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
@@ -133,6 +133,21 @@ class CodingToolMode(NativeToolMode):
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         return await CodingToolSocket.open(turn, ownership, self.owner)
 
+@dataclass(frozen=True)
+class CodingToolRequest:
+    """The native coding socket's object-valued call, not a Codex rollout item."""
+
+    token: str = field(repr=False)
+    call_id: str
+    name: str
+    arguments: object
+
+    def authenticate(self, expected_token: str) -> CodingCall:
+        if self.token != expected_token:
+            raise SelectedToolDenied("Coding request is not authenticated")
+        return CodingCall.decode(self.call_id, self.name, self.arguments)
+
+
 class CodingToolSocket(ToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
 
@@ -147,14 +162,11 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
-        value = FieldCodec.parse(raw)
-        if (
-            type(value) is not dict
-            or set(value) != {"token", "call_id", "name", "arguments"}
-            or value["token"] != self.listener.token
-        ):
-            raise SelectedToolDenied("Coding request is not authenticated")
-        return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
+        try:
+            request = FieldCodec.decode(CodingToolRequest, FieldCodec.parse(raw))
+        except MalformedRecord as error:
+            raise SelectedToolDenied("Coding request is not authenticated") from error
+        return request.authenticate(self.listener.token)
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
         # The owner rechecks authority after its unlocked room wait. The
