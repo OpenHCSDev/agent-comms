@@ -141,7 +141,7 @@ class FieldPlan:
         metadata = self.declared.metadata
         owner: argparse._ActionsContainer = parser
         if "group" in metadata:
-            group = metadata.get("group")
+            group = cast(str, metadata.get("group"))
             if group not in groups:
                 groups[group] = parser.add_mutually_exclusive_group(required=True)
             owner = groups[group]
@@ -150,7 +150,8 @@ class FieldPlan:
         if "parser_default" in metadata:
             options["default"] = metadata.get("parser_default")
         elif "parser_default_factory" in metadata:
-            options["default"] = metadata.get("parser_default_factory")()
+            factory = cast(Callable[[], object], metadata.get("parser_default_factory"))
+            options["default"] = factory()
         elif self.constructor_required:
             options["required"] = True
         else:
