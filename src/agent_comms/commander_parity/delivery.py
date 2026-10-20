@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -13,6 +12,7 @@ from ..child_process import ChildOutcome, ChildResult, ExitedOutcome
 from ..commander.order import OrderFile
 from ..field_codec import FieldCodec
 from ..progress_claims import MergedClaim
+from ..repo import Repo
 from ..todos import CommitDelivery, FileDeliveryEvidence, Todo
 from ..tools import CommsOrderDoneTool
 from . import ParityComparison
@@ -72,57 +72,44 @@ class DeliveryComparison(ParityComparison):
 class DeliveryRepository:
     path: Path
 
-    def git(self, *arguments: str) -> str:
-        return subprocess.check_output(
-            (
-                "git",
-                "-C",
-                str(self.path),
-                "-c",
-                "user.name=parity",
-                "-c",
-                "user.email=parity@invalid",
-                *arguments,
-            ),
-            text=True,
-            stderr=subprocess.PIPE,
-        ).strip()
-
     @classmethod
     def create(cls, root: Path) -> DeliveryRepository:
         path = root / "delivery-repository"
         path.mkdir()
-        repo = cls(path)
         remote = root / "delivery-origin.git"
-        subprocess.run(("git", "init", "--bare", "-q", str(remote)), check=True)
-        repo.git("init", "-q", "-b", "main")
+        Repo.git(root, "init", "--bare", "-q", str(remote))
+        Repo.git(path, "init", "-q", "-b", "main")
+        Repo.git(path, "config", "user.name", "parity")
+        Repo.git(path, "config", "user.email", "parity@invalid")
         url = "https://github.com/parity-local/delivery.git"
-        repo.git("config", f"url.{remote}.insteadOf", url)
-        repo.git("remote", "add", "origin", url)
-        repo.git("commit", "-q", "--allow-empty", "-m", "copied delivery base")
-        repo.git("push", "-q", "origin", "main")
-        repo.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-        return repo
+        Repo.git(path, "config", f"url.{remote}.insteadOf", url)
+        Repo.git(path, "remote", "add", "origin", url)
+        Repo.git(path, "commit", "-q", "--allow-empty", "-m", "copied delivery base")
+        Repo.git(path, "push", "-q", "origin", "main")
+        Repo.git(path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        return cls(path)
 
     def cases(self) -> tuple[tuple[str, str], ...]:
-        base = self.git("rev-parse", "HEAD")
-        self.git("switch", "-q", "-c", "main-answer")
-        self.git("commit", "-q", "--allow-empty", "-m", "answer integrated on main")
-        main = self.git("rev-parse", "HEAD")
-        self.git("switch", "-q", "main")
-        self.git("merge", "-q", "--no-ff", "main-answer", "-m", "integrate main answer")
-        self.git("push", "-q", "origin", "main")
-        self.git("switch", "-q", "-c", "branch-answer", base)
-        self.git("commit", "-q", "--allow-empty", "-m", "answer integrated elsewhere")
-        branch = self.git("rev-parse", "HEAD")
-        self.git("switch", "-q", "-c", "integration", base)
-        self.git("merge", "-q", "--no-ff", "branch-answer", "-m", "integrate branch answer")
-        self.git("push", "-q", "origin", "integration")
-        self.git("switch", "-q", "-c", "unmerged-answer", base)
-        self.git("commit", "-q", "--allow-empty", "-m", "published but not integrated")
-        unmerged = self.git("rev-parse", "HEAD")
-        self.git("push", "-q", "origin", "unmerged-answer")
-        self.git("switch", "-q", "main")
+        base = Repo.git(self.path, "rev-parse", "HEAD").strip()
+        Repo.git(self.path, "switch", "-q", "-c", "main-answer")
+        Repo.git(self.path, "commit", "-q", "--allow-empty", "-m", "answer integrated on main")
+        main = Repo.git(self.path, "rev-parse", "HEAD").strip()
+        Repo.git(self.path, "switch", "-q", "main")
+        Repo.git(self.path, "merge", "-q", "--no-ff", "main-answer", "-m", "integrate main answer")
+        Repo.git(self.path, "push", "-q", "origin", "main")
+        Repo.git(self.path, "switch", "-q", "-c", "branch-answer", base)
+        Repo.git(self.path, "commit", "-q", "--allow-empty", "-m", "answer integrated elsewhere")
+        branch = Repo.git(self.path, "rev-parse", "HEAD").strip()
+        Repo.git(self.path, "switch", "-q", "-c", "integration", base)
+        Repo.git(
+            self.path, "merge", "-q", "--no-ff", "branch-answer", "-m", "integrate branch answer"
+        )
+        Repo.git(self.path, "push", "-q", "origin", "integration")
+        Repo.git(self.path, "switch", "-q", "-c", "unmerged-answer", base)
+        Repo.git(self.path, "commit", "-q", "--allow-empty", "-m", "published but not integrated")
+        unmerged = Repo.git(self.path, "rev-parse", "HEAD").strip()
+        Repo.git(self.path, "push", "-q", "origin", "unmerged-answer")
+        Repo.git(self.path, "switch", "-q", "main")
         return (
             ("merged to main", main),
             ("merged to another branch", branch),
@@ -185,7 +172,7 @@ class DeliveredCommitCase:
                     problem=native_order.id,
                     order_id=native_order.order.checked().id,
                     delivery=CommitDelivery(
-                        commit=repository.git("rev-parse", "HEAD"),
+                        commit=Repo.git(repository.path, "rev-parse", "HEAD").strip(),
                         delivered_commit=commit,
                         evidence=FileDeliveryEvidence(str(run.artifact)),
                     ),
@@ -207,5 +194,5 @@ class DeliveredCommitCase:
                     run.commander.comms.goals.todos.get(native_order.id), process
                 )
                 cases.append((name, commit, current, native))
-            checked_commit = repository.git("rev-parse", "HEAD")
+            checked_commit = Repo.git(repository.path, "rev-parse", "HEAD").strip()
         return DeliveryComparison(checked_commit, tuple(cases))
