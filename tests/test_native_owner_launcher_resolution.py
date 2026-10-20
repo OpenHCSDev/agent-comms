@@ -16,7 +16,7 @@ from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch, Share
 
 
 def launcher(tmp_path, monkeypatch, route):
-    LaunchRoot(tmp_path).install()
+    LaunchRoot.from_path(tmp_path).install()
     executable = tmp_path / "bin/pi-comms-native"
     executable.parent.mkdir()
     executable.write_text("#!/bin/sh\nexit 1\n")
@@ -70,7 +70,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     package = VerifiedNativePackage.acquire(native_package.pinned_native_package())
     comms = Comms(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
-    LaunchRoot(comms.root).install()
+    LaunchRoot.from_path(comms.root).install()
     selected = tmp_path / "selected-core"
     (selected / "bin").mkdir(parents=True)
     marker = tmp_path / "selected-python"

@@ -184,8 +184,11 @@ class EnvironmentRecord:
 
     def encode(self) -> dict[str, str]:
         encoded: dict[str, str] = FieldCodec.encode(self)
-        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
-                for declaration in fields(self) if FieldCodec.wire_key(declaration) in encoded}
+        return {
+            FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+            for declaration in fields(self)
+            if FieldCodec.wire_key(declaration) in encoded
+        }
 
 
 @dataclass(frozen=True)

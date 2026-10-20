@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
@@ -50,10 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        arguments = list(sys.argv[1:] if argv is None else argv)
+        arguments = list(argv) if isinstance(argv, Sequence) else sys.argv[1:]
         LaunchRoot.startup(arguments)
         args = build_parser().parse_args(arguments, namespace=SendArguments())
-        root = LaunchRoot(Path(args.root)) if args.root else LaunchRoot.current()
+        root = LaunchRoot.from_path(args.root) if args.root else LaunchRoot.current()
         with root.selected():
             command = CliCommand.member_named(args.command).from_arguments(args)
             with client_wire(root.path) as comms:

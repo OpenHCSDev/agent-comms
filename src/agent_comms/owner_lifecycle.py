@@ -461,7 +461,7 @@ class OwnerLifecycle:
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
                 (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
-                 *LaunchRoot(self.launch_authority.child_root).arguments()),
+                 *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
                 env=env,
                 cwd=thread.worktree,
                 output=output,

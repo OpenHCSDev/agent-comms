@@ -16,7 +16,7 @@ from agent_comms.store_files import _store_lock
 
 def ingress(root: Path) -> AcpIngress:
     root.mkdir()
-    return AcpIngress(RouteSelection(LocalRoute(root), root, False), root)
+    return AcpIngress(RouteSelection(LocalRoute(root), root), root)
 
 
 @pytest.mark.asyncio

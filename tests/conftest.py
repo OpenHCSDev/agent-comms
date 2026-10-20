@@ -109,7 +109,7 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
     """A developer's live managed process is not a test wire or native child."""
     from agent_comms.launch_root import LaunchRoot
 
-    monkeypatch.setattr(LaunchRoot, "_current", None)
+    monkeypatch.setattr(LaunchRoot, "_current", LaunchRoot.unstarted())
     for name in _MANAGED_RUNTIME_ENVIRONMENT:
         monkeypatch.delenv(name, raising=False)
 
@@ -394,7 +394,7 @@ async def native_backend(tmp_path_factory, monkeypatch, selected_model, native_r
     from agent_comms.launch_root import LaunchRoot
 
     async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner"), package=native_runtime_package) as owner:
-        with LaunchRoot(owner.root).selected():
+        with LaunchRoot.from_path(owner.root).selected():
             yield owner
 
 

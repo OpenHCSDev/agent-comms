@@ -27,7 +27,7 @@ def installed_package(verified_native_package, monkeypatch):
 def route_fixture(tmp_path, monkeypatch):
     tmp_path.chmod(0o700)
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setattr(LaunchRoot, "_current", None)
+    monkeypatch.setattr(LaunchRoot, "_current", LaunchRoot.unstarted())
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
@@ -93,7 +93,7 @@ def test_explicit_environment_absent_default_and_invalid_route(tmp_path, monkeyp
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(explicit))
     with pytest.raises(RelationViolationError, match="explicit launch root"):
         resolve_comms_route()
-    with LaunchRoot(explicit).selected():
+    with LaunchRoot.from_path(explicit).selected():
         assert resolve_comms_route().observe_root() == explicit
     assert not explicit.exists(), "Observation must not create a wire"
     monkeypatch.delenv("AGENT_COMMS_ROOT")
@@ -106,7 +106,7 @@ def test_explicit_environment_absent_default_and_invalid_route(tmp_path, monkeyp
 
 def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkeypatch, verified_native_package):
     _, root, root_id = route_fixture(tmp_path, monkeypatch)
-    LaunchRoot(root).install()
+    LaunchRoot.from_path(root).install()
     service = wire()
     assert service.root == root
     # The default and an explicit selection of the same root derive one launch.
