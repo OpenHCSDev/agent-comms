@@ -472,6 +472,24 @@ class SQLiteSchemaObject(TypedRow):
 
 
 @dataclass(frozen=True)
+class SQLiteTableName(TypedRow):
+    """One table SQLite's catalog holds, whether or not a row declaration names it."""
+
+    name: str
+
+    @classmethod
+    def stored(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
+        """The file's own tables, newest first, so dependents drop before their parents."""
+        return cls.read(db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+            "ORDER BY rowid DESC"
+        ))
+
+    def drop(self, db: sqlite3.Connection) -> None:
+        db.execute(f"DROP TABLE {_identifier(self.name)}")
+
+
+@dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
 

@@ -25,17 +25,12 @@ from agent_comms.coordination_schema import (
 )
 from agent_comms.coordination_tables.metadata import SchemaMeta
 from agent_comms.typed_table import (
+    SQLiteTableName,
     SQLiteUserVersion,
     StoreWriter,
-    TypedRow,
 )
 
 from .declared_family import DeclaredFamily
-
-
-@dataclass(frozen=True)
-class _TableName(TypedRow):
-    name: str
 
 
 class StoreContention(ABC):
@@ -161,7 +156,7 @@ class CoordinationStore(StoreWriter):
         db.execute("BEGIN")
         # BEGIN is lazy. Acquire the snapshot before schema decoders can
         # reclassify BUSY as unsupported data or absent rows.
-        _TableName.read(db.execute("SELECT name FROM sqlite_master LIMIT 1"))
+        SQLiteTableName.read(db.execute("SELECT name FROM sqlite_master LIMIT 1"))
 
     @classmethod
     def _configure_reader(cls, db: sqlite3.Connection) -> sqlite3.Connection:
@@ -356,9 +351,7 @@ class CoordinationStore(StoreWriter):
         return StoreWriter.transaction(self, self._connection)
 
     def _empty_schema(self, version: int) -> bool:
-        return version == 0 and not _TableName.read(
-            self._connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-        )
+        return version == 0 and not SQLiteTableName.stored(self._connection)
 
     def _enforce_private_modes(self) -> None:
         if os.name == "nt":
