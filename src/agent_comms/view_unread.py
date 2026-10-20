@@ -20,7 +20,7 @@ from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
-from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .registry_document import RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
@@ -374,18 +374,21 @@ class TranscriptReadKeys:
     incarnation: ThreadIncarnation
     runtime: RuntimeLocation
     revisions: dict[str, FileRevision | None]
+    paths: dict[str, Path]
 
     def matches(self, thread: Thread) -> bool:
         return self.incarnation == thread.incarnation and self.runtime == thread.runtime
 
     @classmethod
     def capture(cls, thread: Thread):
-        return cls(thread.incarnation, thread.runtime, {}).refresh({})
+        return cls(thread.incarnation, thread.runtime, {}, {}).refresh({})
 
     def refresh(self, observed: Mapping[str, FileRevision | None]) -> TranscriptReadKeys:
-        return replace(self, revisions={
-            key: observed[key] if key in observed else FileRevision.capture(Path(key))
-            for key in self.runtime.read_keys()
+        paths = {key: self.paths[key] if key in self.paths else Path(key).absolute()
+                 for key in self.runtime.read_keys()}
+        return replace(self, paths=paths, revisions={
+            key: observed[key] if key in observed else FileRevision.capture(path)
+            for key, path in paths.items()
         })
 
 
@@ -398,8 +401,8 @@ class TranscriptReadState(ThreadOwnedState):
 
     def __init__(self, path: Path):
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
+        self._path_threads: dict[Path, set[str]] = {}
         self._key_snapshot: RegistrySnapshot | None = None
-        self._key_visibility = DEFAULT_ROSTER
         self._source_watch: FileWatch = NativeFileWatch.open()
         self._source_resources = ExitStack()
         self.path = ReadLedger.path_in(path.parent)
@@ -527,14 +530,14 @@ class TranscriptReadState(ThreadOwnedState):
         # cancellation, never this connection, the observer pipe or the owner's locks.
         self._preparation = self._preparation.started(self, needed)
 
-    def _refresh_keys(self, snapshot: RegistrySnapshot, visibility: RosterVisibility) -> None:
+    def _refresh_keys(self, snapshot: RegistrySnapshot) -> None:
         changed = self._source_watch.changed_paths()
         invalid = self._source_watch.invalid
-        # The caller's captured registry owns the thread set for these counts.
-        rebuild = invalid
-        if snapshot is not self._key_snapshot or visibility != self._key_visibility:
+        # Visibility selects counts, not the lifetime of a registered source.
+        rebuild = False
+        if snapshot is not self._key_snapshot:
             current = {}
-            for thread in snapshot.visible_threads(visibility):
+            for thread in snapshot.visible_threads(RosterVisibility(stopped=True, archived=True)):
                 prior = self._thread_keys.get(thread.name)
                 keys = (prior if prior is not None and prior.matches(thread)
                         else TranscriptReadKeys.capture(thread))
@@ -543,19 +546,24 @@ class TranscriptReadState(ThreadOwnedState):
             rebuild |= bool(self._thread_keys.keys() - current.keys())
             self._thread_keys = current
             self._key_snapshot = snapshot
-            self._key_visibility = visibility
-        if changed or invalid:
-            for name, keys in self._thread_keys.items():
-                if invalid or any(Path(key).absolute() in changed for key in keys.revisions):
-                    observed = {key: FileRevision.capture(Path(key)) for key in keys.revisions}
-                    if observed != keys.revisions:
-                        current_keys = keys.refresh(observed)
-                        rebuild |= keys.revisions.keys() != current_keys.revisions.keys()
-                        self._thread_keys[name] = current_keys
+        names = (self._thread_keys.keys() if invalid else
+                 {name for path in changed for name in self._path_threads.get(path, ())})
+        # A queued event can belong to a source removed by this registry revision.
+        for name in names & self._thread_keys.keys():
+            keys = self._thread_keys[name]
+            observed = {key: FileRevision.capture(path) for key, path in keys.paths.items()}
+            if observed != keys.revisions:
+                current_keys = keys.refresh(observed)
+                rebuild |= keys.revisions.keys() != current_keys.revisions.keys()
+                self._thread_keys[name] = current_keys
         if rebuild:
+            self._path_threads = {}
+            for name, keys in self._thread_keys.items():
+                for path in keys.paths.values():
+                    self._path_threads.setdefault(path, set()).add(name)
+        if rebuild or invalid:
             self._source_resources.close()
-            sources = tuple(WatchSource.modified_file(Path(key).absolute())
-                            for keys in self._thread_keys.values() for key in keys.revisions)
+            sources = tuple(WatchSource.modified_file(path) for path in self._path_threads)
             wanted = {key for keys in self._thread_keys.values() for key in keys.revisions}
             self._preparation.retain(wanted)
             if not sources:
@@ -566,7 +574,7 @@ class TranscriptReadState(ThreadOwnedState):
             ))
             # Cover a write between the first capture and installing its watch.
             for name, keys in tuple(self._thread_keys.items()):
-                observed = {key: FileRevision.capture(Path(key)) for key in keys.revisions}
+                observed = {key: FileRevision.capture(path) for key, path in keys.paths.items()}
                 if observed != keys.revisions:
                     self._thread_keys[name] = keys.refresh(observed)
 
@@ -578,22 +586,25 @@ class TranscriptReadState(ThreadOwnedState):
         try:
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
-            self._refresh_keys(registry, visibility)
+            self._refresh_keys(registry)
+            keys = {name: keys for name, keys in self._thread_keys.items()
+                    if registry.statuses[name].in_view(visibility)}
             try:
-                return self._counts_locked(viewer, document)
+                return self._counts_locked(viewer, document, keys)
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
                     CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
-                return self._counts_locked(viewer, document)
+                return self._counts_locked(viewer, document, keys)
         finally:
             self._lock.release()
 
-    def _counts_locked(self, viewer: str, document: ReadDocument) -> TranscriptUnread:
-        revisions = {source: revision for keys in self._thread_keys.values()
+    def _counts_locked(self, viewer: str, document: ReadDocument,
+                       threads: Mapping[str, TranscriptReadKeys]) -> TranscriptUnread:
+        revisions = {source: revision for keys in threads.values()
                      for source, revision in keys.revisions.items()}
         if not revisions:
-            return TranscriptUnread({name: ReplyUnread(0) for name in self._thread_keys})
+            return TranscriptUnread({name: ReplyUnread(0) for name in threads})
         per_file: dict[str, FileReplyCount] = {}
         seen = {}
         for source, revision in revisions.items():
@@ -614,7 +625,7 @@ class TranscriptReadState(ThreadOwnedState):
             for source, count in TranscriptReply.after(database, ends).items():
                 per_file[source] = indexes[source].counted(count, seen[source])
         result: dict[str, UnreadPresentation] = {}
-        for name, keys in self._thread_keys.items():
+        for name, keys in threads.items():
             total = sum((per_file[source] for source in keys.revisions), Counted(0))
             total.record(name, result)
         return TranscriptUnread(result)

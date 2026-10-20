@@ -14,8 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.turn_lease import NoTurn
-
 from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
@@ -41,7 +39,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
-from agent_comms.publisher import ResponseWrites
+from agent_comms.publisher import ParticipantPublisher
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
@@ -59,7 +57,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus needs PO
 @dataclass
 class Fixture:
     comms: Comms
-    bus: MessageBus[ResponseWrites]
+    bus: MessageBus[ParticipantPublisher]
     store: Coordination
     root_id: str
     origin_seq: int
@@ -299,7 +297,7 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
             case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
         ).value
 
-        def crash_before_append(_intent, *, conversation, registry_snapshot=None):
+        def crash_before_append(_intent, *, conversation, registry_snapshot=None, activity):
             raise OSError("injected process death before append")
 
         monkeypatch.setattr(
@@ -338,8 +336,9 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         ).value
         real_append = case.bus.publisher._publish_keyed_response_unlocked
 
-        def committed_then_lost_ack(frozen, *, conversation, registry_snapshot=None):
-            real_append(frozen, conversation=conversation, registry_snapshot=registry_snapshot)
+        def committed_then_lost_ack(frozen, *, conversation, registry_snapshot=None, activity):
+            real_append(frozen, conversation=conversation, registry_snapshot=registry_snapshot,
+                        activity=activity)
             raise OSError("injected loss after bus fsync")
 
         monkeypatch.setattr(
@@ -380,8 +379,9 @@ def test_fresh_selection_completes_saved_reply_before_admitting_new_assignment(
         ).value
         append = case.bus.publisher._publish_keyed_response_unlocked
 
-        def saved_then_lost(frozen, *, conversation, registry_snapshot=None):
-            append(frozen, conversation=conversation, registry_snapshot=registry_snapshot)
+        def saved_then_lost(frozen, *, conversation, registry_snapshot=None, activity):
+            append(frozen, conversation=conversation, registry_snapshot=registry_snapshot,
+                   activity=activity)
             raise OSError("lost acknowledgement after saved reply")
 
         monkeypatch.setattr(
@@ -425,7 +425,7 @@ def test_fresh_selection_refuses_missing_saved_reply_without_resend(
             exact_target=case.reply_target, owner_witness=case.witness,
         ).value
 
-        def lost_before_append(_intent, *, conversation, registry_snapshot=None):
+        def lost_before_append(_intent, *, conversation, registry_snapshot=None, activity):
             raise OSError("reply was never saved")
 
         monkeypatch.setattr(
@@ -495,12 +495,13 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
         )
         real_append = case.bus.publisher._publish_keyed_response_unlocked
 
-        def blocking_append(frozen, *, conversation, registry_snapshot=None):
+        def blocking_append(frozen, *, conversation, registry_snapshot=None, activity):
             entered.set()
             assert not concurrent_done.wait(0.25), "revocation raced an in-flight fenced append"
             assert not wire_done.is_set(), "registry writer raced an in-flight append"
             return real_append(
-                frozen, conversation=conversation, registry_snapshot=registry_snapshot
+                frozen, conversation=conversation, registry_snapshot=registry_snapshot,
+                activity=activity,
             )
 
         monkeypatch.setattr(case.bus.publisher, "_publish_keyed_response_unlocked", blocking_append)
@@ -558,7 +559,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
             env.pop(name, None)
         env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
 
-        def concurrent_stop(frozen, *, conversation, registry_snapshot=None):
+        def concurrent_stop(frozen, *, conversation, registry_snapshot=None, activity):
             nonlocal child
             child = subprocess.Popen(
                 [
@@ -584,7 +585,8 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
             with pytest.raises(subprocess.TimeoutExpired):
                 child.wait(timeout=0.15)
             return actual_append(
-                frozen, conversation=conversation, registry_snapshot=registry_snapshot
+                frozen, conversation=conversation, registry_snapshot=registry_snapshot,
+                activity=activity,
             )
 
         monkeypatch.setattr(case.bus.publisher, "_publish_keyed_response_unlocked", concurrent_stop)
@@ -619,14 +621,16 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
         elif change == "stop":
             case.comms.registry.unregister("owner")
         elif change == "pid":
-            witness = replace(witness, thread=replace(witness.thread, process_identity=ProcessIdentity(os.getpid() + 1, 1), active_turn=replace(witness.thread.active_turn, owner_pid=os.getpid() + 1)))
+            witness = replace(witness, thread=replace(
+                witness.thread, process_identity=ProcessIdentity(os.getpid() + 1, 1)
+            ))
         elif change == "pid_reuse":
             process = witness.thread.process_identity
             witness = replace(witness, thread=replace(
                 witness.thread, process_identity=ProcessIdentity(process.pid, process.start_time + 1)
             ))
         elif change == "turn":
-            witness = replace(witness, thread=replace(witness.thread, active_turn=NoTurn()))
+            witness = replace(witness, thread=witness.thread.without_turn())
         else:
             witness = replace(witness, thread=replace(witness.thread, created_at=witness.thread.created_at + 1))
         with pytest.raises(StaleFence):
