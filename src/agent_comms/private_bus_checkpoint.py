@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
@@ -46,7 +46,7 @@ from .turn_context import ContextEntryManifest, RecordedContextManifest
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .wire_log import WireLog
+    from .wire_log import WireLog, WireSnapshot
     from .messages import Message
     from .retained_task_facts import ExactTaskFact
     from .registration import Registration
@@ -610,30 +610,75 @@ class CheckedRead:
         )
         return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
+    def message_by_id(
+        self, message_id: str, *,
+        accepts: Callable[[CommittedDelivery], bool] = lambda original: True,
+        public: WireSnapshot | None = None,
+    ) -> Message | None:
+        """Resolve a message ID through checked original rows, not a byte-limited tail.
+
+        Public-only imported history has no delivery pointer; its sequence is
+        located in the same checked index and decoded by the covered page index.
+        Receipt callers select only deliveries and prove their publication key.
+        """
+        self.require_current()
+        if public is not None:
+            opened = public.checked(self)
+            from .message_reference import MessageReference
+
+            rows = PublicMessages.read(self.connection.execute(
+                f"SELECT * FROM {PublicMessages.declared_name} WHERE message_id=? ORDER BY seq DESC",
+                (message_id,),
+            ))
+            for row in rows:
+                delivery = DeliverySources.one(self.connection, seq=row.seq)
+                if delivery is not None:
+                    original = delivery.delivery(self.stream, self.witness.root_id)
+                    if accepts(original):
+                        self.require_current()
+                        return original.message
+                    continue
+                message, = opened.messages_for_references((MessageReference(row.seq, row.message_id),))
+                if message.sender != row.sender:
+                    raise RelationViolationError("Checked public message sender differs from its original.")
+                self.require_current()
+                return message
+            self.require_current()
+            return None
+        # Delivery receipts may share a message ID across senders. Their
+        # original publication key, not the newest unrelated ID, selects one.
+        cursor = self.connection.execute(
+            f"SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC",
+            (message_id,),
+        )
+        for row in DeliverySources.iterate(cursor):
+            original = row.delivery(self.stream, self.witness.root_id)
+            if accepts(original):
+                self.require_current()
+                return original.message
+        self.require_current()
+        return None
+
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
         self.require_current()
         if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
             return None
-        # The original intent already owns its Message-derived identity. Use
-        # that exact pointer relation; never decode unrelated history while
-        # the publication transaction holds its current source fence. Message
-        # IDs are not assumed unique: the original acknowledgement still proves key,
-        # execution and complete publication content for every candidate.
-        cursor = self.connection.execute(
-            f"SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC",
-            (intent.expected_message_id,),
-        )
-        for row in DeliverySources.iterate(cursor):
-            original = row.delivery(self.stream, self.witness.root_id)
+        # The original intent already owns its Message-derived identity. IDs
+        # are not assumed unique: each matching original must prove the key,
+        # execution and complete publication content.
+        def matches(original: CommittedDelivery) -> bool:
             acknowledgement = original.acknowledgement
             if acknowledgement is not None and acknowledgement.publication_key == intent.publication_key:
                 if acknowledgement.execution_id != intent.execution_id:
                     raise RelationViolationError("Response publication identity conflicts.")
                 if not intent.matches_publication(original.message):
                     raise RelationViolationError("Response publication intent conflicts.")
-                self.require_current()
-                return original.message
+                return True
+            return False
+
+        if matched := self.message_by_id(intent.expected_message_id, accepts=matches):
+            return matched
         raise RelationViolationError("checked response key has no original source row.")
 
 
