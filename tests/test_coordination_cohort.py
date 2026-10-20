@@ -395,7 +395,7 @@ def test_reader_rejects_later_corrupt_row_even_for_earlier_valid_seq(tmp_path: P
     bus_path = tmp_path / "comms" / "bus.jsonl"
     with bus_path.open("ab") as output:
         output.write(b'{"seq": true}\n')
-    with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+    with pytest.raises(RelationViolationError, match="Unreadable bus row.*byte offset"):
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert (
         store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]

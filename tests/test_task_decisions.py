@@ -357,6 +357,7 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
+    comms.messaging.initialize_private_initial_protocol()
     from agent_comms.retained_task_facts import CurrentUserTaskCorrectionFact, RetainedTaskFacts
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 

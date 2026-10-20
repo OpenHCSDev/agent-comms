@@ -474,7 +474,7 @@ class Message:
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
         plan = FieldCodec.field_plan(Message, 'type')
-        kind = FieldCodec.decode(plan.annotation, plan.raw(public))
+        kind = cast(type[MessageKind], plan.value.decode(plan.raw(public)))
         return kind.decode_message({"ts": 0.0, **public})
 
     @classmethod
