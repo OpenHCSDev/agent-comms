@@ -503,7 +503,7 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
 
 async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
     from functools import partial
-    from agent_comms.activity import ActivityState
+    from agent_comms.turn_phase import ModelWaitPhase
     from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
     from agent_comms.maintenance_barrier import MaintenanceOperator
     from agent_comms.recorded_time import RecordedEventTime
@@ -512,7 +512,7 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
-    updates = [StartedItem('turn', 'item', ActivityState.WORKING, 'Replying',
+    updates = [StartedItem('turn', 'item', ModelWaitPhase('Replying'),
                           TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
                AppendDraftItem('turn', 'item', ' once')]
     barrier = MaintenanceBarrier(comms.registry.store.path)

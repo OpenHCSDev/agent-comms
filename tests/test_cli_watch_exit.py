@@ -13,7 +13,7 @@ from agent_comms.cli_protocol import DeliveredOutcome, FailedCoreError
 
 
 class WatchOnly(Operation):
-    async def run(self, bridge):
+    async def execute(self, bridge):
         await bridge.watch()
 
 
@@ -164,7 +164,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
     from cutover.carry import STEPS, CarryChain, CarryLedger
     from test_bus_route_counts_locking import _case
     from test_carry import REPO, Repository, TestRuntime
-    from tools.upgrade_bus import Home, Revisions, carry_all
+    from tools.upgrade_bus import CarryOver, Home, Revisions
     from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = _case(tmp_path / 'wire', monkeypatch)
@@ -199,7 +199,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
             head = repo.commit({'carry': (REPO / STEPS / 'carry.py').read_text(), 'carry_probe': PROBE})
             revisions = Revisions(repo.path, tmp_path / 'trees')
             try:
-                carry_all(comms.root, CarryChain.at(repo.path, head).pending(()),
+                CarryOver().all(comms.root, CarryChain.at(repo.path, head).pending(()),
                           TestRuntime(repo.path, home=Home(tmp_path)), revisions)
             finally:
                 revisions.close()
