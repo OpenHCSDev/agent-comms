@@ -17,10 +17,13 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from os import fstat
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from agent_comms.commander.config import Commander, CommanderConfig
-from agent_comms.commander.send_guard import CommanderSession
+from agent_comms.commander import cli
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
+
+if TYPE_CHECKING:
+    from agent_comms.commander.config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,7 @@ class PeerSync(ClaudeHookProgram):
 
     events = ("UserPromptSubmit", "PostToolUse", "Stop")
     commanders = frozenset({"claude-code", "desktop-commander"})
+    verb = "peer-sync"
     interval = timedelta(minutes=15)
     warning = (
         "Peer sync overdue: send the other commander your PRs needed, PRs held and any state "
@@ -119,7 +123,8 @@ class PeerSync(ClaudeHookProgram):
 
     @classmethod
     def command(cls) -> str:
-        return cls.console_script(f"{peer_sync_main.__module__}:{peer_sync_main.__name__}")
+        commander = cls.console_script(f"{cli.__name__}:{cli.main.__name__}")
+        return f"{commander} order {cls.verb}"
 
     @classmethod
     def sent(cls, config: CommanderConfig, target: str) -> None:
@@ -151,15 +156,10 @@ class PeerSync(ClaudeHookProgram):
         elapsed = datetime.now().astimezone() - written
         return elapsed < timedelta() or elapsed >= cls.interval
 
-
-def peer_sync_main() -> None:
-    hook = ClaudeHook.read()
-    config = CommanderConfig.installed()
-    if not CommanderSession(hook.session_id, Commander.of(config)).is_commander():
-        return
-    if not PeerSync.overdue(config):
-        return
-    hook.warn(PeerSync.warning)
+    @classmethod
+    def report(cls, hook: ClaudeHook, config: CommanderConfig) -> None:
+        if cls.overdue(config):
+            hook.warn(cls.warning)
 
 
 def main() -> None:

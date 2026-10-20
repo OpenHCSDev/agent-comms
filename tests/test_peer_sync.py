@@ -8,19 +8,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.order import PeerSyncVerb
 from agent_comms.commander.send_guard import CommanderSession
 from agent_comms.errors import ToolRefusedError
 from agent_comms.todos import VerdictAudience
-from agent_comms_hooks.watch import PeerSync, peer_sync_main
+from agent_comms_hooks.watch import PeerSync
 
 
 @pytest.fixture
 def peer_config(commander_script, monkeypatch):
-    order, _ = commander_script
-    config = order.CONFIG.model_copy(update={"commander": "claude-code"})
-    monkeypatch.setattr(order, "CONFIG", config)
-    return order, config
+    context, _ = commander_script
+    config = context.model_copy(update={"commander": "claude-code"})
+    return config, config
 
 
 def test_missing_empty_and_nonpeer_sends_are_overdue(peer_config):
@@ -52,14 +51,14 @@ def test_wrong_target_does_not_make_the_log_fresh(peer_config):
 
 def test_shared_send_owner_records_once_and_never_on_failed_publication(peer_config, monkeypatch):
     order, config = peer_config
-    monkeypatch.setattr(order, "call", lambda tool: SimpleNamespace(id="published"))
+    monkeypatch.setattr(type(order), "call", lambda self, tool: SimpleNamespace(id="published"))
     assert order.post(VerdictAudience(("desktop-commander",)), "PRs needed: none") == "published"
     assert len(config.peer_sync_log.read_text().splitlines()) == 1
 
-    def failed(tool):
+    def failed(self, tool):
         raise ToolRefusedError("publication refused")
 
-    monkeypatch.setattr(order, "call", failed)
+    monkeypatch.setattr(type(order), "call", failed)
     with pytest.raises(ToolRefusedError):
         order.post(VerdictAudience(("desktop-commander",)), "PRs held: none")
     assert len(config.peer_sync_log.read_text().splitlines()) == 1
@@ -69,12 +68,11 @@ def test_shared_send_owner_records_once_and_never_on_failed_publication(peer_con
 def test_overdue_hook_injects_or_blocks(peer_config, monkeypatch, capsys, event):
     _, config = peer_config
     with monkeypatch.context() as patches:
-        patches.setattr(CommanderConfig, "installed", classmethod(lambda cls: config))
         patches.setattr(CommanderSession, "is_commander", lambda self: True)
         patches.setattr(
             "sys.stdin", io.StringIO(json.dumps({"session_id": "test", "hook_event_name": event}))
         )
-        peer_sync_main()
+        PeerSyncVerb().run(config)
     output = json.loads(capsys.readouterr().out)
     if event == "Stop":
         assert output == {"decision": "block", "reason": PeerSync.warning}
@@ -88,10 +86,9 @@ def test_overdue_hook_injects_or_blocks(peer_config, monkeypatch, capsys, event)
 def test_noncommander_session_is_untouched(peer_config, monkeypatch, capsys):
     _, config = peer_config
     with monkeypatch.context() as patches:
-        patches.setattr(CommanderConfig, "installed", classmethod(lambda cls: config))
         patches.setattr(CommanderSession, "is_commander", lambda self: False)
         patches.setattr(
             "sys.stdin", io.StringIO(json.dumps({"session_id": "other", "hook_event_name": "Stop"}))
         )
-        peer_sync_main()
+        PeerSyncVerb().run(config)
     assert capsys.readouterr().out == ""
