@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Self
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
@@ -85,11 +85,13 @@ class CommanderConfig(CommanderRole, BaseModel):
         root = Path(root).resolve()
         return cls.model_validate_json(cls.root_path(root).read_text(), context=root)
 
-    @staticmethod
-    def homed(root: Path, home: Path) -> dict[str, Any]:
-        """The fields an install derives from this machine; the commander and repos are recorded."""
-        return {'root': root, 'state': home / '.local/state/agent-comms/commander',
-                'worktrees': home / 'wt', 'scratch': home / '.cache/agent-scratch', 'disk': home}
+    @classmethod
+    def on_machine(cls, commander: str, repos: tuple[Repo, ...], root: Path, home: Path,
+                   parked: frozenset[str] = frozenset()) -> Self:
+        """The recorded commander and repos, with the paths this machine derives."""
+        return cls(commander=commander, repos=repos, parked=parked, root=root,
+                   state=home / '.local/state/agent-comms/commander', worktrees=home / 'wt',
+                   scratch=home / '.cache/agent-scratch', disk=home)
 
     @classmethod
     def packaged_rules_files(cls) -> tuple[Path, ...]:
@@ -131,13 +133,10 @@ class CommanderRecord(ABC):
         return NoCommanderRecord()
 
     @abstractmethod
-    def commanded_by(self, name: str, root: Path, home: Path) -> RecordedCommander: ...
+    def commanded_by(self, name: str, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander: ...
 
     @abstractmethod
-    def rehomed(self, root: Path, home: Path) -> CommanderRecord: ...
-
-    @abstractmethod
-    def with_repos(self, choice: RepoChoice) -> CommanderRecord: ...
+    def rehomed(self, repos: RepoChoice, root: Path, home: Path) -> CommanderRecord: ...
 
     @abstractmethod
     def write(self, home: Path) -> CommanderConfigFile: ...
@@ -147,16 +146,12 @@ class CommanderRecord(ABC):
 class RecordedCommander(CommanderRecord):
     config: CommanderConfig
 
-    def commanded_by(self, name: str, root: Path, home: Path) -> RecordedCommander:
-        return RecordedCommander(self.config.model_copy(
-            update={**CommanderConfig.homed(root, home), 'commander': name}))
+    def commanded_by(self, name: str, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
+        return RecordedCommander(CommanderConfig.on_machine(
+            name, repos.applied(self.config.repos), root, home, self.config.parked))
 
-    def rehomed(self, root: Path, home: Path) -> RecordedCommander:
-        return RecordedCommander(self.config.model_copy(update=CommanderConfig.homed(root, home)))
-
-    def with_repos(self, choice: RepoChoice) -> RecordedCommander:
-        return RecordedCommander(self.config.model_copy(
-            update={'repos': choice.applied(self.config.repos)}))
+    def rehomed(self, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
+        return self.commanded_by(self.config.commander, repos, root, home)
 
     def write(self, home: Path) -> WrittenConfigFile:
         return WrittenConfigFile(str(self.config.write(home)))
@@ -166,14 +161,11 @@ class RecordedCommander(CommanderRecord):
 class NoCommanderRecord(CommanderRecord):
     """The bus records no commander; an install names none, so it writes no config."""
 
-    def commanded_by(self, name: str, root: Path, home: Path) -> RecordedCommander:
-        return RecordedCommander(CommanderConfig(
-            commander=name, repos=(), **CommanderConfig.homed(root, home)))
+    def commanded_by(self, name: str, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
+        return repos.founding(name, root, home)
 
-    def rehomed(self, root: Path, home: Path) -> NoCommanderRecord:
-        return self
-
-    def with_repos(self, choice: RepoChoice) -> NoCommanderRecord:
+    def rehomed(self, repos: RepoChoice, root: Path, home: Path) -> NoCommanderRecord:
+        repos.without_commander()
         return self
 
     def write(self, home: Path) -> NoConfigFile:

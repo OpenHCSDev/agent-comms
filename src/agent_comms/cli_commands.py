@@ -1589,8 +1589,8 @@ class InstallCliCommand(CliCommand):
 
         home = Path.home()
         project = self.project.resolve()
-        record = self.commander.configured(CommanderRecord.read(ctx.root), ctx.root, home)
-        return InstallResult(record.with_repos(self.repos).write(home), {
+        record = self.commander.configured(CommanderRecord.read(ctx.root), self.repos, ctx.root, home)
+        return InstallResult(record.write(home), {
             type(harness).declared_name: harness.register(ctx, project)
             for harness in Harness.present(home)})
 

@@ -6,15 +6,17 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+import pytest
+
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.installer.backup import bus_files
+from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.installer.practice import practice_copy
-from agent_comms.install_choices import NoConfigFile, WrittenConfigFile
+from agent_comms.install_choices import GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.wire_log import WireLog
 
@@ -125,6 +127,23 @@ def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(privat
     assert not CommanderConfig.path(home).exists() and not CommanderConfig.path(home).is_symlink()
 
 
+@pytest.mark.parametrize("flags", [
+    {"commander": NamedCommander("lead")},
+    {"repos": GivenRepos((Path("/checkout"),))},
+], ids=["commander-without-repos", "repos-without-commander"])
+def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
+    private_directory, monkeypatch, flags,
+):
+    from agent_comms.cli_commands import InstallCliCommand
+
+    root = private_directory / "wire"
+    root.mkdir(mode=0o700)
+    home = _harnessless_home(private_directory, monkeypatch)
+    with pytest.raises(UpgradeRefused):
+        InstallCliCommand(project=private_directory, **flags).apply(Comms(root))
+    assert not CommanderConfig.root_path(root).exists() and not CommanderConfig.path(home).is_symlink()
+
+
 def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_paths(
     private_directory, monkeypatch,
 ):
@@ -135,12 +154,11 @@ def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_p
     comms = Comms(root)
     comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
     old_home = private_directory / "old-home"
-    recorded = CommanderConfig(commander="lead", repos=(), parked=frozenset({"parked-unit"}),
-                               **CommanderConfig.homed(root, old_home))
+    recorded = CommanderConfig.on_machine("lead", (), root, old_home, frozenset({"parked-unit"}))
     recorded.write(old_home)
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
-    expected = recorded.model_copy(update=CommanderConfig.homed(root, home))
+    expected = CommanderConfig.on_machine("lead", (), root, home, frozenset({"parked-unit"}))
     assert result.config == WrittenConfigFile(str(CommanderConfig.path(home)))
     assert CommanderConfig.root_path(root).read_text() == expected.model_dump_json(indent=1) + "\n"
     assert CommanderConfig.read(CommanderConfig.path(home)) == expected
