@@ -53,10 +53,7 @@ def maintenance_proof(comms):
     log = comms.bus.log
     # A real committed original is indexed by the normal background worker.
     message = comms.messaging.send("worker", "claude-ai", "scratch original").message
-    for worker in threading.enumerate():
-        if worker.name == "agent-comms-candidate-maintenance":
-            worker.join(timeout=15)
-            assert not worker.is_alive()
+    maintenance.drain_candidate_catchup(comms.root)
     index = WakeCandidateIndex(log)
     root_id = log.private_marker_unlocked().root_id
     before = index._verified_checkpoint(root_id)
@@ -79,7 +76,7 @@ def maintenance_proof(comms):
         failures.append(f"{args.exc_type.__name__}: {args.exc_value}")
 
     def profile(frame, event, arg):
-        if frame.f_code is maintenance._drain_candidate.__code__ and event == "call":
+        if frame.f_code is maintenance.CandidateMaintenance.run.__code__ and event == "call":
             observed.append(threading.current_thread())
             entered.set()
 
