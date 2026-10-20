@@ -212,7 +212,8 @@ def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
 
 def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    empty = publish_initial(comms, "sender", "#missing", "No recipient")
+    declare_test_bus(comms, channels=("empty",))
+    empty = publish_initial(comms, "sender", "#empty", "No recipient")
     result = accept_delivery_cohort(comms.bus, root_id, empty.seq, store)
     assert isinstance(result, Applied)
     assert (result.value.member_count, result.value.assignment_count, result.value.assignments) == (

@@ -14,21 +14,17 @@ from bus_history import read_history
 
 
 @pytest.fixture
-def chat(wired):
-    """Re-tag: PR111 and fixer carry 'ci', PR112 carries 'docs'."""
-    comms = wired
-    pr111 = comms.registry.require("PR111")
-    fixer = comms.registry.require("fixer")
-    comms.registry.declare(
-        comms.registry.new_thread(name='PR111', tags=frozenset({'ci'}), worktree=pr111.worktree, process_identity=pr111.process_identity)
-    )
-    comms.registry.declare(
-        comms.registry.new_thread(name='fixer', tags=frozenset({'ci'}), worktree=fixer.worktree, parent='PR111', task=fixer.task, process_identity=fixer.process_identity)
-    )
-    comms.registry.declare(
-        comms.registry.new_thread(name='PR112', tags=frozenset({'docs'}), worktree='/tmp/wt2')
-    )
-    return comms
+def chat(comms):
+    """Only ci/docs exist; PR111 is owned by this actual process."""
+    import os
+    from agent_comms.child_process import ProcessIdentity
+    from conftest import declare_test_bus
+
+    return declare_test_bus(comms, channels=("ci", "docs"), threads=(
+        comms.registry.new_thread('PR111', frozenset({'ci'}), '/tmp/wt1', process_identity=ProcessIdentity.capture(os.getpid())),
+        comms.registry.new_thread('fixer', frozenset({'ci'}), '/tmp/wt1', parent='PR111', task='fix auth'),
+        comms.registry.new_thread('PR112', frozenset({'docs'}), '/tmp/wt2'),
+    ))
 
 
 class TestChannelTargets:
@@ -99,9 +95,9 @@ class TestHistory:
         history = [m.body for m in list(chat.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)]
         assert history == ["hello", "hi back"]
 
-    def test_dm_history_requires_registered_threads(self, chat):
-        with pytest.raises(UnregisteredThreadError):
-            list(chat.views.history_page(CommandTarget.named("ghost"), viewer="PR111").messages)
+    def test_dm_history_of_undeclared_peer_is_empty_and_does_not_register_it(self, chat):
+        assert chat.views.history_page(CommandTarget.named("ghost"), viewer="PR111").messages == ()
+        assert "ghost" not in chat.registry
 
     def test_channel_history_returns_all(self, chat):
         chat.messaging.send("PR111", "#ci", "one").message.message_id
