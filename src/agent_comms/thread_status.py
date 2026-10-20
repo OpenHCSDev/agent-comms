@@ -166,23 +166,19 @@ class CliInboxPresence:
                 else NoBridgeThreadStatus())
 
     def declaration(self) -> ThreadStatus:
-        return CliInboxThreadStatus()
+        return NoBridgeThreadStatus()
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return True
 
     def restored(self) -> ThreadStatus:
         """Restoration preserves the inbox declaration, never a liveness answer."""
-        return CliInboxThreadStatus()
+        return NoBridgeThreadStatus()
 
     def after_heartbeat(self, name: str) -> ThreadStatus:
         """A CLI command is not a bridge; a heartbeat keeps the inbox as it is."""
         self.require_mutable(name)
         return self
-
-
-class CliInboxThreadStatus(CliInboxPresence, StoppedThreadStatus):
-    """Stored external inbox declaration; connectedness is never persisted."""
 
 
 class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
