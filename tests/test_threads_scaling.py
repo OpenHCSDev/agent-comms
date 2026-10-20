@@ -108,11 +108,13 @@ def test_mounted_viewer_snapshot_reopens_without_scanning_bus(wired, monkeypatch
     expected = wired.views.viewer_snapshot(str(wired.root))
     fresh = wire(wired.root)
 
-    def forbidden_scan():
+    def forbidden_scan(*args, **kwargs):
         raise AssertionError("mounted snapshot reparsed historical bus rows")
 
-    monkeypatch.setattr(fresh.bus.log, 'verified_snapshot', forbidden_scan)
-    assert fresh.views.viewer_snapshot(str(wired.root)) == expected
+    with monkeypatch.context() as idle:
+        idle.setattr('agent_comms.wire_log.OpenedWireSnapshot.rows', forbidden_scan)
+        idle.setattr('agent_comms.wire_log.OpenedWireSnapshot.public_records', forbidden_scan)
+        assert fresh.views.viewer_snapshot(str(wired.root)) == expected
 
     wired.messaging.send("PR111", "#base", "new channel activity").message.message_id
     updated = fresh.views.viewer_snapshot(str(wired.root))

@@ -42,10 +42,8 @@ def main(root: Path) -> None:
             worker.join(timeout=10)
             assert not worker.is_alive(), "candidate worker did not retire"
     log = comms.bus.log
-    with log.verified_snapshot() as records:
-        retained = tuple(records)
-    assert len(retained) == 1
-    assert retained[0].messages() == (message,)
+    with log.full_history_snapshot() as (_, messages):
+        assert tuple(messages) == (message,)
     before = log.path.read_bytes()
     assert 1 < len(before) <= WireRecord.max_row_bytes
     index = WakeCandidateIndex(log)

@@ -117,9 +117,6 @@ class WireSnapshot(ObservedPath):
     @abstractmethod
     def checked(self, source) -> OpenedWireSnapshot: ...
 
-    @abstractmethod
-    def records(self) -> Iterator[WireRecord]: ...
-
     def ensure_page_index(self, index: BusPageIndex, mode: LockMode) -> None:
         """The captured prefix owns whether page-index work exists."""
         self.complete_prefix.ensure_page_index(self, index, mode)
@@ -227,9 +224,6 @@ class AbsentWireSnapshot(WireSnapshot, AbsentPath):
     def checked(self, source) -> OpenedWireSnapshot:
         raise RelationViolationError("Opened read differs from its checked source cut")
 
-    def records(self) -> Iterator[WireRecord]:
-        return iter(())
-
     def query_page_index[T](self, read: Callable[[BusPageIndex], T]) -> T:
         from .bus_page_index import EmptyBusPageIndex
         return read(EmptyBusPageIndex())
@@ -297,11 +291,6 @@ class OpenedWireSnapshot(WireSnapshot):
                 or self.boundary != source.witness.offset):
             raise RelationViolationError("Opened read differs from its checked source cut")
         return replace(self)
-
-    def records(self) -> Iterator[WireRecord]:
-        scan = WireScan(self.metadata)
-        for _, raw in WireRecord.rows(self.stream, self.boundary, self.boundary):
-            yield scan.read(raw)
 
     @property
     def complete_prefix(self) -> WirePrefix:
@@ -910,16 +899,6 @@ class WireLog(StoreLockOwner):
         except FileNotFoundError:
             return AbsentWireSnapshot(metadata, through)
         return OpenedWireSnapshot(metadata, through, stream, FileRevision.from_file(stream), self.page_index_type)
-
-    @contextmanager
-    def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
-        """Run the strict WireScan after releasing the bus locks.
-
-        Streams without a saved index still get the same complete validation.
-        Reading this snapshot does not grant permission to append or submit input.
-        """
-        with self.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
-            yield opened.records()
 
     @contextmanager
     def _record_snapshot(self) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
