@@ -207,17 +207,6 @@ class Stack:
             "VerifiedNativePackage.acquire(pinned_native_package())",
             cwd=self.checkout, env=self.environment())
 
-    def select_route(self, root: Path) -> None:
-        """Validate and publish through this stack's prepared native package."""
-        run(self.python, "-c", """import sys
-from pathlib import Path
-from agent_comms.active_route import ActiveRoute, publish_active_route
-from agent_comms.wire_log import WireLog
-root = Path(sys.argv[1])
-marker = WireLog(root / 'bus.jsonl').private_marker_unlocked()
-publish_active_route(ActiveRoute(root, marker.root_id))
-""", root, cwd=self.checkout, env=self.environment())
-
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
         run(
@@ -284,8 +273,10 @@ publish_active_route(ActiveRoute(root, marker.root_id))
                 drain_candidate_catchup(into)
             finally:
                 _, error = child.communicate(input="\n", timeout=60)
-                if child.returncode:
-                    raise UpgradeRefused(f"Installed practice copy did not retire: {error}")
+        if child.returncode:
+            raise UpgradeRefused(
+                f"Installed practice copy did not retire: {error}"
+            ) from subprocess.CalledProcessError(child.returncode, child.args, stderr=error)
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
@@ -399,7 +390,6 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str,
         target = run("git", "-C", stack.checkout, "rev-parse", "HEAD").strip()
         pending = CarryChain.at(revisions.repo, target).pending(CarryLedger(copied.root).applied())
         stopping = before_stop(copied.root, pending, stack, revisions)
-        stack.select_route(copied.root)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied.root):
