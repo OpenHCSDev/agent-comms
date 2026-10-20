@@ -3,15 +3,15 @@
 from contextlib import closing
 
 import pytest
+from cutover.carry_private_message_ids import PrivateMessageIds
 
-from conftest import publish_initial
+from agent_comms.checkpoint_seals import FinalSeal
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
-from agent_comms.checkpoint_seals import FinalSeal
 from agent_comms.private_bus_checkpoint import CheckedPrefix, DeliverySources, PublicMessages
 from agent_comms.store_files import _store_lock
-from cutover.carry_private_message_ids import PrivateMessageIds
+from conftest import publish_initial
 
 
 def test_carry_rebuilds_message_indexes_and_seal(tmp_path):
@@ -31,9 +31,8 @@ def test_carry_rebuilds_message_indexes_and_seal(tmp_path):
         marker = bus.private_marker_unlocked()
         marker.seal_with(FinalSeal.capture(witness, checkpoint))
         bus.write_metadata_unlocked(marker)
-    with pytest.raises(RelationViolationError, match='schema'):
-        with bus.checked_read():
-            pass
+    with pytest.raises(RelationViolationError, match='schema'), bus.checked_read():
+        pass
     assert PrivateMessageIds.carry(comms.root, apply=False).changed == 2
     with _store_lock(comms.root / 'wire'):
         result = PrivateMessageIds.carry(comms.root, apply=True)

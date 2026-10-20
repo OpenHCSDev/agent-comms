@@ -9,7 +9,7 @@ from contextlib import closing
 from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.private_bus_checkpoint import CheckpointTable, CheckedPrefix
+from agent_comms.private_bus_checkpoint import CheckedPrefix, CheckpointTable
 from agent_comms.typed_table import SQLiteSchemaObject, TypedTable
 from agent_comms.wire_log import WireLog
 

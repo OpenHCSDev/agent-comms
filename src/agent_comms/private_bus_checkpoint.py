@@ -37,8 +37,9 @@ from .coordination_tables.publications import PublicationIntents
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from .message_reference import MessageReference
+from .messages import Message
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
@@ -48,7 +49,6 @@ from .turn_context import ContextEntryManifest, RecordedContextManifest
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .wire_log import WireLog, WireSnapshot
-    from .messages import Message
     from .retained_task_facts import ExactTaskFact
     from .registration import Registration
     from .registry_document import RegistrySnapshot
@@ -631,6 +631,7 @@ class CheckedRead:
             return matched
         raise RelationViolationError("checked response key has no original source row.")
 
+    @boundary_decoder
     def message_by_id(
         self, message_id: str, *,
         accepts: Callable[[CommittedDelivery], bool] = lambda original: True,
@@ -657,7 +658,7 @@ class CheckedRead:
                         self.require_current()
                         return original.message
                     continue
-                message = cast("Message", opened.messages_for_references((
+                message = cast(Message, opened.messages_for_references((
                     MessageReference(row.seq, row.message_id),))[0])
                 if message.sender != row.sender:
                     raise RelationViolationError(
