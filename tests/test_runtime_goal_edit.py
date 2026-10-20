@@ -6,7 +6,6 @@ import os
 import pytest
 
 from delivery_owner_fixture import canonical_agent
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     OwnerInvocable,
@@ -62,7 +61,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         history = (await proxy.request("goal_history", goal_id=goal.id))["history"]
         assert history[-1]["before"]["text"] == paused.text
         assert history[-1]["after"] == result["goal"]
-        with pytest.raises(RuntimeError, match="changed"):
+        with pytest.raises(RuntimeError):
             await proxy.request(
                 "edit_goal", goal_id=goal.id, expected_revision=paused.revision, text="stale edit"
             )

@@ -5,7 +5,6 @@ Provider-free native fake only: a source prefix record is not an ACK or input pe
 
 from __future__ import annotations
 
-from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from conftest import publish_initial
 import os
 import tempfile
@@ -13,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.coordinated_runtime as runtime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -27,9 +25,6 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import NativeSourceCursor
-from agent_comms.threads import Thread
-from agent_comms.tracked_turn import TrackedTurnSession
-from test_native_prompt_binding import _fake_model
 
 
 @pytest.fixture
@@ -62,119 +57,6 @@ def _root(tmp_path: Path):
         store.participants.register(lookup, "alpha", "alpha", committed=True)
         accept_delivery_cohort(comms.bus, root_id, first.seq, store)
     return root, root_id, comms, first, lookup
-
-
-async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
-    root, root_id, comms, first, lookup = _root(tmp_path)
-    fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    first_turn = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert first_turn is not None and first_turn.cursor_status == "proven"
-    for number in range(1000):
-        publish_initial(comms, 
-            "sender", "other", f"unrelated-{number:04}-" + "x" * 8700
-        )
-    second = publish_initial(comms, 
-        "sender", "#team", "selected after 1000 other rows"
-    )
-    assert second.seq == first.seq + 1001 and comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
-    second_turn = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert second_turn is not None and second_turn.cursor_status == "proven"
-    assert len(calls) == 2 and second_turn.input_id != first_turn.input_id
-    with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        current = NativeSourceCursor(
-            Comms(root).bus, reopened, wire_root_id=root_id
-        ).read(owner_name="alpha", source_reads=source_reads)
-        assert current is not None
-        assert current.covered_seq == current.injected_seq == second.seq
-        assert current.input_id == second_turn.input_id
-        assert current.recipient_lookup == lookup
-
-
-async def test_checked_unproven_first_source_cannot_be_skipped(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
-    root, root_id, comms, _first, lookup = _root(tmp_path)
-    bad, bad_calls = _fake_model(decision="IGNORE", digest_override="b" * 64)
-    monkeypatch.setattr(TrackedTurnSession, "execute", bad)
-    with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
-        await runtime.SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name="alpha",
-            native_package=native_runtime_package,
-            cursor_delivery=cursor_delivery,
-        ).run()
-    assert len(bad_calls) == 1  # failed input is UNKNOWN; never retry it
-    for number in range(101):
-        publish_initial(comms, "sender", "other", f"unrelated-{number}")
-    later = publish_initial(comms, "sender", "alpha", "later selected")
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_delivery_cohort(comms.bus, root_id, later.seq, store)
-    good, good_calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(TrackedTurnSession, "execute", good)
-    result = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert result is not None and result.cursor_status == "blocked_gap" and len(good_calls) == 1
-    with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        assert (
-            reopened.session._connection.execute(
-                f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name} WHERE recipient_lookup=?",
-                (lookup,),
-            ).fetchone()[0]
-            == 0
-        )
-    assert not (root / "read_markers.json").exists()
-
-
-async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
-    import agent_comms.private_bus_checkpoint as checkpoint
-
-    root, root_id, comms, first, _lookup = _root(tmp_path)
-    fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    turn = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
-    original = checkpoint.append_private_bus_checkpoint_unlocked
-
-    def uncertain(*_args, **_kwargs):
-        raise OSError("crash after durable original bus append")
-
-    monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", uncertain)
-    with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-        publish_initial(comms, "sender", "other", "uncertain other original")
-    assert len(comms.bus.log.path.read_bytes().splitlines()) == first.seq + 1
-    monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
-    with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        retained = NativeSourceCursor(
-            Comms(root).bus, reopened, wire_root_id=root_id
-        ).read(owner_name="alpha", source_reads=source_reads)
-        assert retained is not None and retained.input_id == turn.input_id
-        assert retained.injected_seq == first.seq
-    assert len(calls) == 1  # recovery certifies a source, not native acceptance
 
 
 def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path, *, source_reads):

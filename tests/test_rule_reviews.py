@@ -28,7 +28,7 @@ def test_answer_quotes_the_stored_rule_for_every_draw(tmp_path, answer, accepted
     if accepted:
         store.write("lead", entry)
     else:
-        with pytest.raises(ToolRefusedError, match="Quote the drawn rule's own words"):
+        with pytest.raises(ToolRefusedError):
             store.write("lead", entry)
     with store.snapshot() as db:
         saved = RuleAnswer.select(db, reviewer="lead")

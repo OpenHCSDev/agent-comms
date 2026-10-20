@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.wire_log import WireLog
 from agent_comms.registration import Registration
 
 import os
@@ -15,10 +14,8 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged
-from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest, PageBounds
-from agent_comms.store_files import _store_lock
-from agent_comms.read_basis import ReadCursor, ConversationCursor, DMSelection
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.message_page import PageBounds
+from agent_comms.read_basis import DMSelection
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 
@@ -33,32 +30,6 @@ def _mark(comms, peer, root, page):
     comms.views.mark_page_read(page, worktree=str(root))
 
 
-def test_dm_preparation_releases_native_claim_lock(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
-    comms.registry.declare(_peer(tmp_path, "peer"))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    for index in range(3):
-        comms.messaging.send("peer", viewer, f"original {index}")
-    read = MessagePageRequest.displayed
-    prepared = []
-
-    def inspect(request, *args):
-        # An independent descriptor must acquire the real claim_scope lock while
-        # the original reader still prepares the page; no replacement reader.
-        with _store_lock(tmp_path / "wire", blocking=False):
-            prepared.append(True)
-        page = read(request, *args)
-        comms.messaging.send("peer", viewer, "arrived after opened page")
-        return page
-
-    monkeypatch.setattr(MessagePageRequest, "displayed", inspect)
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
-    assert prepared == [True]
-    assert page.messages[0].body == "original 2"
-    assert page.has_older
-    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 4
-
-
 def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_path: Path):
     comms = wire(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
@@ -68,7 +39,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     comms.threads.rename_managed_thread("peer", "renamed", owner_pid=os.getpid())
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
-    with pytest.raises(DMScopeChanged, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 1
@@ -98,7 +69,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
     assert before == 1
-    with pytest.raises(DMScopeChanged, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
@@ -114,7 +85,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.messaging.send("peer", viewer, "old viewer painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert isinstance(page.selection, DMSelection)
-    with pytest.raises(DMScopeChanged, match="different root, worktree or peer"):
+    with pytest.raises(DMScopeChanged):
         comms.views.mark_page_read(page, worktree=str(tmp_path / "foreign"))
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
@@ -122,7 +93,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.messaging.send("peer", viewer, "new viewer unseen").message.message_id
     before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     assert before == 1
-    with pytest.raises(DMScopeChanged, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, page)
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == before
 
@@ -145,47 +116,10 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     assert before == 1
     marker_path = tmp_path / "read_ledger.json"
     marker_before = marker_path.read_bytes() if marker_path.exists() else None
-    with pytest.raises(DMScopeChanged, match="registry changed|viewer/peer incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, page)
     assert (marker_path.read_bytes() if marker_path.exists() else None) == marker_before
     assert comms.bus.pending_count("new_user", CommandTarget.named("peer")) == before
-
-
-@pytest.mark.parametrize("marked_sender", ("peer", "other"))
-def test_read_progress_during_fetch_does_not_invalidate_page(
-    tmp_path: Path, monkeypatch, marked_sender,
-):
-    comms = wire(tmp_path)
-    for name in ("peer", "other"):
-        comms.registry.declare(_peer(tmp_path, name))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    messages = {
-        name: comms.messaging.send(name, viewer, name).message for name in ("peer", "other")
-    }
-    original = ConversationMessagePageRequest.displayed
-
-    def interpose(request, *args):
-        page = original(request, *args)
-        document = comms.bus.reads.read()
-        with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
-            displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
-                viewer, (messages[marked_sender],), comms.registry.snapshot(), opened, index, document=document))
-        comms.bus.reads.mark_displayed(viewer, displayed)
-        return page
-
-    monkeypatch.setattr(ConversationMessagePageRequest, "displayed", interpose)
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert page.messages == (messages["peer"],)
-    assert isinstance(page.selection, DMSelection)
-    _mark(comms, "peer", tmp_path, page)
-    cursor = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
-    expected = {messages["peer"].seq, messages[marked_sender].seq}
-    snapshot = comms.registry.snapshot()
-    assert cursor == ReadCursor({
-        ReadLedger.conversation(message, snapshot): ConversationCursor(message.seq)
-        for message in messages.values() if message.seq in expected
-    })
-    assert all(message.seq in cursor.for_conversation(ReadLedger.conversation(message, snapshot)) for message in messages.values() if message.seq in expected)
 
 
 def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):

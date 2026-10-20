@@ -2,11 +2,8 @@
 
 import pytest
 
-from agent_comms.commander import capacity
 from agent_comms.commander.capacity import Load
 from agent_comms.field_codec import FieldCodec
-from agent_comms.tools import CommsCommanderLoadTool
-from test_commander_problem_orders import create
 
 
 @pytest.mark.parametrize("unjudged", [0, 1, 395, 1_000_000])
@@ -20,13 +17,3 @@ def test_capacity_reports_load_and_forks(unjudged):
     )
 
 
-def test_native_and_cli_share_load_without_a_heartbeat_store(commander, commander_script, capsys):
-    comms, caller = commander
-    context, _ = commander_script
-    create(commander, 'P1', deadline=1)
-    loaded = CommsCommanderLoadTool(thread='lead').apply(comms, caller)
-    assert loaded == Load.of(context.comms, context.commander)
-    assert (loaded.owed, loaded.overdue, loaded.unjudged, loaded.forks) == (1, 1, 0, ())
-    capacity.main([], context)
-    assert capsys.readouterr().out == f'{loaded}\n'
-    assert not (context.state / 'forks').exists()

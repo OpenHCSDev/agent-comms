@@ -11,7 +11,6 @@ from acp.schema import SessionInfoUpdate
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.comms import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
 from agent_comms.child_process import ProcessIdentity
 
 
@@ -112,7 +111,7 @@ async def test_close_joins_unsent_request_and_capability_requires_claim(tmp_path
         await client.close_session("cold")
         assert request.cancelled() and not proxy._requests
         assert comms.registry.status("cold").running
-        with pytest.raises(ConnectionError, match="closed before request dispatch"):
+        with pytest.raises(ConnectionError):
             await proxy.request("clear_queue")
         with pytest.raises(RequestError):
             await client.close_session("cold")

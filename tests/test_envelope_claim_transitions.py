@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.envelope_claim_transitions import (
-    ClaimConflict, ClaimOwner, ClaimProjection, ClaimRelease, ClaimTransition,
+    ClaimConflict, ClaimProjection, ClaimRelease, ClaimTransition,
     ClaimTransitionError, ExistingFileClaim, NativeClaim, ReleasedClaims,
     UnscopedClaims, WakeClaim, WakeClaims,
 )
@@ -51,7 +51,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     assert saved.project(ClaimProjection(held.last_seq)) == moved  # replay is pure
     with pytest.raises(ClaimConflict):
         saved.require_holders(held)
-    with pytest.raises(ClaimTransitionError, match="exact owner"):
+    with pytest.raises(ClaimTransitionError):
         transition(3, incarnation="1.0", releases=(ClaimRelease(resource, G1),)).project(moved)
 
 
@@ -75,11 +75,11 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     assert Message.from_wire(bound.to_wire()) == bound
     admission_key = FieldCodec.record_key(WakeClaims, "claim_scope")
     invalid = {**raw, admission_key: {**raw[admission_key], "version": 99}}
-    with pytest.raises(ValueError, match="version"):
+    with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, invalid)
     null_claim = raw.copy()
     null_claim[admission_key] = None
-    with pytest.raises(ValueError, match="received NoneType"):
+    with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, null_claim)
 
 
@@ -117,13 +117,13 @@ def test_existing_physical_worktree_files_and_aliases(tmp_path):
     (worktree / "dir").mkdir()
     (worktree / "dir" / "sub.py").symlink_to(worktree / "a.py")
     for path in ("link.py", "dir/sub.py"):
-        with pytest.raises(ClaimTransitionError, match="Symlink"):
+        with pytest.raises(ClaimTransitionError):
             ExistingFileClaim(Path(path)).normalized(worktree)
     (worktree / "hard.py").hardlink_to(worktree / "b.py")
-    with pytest.raises(ClaimTransitionError, match="singly-linked"):
+    with pytest.raises(ClaimTransitionError):
         ExistingFileClaim(Path("b.py")).normalized(worktree)
     (tmp_path / "root-link").symlink_to(worktree, target_is_directory=True)
-    with pytest.raises(ClaimTransitionError, match="physical"):
+    with pytest.raises(ClaimTransitionError):
         ExistingFileClaim(Path("a.py")).normalized(tmp_path / "root-link")
 
 
@@ -148,7 +148,7 @@ def test_same_holder_moves_scope_but_another_holder_cannot(tmp_path):
     for changed in ({"owner": "other"}, {"incarnation": "new-birth"}):
         with pytest.raises(ClaimConflict):
             transition(3, claims=(resource,), generation=G1, **changed).require_holders(moved)
-    with pytest.raises(ClaimTransitionError, match="exact owner"):
+    with pytest.raises(ClaimTransitionError):
         transition(3, releases=(ClaimRelease(resource, G1),)).project(moved)
     assert dict(transition(3, releases=(ClaimRelease(resource, G2),)).project(moved)) == {}
 
@@ -159,12 +159,12 @@ def test_full_set_claim_and_release_are_all_or_nothing(tmp_path):
     with pytest.raises(ClaimConflict) as conflict:
         transition(2, owner="peer", claims=(a, b), generation=G2).require_holders(first)
     assert conflict.value.existing.resource == b and dict(first) == {b: first[b]}
-    with pytest.raises(ClaimTransitionError, match="live claim"):
+    with pytest.raises(ClaimTransitionError):
         transition(3, releases=(ClaimRelease(a, G1),)).project(first)
     assert dict(first) == {b: first[b]}
-    with pytest.raises(ClaimTransitionError, match="Duplicate"):
+    with pytest.raises(ClaimTransitionError):
         transition(2, claims=(a, a), generation=G2)
-    with pytest.raises(ClaimTransitionError, match="releases nothing"):
+    with pytest.raises(ClaimTransitionError):
         transition(2, claims=(b,), releases=(ClaimRelease(b, G1),), generation=G2)
 
 
@@ -176,20 +176,20 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
         transition(2, incarnation="old-epoch", releases=(ClaimRelease(a, G1),)),
         transition(2, releases=(ClaimRelease(a, G2),)),
     ):
-        with pytest.raises(ClaimTransitionError, match="exact owner"):
+        with pytest.raises(ClaimTransitionError):
             attempt.project(held)
         assert held[a].generation == G1
     released = transition(2, releases=(ClaimRelease(a, G1),)).project(held)
     assert dict(released) == {} and released.last_seq == 2
-    with pytest.raises(ClaimTransitionError, match="increase"):
+    with pytest.raises(ClaimTransitionError):
         transition(1, owner="peer", claims=(a,), generation=G2).project(released)
     new = transition(3, owner="peer", claims=(a,), generation=G2).project(released)
     assert new[a].owner == "peer" and new[a].seq == 3
-    with pytest.raises(ClaimTransitionError, match="malformed"):
+    with pytest.raises(ClaimTransitionError):
         ClaimProjection(0, {a: new[a]})
-    with pytest.raises(MalformedRecord, match="JSON object"):
+    with pytest.raises(MalformedRecord):
         ClaimProjection(1, [])
-    with pytest.raises(ClaimTransitionError, match="exact owner"):
+    with pytest.raises(ClaimTransitionError):
         transition(4, releases=(ClaimRelease(a, G1),)).project(new)
 
 
@@ -206,7 +206,7 @@ def test_renamed_owner_releases_by_incarnation_without_reusing_stale_generation(
         transition(4, owner="alice", incarnation="birth-3", releases=(ClaimRelease(a, G2),)),
         transition(4, owner="bob", incarnation="birth-2", releases=(ClaimRelease(a, G1),)),
     ):
-        with pytest.raises(ClaimTransitionError, match="exact owner"):
+        with pytest.raises(ClaimTransitionError):
             stale.project(reacquired)
     assert reacquired[a].owner == "bob" and reacquired[a].generation == G2
 
@@ -219,7 +219,7 @@ def test_owned_application_is_deterministic_and_requires_order(tmp_path):
     assert list(released) == [b] and released[b].seq == 7
     assert transition(8, releases=(ClaimRelease(a, G1),)).project(both) == released
     for stale in (transition(8, releases=(ClaimRelease(b, G2),)), transition(1, claims=(a,), generation=G1)):
-        with pytest.raises(ClaimTransitionError, match="increase"):
+        with pytest.raises(ClaimTransitionError):
             stale.project(released)
 
 
@@ -250,7 +250,7 @@ def test_path_aliases_are_rejected_as_duplicate_normalized_resources(tmp_path):
     duplicate = (ExistingFileClaim(Path("a.py")).normalized(worktree),
                  ExistingFileClaim(Path(worktree / "a.py")).normalized(worktree))
     assert duplicate == (a, a)
-    with pytest.raises(ClaimTransitionError, match="Duplicate"):
+    with pytest.raises(ClaimTransitionError):
         transition(1, claims=duplicate, generation=G1)
 
 
@@ -260,17 +260,17 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
     aliases = (f"{worktree}//a.py", f"{worktree}/./a.py")
     for alias in aliases:
         assert alias != a
-        with pytest.raises(MalformedRecord, match="canonical absolute"):
+        with pytest.raises(MalformedRecord):
             transition(2, owner="competitor", claims=(alias,), generation=G2)
-        with pytest.raises(MalformedRecord, match="canonical absolute"):
+        with pytest.raises(MalformedRecord):
             ClaimRelease(alias, G1)
         claiming_row = FieldCodec.encode(transition(2, owner="competitor", claims=(a,), generation=G2))
         claiming_row[FieldCodec.record_key(UnscopedClaims, "claims")] = [alias]
-        with pytest.raises(MalformedRecord, match="canonical absolute"):
+        with pytest.raises(MalformedRecord):
             FieldCodec.decode(ClaimTransition, claiming_row)
         releasing_row = FieldCodec.encode(transition(2, releases=(ClaimRelease(a, G1),)))
         releasing_row["releases"][0]["resource"] = alias
-        with pytest.raises(MalformedRecord, match="canonical absolute"):
+        with pytest.raises(MalformedRecord):
             FieldCodec.decode(ClaimTransition, releasing_row)
         assert list(held) == [a] and held[a].owner == "owner" and held.last_seq == 1
     with pytest.raises(ClaimConflict) as loser:

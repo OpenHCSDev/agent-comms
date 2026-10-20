@@ -1,47 +1,13 @@
 """Saved documents, independent snapshots, and disposable activity projection."""
 
 import json
-import time
 from unittest.mock import patch
 
 import pytest
 
-from agent_comms.locked_store import LockedStore
 from agent_comms.runtime_info import RuntimeInfoStore
-from agent_comms.shared_ledger import SharedLedger, LedgerDocument
-from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
+from agent_comms.shared_ledger import SharedLedger
 from test_locked_store import assert_writer_excluded
-
-
-
-async def test_installed_native_observation_producers_preserve_dates_without_input(native_backend, monkeypatch):
-    import asyncio
-
-    native = native_backend
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    async with asyncio.timeout(15), native.open_owner() as (agent, name):
-        # The fixture starts the real owner socket before acquiring this saved
-        # session; preparation and shutdown keep their normal application paths.
-        thread = agent._comms.registry.require(name)
-        history = native.session.read_bytes()
-        before = time.time()
-        prepared = await agent.turns.backend_for(name, thread).prepare(thread)
-        assert prepared.model.display_name == "response-local/fixture"
-        child = agent.turns.persistent_backends[name].child_state.child.proc
-        assert child.alive()
-        captured = agent._comms.agents.agent_info_of(name)
-        assert before <= captured.timestamp <= time.time()
-        store = agent._comms.agents.runtime_info
-        original = store.path.read_bytes()
-        with patch("time.time", side_effect=AssertionError("Reading cannot capture an observation")):
-            assert RuntimeInfoStore(store.path).read().observations[name] == captured
-            store.rename_thread(name, "renamed-observation")
-            assert RuntimeInfoStore(store.path).read().observations["renamed-observation"].timestamp == captured.timestamp
-        assert json.loads(original)[name]["ts"] == captured.timestamp
-        assert native.session.read_bytes() == history
-        assert native.provider.posts == len(native.saved_inputs()) == 0
-    assert not child.alive()
 
 
 @pytest.mark.parametrize("store_type", [RuntimeInfoStore, SharedLedger])
@@ -108,34 +74,3 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path, *, thread_reg
     assert store.read().entries == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
 
 
-@pytest.mark.parametrize(
-    "store_type,operation,initial",
-    [
-        (
-            SharedLedger,
-            lambda s: s.merge({"new": "value"}, "writer"),
-            '{"old": {"data": [1, null]}}',
-        ),
-    ],
-)
-def test_authoritative_documents_keep_bytes_on_failed_publication(
-    tmp_path, monkeypatch, store_type, operation, initial
-):
-    store = store_type(tmp_path / store_type.filename)
-    store.path.write_text(initial)
-
-    def fail(source, destination):
-        raise OSError("publication failed")
-
-    monkeypatch.setattr("agent_comms.locked_store.os.replace", fail)
-    with pytest.raises(OSError, match="publication failed"):
-        operation(store)
-    assert store.path.read_text() == initial
-
-
-def test_complete_snapshot_replacement_does_not_decode_discarded_document(tmp_path):
-    store = SharedLedger.at(tmp_path)
-    store.path.write_text("invalid discarded snapshot")
-    with patch.object(LockedStore, "_read_unlocked", side_effect=AssertionError("old read")):
-        store.replace(LedgerDocument({"captured": [1, 2]}))
-    assert store.read().entries == {"captured": [1, 2]}

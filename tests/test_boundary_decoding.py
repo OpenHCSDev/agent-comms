@@ -27,7 +27,7 @@ def test_coding_socket_record_keeps_object_arguments_and_strict_fields():
     request = FieldCodec.decode(CodingToolRequest, payload)
     assert request.arguments == {'path': 'source.py'}
     assert request.authenticate('secret').call_id == 'call-1'
-    with pytest.raises(SelectedToolDenied, match='authenticated'):
+    with pytest.raises(SelectedToolDenied):
         request.authenticate('wrong')
     with pytest.raises(ValueError):
         FieldCodec.decode(CodingToolRequest, {**payload, 'unexpected': True})

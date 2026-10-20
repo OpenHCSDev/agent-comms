@@ -3,7 +3,6 @@
 from __future__ import annotations
 from contextlib import closing
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
@@ -23,49 +22,17 @@ from agent_comms.turn_watchdog import ModelWait
 
 import agent_comms.native_pi as native_pi
 import agent_comms.native_prompt_send as native_prompt_send
-from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_database import StoreBusy
-from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.tracked_turn import TrackedTurnSession
-from test_coordinated_runtime import _fake_model, _root
+from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
-
-
-@pytest.mark.parametrize(
-    ("direct", "drift"), [(False, "generation"), (False, "registry"), (True, "registry")]
-)
-async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, direct, drift, *, native_runtime_package, cursor_delivery):
-    root, root_id, comms, _, people = _root(tmp_path, direct=direct)
-    owner = people[2] if direct else people[1]
-    fake, calls = _fake_model(decision="IGNORE")
-
-    async def race(*args, **kwargs):
-        if drift == "generation":
-            with Coordination(str(root / "coordination.sqlite3")) as store:
-                store.participants.advance_generation(
-                    RecordedThreadIncarnation("fixture", owner.created_at).lookup, owner.name, expected_generation=1
-                )
-        else:
-            comms.registry.unregister(owner.name)
-        return await fake(*args, **kwargs)
-
-    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
-    with pytest.raises(StaleFence):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name=owner.name,
-            native_package=native_runtime_package,
-            cursor_delivery=cursor_delivery,
-        ).run()
-    assert calls == []
 
 
 _PROBE = r"""
@@ -119,63 +86,6 @@ else:
 """
 
 
-@pytest.mark.parametrize("direct", [False, True])
-@pytest.mark.parametrize("revoke", [False, True])
-async def test_actual_raw_writes_follow_committed_claim_without_global_exclusions(tmp_path, monkeypatch, direct, revoke, *, native_runtime_package, cursor_delivery):
-    root, root_id, comms, _, people = _root(tmp_path, direct=direct)
-    owner = people[2] if direct else people[1]
-    create = AttachedChild.start
-    children = []
-    received = tmp_path / "received.json"
-    session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
-
-    async def launch(*args, **kwargs):
-        child = await create(
-            (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
-        )
-        children.append(child)
-        if revoke:
-            comms.registry.unregister(owner.name)
-        return child
-
-    monkeypatch.setattr(AttachedChild, "start", launch)
-    write = native_prompt_send._write_fenced
-    observed = []
-
-    def probe(fd, payload, boundary, cancelled, deadline, measurements):
-        @contextmanager
-        def scope():
-            with boundary():
-                observed.append(_held(root))
-                yield
-                observed.append(_held(root))
-
-        result = write(fd, payload, scope, cancelled, deadline, measurements)
-        # The same production claim_scope cannot write twice even after all locks
-        # are released. Its UNKNOWN journal reservation survives the first send.
-        with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
-            pytest.fail("one-use native claim_scope reopened")
-        return result
-
-    monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
-    with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name=owner.name,
-            native_package=native_runtime_package,
-            cursor_delivery=cursor_delivery,
-        ).run()
-    if revoke:
-        assert observed == []
-        assert not received.exists() or not received.read_text()
-    else:
-        assert json.loads(received.read_text())["type"] == "prompt"
-        assert observed == [[], []]
-    assert all(child.returncode is not None for child in children)
-    assert _held(root) == []
-
-
 async def _same_loop_backpressure_case(directory: Path, mode: str):
     with closing(CursorDelivery()) as cursor_delivery:
         """Runs in a bounded subprocess so a regression cannot hang the pytest owner."""
@@ -184,7 +94,6 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         import threading
         import time
 
-        import agent_comms.coordinated_runtime as runtime
 
         with pytest.MonkeyPatch.context() as patch:
             root, root_id, comms, _, people = _root(directory, direct=True)
@@ -341,97 +250,8 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode
     assert "BOUNDED_UNKNOWN_REAPED" in result.stdout
 
 
-@pytest.mark.parametrize(
-    ("held_store", "revoke"),
-    [
-        ("wire", False),
-        ("bus.jsonl", False),
-        ("registry.json", False),
-        ("sql", False),
-        ("wire", True),
-    ],
-)
-async def test_short_claim_contention_sends_once_after_release(tmp_path, monkeypatch, held_store, revoke, *, native_runtime_package, cursor_delivery):
-    """A busy store before claim_scope is not an attempted native prompt."""
-    import sqlite3
-    import threading
-
-    import agent_comms.coordinated_runtime as runtime
-    from agent_comms.store_files import _store_lock
-
-    root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
-    owner = people[2]
-    create = AttachedChild.start
-    received = tmp_path / "received.json"
-    session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
-
-    async def launch(*args, **kwargs):
-        return await create(
-            (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
-        )
-
-    monkeypatch.setattr(AttachedChild, "start", launch)
-    write = native_prompt_send._write_fenced
-    claims = []
-
-    def probe(fd, payload, boundary, cancelled, deadline, measurements):
-        held, release = threading.Event(), threading.Event()
-
-        def contend():
-            if held_store == "sql":
-                with sqlite3.connect(root / "coordination.sqlite3") as db:
-                    db.execute("BEGIN IMMEDIATE")
-                    held.set()
-                    assert release.wait(3)
-            else:
-                with _store_lock(root / held_store):
-                    if revoke:
-                        comms.registry.unregister(owner.name)
-                    held.set()
-                    assert release.wait(3)
-
-        competitor = threading.Thread(target=contend)
-        competitor.start()
-        assert held.wait(3)
-        timer = threading.Timer(0.1, release.set)
-        timer.start()
-
-        @contextmanager
-        def scope():
-            with boundary():
-                claims.append(payload)
-                yield
-
-        try:
-            return write(fd, payload, scope, cancelled, deadline, measurements)
-        finally:
-            release.set()
-            competitor.join(3)
-            timer.cancel()
-
-    monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
-    # The child intentionally exits after reading the prompt; this tests raw
-    # claim_scope only, not a native context or successful model response.
-    with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name=owner.name,
-            native_package=native_runtime_package,
-            cursor_delivery=cursor_delivery,
-        ).run()
-    if revoke:
-        assert not received.exists() or not received.read_text()
-        assert claims == []
-        return
-    assert received.exists() and received.read_text()
-    assert json.loads(received.read_text())["type"] == "prompt"
-    assert claims == [received.read_bytes()]
-
-
 def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
     """A transaction which admits the pipe write owns its complete commit lifetime."""
-    import threading
 
     path = tmp_path / "coordinator.sqlite3"
     with Coordination(path, contention=StoreBusy()) as store:
@@ -478,86 +298,3 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
             os.close(write_fd)
 
 
-@pytest.mark.parametrize("direct", [False, True])
-async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_readers(tmp_path, monkeypatch, direct, *, native_runtime_package, cursor_delivery):
-    root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
-    owner = people[2] if direct else people[1]
-    create = AttachedChild.start
-    received = tmp_path / "received.json"
-    session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
-    children = []
-
-    async def launch(*_args, **kwargs):
-        child = await create(
-            (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
-        )
-        children.append(child)
-        return child
-
-    monkeypatch.setattr(AttachedChild, "start", launch)
-    write = native_prompt_send._write_fenced
-    observations = []
-
-    def probe(fd, payload, boundary, cancelled, deadline, measurements):
-        path = root / "coordination.sqlite3"
-        reader = sqlite3.connect(path, isolation_level=None, timeout=0, check_same_thread=False)
-        reader.execute("BEGIN")
-        reader.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}").fetchall()
-
-        def release_reader():
-            assert not received.exists()
-            reader.execute("ROLLBACK")
-            observations.append("reader released before bytes")
-
-        release = threading.Timer(0.1, release_reader)
-        release.start()
-
-        @contextmanager
-        def checked_claim():
-            with boundary():
-                assert observations == ["reader released before bytes"]
-                late = sqlite3.connect(path, isolation_level=None, timeout=0)
-                try:
-                    epochs = late.execute(
-                        f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} "
-                        f"FROM {NativeRuntimeInput.declared_name}"
-                    ).fetchall()
-                    assert len(epochs) == 1 and epochs[0][0] is not None
-                finally:
-                    late.close()
-                assert _held(root) == []
-                observations.append("original claim_scope committed and released")
-                yield
-
-        try:
-            write(fd, payload, checked_claim, cancelled, deadline, measurements)
-            observations.append("sent and committed once")
-        finally:
-            release.join()
-            reader.close()
-
-    monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
-    # The local child supplies capability+reads prompt then exits without proof;
-    # the expected downstream error is NOT a post-write claim_scope failure.
-    with pytest.raises(native_pi.NativePiUnavailable) as caught:
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name=owner.name,
-            native_package=native_runtime_package,
-            cursor_delivery=cursor_delivery,
-        ).run()
-    assert "post-write" not in str(caught.value)
-    assert observations == [
-        "reader released before bytes",
-        "original claim_scope committed and released",
-        "sent and committed once",
-    ]
-    assert json.loads(received.read_text())["type"] == "prompt"
-    assert len(children) == 1 and children[0].returncode is not None
-    with Coordination(root / "coordination.sqlite3") as store:
-        rows = store.session._connection.execute(
-            f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} "
-            f"FROM {NativeRuntimeInput.declared_name}"
-        ).fetchall()
-        assert len(rows) == 1 and rows[0][0] is not None

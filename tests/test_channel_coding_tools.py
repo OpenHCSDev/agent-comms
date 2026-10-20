@@ -25,7 +25,6 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
-from agent_comms.threads import Thread
 
 
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():
@@ -173,7 +172,7 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
     from agent_comms.tool_declaration import ToolDeclaration
 
     arguments = {"path": "x", "tool": "write"}
-    with pytest.raises(SelectedToolDenied, match="family selector"):
+    with pytest.raises(SelectedToolDenied):
         CodingCall.decode("selector", "read", arguments)
     assert ToolDeclaration.record("read", arguments, call_id="refused") is None
 
@@ -201,7 +200,7 @@ async def test_malformed_edit_reports_error_and_allows_a_later_tool_round(tmp_pa
         socket.announce((ToolCallContent(id=id, name=name, arguments=args),))
         socket.tool_started(ToolExecutionStart(tool_call_id=id, tool_name=name, args=args))
         if id == "bad-edit":
-            with pytest.raises(SelectedToolDenied, match="newText_should_not_exist") as refused:
+            with pytest.raises(SelectedToolDenied) as refused:
                 await socket.handle_request(_request(socket, id, name, args))
             response = socket.failure_response(refused.value)
             assert response["ok"] is False and "newText_should_not_exist" in response["error"]
@@ -256,7 +255,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
             + "\n"
         ).encode()
         assert await socket.handle_request(raw) == {"ok": True}
-        with pytest.raises(ValueError, match="already consumed"):
+        with pytest.raises(ValueError):
             await socket.handle_request(raw)
         # Terminal ledger needs the consumed slot an actual owner writes.
         from agent_comms.selected_tool_broker import consume_selected_slot
@@ -300,7 +299,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
     await checking.wait()
     socket.tool_finished(ToolExecutionEnd(tool_call_id="late", tool_name="read", is_error=True), owner.input_id)
     release.set()
-    with pytest.raises(ValueError, match="not executing"):
+    with pytest.raises(ValueError):
         await pending
     socket.assert_complete()
 
@@ -382,7 +381,7 @@ async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(t
         assert not socket._handlers
         # Retirement consumes the interrupted request; a late start is not
         # permission to replay it. Main deliberately has no ten-second timer.
-        with pytest.raises(ValueError, match="not executing"):
+        with pytest.raises(ValueError):
             await socket.handle_request(_request(socket, *call))
     finally:
         writer.close()

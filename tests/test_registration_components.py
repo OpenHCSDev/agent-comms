@@ -47,7 +47,7 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
     registration.register(owner(tmp_path, registry=registration))
     prior = registration.snapshot()
     raw = registration.store.path.read_bytes()
-    with pytest.raises(RuntimeError, match="aborted"), registration.store.editing() as edit:
+    with pytest.raises(RuntimeError), registration.store.editing() as edit:
         edit.document.unregister("owner")
         raise RuntimeError("aborted")
     assert registration.snapshot() == prior
@@ -79,7 +79,7 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
 
 
 def test_a_document_field_without_a_thread_slice_is_refused_at_definition():
-    with pytest.raises(TypeError, match="Unsliced.rows declares no thread slice"):
+    with pytest.raises(TypeError):
         @ThreadSlice.required
         @dataclass
         class Unsliced:

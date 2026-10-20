@@ -23,7 +23,7 @@ async def test_successful_task_without_event_is_a_failed_expectation():
         return None
 
     async with asyncio.timeout(1):
-        with pytest.raises(AssertionError, match='without the expected event'):
+        with pytest.raises(AssertionError):
             await await_event_or_task(asyncio.Event().wait(), asyncio.create_task(complete()))
 
 

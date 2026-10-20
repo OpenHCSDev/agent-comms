@@ -11,13 +11,6 @@ class FakeClient:
         pass
 
 
-def native_model(*, decision="FULL", fail_on=None):
-    """Use the shared model boundary with the production selected-session owner."""
-    from test_coordinated_runtime import _fake_model
-
-    return _fake_model(decision=decision, fail_on=fail_on)
-
-
 @asynccontextmanager
 async def canonical_delivery_owner(root, *, direct=False):
     """Only model execution is supplied by tests; routing and persistence are real."""
@@ -65,11 +58,3 @@ async def reply_turn_finished(owner, session):
         await task
 
 
-def drain_diagnostic(comms, thread):
-    """What the owner records on its thread when its inbox drain failed."""
-    from agent_comms.comms import Comms
-
-    view = next(
-        view for view in Comms(comms.root).views.thread_views() if view.thread.name == thread
-    )
-    return view.activity.readiness.source_diagnostic()

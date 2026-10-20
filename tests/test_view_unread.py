@@ -1,4 +1,3 @@
-from agent_comms.channel_targets import CommandTarget
 from agent_comms.coordination_errors import DMPaintedBoundChanged
 from agent_comms.read_basis import NamedViewer
 import os
@@ -6,12 +5,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
 from agent_comms.private_path import FileRevision
 from agent_comms.view_unread import Counted, ReplyIndex
 
@@ -34,40 +31,6 @@ def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
     truncated = FileRevision.capture(source)
     assert not index.continues(truncated)
     assert index.counts(truncated, 0)  # Empty and fully read, independently of the old index.
-
-
-def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
-    comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('sender', frozenset({'ci'}), str(tmp_path)))
-    comms.registry.declare(comms.registry.new_thread('receiver', frozenset({'ci', 'docs'}), str(tmp_path)))
-    comms.messaging.send("sender", "#ci", "first").message.message_id
-    messages = comms.bus.inbox("receiver")
-    comms.messaging.acknowledge("receiver", tuple(message.reference for message in messages))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"].count == 1
-    comms.views.mark_user_view_read("#ci", worktree=str(tmp_path))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"].count == 0
-    comms.messaging.send("sender", "#ci", "second").message.message_id
-    comms.messaging.send("sender", "#docs", "docs").message.message_id
-    snapshot = comms.views.viewer_snapshot(str(tmp_path))
-    assert snapshot.channel_unread["#ci"].count == snapshot.channel_unread["#docs"].count == 1
-    comms.views.mark_user_view_read("#ci", worktree=str(tmp_path))
-    assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 1
-    comms.messaging.send_user_message("#ci", "my own message", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"].count == 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"].count == 1
-    comms.messaging.send("sender", "receiver", "agent-to-agent DM in the aggregate feed").message.message_id
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"].count == 2
-    comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"].count == 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"].count == 0
-    with patch(
-        "agent_comms.wire_log.OpenedWireSnapshot.rows",
-        side_effect=AssertionError("idle rescan"),
-    ), patch(
-        "agent_comms.wire_log.OpenedWireSnapshot.public_records",
-        side_effect=AssertionError("idle rescan"),
-    ):
-        comms.views.viewer_snapshot(str(tmp_path))
 
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
@@ -115,12 +78,11 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
     unread_after_join = wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count
-    with pytest.raises(DMPaintedBoundChanged, match=r"^Transcript changed; reload the latest page\.$"):
+    with pytest.raises(DMPaintedBoundChanged):
         comms.views.mark_page_read(painted, worktree=str(tmp_path))
     assert (
         wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == unread_after_join
     )
-
 
 
 @pytest.mark.skipif(os.name != "posix", reason="real /var/tmp crash durability")

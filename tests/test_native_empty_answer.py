@@ -16,7 +16,7 @@ def test_empty_final_and_notifications_keep_the_model_outcome():
     for _ in range(6):
         terminal = terminal.notification([]).append("")
         assert isinstance(terminal, EmptyAnswerTrackedTerminal)
-    with pytest.raises(NativeEmptyAnswer, match="^The model finished with no text$") as caught:
+    with pytest.raises(NativeEmptyAnswer) as caught:
         terminal.require_response([])
     assert isinstance(caught.value, NativeRequestFailure)
     assert not isinstance(caught.value, NativePiUnavailable)

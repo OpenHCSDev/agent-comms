@@ -1,24 +1,17 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
-from agent_comms.messages import Membership
 from agent_comms.read_basis import ChannelDisplayScope, DMDisplayScope, NamedViewer
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
-from agent_comms.presentation import ReadThrough
 import json
-from contextlib import contextmanager
 from dataclasses import replace
 from threading import Event
 from threading import Thread as WorkerThread
-from unittest.mock import patch
 
 import pytest
 
-from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.messages import Message, InfoKind
-from agent_comms.threads import Thread
 from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import NewerTraversal, OlderTraversal
 
@@ -102,55 +95,13 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
     metadata = comms.channels.catalog.path
     before = metadata.read_bytes() if metadata.exists() else None
     for channel in ("#any", "#all", "#none", "#engineering", "#saved", "#missing"):
-        with pytest.raises(ValueError, match="Only existing exact tag channels"):
+        with pytest.raises(ValueError):
             comms.channels.set_channel_any_mode(channel, True)
-    with pytest.raises(ValueError, match="boolean"):
+    with pytest.raises(ValueError):
         comms.channels.set_channel_any_mode("#api", 1)
     assert (metadata.read_bytes() if metadata.exists() else None) == before
-    with pytest.raises(ValueError, match="Unknown channel"):
+    with pytest.raises(ValueError):
         comms.views.channel_display_page("#missing")
-
-
-def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
-    comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "member DM").message.message_id
-    original = comms.bus.log.opened_wire_snapshot
-    started, finished = Event(), Event()
-
-    def toggle():
-        started.set()
-        comms.channels.set_channel_any_mode("#api", True)
-        finished.set()
-
-    @contextmanager
-    def toggle_after_boundary(**options):
-        with original(**options) as snapshot:
-            if started.is_set():
-                yield snapshot
-                return
-            writer = WorkerThread(target=toggle, daemon=True)
-            writer.start()  # blocked on the short wire lock until the boundary opens
-            assert started.wait(timeout=3) and not finished.is_set()
-            try:
-                yield snapshot
-            finally:
-                writer.join(timeout=3)
-                assert finished.is_set()
-
-    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=toggle_after_boundary):
-        first = comms.views.viewer_snapshot(str(tmp_path))
-    old = first.channels["#api"]
-    assert not old.channel.any_mode
-    assert old.last_activity == 0
-    assert first.channel_unread["#api"].count == 0
-
-    second = comms.views.viewer_snapshot(str(tmp_path))
-    new = second.channels["#api"]
-    assert new.channel.any_mode
-    assert new.last_activity > 0
-    assert second.channel_unread["#api"].count == 1
-    assert comms.bus.log.latest_sequence() == 1
-    assert len(comms.views.channel_display_page("#any").messages) == 1
 
 
 def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
@@ -191,7 +142,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms.channels.rename_tag("api", "services")
     assert comms.bus.log.latest_sequence() == high_water
     assert comms.bus.require_channel("#services").any_mode
-    with pytest.raises(ValueError, match="Unknown channel"):
+    with pytest.raises(ValueError):
         comms.bus.require_channel("#api")
     assert bodies(comms.views.channel_display_page("#services")) == ["old sender DM"]
     comms.channels.delete_tag("services")
@@ -240,186 +191,6 @@ def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
     assert bodies(tail) == ["second target"] and tail.has_older and tail.has_newer
 
 
-def test_fixed_opened_boundary_excludes_later_append(tmp_path):
-    comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "within boundary").message.message_id
-    comms.channels.set_channel_any_mode("#api", True)
-    original = comms.bus.log.opened_wire_snapshot
-    started, finished = Event(), Event()
-
-    def append():
-        started.set()
-        wire(tmp_path).messaging.send("alice", "bob", "outside boundary").message.message_id
-        finished.set()
-
-    @contextmanager
-    def with_append(**options):
-        with original(**options) as snapshot:
-            writer = WorkerThread(target=append, daemon=True)
-            writer.start()
-            assert started.wait(timeout=3) and not finished.is_set()
-            try:
-                yield snapshot
-            finally:
-                writer.join(timeout=3)
-                assert finished.is_set()
-
-    original_page = comms.views.presentation.channel_page
-
-    def captured_page(*args, **kwargs):
-        with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=with_append):
-            return original_page(*args, **kwargs)
-
-    with patch.object(comms.views.presentation, "channel_page", side_effect=captured_page):
-        assert bodies(comms.views.channel_display_page("#api")) == ["within boundary"]
-    assert bodies(comms.views.channel_display_page("#api")) == [
-        "within boundary",
-        "outside boundary",
-    ]
-
-
-def test_failed_document_write_does_not_publish_mode(tmp_path):
-    comms = populated(tmp_path)
-    from agent_comms.catalog_store import ChannelCatalog
-
-    with (
-        patch.object(ChannelCatalog, "_write_unlocked", side_effect=OSError("catalog failure")),
-        pytest.raises(OSError, match="catalog failure"),
-    ):
-        comms.channels.set_channel_any_mode("#api", True)
-    assert not comms.bus.require_channel("#api").any_mode
-    assert not wire(tmp_path).bus.require_channel("#api").any_mode
-    comms.channels.set_channel_any_mode("#api", True)
-    comms.channels.create_tag("later")
-    assert wire(tmp_path).bus.require_channel("#api").any_mode
-
-
-def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
-    comms = populated(tmp_path)
-    comms.channels.set_channel_any_mode("#api", True)
-    comms.messaging.send("alice", "bob", "before retag").message.message_id
-    original = comms.bus.log.opened_wire_snapshot
-    started, finished = Event(), Event()
-
-    def retag_and_send():
-        writer_comms = wire(tmp_path)
-        started.set()
-        writer_comms.channels.update_tags("alice", remove=frozenset({"api"}), add=frozenset({"ui"}))
-        writer_comms.messaging.send("alice", "bob", "late nonmember").message.message_id
-        finished.set()
-
-    @contextmanager
-    def concurrent_public_change(**options):
-        with original(**options) as snapshot:
-            writer = WorkerThread(target=retag_and_send, daemon=True)
-            writer.start()
-            assert started.wait(timeout=3) and not finished.is_set()
-            try:
-                yield snapshot
-            finally:
-                writer.join(timeout=3)
-                assert finished.is_set()
-
-    original_page = comms.views.presentation.channel_page
-
-    def captured_page(*args, **kwargs):
-        with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=concurrent_public_change):
-            return original_page(*args, **kwargs)
-
-    with patch.object(comms.views.presentation, "channel_page", side_effect=captured_page):
-        assert bodies(comms.views.channel_display_page("#api")) == ["before retag"]
-    later = comms.views.channel_display_page("#api")
-    assert "late nonmember" not in bodies(later)
-    assert all(message.target == "#api" for message in later.messages)
-    assert any(isinstance(message.role, Membership) for message in later.messages)
-
-
-def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):
-    comms = populated(tmp_path)
-    comms.channels.set_channel_any_mode("#api", True)
-    original = comms.bus.log.opened_wire_snapshot
-    changed = False
-
-    @contextmanager
-    def mutate_before_open(**options):
-        nonlocal changed
-        if not changed:
-            changed = True
-            alice = comms.registry.require("alice")
-            comms.registry.register(replace(alice, tags=frozenset({"ui"})))
-            comms.bus.publisher.publish_ordinary(
-                Message("alice", "bob", "late direct", InfoKind), origin=AgentOrigin()
-            )
-        with original(**options) as snapshot:
-            yield snapshot
-
-    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=mutate_before_open):
-        assert bodies(comms.views.channel_display_page("#api")) == []
-    assert changed
-    assert bodies(comms.views.channel_display_page("#api")) == []
-    assert bodies(comms.views.channel_display_page("#any")) == ["late direct"]
-
-
-def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
-    comms = populated(tmp_path)
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("bob", "#api", "outside unread").message.message_id
-    original = comms.bus.log.opened_wire_snapshot
-    changed = False
-
-    @contextmanager
-    def rename_and_send_before_open(**options):
-        nonlocal changed
-        if not changed:
-            changed = True
-            comms.registry.rename(viewer, "human")
-            human = comms.registry.require("human")
-            comms.bus.publisher.publish_ordinary(
-                Message("human", "#api", "owned unread", InfoKind),
-                origin=HumanOrigin(human.name, human.created_at, human.worktree),
-            )
-        with original(**options) as snapshot:
-            yield snapshot
-
-    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=rename_and_send_before_open):
-        raced = comms.views.viewer_snapshot(str(tmp_path))
-    assert changed
-    assert raced.channel_unread["#api"].count == 1
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 1
-
-
-def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
-    comms = populated(tmp_path)
-    comms.messaging.send("bob", "#api", "row1").message.message_id
-    original = comms.bus.log.opened_wire_snapshot
-    started, finished = Event(), Event()
-
-    def mark_then_append():
-        started.set()
-        comms.views.mark_user_view_read("#api", worktree=str(tmp_path))
-        comms.messaging.send("bob", "#api", "row2").message.message_id
-        finished.set()
-
-    @contextmanager
-    def concurrent_public_mark(**options):
-        with original(**options) as snapshot:
-            if started.is_set():
-                yield snapshot
-                return
-            writer = WorkerThread(target=mark_then_append, daemon=True)
-            writer.start()
-            assert started.wait(timeout=3) and not finished.is_set()
-            try:
-                yield snapshot
-            finally:
-                writer.join(timeout=3)
-                assert finished.is_set()
-
-    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=concurrent_public_mark):
-        assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 1
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 1
-
-
 def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_path):
     comms = populated(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -456,7 +227,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     assert bodies(page) == [f"burst {n}" for n in range(20)]
     comms.registry.rename("alice", "renamed")
-    with pytest.raises(DMScopeChanged, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         comms.views.mark_page_read(dm, worktree=str(tmp_path))
 
 

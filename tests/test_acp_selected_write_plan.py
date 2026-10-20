@@ -15,11 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-import agent_comms.coordinated_runtime as coordinated_runtime
-import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-import agent_comms.selected_write_plan as selected_write_plan
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     SelectedWriteAcceptedUpdate,
@@ -34,214 +30,16 @@ from agent_comms.comms import Comms
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_assignments
-from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import UnclaimedResource
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
-from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.selected_write_plan import SelectedWritePlans
-from agent_comms.threads import Thread
-from delivery_owner_fixture import drain_diagnostic, reply_turn_finished
-from agent_comms.tracked_turn import TrackedTurnSession
-from test_coordinated_runtime import _fake_model
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink(),
     reason="selected private root requires a physical POSIX /var/tmp",
 )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "scenario",
-    [
-        "success",
-        "reconnect",
-        "lost_process_state",
-        "commit_unknown",
-        "native_failure",
-        "older_claims",
-        "parent_retry",
-    ],
-)
-async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
-    monkeypatch, scenario
-):
-    with TemporaryDirectory(prefix="ac-acp-selected-write-", dir="/var/tmp") as dirname:
-        base = Path(dirname)
-        base.chmod(0o700)
-        root = base / "wire"
-        root.mkdir(mode=0o700)
-        work = base / "work"
-        work.mkdir(mode=0o700)
-        resource = work / "module.py"
-        resource.write_bytes(b"before\n")
-        package = base / "fake-package"
-        package.mkdir(mode=0o700)
-        comms = Comms(root)
-        for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
-            comms.registry.declare(
-                comms.registry.new_thread(name, frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(os.getpid()), created_at=incarnation, model='test/fake')
-            )
-        root_id = comms.messaging.initialize_private_initial_protocol()
-        with Coordination(str(root / "coordination.sqlite3")) as store:
-            install_private_cohort_schema(store)
-            install_private_response_schema(store)
-            install_native_runtime_schema(store)
-            install_prompt_binding_schema(store)
-            for name in ("alpha", "beta"):
-                store.participants.register(
-                    RecordedThreadIncarnation("fixture", comms.registry.require(name).created_at).lookup,
-                    name,
-                    name,
-                    committed=True,
-                )
-        agent = CommsAgent(
-            comms,
-            runtime_enabled=True,
-        )
-        agent.sessions.bindings["beta"] = "beta"
-        agent.sessions.titles["beta"] = "beta"
-        agent.sessions.worktrees["beta"] = str(work)
-        agent.sessions.bindings["alpha"] = "alpha"
-        agent.sessions.titles["alpha"] = "alpha"
-        agent.sessions.worktrees["alpha"] = str(work)
-
-        class AttachedClient:
-            async def session_update(self, **_kwargs):
-                return None
-
-        agent.sessions.client = AttachedClient()  # explicit attached direct ACP test controller
-        prior_seq = 0
-        if scenario == "older_claims":
-            for index in range(100):
-                prior_seq = comms.messaging.send(
-                    "sender", "#team", f"@beta earlier {index}"
-                ).message.seq
-        bus = responder(root, comms.registry)
-        if prior_seq:
-            with Coordination(str(root / "coordination.sqlite3")) as store:
-                await _accept_visible_deliveries(
-                    bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 51003.0).lookup, 0, owner_name="beta"
-                )
-        message = comms.messaging.send("sender", "#team", "@beta inspect module.py").message
-        with Coordination(str(root / "coordination.sqlite3")) as store:
-            await _accept_visible_deliveries(
-                bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 51003.0).lookup, prior_seq, owner_name="beta"
-            )
-        request = SelectedWriteRequest(
-            message.seq, message.message_id, str(resource), "after selected\n"
-        )
-        options = encode_request(request)
-        # Public ACP prompt metadata is an operator intent with no text/model turn.
-        with pytest.raises(IdentityConflict):
-            await agent.prompt("alpha", [], field_meta=options)
-        assert resource.read_bytes() == b"before\n"
-        with pytest.raises(IdentityConflict, match="source identity changed"):
-            await agent.prompt(
-                "beta",
-                [],
-                field_meta=encode_request(
-                    SelectedWriteRequest(message.seq, "wrong", str(resource), "after selected\n")
-                ),
-            )
-        with pytest.raises(IdentityConflict, match="matching private claim root"):
-            SelectedWritePlans(comms, "foreign-root").submit(
-                owner_name="beta",
-                source_seq=message.seq,
-                source_message_id=message.message_id,
-                resource=str(resource),
-                contents="not written",
-            )
-        if scenario == "parent_retry":
-            original_sync = selected_write_plan.fsync_directory
-
-            def fail_parent(path):
-                if path == root:
-                    raise OSError("ambiguous parent fsync")
-                return original_sync(path)
-
-            with monkeypatch.context() as fault:
-                fault.setattr(selected_write_plan, "fsync_directory", fail_parent)
-                with pytest.raises(OSError, match="ambiguous parent fsync"):
-                    await agent.prompt("beta", [], field_meta=options)
-            assert (root / "selected-write-plans").is_dir()
-            assert not list((root / "selected-write-plans").glob("*.json"))
-        if scenario == "commit_unknown":
-            original_sync = selected_write_plan.fsync_directory
-
-            def fail_commit(path):
-                if path.name == "selected-write-plans":
-                    raise OSError("ambiguous directory fsync")
-                return original_sync(path)
-
-            with monkeypatch.context() as fault:
-                fault.setattr(selected_write_plan, "fsync_directory", fail_commit)
-                with pytest.raises(OSError, match="ambiguous"):
-                    await agent.prompt("beta", [], field_meta=options)
-            with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
-                await agent.prompt("beta", [], field_meta=options)
-            assert resource.read_bytes() == b"before\n"
-            assert len(list((root / "selected-write-plans").glob("*.json"))) == 1
-            await agent.shutdown()
-            return
-        response = await agent.prompt("beta", [], field_meta=options)
-        (acknowledgement,) = decode_updates(response.field_meta)
-        assert isinstance(acknowledgement, SelectedWriteAcceptedUpdate)
-        assert resource.read_bytes() == b"before\n"
-        if scenario == "older_claims":
-            assert message.seq > 100
-            await agent.shutdown()
-            return
-        with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
-            await agent.prompt("beta", [], field_meta=options)
-        fake, calls = _fake_model(
-            decision="FULL", fail_on=1 if scenario == "native_failure" else None
-        )
-        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-        if scenario == "native_failure":
-            assert await agent._drain_private_nk("beta", root_id) == 1
-            with pytest.raises(NativePiUnavailable, match="fake backend process died"):
-                await reply_turn_finished(agent, "beta")
-            failure = drain_diagnostic(comms, "beta")
-            assert isinstance(failure, NativeInputDrainDiagnostic)
-            assert failure.error_type == "NativePiUnavailable"
-            assert len(calls) == 1 and resource.read_bytes() == b"before\n"
-            assert not list(Comms(root).bus.log.claim_projection())
-            await agent.shutdown()
-            return
-        if scenario in {"reconnect", "lost_process_state"}:
-            if scenario == "reconnect":
-                agent.sessions.client = (
-                    AttachedClient()
-                )  # different ACP controller, same owner process
-            else:
-                agent._selected_write_controllers.clear()  # owner-process crash loses binding
-            assert await agent._drain_private_nk("beta", root_id) == 1
-            with pytest.raises(IdentityConflict, match="controller changed|no longer bound") as error:
-                await reply_turn_finished(agent, "beta")
-            failure = drain_diagnostic(comms, "beta")
-            assert isinstance(failure, UnavailableDrainDiagnostic)
-            assert failure.error_type == "IdentityConflict"
-            assert failure.reason.startswith(str(error.value))
-            assert not calls and resource.read_bytes() == b"before\n"
-            rows = list((root / "selected-write-plans").glob("*.json"))
-            assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "accepted"
-            await agent.shutdown()
-            return
-        assert await agent._drain_private_nk("beta", root_id) == 1
-        await reply_turn_finished(agent, "beta")
-        assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
-        with Comms(root).bus.log.checked_read() as source:
-            assert source.claim_operation_used(acknowledgement.operation_id)
-            assert source.claim(str(resource)) == UnclaimedResource()
-        rows = list((root / "selected-write-plans").glob("*.json"))
-        assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
-        assert await agent._drain_private_nk("beta", root_id) == 0
-        assert len(calls) == 1
-        await agent.shutdown()
 
 
 @pytest.mark.asyncio

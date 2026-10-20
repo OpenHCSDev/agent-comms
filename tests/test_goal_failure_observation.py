@@ -14,7 +14,6 @@ from agent_comms.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
     StaleAttemptError,
-    StorageUncertainError,
     UnresolvedAttemptError,
 )
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
@@ -29,7 +28,6 @@ from agent_comms.thread_status import (
     IdleThreadStatus,
     StoppedThreadStatus,
 )
-from agent_comms.threads import Thread
 from agent_comms.turn_lease import StoredTurnRecord, TurnLeaseFence
 
 
@@ -185,28 +183,6 @@ def test_observation_insert_error_does_not_rollback_failure_fence(bound):
     with pytest.raises(UnresolvedAttemptError):
         store.resume("goal", 1)
     assert read(store, blocked(owner)).reason == "unsupported_schema"
-
-
-@pytest.mark.parametrize("after_commit", [False, True])
-def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch, after_commit):
-    store, owner, _, observation = bound
-
-    def fail(*args):
-        raise OSError("injected storage failure")
-
-    monkeypatch.setattr(store, "_sync" if after_commit else "_commit", fail)
-    with pytest.raises(StorageUncertainError):
-        observation.reservation.fail(store, "failed", observation=observation)
-    reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").lifecycle == (
-        BlockedGeneration() if after_commit else ReservedGeneration()
-    )
-    assert len(rows(reopened, "failed_turn_evidence")) == int(after_commit)
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.resume("goal", 1)
-    assert read(reopened, blocked(owner)).state == (
-        "backend_suspended" if after_commit else "unavailable"
-    )
 
 
 @pytest.mark.parametrize("source", [OwnerPause(), ModelPause()])

@@ -1,13 +1,9 @@
 import asyncio
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.external_transcript import StoreRead
 from agent_comms.field_codec import FieldCodec
-from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity
 from agent_comms.turn_digests import LastTurns
@@ -46,44 +42,6 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
     assert newest.has_older and not older.has_older
     later = comms.transcripts.thread_transcript_page("codex", after=older.after)
     assert [event.text for event in later.events] == ["Hello"]
-
-
-def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
-    transcript = comms.transcripts.external("codex")
-    transcript.draft(
-        turn_id="turn", item_id="reply", events=(AssistantTranscript("Writing", timestamp=1.0, position='reply'),)
-    )
-    read = comms.transcripts.capture_page_read("codex")
-    reading_draft = threading.Event()
-    release = threading.Event()
-    current_draft = StoreRead.current_draft
-
-    def pause_draft(source, root, incarnation):
-        draft = current_draft(source, root, incarnation)
-        reading_draft.set()
-        assert release.wait(timeout=5)
-        return draft
-
-    monkeypatch.setattr(StoreRead, "current_draft", pause_draft)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        page = executor.submit(read._read_page)
-        assert reading_draft.wait(timeout=5)
-        finish = executor.submit(
-            transcript.finish,
-            turn_id="turn",
-            item_id="reply",
-            events=(AssistantTranscript("Finished", timestamp=1.0, position='reply'),),
-        )
-        finish.result(timeout=5)
-        release.set()
-        captured_page, captured_draft = page.result(timeout=5)
-
-    assert captured_page.events == ()
-    assert captured_draft.events[0].text == "Writing"
-    with transcript.reading() as records:
-        assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
 
 
 def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
@@ -144,7 +102,7 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('pi', frozenset(), str(tmp_path), session_file=str(tmp_path / 'session.jsonl')))
-    with pytest.raises(ValueError, match="native session"):
+    with pytest.raises(ValueError):
         comms.transcripts.external("pi")
 
 

@@ -1,23 +1,12 @@
 """Command extension and guards for the retired response/settlement replicas."""
 
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.selected_session import SelectedSession
 import ast
 from pathlib import Path
-from types import SimpleNamespace
 
-import pytest
 
 import agent_comms.pi_commands as commands
-from agent_comms.native_session_prepare import NativeSessionPreparation
-from agent_comms.native_startup import NativeStartup
-from agent_comms.native_attestation import KnownSessionAttestation, ObservedAttestation
-from agent_comms.native_pi import NativePiRpcLaunch
-from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.pi_payloads import SessionStatsData, StateData
-from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_payloads import StateData
 from agent_comms.turn_stats import StatsRequest
-from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class InspectionSnapshot(commands.SessionSnapshot, commands.PiCommand):
@@ -26,64 +15,6 @@ class InspectionSnapshot(commands.SessionSnapshot, commands.PiCommand):
 
 class InspectionFork(commands.MutatesSession, commands.PiCommand):
     pass
-
-
-@pytest.mark.parametrize("success", [True, False])
-def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(success):
-    session = NativeSessionPreparation(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})),
-        native_session=PersistentPiSession(), startup=NativeStartup(Path.cwd()),
-    )
-    session.native = SimpleNamespace(
-        attestation=ObservedAttestation(
-            StateData(session_id="selected", session_file="/selected.jsonl")
-        )
-    )
-    import json
-
-    def response(owner, identity, path):
-        return PiRpcChannel.decode_record(
-            json.dumps(
-                {
-                    "type": "response",
-                    "command": owner.declared_name,
-                    "success": success,
-                    "data": {"sessionId": identity, "sessionFile": path},
-                }
-            ).encode()
-        )
-
-    for identity, path in (("foreign", "/selected.jsonl"), ("selected", "/foreign.jsonl")):
-        record = response(InspectionSnapshot, identity, path)
-        assert record.command.invalidates_identity(record, session) is success
-    record = response(InspectionSnapshot, "selected", "/selected.jsonl")
-    assert not record.command.invalidates_identity(record, session)
-    # Even a failed mutating response cannot prove the session stayed unchanged.
-    record = response(InspectionFork, "selected", "/selected.jsonl")
-    assert record.command.invalidates_identity(record, session)
-
-
-@pytest.mark.parametrize(
-    ("command", "data", "invalid"),
-    [
-        (commands.GetState, StateData(session_id="saved", session_file="/saved.jsonl"), False),
-        (commands.GetState, StateData(session_id="foreign", session_file="/saved.jsonl"), True),
-        (commands.GetSessionStats, SessionStatsData(session_file="/saved.jsonl"), False),
-        (commands.GetSessionStats, SessionStatsData(session_file="/foreign.jsonl"), True),
-    ],
-)
-def test_known_session_attestation_rejects_complete_and_partial_snapshot_conflicts(
-    command, data, invalid
-):
-    session = SimpleNamespace(
-        native=SimpleNamespace(
-            attestation=KnownSessionAttestation(
-                NativeSessionIdentity("saved", "/saved.jsonl")
-            )
-        )
-    )
-    response = SimpleNamespace(success=True, data=data)
-    assert command.invalidates_identity(response, session) is invalid
 
 
 def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():

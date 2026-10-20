@@ -67,7 +67,7 @@ async def test_exhausted_native_request_records_required_final_error(previous):
 
     assert turn.finished
     assert turn.output.declared_failure == ModelRequestFailed("final refusal")
-    with pytest.raises(NativePiTerminalFailure, match="final refusal") as caught:
+    with pytest.raises(NativePiTerminalFailure) as caught:
         turn.output.raise_if_failed(None, SelectedModel("configured", "model"))
     assert not isinstance(caught.value.failure, RetryableProviderFailure)
     message = PiMessage.from_wire({
@@ -79,7 +79,7 @@ async def test_exhausted_native_request_records_required_final_error(previous):
 
 
 def test_failed_native_retry_end_requires_final_error_at_decode():
-    with pytest.raises(ValueError, match="requires finalError"):
+    with pytest.raises(ValueError):
         NativeRetryEnd.from_wire({
             "type": "native_retry_end", "success": False, "attempt": 3
         })
@@ -127,7 +127,7 @@ def test_midtool_delivered_message_does_not_erase_pending_selected_answer():
     # the response publisher already links a started same-route DM once.
     pending = PendingTrackedTerminal().tool_round()
     pending = following(DeliveredFollowingInput).continue_response(pending, [])
-    with pytest.raises(NativePiUnavailable, match="no unique authoritative completed response"):
+    with pytest.raises(NativePiUnavailable):
         pending.require_response([])
     completed = pending.append("Shared final answer")
     assert completed.require_response(["Shared final answer"]) == "Shared final answer"

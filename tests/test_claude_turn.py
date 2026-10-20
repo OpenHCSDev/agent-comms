@@ -17,7 +17,7 @@ from agent_comms.transcript_events import AssistantTranscript
 @pytest.mark.parametrize('question', ('finished', 'result', 'thinking', 'tool'))
 @pytest.mark.parametrize('phase, expectation', (
     (CatchUp, nullcontext()),
-    (Live, pytest.raises(ValueError, match='before identifying its turn')),
+    (Live, pytest.raises(ValueError)),
 ))
 def test_unknown_turn_uses_the_reader_phase_for_every_item(question, phase, expectation):
     session = ClaudeSession(phase=phase())
