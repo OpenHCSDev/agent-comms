@@ -1096,7 +1096,7 @@ class FairText(OrderWords):
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID in a Slop: line, "
+    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID, "
                "name the restated fact and the declaration that derives it.")
 
 
@@ -1162,13 +1162,20 @@ class Slop:
                          for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
 
     def __post_init__(self):
+        problems = []
         if self.pattern not in self.patterns():
-            raise ValueError(f'Unknown refactor-audit pattern ID {self.pattern!r}; '
-                             'fix: use an ID from the packaged pattern catalog.')
+            problems.append(f'Unknown refactor-audit pattern ID {self.pattern!r}; '
+                            'fix: use an ID from the packaged pattern catalog.')
         if len(self.fact.split()) < 4:
-            raise ValueError('The duplicated fact needs 4+ words.')
-        self.at.require_exists()
-        self.by.require_exists()
+            problems.append('fact: fix: describe the duplicated fact in at least four words')
+        for name, reference in (('at', self.at), ('by', self.by)):
+            try:
+                with MalformedRecord.refusing(name):
+                    reference.require_exists()
+            except MalformedRecord as error:
+                problems.append(f'{name}: {error}; fix: cite an existing source line')
+        if problems:
+            raise ValueError('\n'.join(problems))
 
     def render(self):
         return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
@@ -1414,8 +1421,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         for check in (lambda: self.at.require_recorded("An order"),
                       self.first_call_deadline.require_deadline):
             try:
-                check()
-            except ValueError as error:
+                with MalformedRecord.refusing('order time'):
+                    check()
+            except MalformedRecord as error:
                 problems.append(str(error))
         if problems:
             raise ValueError("\n".join(problems))

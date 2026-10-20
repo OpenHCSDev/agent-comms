@@ -150,7 +150,9 @@ class OrderFile:
         return f'{self.defect}\n{self.why_stupid}'
 
     def problems_found(self, clean: bool) -> list[str]:
-        problems = list(DirectiveText.refused(self.prose))
+        problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
+                    for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
+                    for error in DirectiveText.refused(text)]
         if len(self.defect.split()) < 8:
             problems.append('defect: fix: describe what fails in at least eight words')
         if not self.why_stupid.strip():
@@ -282,23 +284,26 @@ class Commander(CommanderContext):
         for label, validate in (('order.owner', order.owner.require_exists),
                                ('order.check.directory', check.require_directory)):
             try:
-                validate()
-            except ValueError as error:
+                with MalformedRecord.refusing(label):
+                    validate()
+            except MalformedRecord as error:
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
         # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
         # An order's check must fail now (or it proves nothing), and every absolute
         # path:line it cites must exist.
         if Path(check.directory).is_dir():
             try:
-                ran = asyncio.run(BoundedRun.run(('bash', '-c', check.command),
-                                                cwd=check.directory, timeout=90))
-                problems += check.result.distance(ran).unproven(check.command, 0)
-            except ValueError as error:
+                with MalformedRecord.refusing('order.check'):
+                    ran = asyncio.run(BoundedRun.run(('bash', '-c', check.command),
+                                                    cwd=check.directory, timeout=90))
+                    problems += check.result.distance(ran).unproven(check.command, 0)
+            except MalformedRecord as error:
                 problems.append(f'order.check: {error}; fix: supply a focused measurable command')
         for reference in FileLine.scan('\n'.join((document.prose, *edits))):
             try:
-                reference.require_exists()
-            except ValueError as error:
+                with MalformedRecord.refusing(reference.to_wire()):
+                    reference.require_exists()
+            except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         # A module deleted here can still be imported by another repo:
         # P12 deleted acp_ingress.py, which Toad imports.
@@ -317,16 +322,18 @@ class Commander(CommanderContext):
         trace = None
         if traced is not None:
             try:
-                trace = FileLine.from_wire(traced)
-            except ValueError as error:
+                with MalformedRecord.refusing('--traced'):
+                    trace = FileLine.from_wire(traced)
+            except MalformedRecord as error:
                 problems.append(f'--traced: {error}; fix: supply PATH:LINE')
         for pid in group:
             try:
-                if replacing:
-                    listed[pid].require_replacement(replaces)
-                if pid in listed and listed[pid].assignment:
-                    listed[pid].assignment.require_trace(unit, trace)
-            except ValueError as error:
+                with MalformedRecord.refusing(pid):
+                    if replacing:
+                        listed[pid].require_replacement(replaces)
+                    if pid in listed and listed[pid].assignment:
+                        listed[pid].assignment.require_trace(unit, trace)
+            except MalformedRecord as error:
                 problems.append(str(error))
         if replaces and not replacing:
             problems.append('--replaces: fix: name the current order on these problems to the same unit')

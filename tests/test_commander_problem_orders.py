@@ -458,31 +458,19 @@ def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
         slop = Slop(pattern, 'the count of open orders', location, DeclarationDerivation, location)
         assert FieldCodec.decode(Slop, FieldCodec.encode(slop)) == slop
         assert pattern in slop.render()
-        body = (f'Slop: {pattern}; fact the count of open orders; at {__file__}:1; '
-                f'derive declaration on {__file__}:1')
-        assert Slop.from_order(body) == [slop]
     with pytest.raises(ValueError, match='MADEUP-999'):
         Slop('MADEUP-999', 'the count of open orders', location, DeclarationDerivation, location)
-    for pattern in ('MADEUP-999', 'state'):
-        with pytest.raises(ValueError, match=pattern) as refused:
-            Slop.from_order(f'Slop: {pattern}; fact the count of open orders; at {__file__}:1; '
-                            f'derive declaration on {__file__}:1')
-        assert Slop.USAGE in str(refused.value)
-    valid = (f'Slop: MEMB-1; fact the count of open orders; at {__file__}:1; '
-             f'derive declaration on {__file__}:1')
-    malformed = 'Slop: MADEUP-999; an incomplete line must not disappear'
-    for body in (malformed, valid + '\n' + malformed, malformed + '\n' + valid):
-        with pytest.raises(ValueError, match='Slop: PATTERN-ID'):
-            Slop.from_order(body)
-    assert len(Slop.from_order(valid + '\n' + valid)) == 2
 
 
 def test_order_send_refuses_unknown_pattern_before_recording(commander_script):
     script, repo = commander_script
-    extra = (f'Slop: MADEUP-999; fact the count of open orders; at {__file__}:1; '
-             f'derive declaration on {__file__}:1\n')
-    with pytest.raises(ValueError, match='MADEUP-999'):
-        problem(script, order_body(repo, extra=extra))
+    body = Path(order_body(repo))
+    document = json.loads(body.read_text())
+    document['slop'] = [dict(pattern='MADEUP-999', fact='the count of open orders',
+                             at=f'{__file__}:1', derive='declaration', by=f'{__file__}:1')]
+    body.write_text(json.dumps(document))
+    with pytest.raises(SystemExit, match='MADEUP-999'):
+        problem(script, str(body))
     assert script.held_orders() == ()
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     with pytest.raises(ValueError, match='MADEUP-999'):
@@ -499,33 +487,31 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     (repo / 'count.txt').write_text('0\n')
     git('add', '.')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
-    body = repo.parent / 'order.txt'
-    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
-                    "Works when: the installed app shows the counter at one after restart\n"
-                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
-                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    body = Path(order_body(repo))
     due = '23:59'
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body), f'{__file__}:1')
+    script.problem(str(body), 'worker', due, f'{__file__}:1')
     created = comms.goals.todos.get('P1')
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    numbered = body.read_text().replace('Problem: NEW', f'Problem: {created.id}')
+    document = json.loads(body.read_text())
+    document['problems'] = [created.id]
+    numbered = json.dumps(document)
     # The refusal itself supplies the exact replacement argument; no DM lookup.
-    with pytest.raises(ValueError) as refusal:
-        script.send('worker', due, numbered)
+    with pytest.raises(SystemExit) as refusal:
+        script.send('worker', due, commander_order.OrderFile.read(numbered))
     expected = f"worker already holds P1; pass --replaces {created.messages[-1].message_id}"
-    assert str(refusal.value) == expected
-    replaces = str(refusal.value).split('--replaces ', 1)[1]
+    assert expected in str(refusal.value)
+    replaces = str(refusal.value).split('--replaces ', 1)[1].splitlines()[0]
     print(f'Refused order: {refusal.value}')
     # Without --clean this replaces the prior order and counts a send-back.
-    script.send('worker', due, numbered, replaces=replaces)
+    script.send('worker', due, commander_order.OrderFile.read(numbered), replaces=replaces)
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and commander_order.struck(sent_back, 'worker') == 1
     print(f'Accepted replacement: {sent_back.order.id}')
     # A historical send cannot replace the latest order.
-    with pytest.raises(ValueError, match=sent_back.messages[-1].message_id):
-        script.send('worker', due, numbered, replaces=replaces)
+    with pytest.raises(SystemExit, match=sent_back.messages[-1].message_id):
+        script.send('worker', due, commander_order.OrderFile.read(numbered), replaces=replaces)
     with pytest.raises(ValueError, match='no order message was recorded'):
         replace(sent_back, messages=()).require_replacement(replaces)
     (link,) = sent_back.messages[-1:]
@@ -552,17 +538,22 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
 
 
 def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
-    """An order body the commander script accepts, with its check and one numbered edit."""
-    body = repo.parent / 'order.txt'
-    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: {check or 'cat count.txt -> 1'}\n"
-                    "Works when: the installed app shows the counter at one after restart\n"
-                    f"The counter is wrong and that is stupid.\n1. {edit}\n{extra}"
-                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    """Raw JSON input; the application, not the test, constructs the order."""
+    body = repo.parent / 'order.json'
+    checked = OrderCheck.parse(f'{repo} :: {check or "cat count.txt -> 1"}')
+    body.write_text(json.dumps({
+        'defect': 'The counter file holds zero where the fleet needs one',
+        'why_stupid': 'The counter is wrong and that is stupid.',
+        'order': {'kind': 'pending', 'owner': f'{__file__}:1',
+                  'check': FieldCodec.encode(checked), 'edits': [edit],
+                  'run': {'kind': 'application', 'text': 'the installed app shows the counter at one after restart'},
+                  'banned': ['no second store', 'no cache'],
+                  'report': 'the commit and the count before -> after ' + extra}}))
     return str(body)
 
 
 def problem(script, body):
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, f'{__file__}:1')
+    script.problem(body, 'worker', '23:59', f'{__file__}:1')
 
 
 def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
@@ -576,7 +567,9 @@ def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
     (repo / 'count.txt').write_text('0\n')
     body = Path(order_body(repo))
     problem(script, str(body))
-    body.write_text(body.read_text().replace('Problem: NEW', 'Problem: P1'))
+    document = json.loads(body.read_text())
+    document['problems'] = ['P1']
+    body.write_text(json.dumps(document))
     reviews = RuleReviews(comms.root)
     reviews.write('lead', DrawnRuleReviewEntry(('Keep the current order message with its Todo.',), 0))
     reviews.write('lead', AnsweredRuleReviewEntry(
@@ -619,7 +612,7 @@ def test_check_repo_resolves_once_for_send_and_correction(
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     directory = str(repo) if spelling == 'absolute' else spelling
     body = order_body(repo, f'{command} -> 1')
-    Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {directory}'))
+    Path(body).write_text(Path(body).read_text().replace(f'"directory": "{repo}"', f'"directory": "{directory}"'))
     problem(script, body)
     sent = comms.goals.todos.get('P1')
     assert sent.order.check.directory == str(repo.resolve())
@@ -645,7 +638,7 @@ def test_missing_check_repo_refuses_before_recording(
     with pytest.raises(SystemExit, match='is not a directory'):
         if entrypoint == 'send':
             body = order_body(repo)
-            Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {missing}'))
+            Path(body).write_text(Path(body).read_text().replace(f'"directory": "{repo}"', f'"directory": "{missing}"'))
             problem(script, body)
         else:
             script.correct_check('P1', f'{missing} :: printf 0 -> 0',
@@ -662,11 +655,13 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     body = order_body(repo)
     problem(script, body)
     script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
-    numbered = Path(body).read_text().replace('Problem: NEW', 'Problem: P1')
-    script.send('worker', '23:59', numbered,
+    document = json.loads(Path(body).read_text())
+    document['problems'] = ['P1']
+    numbered = json.dumps(document)
+    script.send('worker', '23:59', commander_order.OrderFile.read(numbered),
                 replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', numbered,
+    script.send('worker', '23:59', commander_order.OrderFile.read(numbered),
                 replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
@@ -730,12 +725,8 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('add', '.')
     git('commit', '-qm', 'base')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
-    body = repo.parent / 'order.txt'
-    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: grep -c two count.txt -> 1\n"
-                    "Works when: the installed app shows the counter at one after restart\n"
-                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
-                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
+    body = order_body(repo, 'grep -c two count.txt -> 1')
+    problem(script, body)
     script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
@@ -765,31 +756,26 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     assert comms.goals.todos.get('P1').order.check_corrections == (record,)
 
 
-def test_commander_refuses_jargon_before_core_records_the_problem(commander_script):
-    """A refused outgoing text leaves Core without the problem, so "nothing recorded" is true."""
+def test_commander_refuses_soft_prose_without_filtering_code(commander_script):
     script, repo = commander_script
     (repo / 'count.txt').write_text('0\n')
-    body = repo.parent / 'order.txt'
-    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
-                    "Works when: the installed app shows the counter at one after restart\n"
-                    "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
-                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    body = Path(order_body(repo))
+    document = json.loads(body.read_text())
+    document['why_stupid'] = 'Maybe consider repairing the counter because the value is wrong.'
+    document['order']['edits'] = ['Keep identifiers maybe_consider and optional_action unchanged.']
+    body.write_text(json.dumps(document))
     original = body.read_bytes()
-    with pytest.raises(ValueError, match='Jargon'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
+    with pytest.raises(SystemExit, match='why_stupid: Soft wording'):
+        problem(script, str(body))
     assert script.held_orders() == () and body.read_bytes() == original
 
 
 def test_commander_refuses_a_check_that_prints_no_count(commander_script):
     """done could never pass a check that prints no integer, so send refuses it before Core records anything."""
     script, repo = commander_script
-    body = repo.parent / 'order.txt'
-    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: git grep -c no-such-text -> 0\n"
-                    "Works when: the installed app shows the counter at one after restart\n"
-                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
-                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    body = order_body(repo, 'git grep -c no-such-text -> 0')
     with pytest.raises(SystemExit, match='the check printed no integer'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
+        problem(script, body)
     assert script.held_orders() == ()
 
 
@@ -1523,7 +1509,7 @@ def test_close_quotes_the_works_line(commander):
     artifact = comms.root / 'installed-evidence'
     artifact.write_text('Verified installed path')
     delivered = comms.goals.todos.get('P1')
-    with pytest.raises(ValueError, match='consecutive words of: Works when:'):
+    with pytest.raises(ValueError, match='consecutive words of: Application run:'):
         CommsProblemCloseTool(problem='P1', artifact=str(artifact),
             works='The installed application kept both queued orders through tab returns.').apply(comms, caller)
     assert comms.goals.todos.get('P1') == delivered
@@ -1540,7 +1526,11 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     callers = copied / 'callers.py'
     callers.write_text('from flag import is_set\n\ndef read(v):\n    return 1 if is_set(v) else 0\n')
     family = ("grep -rhoE 'is_set\\(|except ValueError' --include=*.py . | wc -l")
-    deletes = OrderDeletion.parse(f'is_set absence decision at {copied / "flag.py"}:1 :: {copied} :: {family}')
+    deletes = FieldCodec.decode(OrderDeletion, {
+        'kind': 'family', 'family': 'is_set absence decision',
+        'site': f'{copied / "flag.py"}:1',
+        'count': {'directory': str(copied), 'command': family,
+                  'result': {'kind': 'count', 'expected': 0}}})
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
         problem='P520', order=replace(order(comms.root, 'order-P520'), deletes=deletes),
         request='request', deadline=RecordedEventTime(1000), commander='lead',

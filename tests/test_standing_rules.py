@@ -24,7 +24,7 @@ from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, Hun
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
+from agent_comms.todos import (CleanHunt, DirectiveText, MergedProgress,
     MergedPullRequest, NoCommitProgress, OpenPrProgress, OrderProgress, PullRequests, StrikeReason,
     Todo, UnmergedPullRequest, UnreadProgress)
 from agent_comms.connector import CALLER
@@ -268,13 +268,8 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
 
 
 
-def test_defect_text_without_slop_line_needs_no_label():
-    """Only a text that names a defect in a Slop: line needs its label outside that line."""
-    assert DefectText.found("Yes, go ahead.") == [] and DirectiveText.refused("Yes, go ahead.") == ()
-    slop = "Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
-    assert DefectText.found(slop + "\nRead the count from its owner.") == [slop]
-    assert DirectiveText.refused(slop + "\nRead the count from its owner.") == (DefectText.refusal,)
-    assert DefectText.found(slop + "\nThe copy at tools.py:829 is wrong.") == []
+def test_plain_messages_need_no_order_labels():
+    assert DirectiveText.refused("Yes, go ahead.") == ()
 
 
 def test_a_claude_ai_directive_passes_the_commanders_wording_with_no_rules_review(commander, tmp_path):
