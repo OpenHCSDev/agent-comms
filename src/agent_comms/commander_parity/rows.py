@@ -302,14 +302,6 @@ class BuildBoundProofParityRow(ParityRow):
     comparison = BuildBoundProofCase.read
 
 
-class DeletionTargetParityRow(ParityRow):
-    number = 31
-    capability = "An order states its intent as a deletion target"
-    current = "none; P520 renamed a decision rather than deleting it"
-    native = "Order owns deletion family/site/count; delivery refuses nonzero or renamed decisions"
-    phases = (RecordPlanePhase,)
-
-
 class UnitTimeParityRow(ParityRow):
     number = 32
     capability = "Where units' time goes, classified"
