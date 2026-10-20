@@ -80,7 +80,8 @@ def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, 
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
     changed = {name for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
-    unnamed = sorted(changed - {name for step in steps for name in step["rewritten"]})
+    unnamed = sorted(changed - {CarryLedger.name}
+                     - {name for step in steps for name in step["rewritten"]})
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
     return {"identical": len(before.keys() - changed), "rewritten": len(changed)}
