@@ -28,7 +28,8 @@ from dataclasses import asdict, dataclass, field
 
 
 from ..comms import Comms
-from ..field_codec import FieldCodec, Argument
+from ..change_report import FileLine
+from ..field_codec import Argument, FieldCodec
 from ..todos import (
     AcceptedVerdict,
     BluntText,
@@ -41,9 +42,9 @@ from ..todos import (
     Todo,
     ToolCallVerdict,
 )
+from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
-from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from . import order
 from .order import CommanderVerb
 
@@ -314,7 +315,8 @@ class BackVerb(VerdictVerb):
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, ctx.incarnation,
                                todo.held(), edit_id,
-                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
+                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
+                               evidence=(FileLine.from_wire(self.at),))
 
     def check_edits(self, edits: list[Edit]) -> None:
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):

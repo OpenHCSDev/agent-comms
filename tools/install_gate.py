@@ -38,7 +38,6 @@ from cutover.carry import CarryLedger
 from cutover.carry_maintenance_identity import OldMarker, StoredMaintenanceState
 from install_snapshot import SnapshotHome
 
-from agent_comms import field_codec
 from agent_comms.active_route import ActiveRoute, CommsRoute
 from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import Platform
@@ -53,6 +52,8 @@ from agent_comms.field_codec import (
     SingleFieldValue,
     SubclassUnion,
     compile_decoder,
+    WireInline,
+    WireName,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceMarker
@@ -98,7 +99,7 @@ class ExternalRecord(RecordMember):
 @dataclass(frozen=True)
 class WheelFiles(ExternalRecord):
     packages: tuple[str, ...]
-    force_include: Annotated[dict[str, str], field_codec.WireName("force-include")] = field(
+    force_include: Annotated[dict[str, str], WireName("force-include")] = field(
         default_factory=dict
     )
 
@@ -361,7 +362,7 @@ class SnapshotCopy(SnapshotHome):
 @dataclass(frozen=True)
 class RouteDocument:
     version: int
-    selection: Annotated[ActiveRoute, field_codec.WireInline()]
+    selection: Annotated[ActiveRoute, WireInline()]
 
     def require_current(self) -> None:
         if self.version != ActiveRoute.version:
@@ -920,14 +921,14 @@ class GateReport:
 
 @dataclass(frozen=True)
 class RepositoryAnswer(ExternalRecord):
-    name: Annotated[str, field_codec.WireName("nameWithOwner")]
+    name: Annotated[str, WireName("nameWithOwner")]
 
 
 @dataclass(frozen=True)
 class PullRequestAnswer(ExternalRecord):
-    head: Annotated[str, field_codec.WireName("headRefOid")]
-    base: Annotated[str, field_codec.WireName("baseRefOid")]
-    cross_repository: Annotated[bool, field_codec.WireName("isCrossRepository")]
+    head: Annotated[str, WireName("headRefOid")]
+    base: Annotated[str, WireName("baseRefOid")]
+    cross_repository: Annotated[bool, WireName("isCrossRepository")]
 
     def require_local(self) -> None:
         if self.cross_repository:

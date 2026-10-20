@@ -61,7 +61,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 ```
 
 The order declaration supplies its ID and first-call times when omitted. A mechanical order declares `"run": {"kind": "mechanical"}` instead of an application run. `serves`, `finding` and `deletes` use their declared Core family shapes; rendered instructions are never input.
-- **Strikes are `order strike UNIT PID --why ...`; firing reassigns every board row the unit owns.** `order done UNIT` only after reading the diff that meets the order. See `rules/send-backs-and-strikes.md`.
+- **Strikes are `order strike UNIT PID FILE:LINE --why ...`; firing reassigns every board row the unit owns.** `order done UNIT` only after reading the diff that meets the order. See `rules/send-backs-and-strikes.md`.
 - **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
 - **Judged against what the commander would have done.** If a unit action is not what you would have done given what it knew, say why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
@@ -112,7 +112,7 @@ Update the board row, move on. One line per unit touched.
 
 ## The public record
 
-- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, records the strike in Core's Todo store and posts to #comms. Send-backs strike automatically.
+- **Every failure goes on the record in plain words.** `order strike UNIT PID FILE:LINE --why "..."` refuses jargon and anything under 10 words, records the strike in Core's Todo store and posts to #comms. Send-backs strike automatically.
 - **Work lives on main or on a branch with a linked PR or issue.** Core's standing rules report unlinked work through commander-heartbeat; each branch goes to its owner.
 
 ## Merging

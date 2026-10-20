@@ -119,13 +119,13 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     lifecycle: Annotated[AssignmentState, SnapshotExclude()]
     accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= accepted_at_ms")]
-    revision: Annotated[int, Column(check="revision > 0")] = dataclass_field(default=1)
+    revision: Annotated[int, Column(check="revision > 0")] = 1
     resolver_version: Annotated[
         str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
-    ] = dataclass_field(default=RESOLVER_VERSION)
+    ] = RESOLVER_VERSION
     policy_version: Annotated[
         str, Column(check="length(policy_version) BETWEEN 1 AND 256")
-    ] = dataclass_field(default=POLICY_VERSION)
+    ] = POLICY_VERSION
 
     @projected(view="snapshot", name="disposition")
     def snapshot_disposition(self):
