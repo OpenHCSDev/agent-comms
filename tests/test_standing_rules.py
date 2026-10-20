@@ -252,6 +252,8 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     assert unowned.line() == (
         f"WHEEL SPIN: {unowned.unit} holds no order while P2 is unowned"
         f" -> Core gives it to {unowned.unit}")
+    # A second pass over the same board is the same violation, so the heartbeat stays quiet.
+    assert frozenset(module.UnownedWheelSpin.violations(comms, "lead")) == frozenset([unowned])
     # Actual unit launch/first reply is a separate native application proof.
     assert comms.goals.todos.get("P2").holder is None
 
