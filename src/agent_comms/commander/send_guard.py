@@ -99,8 +99,7 @@ class RawSendCommand(GuardedCommand):
 
 @dataclass(frozen=True)
 class TacticalCommand(GuardedCommand):
-    """Work the bus's planned installer owns. Each shape is the words a command runs,
-    in order, matched against its words' path parts and stems."""
+    """Work the bus's planned installer owns. Match the invoked program, never argument text."""
 
     work: ClassVar[str] = "tactical work"
     shapes: ClassVar[tuple[Words, ...]] = ()
@@ -109,20 +108,97 @@ class TacticalCommand(GuardedCommand):
     def refused(cls, words: Words, session: CommanderSession, cwd: Path) -> tuple[str, ...]:
         return session.refusals(cls) if cls.runs(words) else ()
 
+    @staticmethod
+    def _python_target(args: list[str]) -> tuple[str, str, list[str]]:
+        module = len(args) > 2 and args[1] in ("-m",)
+        target = args[2] if module else args[1] if len(args) > 1 else ""
+        if not target or target.startswith("-"):
+            return "", "", []
+        namespace = (
+            target.rpartition(".")[0].rsplit(".", 1)[-1] if module else Path(target).parent.name
+        )
+        name = target.rsplit(".", 1)[-1] if module else Path(target).stem
+        return name, namespace, args[3:] if module else args[2:]
+
+    @staticmethod
+    def _shell_target(args: list[str]) -> tuple[str, str, list[str]]:
+        if len(args) < 2 or args[1].startswith("-"):
+            return "", "", []
+        return Path(args[1]).stem, "", args[2:]
+
+    @staticmethod
+    def _direct_target(args: list[str]) -> tuple[str, str, list[str]]:
+        return Path(args[0]).stem, "", args[1:]
+
+    @staticmethod
+    def _systemctl_args(args: list[str]) -> list[str]:
+        global_options = {"--user": True, "--system": True, "--no-pager": True}
+        while args and global_options.get(args[0], False):
+            args = args[1:]
+        return [arg.removesuffix(".service") for arg in args[:2]]
+
+    @staticmethod
+    def _uv_args(args: list[str]) -> list[str]:
+        subcommands = {"pip": True, "tool": True}
+        return args[1:] if args and subcommands.get(args[0], False) else args
+
     @classmethod
     def runs(cls, words: Words) -> bool:
-        parts = [
-            part
-            for word in words
-            if not any(space in word for space in " \n\t")
-            for part in (*Path(word).parts, Path(word).stem)
-        ]
-
-        def ordered(shape: Words) -> bool:
-            remaining = iter(parts)
-            return all(word in remaining for word in shape)
-
-        return any(ordered(shape) for shape in cls.shapes)
+        """ShellInvocation has already split simple commands with shlex and skipped heredocs."""
+        args = list(words)
+        prefixes = {
+            "sudo": (False, False),
+            "env": (True, False),
+            "timeout": (False, True),
+            "nice": (False, False),
+        }
+        value_options = (
+            "-u",
+            "-g",
+            "--user",
+            "--group",
+            "-p",
+            "--prompt",
+            "--unset",
+            "-k",
+            "--kill-after",
+            "-s",
+            "--signal",
+            "-n",
+            "--adjustment",
+        )
+        while args and Path(args[0]).name in prefixes:
+            rule = prefixes[Path(args.pop(0)).name]
+            while args and args[0].startswith("-"):
+                option = args.pop(0)
+                if option in ("--",):
+                    break
+                if option in value_options and args:
+                    args.pop(0)
+            assignments, duration = rule
+            if assignments:
+                while args and "=" in args[0]:
+                    args.pop(0)
+            if duration and args:
+                args.pop(0)
+        if not args:
+            return False
+        program = Path(args[0]).name
+        runners = {"python": cls._python_target, "bash": cls._shell_target, "sh": cls._shell_target}
+        runner = runners.get(program, cls._direct_target)
+        if (
+            runner is cls._direct_target
+            and program.startswith("python")
+            and program[6:].replace(".", "").isdigit()
+        ):
+            runner = cls._python_target
+        name, namespace, arguments = runner(args)
+        argument_forms = {"systemctl": cls._systemctl_args, "uv": cls._uv_args}
+        arguments = argument_forms.get(name, list)(arguments)
+        return any(
+            shape[0] in (name, namespace) and tuple(arguments[: len(shape) - 1]) == shape[1:]
+            for shape in cls.shapes
+        )
 
     @classmethod
     def install_refusals(cls, ctx: Commander) -> tuple[str, ...]:

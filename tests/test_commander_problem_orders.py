@@ -1609,6 +1609,29 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
         assert guarded(target) == ''
 
 
+@pytest.mark.parametrize('command, expected', [
+    ('cat show-p758.sh', ()),
+    ('git log -- tools/upgrade_bus.py', ()),
+    ("cat <<'EOF'\npython tools/upgrade_bus.py --to x\nEOF", ()),
+    ('agent-comms-commander order send --body "run agent-comms install"', ()),
+    ('agent-comms-commander order problem file.json --where tools/upgrade_bus.py:289', ()),
+    ('cat rehearse.txt', ()),
+    ('python tools/upgrade_bus.py --to x', ('maintenance',)),
+    ('python -m tools.upgrade_bus --to x', ('maintenance',)),
+    ('timeout 60 agent-comms install', ('install',)),
+    ('sudo env PYTHONPATH=src nice -n 5 python tools/upgrade_bus.py --to x', ('maintenance',)),
+    ('cd x && bash publish_runtime.sh', ('install',)),
+])
+def test_tactical_guard_matches_executed_targets_not_argument_text(tmp_path, command, expected):
+    from agent_comms.commander.send_guard import InstallCommand, MaintenanceCommand
+    from agent_comms.storage_rules import ShellInvocation
+
+    kinds = (InstallCommand, MaintenanceCommand)
+    actual = tuple(kind.work for invocation in ShellInvocation.parse(command, tmp_path)
+                   for kind in kinds if kind.runs(invocation.words))
+    assert actual == expected
+
+
 @pytest.mark.parametrize('command, kind', [
     ('bash ~/code/toad/relink.sh', 'install'),
     ('uv tool install --force .', 'install'),
