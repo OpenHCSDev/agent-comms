@@ -24,7 +24,7 @@ def main() -> None:
         for path in sources
     )
     try:
-        notice = f"Commander: {CommanderConfig.installed().commander}."
+        notice = f"Commander: {CommanderConfig.read(CommanderConfig.path()).commander}."
     except (OSError, ValueError):
         notice = "No commander is configured (installed configuration is missing or invalid)."
     print(
