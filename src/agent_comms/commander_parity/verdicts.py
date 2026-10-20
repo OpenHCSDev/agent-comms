@@ -22,25 +22,59 @@ from ..todos import AcceptedVerdict, SendBackVerdict, Todo, ToolCallVerdict
 from ..tools import CommsVerdictTool, TodoChanged
 from ..turn_context import GoalSegment
 from . import ParityComparison
-from .lifecycle import LifecycleRun
+from .lifecycle import LifecycleObservation, LifecycleRun
+
+# Comparison-side controlled input, like load.OBSERVE_CAPACITY, not a new native
+# runtime bootstrap/resource. The unchanged pinned SDK owns execution and storage.
+NATIVE_EDIT = """
+import { pathToFileURL } from 'node:url';
+import { readFile } from 'node:fs/promises';
+const [packagePath, sessionPath, path, callId, replacement] = process.argv.slice(1);
+const sdk = pathToFileURL(`${packagePath}/dist/index.js`).href;
+const { createEditTool, SessionManager } = await import(sdk);
+const args = {path, edits: [{oldText: await readFile(path, 'utf8'), newText: replacement}]};
+const session = SessionManager.open(sessionPath);
+session.appendMessage({role: 'user', content: 'Execute one isolated verdict-check edit.',
+  timestamp: Date.now()});
+session.appendMessage({
+  role: 'assistant', content: [{type: 'toolCall', id: callId, name: 'edit', arguments: args}],
+  api: 'controlled-verification', provider: 'controlled-verification', model: 'local-native-edit',
+  usage: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+    cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0}},
+  stopReason: 'toolUse', timestamp: Date.now(),
+});
+const result = await createEditTool(process.cwd()).execute(callId, args);
+if ((await readFile(path, 'utf8')) !== replacement) {
+  throw new Error('Native edit did not apply its request');
+}
+session.appendMessage({role: 'toolResult', toolCallId: callId, toolName: 'edit',
+  content: result.content, details: result.details, isError: false, timestamp: Date.now()});
+"""
 
 
 @dataclass(frozen=True)
-class VerdictEffect:
+class VerdictMutation:
     call_id: str
     verdicts: int
     todo_revisions: int
     strikes: int
     goal_revisions: int
     goal_transitions: int
-    goal_retained: bool
-    goal_state_retained: bool
     progress: str
-    native_calls: int
-    native_result_retained: bool
-    strike_matches_verdict_event: bool
-    declared_verdict_recorded: bool
-    goal_transition_retained: bool
+
+    def checks(self, changes: int) -> tuple[tuple[str, bool], ...]:
+        return (
+            ("one verdict", self.verdicts == 1),
+            ("one Todo revision", self.todo_revisions == 1),
+            ("strike delta", self.strikes == changes),
+            ("Goal revision delta", self.goal_revisions == changes),
+            ("committed Goal transition delta", self.goal_transitions == changes),
+        )
+
+
+@dataclass(frozen=True)
+class VerdictObservation(LifecycleObservation):
+    mutation: VerdictMutation
 
 
 class VerdictCase(ABC):
@@ -56,8 +90,8 @@ class VerdictCase(ABC):
     def command(cls, run: LifecycleRun, todo: Todo, edit: Edit) -> VerdictVerb: ...
 
     @staticmethod
-    def judge(run: LifecycleRun, command: VerdictVerb, todo: Todo, edit: Edit) -> object:
-        return command.apply(run.commander)
+    def judge(run: LifecycleRun, command: VerdictVerb, todo: Todo, edit: Edit) -> None:
+        command.apply(run.commander)
 
     @staticmethod
     def native(run: LifecycleRun, command: VerdictVerb, todo: Todo, edit: Edit) -> object:
@@ -70,10 +104,9 @@ class VerdictCase(ABC):
     @classmethod
     def capture(
         cls, call_id: str, invoke: Callable[[LifecycleRun, VerdictVerb, Todo, Edit], object]
-    ) -> VerdictEffect:
+    ) -> VerdictObservation:
         with LifecycleRun.open() as run, contextlib.redirect_stdout(io.StringIO()):
-            # Satisfy the actual current command's gate in this copy; never bypass it
-            # or transfer the original commander's review authority into a new root.
+            # Satisfy the actual gate in this copy, without transferring original authority.
             ReviewVerb().apply(run.commander)
             with RuleReviews(run.commander.root).snapshot() as db:
                 drawn = DrawnRule.select(db, reviewer=run.commander.commander, order_by=("n",))
@@ -91,16 +124,21 @@ class VerdictCase(ABC):
             worker = run.commander.comms.registry.require(run.worker)
             goal = worker.goal.require()
             history = len(run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id))
-            for path in (Path(worker.session_file), run.decisions, Path(worker.worktree)):
+            session_file = worker.session_file
+            if not session_file:
+                raise ValueError("The copied unit must have its own recorded native session")
+            for path in (Path(session_file), run.decisions, Path(worker.worktree)):
                 path.resolve().relative_to(run.commander.root.resolve())
             package = resolve_comms_route().launch().require_private().validate()
             subprocess.run(
                 (
                     "node",
                     "--no-global-search-paths",
-                    str(Path(__file__).with_name("verdict_edit.mjs")),
+                    "--input-type=module",
+                    "-e",
+                    NATIVE_EDIT,
                     str(package.path),
-                    worker.session_file,
+                    session_file,
                     str(run.decisions),
                     call_id,
                     cls.replacement(run),
@@ -131,40 +169,44 @@ class VerdictCase(ABC):
             transitions = run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id)[
                 history:
             ]
-            return VerdictEffect(
+            progress = GoalSegment.capture(worker, after, run.commander.comms.goals).progress
+            mutation = VerdictMutation(
                 request.operation.tool_call_id,
                 len(saved.verdicts) - len(before.verdicts),
                 saved.revision - before.revision,
                 saved.strike_count - before.strike_count,
                 after.revision - goal.revision,
                 len(transitions),
-                after.id == goal.id,
-                after.state == goal.state,
-                GoalSegment.capture(worker, after, run.commander.comms.goals).progress,
-                len(native),
-                result == TodoChanged(saved, saved.strike_count)
-                and request.operation in saved.verdicts,
-                all(
-                    strike.at == request.operation.at
-                    and strike.previous == request.operation.previous
-                    for strike in saved.strikes[len(before.strikes) :]
-                ),
-                isinstance(request.operation, cls.native_owner),
-                all(entry.before == goal and entry.after == after for entry in transitions),
+                progress,
             )
-
-    @classmethod
-    def valid(cls, effect: VerdictEffect) -> bool:
-        return (
-            effect.verdicts == effect.todo_revisions == effect.native_calls == 1
-            and effect.strikes == effect.goal_revisions == effect.goal_transitions == cls.changes
-            and effect.goal_retained
-            and effect.goal_state_retained
-            and effect.native_result_retained
-            and effect.strike_matches_verdict_event
-            and effect.declared_verdict_recorded
-            and effect.goal_transition_retained
-        )
+            checks = (
+                *mutation.checks(cls.changes),
+                ("same Goal identity", after.id == goal.id),
+                ("same Goal state", after.state == goal.state),
+                ("native result retained", result == TodoChanged(saved, saved.strike_count)),
+                ("native verdict retained", request.operation in saved.verdicts),
+                (
+                    "strike is the verdict event",
+                    all(
+                        strike.at == request.operation.at
+                        and strike.previous == request.operation.previous
+                        for strike in saved.strikes[len(before.strikes) :]
+                    ),
+                ),
+                ("declared verdict kind", isinstance(request.operation, cls.native_owner)),
+                (
+                    "Goal publication retained",
+                    all(entry.before == goal and entry.after == after for entry in transitions),
+                ),
+                ("native verdict visible in Goal", request.operation.line in progress),
+            )
+            return VerdictObservation(
+                f"{cls.native_owner.__module__}.{cls.native_owner.__qualname__}",
+                len(native),
+                checks,
+                "",
+                mutation,
+            )
 
 
 class AcceptedCase(VerdictCase):
@@ -189,10 +231,6 @@ class SendBackCase(VerdictCase):
     changes = 1
     native_owner = SendBackVerdict
     why: ClassVar[str] = "The edit duplicates the copied workflow decision instead of removing it."
-
-    @classmethod
-    def valid(cls, effect: VerdictEffect) -> bool:
-        return super().valid(effect) and cls.why in effect.progress
 
     @classmethod
     def replacement(cls, run: LifecycleRun) -> str:
@@ -220,25 +258,32 @@ class SendBackCase(VerdictCase):
 
 @dataclass(frozen=True)
 class VerdictComparison(ParityComparison):
-    accepted_current: VerdictEffect
-    accepted_native: VerdictEffect
-    back_current: VerdictEffect
-    back_native: VerdictEffect
+    accepted_current: VerdictObservation
+    accepted_native: VerdictObservation
+    back_current: VerdictObservation
+    back_native: VerdictObservation
 
     @property
     def passed(self) -> bool:
+        observations = (
+            self.accepted_current,
+            self.accepted_native,
+            self.back_current,
+            self.back_native,
+        )
         return (
-            self.accepted_current == self.accepted_native
-            and self.back_current == self.back_native
-            and AcceptedCase.valid(self.accepted_native)
-            and SendBackCase.valid(self.back_native)
+            all(observation.passed for observation in observations)
+            and self.accepted_current.mutation == self.accepted_native.mutation
+            and self.back_current.mutation == self.back_native.mutation
         )
 
     def describe(self) -> str:
         return (
-            f"accepted current/native equal={self.accepted_current == self.accepted_native}; "
-            f"send-back current/native equal={self.back_current == self.back_native}; "
-            f"accepted={self.accepted_native!r}; send-back={self.back_native!r}"
+            "accepted current/native equal="
+            f"{self.accepted_current.mutation == self.accepted_native.mutation}; "
+            "send-back current/native equal="
+            f"{self.back_current.mutation == self.back_native.mutation}; "
+            f"accepted={self.accepted_native.describe()}; send-back={self.back_native.describe()}"
         )
 
     @classmethod
