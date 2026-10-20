@@ -46,7 +46,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
-from agent_comms.active_route import ActiveRoute, publish_active_route
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, Id128Text
@@ -128,6 +127,17 @@ class Stack:
     def prepare_native(self) -> None:
         run(self.checkout / "stack/bin/prepare-pi-native", cwd=self.checkout,
             env=self.environment())
+
+    def select_route(self, root: Path) -> None:
+        """Validate and publish through this stack's prepared native package."""
+        run(self.python, "-c", """import sys
+from pathlib import Path
+from agent_comms.active_route import ActiveRoute, publish_active_route
+from agent_comms.wire_log import WireLog
+root = Path(sys.argv[1])
+marker = WireLog(root / 'bus.jsonl').private_marker_unlocked()
+publish_active_route(ActiveRoute(root, marker.root_id))
+""", root, cwd=self.checkout, env=self.environment())
 
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
@@ -253,12 +263,10 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
     ):
         home = Path(scratch) / "home"
         prepare_runtime_home(home)
-        marker = copied.bus.log.private_marker_unlocked()
-        publish_active_route(ActiveRoute(copied.root, marker.root_id),
-                             home / ROUTE.relative_to(Path.home()))
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(stack, home=home)
         stack.prepare_native()
+        stack.select_route(copied.root)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied.root):
