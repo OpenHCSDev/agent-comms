@@ -33,7 +33,14 @@ class Repo(BaseModel):
         return self.github == todo.repo
 
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
-        """Prove ancestry in the requested fetched revision without moving the checkout."""
+        """Prove ancestry in the requested fetched revision without moving the checkout.
+
+        A commit merged after the last fetch is fetched once first; a commit origin does not
+        have either is in no revision of this checkout."""
+        if not self.has_commit(sha):
+            self.git(self.checkout, "fetch", "-q", "origin")
+            if not self.has_commit(sha):
+                return False
         result = subprocess.run(
             ("git", "-C", str(self.checkout), "merge-base", "--is-ancestor", sha, revision),
             capture_output=True,
@@ -42,6 +49,16 @@ class Repo(BaseModel):
         if result.returncode not in (0, 1):
             result.check_returncode()
         return result.returncode == 0
+
+    def has_commit(self, sha: str) -> bool:
+        return (
+            subprocess.run(
+                ("git", "-C", str(self.checkout), "cat-file", "-e", f"{sha}^{{commit}}"),
+                capture_output=True,
+                timeout=30,
+            ).returncode
+            == 0
+        )
 
     @staticmethod
     def git(checkout: Path, *args: str) -> str:
