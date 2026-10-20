@@ -9,7 +9,7 @@ from agent_comms.commander.order import Commander
 from agent_comms.commander.send_guard import CommanderSession
 from agent_comms.connector import DirectorCaller
 from agent_comms.errors import RelationViolationError
-from agent_comms_hooks import ClaudeWorkspaceHook, ClaudeHookProgram
+from agent_comms_hooks import ClaudeHookProgram, ClaudeWorkspaceHook
 
 
 @dataclass(frozen=True)

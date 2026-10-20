@@ -1,6 +1,7 @@
 """Configured storage limits over current filesystem and Git worktrees."""
 from __future__ import annotations
 
+import getopt
 import json
 import math
 import re
@@ -10,6 +11,7 @@ import subprocess
 import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -371,11 +373,25 @@ class ShellInvocation:
             yield cls(tuple(words), cwd)
 
 
+class ShellInterpreter(StrEnum):
+    BASH = 'bash'
+    SH = 'sh'
+
+
+class GitWriteOperation(StrEnum):
+    COMMIT = 'commit'
+    PUSH = 'push'
+
+
 @dataclass(frozen=True)
 class GitInvocation:
     args: list[str]
     cwd: Path
     directories: tuple[Path, ...]
+
+    @property
+    def writes_source(self) -> bool:
+        return bool(self.args) and self.args[0] in GitWriteOperation
 
 
 def shell_commands(command):
@@ -469,7 +485,7 @@ class RemovesCheckout(ShellProgram):
 
 
 class WritesWorkingTree(ShellProgram):
-    verbs = (('switch',), ('checkout',), ('commit',), ('merge',), ('reset',), ('stash',))
+    verbs = (('switch',), ('checkout',), (GitWriteOperation.COMMIT,), ('merge',), ('reset',), ('stash',))
 
     def decode(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         return (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
@@ -480,33 +496,33 @@ class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTr
     forbidden = (('clone',), ('worktree', 'move'))
     reason = 'git clone and git worktree move are forbidden; add and remove worktrees instead'
 
+    chdir_option = '-C'
+    directory_options = frozenset({chdir_option, '--git-dir', '--work-tree'})
+    value_options = (*sorted(directory_options), '-c', '--config-env', '--namespace',
+                     '--exec-path', '--list-cmds', '--attr-source', '--super-prefix')
+    switch_options = ('-v', '-h', '-p', '-P', '--version', '--help', '--no-pager', '--paginate',
+                      '--html-path', '--man-path', '--info-path', '--no-replace-objects', '--bare',
+                      '--literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs',
+                      '--icase-pathspecs', '--no-optional-locks', '--no-lazy-fetch', '--no-advice')
+
     @classmethod
     def invocation(cls, args: list[str], cwd: Path) -> GitInvocation:
+        short = ''.join(name[1:] + ':' for name in cls.value_options if len(name) == 2)
+        short += ''.join(name[1:] for name in cls.switch_options if len(name) == 2)
+        long = [name[2:] + '=' for name in cls.value_options if name.startswith('--')]
+        long.extend(name[2:] for name in cls.switch_options if name.startswith('--'))
+        try:
+            options, remaining = getopt.getopt(args, short, long)
+        except getopt.GetoptError as error:
+            raise SelectedToolDenied(f'StorageRule: incomplete or unknown git option: {error}') from error
         directories = [cwd]
-        while args and args[0].startswith('-'):
-            option = args[0]
-            if option in ('-C', '-c', '--git-dir', '--work-tree', '--config-env'):
-                if len(args) < 2:
-                    raise SelectedToolDenied('StorageRule: incomplete git option')
-                if option in ('-C', '--git-dir', '--work-tree'):
-                    path = physical_path(args[1], cwd)
-                    directories.append(path)
-                    if option == '-C':
-                        cwd = path
-                args = args[2:]
-            elif option.startswith('-C'):
-                cwd = physical_path(option[2:], cwd)
-                directories.append(cwd)
-                args = args[1:]
-            elif option.startswith(('--git-dir=', '--work-tree=')):
-                directories.append(physical_path(option.partition('=')[2], cwd))
-                args = args[1:]
-            elif option.startswith(('-c', '--config-env=')) or option in (
-                    '--no-pager', '--paginate', '--literal-pathspecs', '--no-optional-locks'):
-                args = args[1:]
-            else:
-                break
-        return GitInvocation(args, cwd, tuple(directories))
+        for option, value in options:
+            if option in cls.directory_options:
+                path = physical_path(value, cwd)
+                directories.append(path)
+                if option == cls.chdir_option:
+                    cwd = path
+        return GitInvocation(remaining, cwd, tuple(directories))
 
     def effects(self, args, cwd):
         invocation = self.invocation(args, cwd)

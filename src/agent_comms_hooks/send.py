@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from agent_comms.commander import cli, send_guard
-from agent_comms_hooks import BashInput, ClaudeToolHookProgram, FileEditInput
+from agent_comms_hooks import BashInput, ClaudeToolHookProgram, FileEditInput, ToolInput
 
 
 class SendGuard(ClaudeToolHookProgram):
     """Refuses the commander's raw sends and tactical work in the Bash command about to run."""
 
     events = ("PreToolUse",)
-    reads = BashInput
+    reads: ClassVar[type[ToolInput]] = BashInput
 
     @classmethod
     def command(cls) -> str:

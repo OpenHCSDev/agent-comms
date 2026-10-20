@@ -23,7 +23,7 @@ from agent_comms_hooks import ClaudeBashHook, ClaudeFileEditHook
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
-from ..storage_rules import GitProgram, ShellInvocation
+from ..storage_rules import GitProgram, ShellInterpreter, ShellInvocation
 from ..todos import InstallDeadline
 
 if TYPE_CHECKING:
@@ -186,7 +186,9 @@ class SourceChangeCommand(TacticalCommand):
 
     @classmethod
     def landing(cls, words: Words, cwd: Path) -> bool:
-        script = words[1] if Path(words[0]).name in ("bash", "sh") and len(words) > 1 else words[0]
+        script = (
+            words[1] if Path(words[0]).name in ShellInterpreter and len(words) > 1 else words[0]
+        )
         path = Path(script).expanduser()
         return (path if path.is_absolute() else cwd / path).resolve() == cls.landing_tool
 
@@ -195,10 +197,8 @@ class SourceChangeCommand(TacticalCommand):
         if cls.landing(words, cwd) or Path(words[0]).name not in GitProgram.names:
             return ()
         invocation = GitProgram.invocation(list(words[1:]), cwd)
-        if (
-            invocation.args
-            and invocation.args[0] in ("commit", "push")
-            and any(cls.protected(path, session.commander) for path in invocation.directories)
+        if invocation.writes_source and any(
+            cls.protected(path, session.commander) for path in invocation.directories
         ):
             return session.refusals(cls)
         return ()
@@ -225,7 +225,7 @@ class BashGuardTool(GuardTool):
             )
         except (ValueError, OSError) as error:
             hook.deny(f"Cannot resolve command safely: {error}")
-            return
+            raise SystemExit(0) from error
         if reasons:
             hook.deny(" ".join(reasons))
 
@@ -240,7 +240,7 @@ class EditGuardTool(GuardTool, declared_name="edit-guard"):
             )
         except (ValueError, OSError) as error:
             hook.deny(f"Cannot resolve edit safely: {error}")
-            return
+            raise SystemExit(0) from error
         if protected:
             reasons = CommanderSession(hook.session_id, ctx).refusals(SourceChangeCommand)
             if reasons:
