@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict
 
@@ -61,7 +62,7 @@ class CommanderConfig(CommanderRole, BaseModel):
         return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
 
     @classmethod
-    def read(cls, path: Path | str) -> CommanderConfig:
+    def read(cls, path: Path | str) -> Self:
         return cls.model_validate_json(Path(path).read_text())
 
     @staticmethod
@@ -69,7 +70,7 @@ class CommanderConfig(CommanderRole, BaseModel):
         return root / 'commander.json'
 
     @classmethod
-    def read_root(cls, root: Path | str) -> CommanderConfig:
+    def read_root(cls, root: Path | str) -> Self:
         root = Path(root).resolve()
         return cls.read(cls.root_path(root)).model_copy(update={'root': root})
 

@@ -432,7 +432,8 @@ class Commander(CommanderContext):
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
-    def say(self, units, body_file, answers: tuple[MessageReference, ...] = ()):
+    def say(self, units: str, body_file: str,
+            answers: tuple[MessageReference, ...] = ()) -> None:
         body = open(body_file).read()
         # Numbered edits or a report line are an order: it needs a deadline, so it goes through send.
         if len(re.findall(r'(?m)^\s*\d+[.)] ',
@@ -442,8 +443,8 @@ class Commander(CommanderContext):
         Slop.from_order(body)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 
-    def problem(self, text, unit, due, order_file, where, disk=False,
-                answers: tuple[MessageReference, ...] = ()):
+    def problem(self, text: str, unit: str, due: str, order_file: str, where: str,
+                disk: bool = False, answers: tuple[MessageReference, ...] = ()) -> None:
         """A problem is born owned: Core records it with its order in one step, or not at all."""
         location = FileLine.from_wire(where)
         location.require_exists()
