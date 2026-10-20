@@ -21,7 +21,8 @@ def test_executing_comes_from_the_record_declaration_without_reading(tmp_path, m
         'worker', frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
-    owner = comms.agents.begin_turn('worker', 'running')
+    comms.agents.begin_turn('worker', 'running')
+    owner = comms.registry.require('worker')
 
     def forbidden_read(record):
         raise AssertionError('execution status must not read a turn file')
