@@ -21,11 +21,11 @@ from agent_comms.private_bus_checkpoint import (
     CheckedPrefix,
     CheckpointTable,
     DeliverySources,
+    WritableCheckpoint,
     _chain,
     _connect,
     _directory_sync,
     _tail,
-    WritableCheckpoint,
 )
 from agent_comms.private_path import FileRevision
 from agent_comms.thread_identity import ThreadIncarnation

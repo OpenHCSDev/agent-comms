@@ -52,9 +52,9 @@ from .field_codec import FieldCodec, MalformedRecord
 from .locked_store import DurableFile, RegistryFile, WireWakeFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
-from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
-from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
 from .private_bus_checkpoint import CheckedRead
+from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .store_files import (
     UNBOUNDED_STORE_READ,
     ExclusiveLock,

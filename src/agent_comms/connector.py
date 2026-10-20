@@ -275,7 +275,9 @@ class ServerInfo:
 
 @dataclass(frozen=True)
 class InitializeResult(McpResult):
-    protocol_version: str = field(default=PROTOCOL_VERSION, metadata={"wire_name": "protocolVersion"})
+    protocol_version: str = field(
+        default=PROTOCOL_VERSION, metadata={"wire_name": "protocolVersion"}
+    )
     capabilities: ServerCapabilities = ServerCapabilities()
     server_info: ServerInfo = field(default=ServerInfo(), metadata={"wire_name": "serverInfo"})
 
@@ -608,7 +610,9 @@ class Connector:
             self.store.update(spent)
         except OAuthError as refusal:
             return refusal.response()
-        return web.json_response(FieldCodec.encode(exchanged[0]), headers={"Cache-Control": "no-store"})
+        return web.json_response(
+            FieldCodec.encode(exchanged[0]), headers={"Cache-Control": "no-store"}
+        )
 
     async def mcp(self, request: web.Request) -> web.Response:
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
@@ -713,7 +717,9 @@ class PendingVerb(ConnectorVerb):
         print(
             json.dumps(
                 {
-                    key: FieldCodec.encode(PendingAuthorization(grants.clients[held.client_id].name))
+                    key: FieldCodec.encode(
+                        PendingAuthorization(grants.clients[held.client_id].name)
+                    )
                     for key, held in grants.requests.items()
                 }
             )

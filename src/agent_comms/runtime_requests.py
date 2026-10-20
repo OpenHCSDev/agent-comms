@@ -18,11 +18,11 @@ from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
 from .command import Command
+from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireValue
-from .context_store import ContextManifestReference
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
