@@ -118,7 +118,7 @@ Update the board row, move on. One line per unit touched.
 ## Merging
 
 - **One merger, and it is not the commander.** A merge fork judges each PR when it is pushed and runs the batches; the commander orders units. Only the merger merges.
-- **Small batches, back to back.** Two or three passed PRs per batch; the next batch starts the minute the last one lands or fails.
+- **One integration run for every ready branch.** Units push and run only the tests they wrote or touched, never the full suite or the ratchets. The merger merges every ready head onto fresh main, runs the suite and both ratchets once, and installs once. Per-PR full gates are serial waste (owner, 2026-10-20).
 - **A failing PR drops out and the rest land in the same run.** A batch is never abandoned in silence: every landing and every drop is posted to #comms with its time and reason.
 - **Units never merge main into their branches.** The batch merges each head onto fresh main; the merger resolves trivial conflicts itself and sends only a real conflict back.
 - **The PR owns its state.** Ready is out of draft with both ratchets and the proof in the body; sent back is a review requesting changes with the defect at file:line; merged is merged. Read state from the PR, never from a message about it.

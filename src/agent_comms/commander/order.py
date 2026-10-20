@@ -725,23 +725,6 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
         return cls.member_named(args.command).from_arguments(args)
 
 
-class StaleOrderGate(CommanderVerb):
-    """All directive verbs read the configured commander's same retained board."""
-
-    def gate(self, ctx: Commander) -> None:
-        super().gate(ctx)
-        stale = tuple(todo for todo in ctx.held_orders() if todo.overdue(time.time() - 30 * 60))
-        if stale:
-            lines = []
-            for todo in stale:
-                due = time.localtime(todo.deadline.recorded_at("An order deadline"))
-                lines.append(f'{todo.id}: holder {todo.holder}, deadline '
-                             f'{time.strftime("%Y-%m-%d %H:%M", due)}')
-            sys.exit('REFUSED, nothing recorded: orders more than 30 minutes overdue:\n  '
-                     + '\n  '.join(lines)
-                     + '\nMove their deadlines or withdraw them before sending more work.')
-
-
 @dataclass(frozen=True, kw_only=True)
 class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
@@ -777,7 +760,7 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class SendVerb(OrderVerb, DirectiveVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
@@ -796,7 +779,7 @@ class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class StrikeVerb(OrderVerb, DirectiveVerb):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
     why: str = option("--why")
@@ -928,7 +911,7 @@ class ServeVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SayVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class SayVerb(OrderVerb, DirectiveVerb):
     help = "a non-order message; refused if it orders work"
     units: str = option("units", metavar="UNIT[,UNIT]")
     body_file: str = option("body_file", metavar="BODYFILE")
@@ -938,7 +921,7 @@ class SayVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class ProblemVerb(OrderVerb, DirectiveVerb):
     help = "Core records the problem with its order, or nothing"
     order: str = option("order", metavar="ORDER.json")
     to: str = option("--to")
