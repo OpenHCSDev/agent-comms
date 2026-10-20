@@ -2,6 +2,7 @@
 from unittest.mock import patch
 
 from agent_comms.agent_backend import RuntimeLocation
+from agent_comms.private_path import FileRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.wire_watch import NativeFileWatch
 from native_unread_fixture import completed_snapshot
@@ -43,11 +44,26 @@ def test_idle_sidebar_does_not_read_keys_and_append_only_reads_changed_thread(tm
         for number in range(10):
             snapshot = comms.views.viewer_snapshot(
                 str(tmp_path), RosterVisibility(archived=number % 2 == 0))
-            assert snapshot.thread_unread == ({'worker': 1, 'other': 1} if number % 2 == 0 else {'worker': 1})
+            assert {name: shown.count for name, shown in snapshot.thread_unread.items()} == (
+                {'worker': 1, 'other': 1} if number % 2 == 0 else {'worker': 1}
+            )
         assert calls == []
         append(source, content="Only the worker changed")
-        comms.views.viewer_snapshot(str(tmp_path))
+        with patch.object(FileRevision, 'capture', wraps=FileRevision.capture) as captures:
+            comms.views.viewer_snapshot(str(tmp_path))
+        assert other not in [call.args[0] for call in captures.call_args_list]
         assert calls == [str(source)]
         completed_snapshot(comms, str(tmp_path))
         assert calls == [str(source)]
+    comms.views.transcript_reads.close()
+
+
+def test_queued_change_for_a_deleted_thread_does_not_refresh_its_keys(tmp_path):
+    comms, source = setup_thread(tmp_path)
+    append(source)
+    completed_snapshot(comms, str(tmp_path))
+    comms.registry.remove('worker')
+    source.unlink()
+    with patch.object(RuntimeLocation, 'read_keys', side_effect=AssertionError('deleted source')):
+        assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {}
     comms.views.transcript_reads.close()
