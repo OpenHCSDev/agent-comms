@@ -20,7 +20,7 @@ from contextlib import (
     nullcontext,
     redirect_stdout,
 )
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib.metadata import distribution
 from io import StringIO
 from pathlib import Path
@@ -43,7 +43,7 @@ from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.owner_cutover import MaintainedOwnerCutover
-from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelection, OwnerStartResult
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _atomic_write_text, _store_lock
@@ -179,9 +179,7 @@ class RuntimePublication:
 
     def publish_stopped(self, carries, comms, intent, hold, resources) -> None:
         root = comms.root
-        snapshot = comms.registry.snapshot()
-        remaining = [original.name for original in OwnerRestartSelection.live(intent.owners, snapshot)]
-        request = OwnerRestartRequest(names=tuple(remaining))
+        request = OwnerRestartRequest(names=tuple(original.name for original in intent.owners))
         if not carries.original():
             if OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):
                 raise RuntimeError('Cannot restore data while an original worker is running')
@@ -245,6 +243,28 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
     carries: PendingConversion
     route_ownership: ExitStack = field(default_factory=ExitStack, compare=False)
     route_descriptor: int = field(init=False)
+
+    def restart(self, lifecycle, request) -> tuple[OwnerRestartResult, ...]:
+        snapshot = lifecycle.registry.snapshot()
+        running = replace(request, names=tuple(
+            thread.name for thread in request.threads(snapshot)
+            if thread.restart_candidates(snapshot.status(thread.name))))
+        results = super().restart(lifecycle, running)
+        # A previous failed cutover already retired these owners. Their /proc
+        # environment is gone; normal start derives their declared launch anew.
+        # The stopped batch has released its wire/route locks before this step.
+        for original in self.selection:
+            thread = lifecycle.registry.require(original.name)
+            if thread.incarnation != original.identity.incarnation:
+                raise ValueError('Saved publication owner incarnation changed')
+            if not thread.process_alive:
+                completed = subprocess.run([
+                    self.runtime / 'bin/agent-comms', '--root', str(lifecycle.root),
+                    'start', '--name', original.name,
+                ], capture_output=True, text=True, check=True, timeout=60)
+                started = FieldCodec.decode(OwnerStartResult, FieldCodec.parse(completed.stdout))
+                results += (OwnerRestartResult(original.name, original.process.pid, started.pid),)
+        return results
 
     def stopped_resources(self, lifecycle):
         # Agent observation children hold shared route locks until they stop.

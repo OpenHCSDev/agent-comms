@@ -27,10 +27,10 @@ def main():
     units = ('core-read-locks-2', 'core-goal-retry')
     target = Path('/home/ts/.local/share/agent-comms/current').resolve()
     previous = Path(sys.executable).parent.parent.resolve()
-    home = base / 'private-home-2'
+    home = base / 'private-home-3'
     home.mkdir(mode=0o700)
     prepare_runtime_home(home)
-    with CheckRoot(source, units, base / 'bus-copy-2').open() as copied:
+    with CheckRoot(source, units, base / 'bus-copy-3').open() as copied:
         shutil.copy2(source.root / 'carries.json', copied.root / 'carries.json')
         chain = CarryChain.at(checkout, 'HEAD')
         assert not chain.pending(CarryLedger(copied.root).applied())
@@ -68,6 +68,8 @@ def main():
                 resumed = publication.publish(copied.root, checkout=checkout)
             added = copied.registry.require(units[1])
             assert units[1] in resumed and added.process_alive
+            assert copied.registry.require(units[0]).process_alive
+            assert copied.registry.require(units[0]).process_identity != first_process
             assert added.process_identity != added_process
             assert not (copied.root / 'runtime-publication.json').exists()
             result = {'resumed_selection': resumed, 'additional_owner': units[1],
