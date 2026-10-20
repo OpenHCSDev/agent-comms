@@ -16,13 +16,13 @@ from typing import TYPE_CHECKING, cast, BinaryIO, ClassVar
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord, WireValue
+from .messages import Message
 from .thread_identity import ThreadIncarnation
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .delivery_policy import KeyedResponseAcknowledgement
-    from .messages import Message
     from .wire_metadata import WireMetadata
 
 
@@ -55,7 +55,6 @@ class WireRecord(ABC):
     @classmethod
     def from_wire(cls, value: Mapping, root_id: str) -> WireRecord:
         from .bus_publication import CommittedDelivery, has_private_wire_fields
-        from .messages import Message
 
         if "observation" in value:
             return DeferredObservationWireRecord.decode(value)
@@ -68,7 +67,6 @@ class WireRecord(ABC):
     def public_from_wire(cls, value: object) -> WireRecord:
         """Display decoding preserves public messages and validates silent rows."""
         from .bus_publication import has_private_wire_fields
-        from .messages import Message
         if not isinstance(value, Mapping):
             raise MalformedRecord("Bus row must be an object")
         if "observation" in value:
