@@ -379,20 +379,20 @@ class BuildBoundProofCase(InstalledEvidenceCase):
         delivered, closed, stale, after = rows
         assert isinstance(delivered.order, DeliveredProblemOrder)
         assert isinstance(stale.order, DeliveredProblemOrder)
-        current_build = delivered.order.delivery.proof_build.recorded()
-        older_build = stale.order.delivery.proof_build.recorded()
+        current_build = delivered.order.delivery.proof_build
+        older_build = stale.order.delivery.proof_build
+        assert isinstance(current_build, RecordedBuildIdentity)
+        assert isinstance(older_build, RecordedBuildIdentity)
         return (
             ("installed proof closes", closed.order.accepted and not closed.state.open),
             (
                 "build recorded durably",
-                bool(current_build and older_build)
-                and FieldCodec.decode(Todo, FieldCodec.encode(stale)) == stale,
+                FieldCodec.decode(Todo, FieldCodec.encode(stale)) == stale,
             ),
             ("older proof refused without mutation", stale == after and after.state.open),
             (
                 "both revisions named",
-                bool(current_build and older_build)
-                and all(
+                all(
                     revision in output
                     for revision in (
                         current_build.core,

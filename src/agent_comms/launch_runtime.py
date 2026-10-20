@@ -45,7 +45,7 @@ class LaunchRuntime:
 
     @classmethod
     def installed(cls) -> LaunchRuntime:
-        return cls(cls.current_pointer() / "bin/python")
+        return cls(cls.current_pointer().resolve(strict=True) / "bin/python")
 
     @property
     def prefix(self) -> Path:
