@@ -38,3 +38,28 @@ def test_one_map_keeps_view_counts_and_read_positions_separate(tmp_path):
     assert after.unread[NativeThreadTarget("worker")] == ReplyUnread(0)
     assert after.unread[ThreadTarget("worker")] == ExactUnread(0)
     assert after.unread[ChannelTarget("#ci")] == ExactUnread(0)
+
+
+def test_sibling_views_convert_and_clear_only_their_painted_source(tmp_path):
+    comms, source = setup_thread(tmp_path)
+    human, saved = ThreadTarget("worker"), NativeThreadTarget("worker")
+    for target in (human, saved):
+        assert target.native() == saved
+        assert target.external() == human
+    append(source, content="Saved reply stays unread while reading the DM")
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.messaging.send("worker", viewer, "Human DM")
+    before = completed_snapshot(comms, str(tmp_path))
+    assert before.unread[human] == ExactUnread(1)
+    assert before.unread[saved] == ReplyUnread(1)
+    page = comms.views.dm_display_page("worker", worktree=str(tmp_path))
+    comms.views.mark_page_read(page, worktree=str(tmp_path))
+    after_human = completed_snapshot(comms, str(tmp_path))
+    assert after_human.unread[human] == ExactUnread(0)
+    assert after_human.unread[saved] == ReplyUnread(1)
+    comms.messaging.send("worker", viewer, "Human DM stays unread while reading the saved reply")
+    comms.views.mark_thread_view_read("worker", worktree=str(tmp_path),
+                                    through=comms.transcripts.transcript_checkpoint("worker"))
+    after_saved = completed_snapshot(comms, str(tmp_path))
+    assert after_saved.unread[human] == ExactUnread(1)
+    assert after_saved.unread[saved] == ReplyUnread(0)

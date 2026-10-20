@@ -208,7 +208,7 @@ class NamedTarget(CommandTarget):
 
 
 @dataclass(frozen=True)
-class ThreadViewTarget(ConversationPreparation["ThreadViewTarget"]):
+class ThreadViewTarget:
     """A participant's view identity, without command or delivery capabilities."""
 
     name: str
@@ -232,7 +232,7 @@ class ThreadViewTarget(ConversationPreparation["ThreadViewTarget"]):
         return self.canonical_name(snapshot.canonical_name) in snapshot.threads
 
 
-class ThreadTarget(ThreadViewTarget, NamedTarget):
+class ThreadTarget(ThreadViewTarget, NamedTarget, ConversationPreparation[ThreadViewTarget]):
     history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
@@ -307,7 +307,7 @@ class ThreadTarget(ThreadViewTarget, NamedTarget):
         views.mark_thread_user_read(self.name, worktree=worktree)
 
 
-class NativeThreadTarget(ThreadViewTarget):
+class NativeThreadTarget(ThreadViewTarget, ConversationPreparation[ThreadViewTarget]):
     """A saved reply view, not the human DM with that participant."""
 
 

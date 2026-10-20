@@ -15,7 +15,9 @@ class UnreadPresentation(ABC):
     pending = False
 
     @staticmethod
-    def for_view(snapshot: CoordinationSnapshot, target: CommandTarget | ThreadViewTarget) -> UnreadPresentation:
+    def for_view(
+        snapshot: CoordinationSnapshot, target: CommandTarget | ThreadViewTarget,
+    ) -> UnreadPresentation:
         return snapshot.unread[target]
 
     @property

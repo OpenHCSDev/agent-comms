@@ -16,7 +16,13 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
-from .channel_targets import ChannelTarget, CommandTarget, NativeThreadTarget, ThreadTarget, ThreadViewTarget
+from .channel_targets import (
+    ChannelTarget,
+    CommandTarget,
+    NativeThreadTarget,
+    ThreadTarget,
+    ThreadViewTarget,
+)
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
