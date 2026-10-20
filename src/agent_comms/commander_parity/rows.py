@@ -11,9 +11,9 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
+from .fleet import BoardComparison, BranchComparison, OrderWorkComparison, UnjudgedComparison
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
-from .fleet import UnjudgedComparison
 
 
 class CreateProblemParityRow(ParityRow):
@@ -55,6 +55,10 @@ class BoardParityRow(ParityRow):
     native = "`CommsTodoListTool` and the fleet tool, derived"
     phases = (OneOrderOwnerPhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return BoardComparison.read()
+
 
 class BranchHygieneParityRow(ParityRow):
     number = 6
@@ -62,6 +66,10 @@ class BranchHygieneParityRow(ParityRow):
     current = "`branches-*.txt` by hand"
     native = "`CommsWorkBranchesTool`"
     phases = (OneOrderOwnerPhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return BranchComparison.read()
 
 
 class StrikeLimitParityRow(ParityRow):
@@ -103,6 +111,10 @@ class OrderWorkParityRow(ParityRow):
     native = "`comms_order_work`: both transcript families by `tool_call_id`"
     phases = (ReviewQueuePhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return OrderWorkComparison.read()
+
 
 class UnjudgedParityRow(ParityRow):
     number = 12
@@ -122,6 +134,13 @@ class PublicStoryParityRow(ParityRow):
     current = "`fleet-narrative.md`; `judge.py roast`"
     native = "`comms_order_story`, `comms_fleet_story`; send-back reason posted once"
     phases = (StoryPhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return UnverifiedParity(
+            "Missing native owners CommsOrderStoryTool and CommsFleetStoryTool; "
+            "the narrative file alone does not prove native story or exactly-once publication."
+        )
 
 
 class ScheduledWakeParityRow(ParityRow):
@@ -251,6 +270,13 @@ class MomentumParityRow(ParityRow):
         "`CommitMomentum` is a partial candidate"
     )
     phases = (CommanderPagePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return UnverifiedParity(
+            "Missing native CommitMomentum and prediction/outcome owner; "
+            "there is no current prediction workflow to compare."
+        )
 
 
 class MeasuredLoadParityRow(ParityRow):
