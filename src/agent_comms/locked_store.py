@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import stat
-import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -15,7 +14,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
-from .store_files import SharedLock, StoreLock, StoreLockOwner
+from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner
 
 T = TypeVar("T")
 
@@ -76,11 +75,8 @@ class JsonDocument(ABC, Generic[T]):
         repeated I/O failure. Process death after replace has the usual atomic
         old-or-new semantics, not a multi-file transaction or recovery journal.
         """
-        fd, temporary = tempfile.mkstemp(
-            prefix=f".{self.path.name}.", suffix=".tmp", dir=self.path.parent
-        )
-        staged = Path(temporary)
-        backup = staged.with_suffix(".previous")
+        fd, staged = StoreOwner.stage_file(self.path)
+        backup = StoreOwner.rollback_file(staged)
         directory_fd = None
         published = False
         had_original = False

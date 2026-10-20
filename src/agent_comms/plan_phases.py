@@ -2,8 +2,9 @@
 
 This family is the one owner of the plan's order and dependencies;
 ``plans/commander-native-plan.md`` points here. An order names the phase it
-serves in ``ProblemOrder.serves``; an order outside the plan serves
-``UnplannedPhase``. A phase is done when every order serving it is closed.
+serves through ``ProblemOrder.phase``; an order outside the plan serves
+``UnplannedPhase``. A phase is done only when its declared full-phase task is accepted; closing
+related subtasks does not establish completion of the phase.
 """
 
 from __future__ import annotations
@@ -11,7 +12,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar
 
+from .commander_parity import ParityRow
 from .declared_family import DeclaredFamily
+from .phase_tasks import PhaseTask, UnspecifiedPhaseTask
 
 if TYPE_CHECKING:
     from .todos import Todo
@@ -27,15 +30,15 @@ class UnplannedPhase(OrderPhase):
 
 class PlanPhase(OrderPhase, declared_name=None):
     after: ClassVar[tuple[type[PlanPhase], ...]] = ()
+    task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
 
     @classmethod
     def serving(cls, todos: Iterable[Todo]) -> tuple[Todo, ...]:
-        return tuple(todo for todo in todos if todo.order.serves is cls)
+        return tuple(todo for todo in todos if todo.order.phase is cls)
 
     @classmethod
     def done(cls, todos: Iterable[Todo]) -> bool:
-        serving = cls.serving(todos)
-        return bool(serving) and not any(todo.state.open for todo in serving)
+        return cls.task.done(cls.serving(todos))
 
     @classmethod
     def ordered(cls, todos: Iterable[Todo]) -> bool:
@@ -78,24 +81,37 @@ class RecordPlanePhase(PlanPhase):
     after = (RetainedStorePhase,)
 
 
-class ReviewQueuePhase(PlanPhase):
+class ReviewQueuePhase(MergedPhase):
     after = (RecordPlanePhase,)
-
-
-class StoryPhase(PlanPhase):
-    after = (ReviewQueuePhase,)
-
-
-class CommanderPagePhase(PlanPhase):
-    after = (StoryPhase,)
+    delivered = "41e4ec7319432755d75dcd8dbbab35839a4eb005 (#1654)"
 
 
 class ControlPlanePhase(PlanPhase):
     after = (RecordPlanePhase,)
 
 
+class ParityPhase(PlanPhase):
+    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase)
+
+    @classmethod
+    def done(cls, todos: Iterable[Todo]) -> bool:
+        return ParityRow.done(todos)
+
+
 class CutoverPhase(PlanPhase):
-    after = (ReviewQueuePhase, StoryPhase, CommanderPagePhase, ControlPlanePhase)
+    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, ParityPhase)
+
+
+class StoryPhase(PlanPhase):
+    """A view of the native records, not a prerequisite for their cutover."""
+
+    after = (RecordPlanePhase,)
+
+
+class CommanderPagePhase(PlanPhase):
+    """A view of the native records and control plane, independent of cutover."""
+
+    after = (RecordPlanePhase, ControlPlanePhase)
 
 
 class SkillPhase(PlanPhase):

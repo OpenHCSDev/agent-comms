@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .lifecycle import LifecycleState
 from .send_outcome import GrantedSend, HeldSend
@@ -31,7 +31,7 @@ from .store_files import (
 )
 
 
-class MaintenanceHeldError(RelationViolationError):
+class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
     """The bus is in maintenance: its readers close and wait for READY."""
 
 
@@ -139,6 +139,10 @@ class ReadyPhase(MaintenancePhase):
         drained()
 
 
+# The holding operation hands its nonce to its own child processes through this variable.
+HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
+
+
 class MaintenanceStatus:
     """Absent witness is READY; stored phases derive from their record."""
 
@@ -151,6 +155,10 @@ class MaintenanceStatus:
 
     def require_open(self) -> None:
         self.phase.new_sends.require_open()
+
+    def require_open_to(self, holder: str) -> None:
+        """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
+        self.require_open()
 
 
 @dataclass(frozen=True)
@@ -213,6 +221,10 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
         return MaintenanceState(version=self.version, root=self.root,
                                 generation=self.generation + 1, operator=self.operator,
                                 nonce=nonce, phase=phase)
+
+    def require_open_to(self, holder: str) -> None:
+        if holder != self.nonce:
+            self.require_open()
 
     def require_draining(self) -> None:
         if self.phase is not DrainingPhase:
@@ -280,8 +292,10 @@ class MaintenanceBarrier(MaintenanceIngress):
         return value
 
     def current_unlocked(self) -> MaintenanceStatus:
-        """Call while holding the registry lock OR the wire lock.
+        """Check the phase under the registry lock OR the wire lock.
 
+        Clients may read it before taking locks only to refuse work, never to
+        permit a write. An incomplete phase change refuses that read.
         For a send, the wire lock stays held through stdin.write; for a claim,
         the registry lock spans the turn's durable transition. A phase change
         takes both locks in wire -> registry order.
@@ -296,7 +310,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def assert_open_unlocked(self) -> MaintenanceStatus:
         hold = self.current_unlocked()
-        hold.require_open()
+        hold.require_open_to(os.environ.get(HOLDER_NONCE, ""))
         return hold
 
     def read(self) -> MaintenanceStatus:

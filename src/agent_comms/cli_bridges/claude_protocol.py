@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import ClassVar, Literal
 from xml.etree import ElementTree
 
@@ -17,8 +16,7 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.activity import ActivityState
-from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import TaggedWire, TimestampedWire, WireHeader, WireModel
 from agent_comms.runtime_updates import (
     ActiveItem,
     FinishedItem,
@@ -40,6 +38,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from .shared import (
     MONITOR_FRAME,
@@ -174,7 +173,7 @@ class ClaudeTurn(ABC):
 
     @abstractmethod
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]: ...
+               turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class UnknownTurn(ClaudeTurn):
@@ -183,7 +182,7 @@ class UnknownTurn(ClaudeTurn):
         return phase.unturned_finish()
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]:
+               turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
 
 
@@ -196,14 +195,14 @@ class KnownTurn(ClaudeTurn):
         return (FinishedItem(self.id, item, events),)
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]:
-        return (ActiveItem(self.id, tool_id, state, detail),)
+               turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:
+        return (ActiveItem(self.id, tool_id, turn_phase),)
 
 
 @dataclass
 class ClaudeSession:
     turn: ClaudeTurn = field(default_factory=UnknownTurn)
-    tools: dict[str, ToolCall] = field(default_factory=dict)
+    tools: dict[str, tuple[ToolCall, TimedRecord]] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
 
@@ -213,30 +212,26 @@ class ClaudeSession:
         self.project = cwd
         return (SessionFacts(project=cwd),)
 
-    def started(self, call: ToolCall) -> None:
-        self.tools[call.id] = call
+    def started(self, call: ToolCall, record: TimedRecord) -> None:
+        self.tools[call.id] = call, record
 
-    def tool_result(self, tool_id: str, text: str, ok: bool, position: int) -> tuple[RuntimeUpdate, ...]:
+    def tool_result(self, tool_id: str, text: str, ok: bool, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         try:
-            call = self.tools.pop(tool_id)
+            call, started = self.tools.pop(tool_id)
         except KeyError:
             return self.phase.missing_tool(tool_id)
-        return (*self.finished(tool_id, call.finished(text, ok, position)),
-                *self.turn.active(tool_id, self.phase, ActivityState.WORKING, ''))
+        return (*self.finished(tool_id, (
+                    call.started(started.position, started.timestamp),
+                    call.ended(text, ok, record.position, record.timestamp))),
+                *self.turn.active(tool_id, self.phase, ModelWaitPhase()))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
 
 
-class TimedRecord(WireModel):
+class TimedRecord(TimestampedWire):
     position: int = Field(exclude=True)
     uuid: str
-    timestamp: float
-
-    @field_validator('timestamp', mode='before')
-    @classmethod
-    def epoch(cls, value: str) -> float:
-        return datetime.fromisoformat(value).timestamp()
 
 
 class ClaudeHeader(WireHeader):
@@ -308,7 +303,7 @@ class RedactedThinking(AssistantBlock):
     wire_tag = 'redacted_thinking'
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.turn.active(record.uuid, session.phase, ActivityState.THINKING, '')
+        return session.turn.active(record.uuid, session.phase, ModelWaitPhase())
 
 
 class ThinkingBlock(RedactedThinking):
@@ -331,8 +326,9 @@ class ToolUse(AssistantBlock):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
-        session.started(call)
-        return session.turn.active(self.id, session.phase, ActivityState.WORKING, call.title)
+        session.started(call, record)
+        return session.turn.active(self.id, session.phase,
+                                   ToolRunningPhase(tools=((self.id, call.title),)))
 
 
     def call(self) -> ToolCall:
@@ -546,7 +542,7 @@ class ToolResult(UserBlock, ContentBlocks):
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record.position)
+        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record)
 
 
 class UserMessage(ContentBlocks):

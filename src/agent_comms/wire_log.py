@@ -8,10 +8,11 @@ import math
 import os
 import sqlite3
 import stat
+import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import ExitStack, contextmanager
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from io import DEFAULT_BUFFER_SIZE
@@ -23,6 +24,7 @@ from agent_comms.coordination_tables.publications import (
 )
 
 from .audience_manifest import MAX_WIRE_SEQ
+from .child_process import Platform
 from .bus_publication import (
     CommittedDelivery,
     has_private_wire_fields,
@@ -35,6 +37,7 @@ from .envelope_claim_transitions import (
     ClaimProjection,
 )
 from .errors import (
+    CheckpointNeedsRepairError,
     RelationViolationError,
     StoredHistoryUnreadable,
 )
@@ -51,11 +54,12 @@ from .store_files import (
     StoreLock,
     StoreLockOwner,
     StoreLockContention,
+    StoreLockAcquisition,
+    UNBOUNDED_STORE_READ,
     _atomic_write_text,
     _iter_jsonl_stream,
     _store_lock,
     _store_lock_file,
-    _held_store_source,
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
@@ -586,42 +590,56 @@ class WireLog(StoreLockOwner):
                 yield source
 
     async def read_checked_async(self, read: Callable):
-        """Acquire cancellably, then consume the whole source in its worker.
-
-        Return detached observations only. Verification and the callback share
-        one resource thread; no SQLite connection crosses to the event loop.
-        The worker releases its locks before returning its result; result
-        delivery must not keep a POSIX lock until the event loop resumes.
-        Cancellation joins acquired work before the original descriptor closes.
-        """
-        from .private_bus_checkpoint import CheckpointNeedsRepair
-
+        """Consume in the joined source worker; cancellation waits for acquired work."""
         # Readers share the bus lock so idle workers don't queue behind each
         # other; only a checkpoint repair needs the exclusive lock.
         mode = SharedLock()
         try:
             return await self._read_checked_under_lock(read, mode)
-        except CheckpointNeedsRepair as error:
+        except CheckpointNeedsRepairError as error:
             return await self._read_checked_under_lock(read, mode.after_repair_needed(error))
 
-    async def _read_checked_under_lock(self, read: Callable, mode: LockMode):
-        from .child_process import Platform
+    async def _read_checked_under_lock[T](
+        self, read: Callable[[CheckedRead], T], mode: LockMode,
+    ) -> T:
         from .coordinator import Coordination
 
+        return await StoreLockAcquisition.current(self.path, mode).read_checked(
+            self, read, mode, Coordination.run_worker,
+        )
+
+    def _consume_checked[T](
+        self, read: Callable[[CheckedRead], T], acquisition: AbstractContextManager,
+    ) -> T:
+        with acquisition as lock, self._checked_source(lock) as source:
+            return read(source)
+
+    async def _read_checked_borrowed[T](
+        self, read: Callable[[CheckedRead], T], held: StoreLockAcquisition,
+        worker: Callable[[Callable[[], T]], Awaitable[T]],
+    ) -> T:
+        return await worker(partial(
+            self._consume_checked, read, held.source(self.path, UNBOUNDED_STORE_READ, self.lock_type)
+        ))
+
+    async def _read_checked_fresh[T](
+        self, read: Callable[[CheckedRead], T], mode: LockMode,
+        worker: Callable[[Callable[[], T]], Awaitable[T]],
+    ) -> T:
         platform = Platform.current()
         with _store_lock_file(self.path) as lock_file:
             await StoreLockContention(math.inf).acquire_async(
                 lock_file.fileno(), platform, mode=mode,
             )
-            return await Coordination.run_worker(
-                partial(self._read_checked, lock_file, platform, read, mode),
-            )
 
-    def _read_checked(self, lock_file, platform, read, mode):
-        with lock_file, _held_store_source(self.path, lock_file, platform, None,
-                                           mode=mode, lock_type=self.lock_type) as lock:
-            with self._checked_source(lock) as source:
-                return read(source)
+            def read_acquired() -> T:
+                with lock_file:
+                    return self._consume_checked(read, StoreLockAcquisition.holding(
+                        self.path, lock_file, platform, UNBOUNDED_STORE_READ,
+                        mode=mode, lock_type=self.lock_type,
+                    ))
+
+            return await worker(read_acquired)
 
     @contextmanager
     def _checked_source(self, lock: CheckedWireStoreLock):
@@ -760,13 +778,17 @@ class WireLog(StoreLockOwner):
         metadata: WireMetadata,
         *,
         on_row: Callable[[int, bytes, WireRecord], None] | None = None,
+        offset: int = 0,
+        previous_sequence: int = 0,
+        end: int = sys.maxsize,
     ) -> Iterator[WireRecord]:
-        """Read the whole file strictly; reject corruption even after the requested append."""
-        scan = WireScan(metadata)
+        """Decode the selected range, continuing its already proved sequence."""
+        scan = WireScan(metadata, previous_sequence=previous_sequence)
         if not self.path.exists():
             return
         with self.path.open("rb") as stream:
-            for offset, line in WireRecord.rows(stream):
+            stream.seek(offset)
+            for offset, line in WireRecord.rows(stream, end, end):
                 try:
                     record = scan.read(line)
                 except StoredHistoryUnreadable as error:

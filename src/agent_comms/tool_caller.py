@@ -39,6 +39,9 @@ class ToolCaller(ABC):
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
 
     @abstractmethod
+    def acting_name(self, default: str) -> str: ...
+
+    @abstractmethod
     def subject(self, named: str) -> str: ...
 
     @abstractmethod
@@ -66,6 +69,9 @@ class NoThreadCaller(ToolCaller):
 
     def refuse_thread(self) -> NoReturn:
         raise CallingThreadUnavailable("This tool requires a thread caller.")
+
+    def acting_name(self, default: str) -> str:
+        return default
 
     def subject(self, named: str) -> str:
         if not named:
@@ -95,6 +101,9 @@ class ThreadCaller(ToolCaller):
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(tools, comms.registry.require(self.name).service_tier)
+
+    def acting_name(self, default: str) -> str:
+        return self.name
 
     def subject(self, named: str) -> str:
         return named or self.name

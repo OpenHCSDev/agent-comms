@@ -17,7 +17,6 @@ from .cli_result import CliResult
 from .comms import Comms
 from .fresh_private_session import NativeSessions, create_fresh_private_session
 from .goals import NoGoal
-from .importing import ImportLimits
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry
 from .read_basis import MemberActivityDisplayScope
@@ -66,8 +65,8 @@ class CheckRoot:
         root.mkdir(mode=0o700, parents=True)  # Refuse an existing directory, including a symlink.
         try:
             copied = Comms(root)
+            self._populate(copied)
             try:
-                self._populate(copied)
                 yield copied
             finally:
                 for thread in copied.registry.snapshot().visible_threads(
@@ -142,7 +141,6 @@ class CheckRoot:
     def _session(self, original: Thread, directory: Path, project: Path) -> str:
         session = create_fresh_private_session(directory, worktree=project)
         source = original.runtime.history_source(self.source.root, original.incarnation)
-        limits = ImportLimits(messages=self.max_records, characters=self.max_bytes)
         with source.reading() as reader, session.path.open("r+") as output:
             writer = ImportedSessionWriter(output, NativeEntry.read(output.readline().encode()))
             output.seek(0, os.SEEK_END)
@@ -158,16 +156,13 @@ class CheckRoot:
                 with source.projection(
                     source, TranscriptRoutes(self.source.root)
                 ) as project_records:
-                    for record, events in project_records(
+                    for _record, events in project_records(
                         iter(reversed(selected)),
                         max_records=self.max_records,
                         max_bytes=self.max_bytes,
                     ):
-                        record.project(
-                            lambda current, events=events: writer.import_record(
-                                current.entry, events, limits
-                            )
-                        )
+                        for event in events:
+                            writer.append_recorded(event)
         return session.session_file
 
     def run(self, command: Sequence[str]) -> CheckRootResult:

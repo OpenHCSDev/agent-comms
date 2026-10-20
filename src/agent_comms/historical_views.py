@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
+from functools import partial
 from typing import TYPE_CHECKING
 
 from .locked_store import HistoryDirectory, RootFile
@@ -70,16 +71,35 @@ class HistoryView(ABC):
         return MessagePageRequest(scope, bounds)
 
 
+class ConversationObservation:
+    """A first observation has no selection and therefore always reads."""
+
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision:
+        return read()
+
+    def display_changed_before(self, later: ConversationRevision) -> bool:
+        return True
+
+
 @dataclass(frozen=True, slots=True)
-class ConversationRevision:
+class ConversationRevision(ConversationObservation):
     """Core's captured selection and original store observation for one view."""
 
     stores: WireRevision
     selection: DisplayIdentity
 
-    def display_changed_since(self, earlier: ConversationRevision) -> bool:
-        return (self.selection != earlier.selection
-                or self.stores.changed_since(BusSourceView(), earlier.stores))
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision:
+        return (type(self)(stores, self.selection) if stores.selection_reusable_from(self.stores)
+                else read())
+
+    def display_changed_since(self, earlier: ConversationObservation) -> bool:
+        return earlier.display_changed_before(self)
+
+    def display_changed_before(self, later: ConversationRevision) -> bool:
+        return (self.selection != later.selection
+                or later.stores.changed_since(BusSourceView(), self.stores))
 
 
 class ConversationHistoryView:
@@ -91,7 +111,14 @@ class ConversationHistoryView:
         return page.selection.identity == earlier.selection.identity
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
+    def revision(cls, views: HistoryViews, target: str, earlier: ConversationObservation,
+                 *, worktree: str) -> ConversationRevision:
+        return earlier.capture(
+            views.revision(), partial(cls._read_revision, views, target, worktree))
+
+    @classmethod
+    def _read_revision(cls, views: HistoryViews, target: str,
+                       worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
         with views.registry.store.reading(views.bus, views.bus.log, views.channels.catalog):

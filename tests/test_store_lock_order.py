@@ -9,10 +9,11 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
-from agent_comms.historical_views import DMDisplayHistory
+from agent_comms.historical_views import ConversationObservation, DMDisplayHistory
 from agent_comms.message_bus import MessageBus
 from agent_comms.store_files import (
-    ExclusiveLock, SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path,
+    ExclusiveLock, SharedLock, StoreLock, StoreLockContention, StoreLockOwner,
+    StoreOwner, store_lock_path,
 )
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
@@ -67,7 +68,7 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
             ranks[str(store_lock_path(owner.path))] = owner.lock_rank
             return
         operation = frame.f_code.co_name
-        if operation not in {"acquire_store_lock", "_store_lock_file"}:
+        if operation != "_store_lock_file" and frame.f_code is not StoreLockContention.acquire.__code__:
             return
         actor = threading.current_thread().name
         active = held.setdefault(actor, {})
@@ -106,7 +107,7 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
 
     def observe():
         try:
-            revision = DMDisplayHistory.revision(comms.views, "peer", worktree=str(tmp_path))
+            revision = DMDisplayHistory.revision(comms.views, "peer", ConversationObservation(), worktree=str(tmp_path))
             assert revision.selection.peer.name == "peer"
         except BaseException as error:
             failures.append(error)

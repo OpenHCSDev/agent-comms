@@ -79,7 +79,7 @@ from agent_comms.launch_runtime import (
     SpecifiedImportPath,
     ThreadLaunch,
 )
-from agent_comms.locked_store import HistoryDirectory
+from agent_comms.locked_store import HistoryDirectory, LockedStore
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
 from agent_comms.messages import Message
 from agent_comms.native_arguments import NativeArguments
@@ -752,7 +752,10 @@ class BusSnapshot:
 
     def skipped(self, directory: str, names: list[str]) -> set[str]:
         paths = {name: Path(directory, name) for name in names}
-        skip = {
+        omitted = {name for name, path in paths.items()
+                   if path in self.left or LockedStore.is_staging(path)}
+        paths = {name: path for name, path in paths.items() if name not in omitted}
+        skip = omitted | {
             name
             for name, path in paths.items()
             if not stat.S_ISREG(mode := self.mode(path))
@@ -765,7 +768,7 @@ class BusSnapshot:
             if self.store(path)
             for companion in CoordinationStore.files(path)[1:]
         }
-        return skip | {name for name, path in paths.items() if path in self.left}
+        return skip
 
     def needed(self) -> int:
         """The bytes the copy takes: every file it copies, and each database as large as its
@@ -1282,7 +1285,7 @@ def main() -> None:
             )
         )
     except UpgradeRefused as error:
-        raise SystemExit(f"upgrade-bus: {error}") from None
+        raise SystemExit(error.output) from None
 
 
 if __name__ == "__main__":

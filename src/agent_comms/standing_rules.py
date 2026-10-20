@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
@@ -68,7 +68,7 @@ class DatedStandingRule(StandingRule, declared_name=None):
 class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
-    why: str
+    why: str = field(compare=False)
     text: ClassVar[str]
 
     @classmethod
@@ -147,7 +147,7 @@ class RulesDue(DatedStandingRule):
     """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
     max_age: ClassVar[int] = 20 * 60
-    why: str
+    why: str = field(compare=False)
     since: float
 
     @classmethod
@@ -196,7 +196,7 @@ class BoardDisagrees(UndatedStandingRule):
     def line(self) -> str:
         return (
             f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
-            f"but its linked PR merged as {self.merge} -> repair the progress read this wake"
+            f"but its linked PR merged as {self.merge[:9]} -> repair the progress read this wake"
         )
 
 
@@ -229,7 +229,7 @@ class MemoryLow(UndatedStandingRule):
     """Under the memory threshold a cleanup owner is due, told what holds the memory."""
 
     rule: StorageRule
-    memory: MemoryUse
+    memory: MemoryUse = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
@@ -253,21 +253,29 @@ class DiskLow(UndatedStandingRule):
     """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
 
     rule: StorageRule
-    free_gib: float
+    free_gib: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, commander: str) -> tuple[DiskLow, ...]:
         rule = comms.registry.storage_rule
         free = rule.free_gib()
-        return (cls(rule, free),) if rule.cleanup_due(free) else ()
+        member = DiskFloorLow if rule.below_floor(free) else cls
+        return (member(rule, free),) if rule.cleanup_due(free) else ()
+
+    def floor_warning(self) -> str:
+        return ""
 
     def line(self) -> str:
-        floor = (
-            f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"
-            if self.rule.below_floor(self.free_gib)
-            else ""
-        )
         return (
             f"DISK LOW: {self.rule.volume} has {self.free_gib:.1f} GiB free (cleanup due under"
-            f" {self.rule.cleanup_gib:g} GiB{floor}) -> put a cleanup owner on it now"
+            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()})"
+            " -> put a cleanup owner on it now"
         )
+
+
+@dataclass(frozen=True)
+class DiskFloorLow(DiskLow, declared_name=None):
+    """The allocation-floor warning, selected by DiskLow rather than a second rule scan."""
+
+    def floor_warning(self) -> str:
+        return f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"

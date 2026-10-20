@@ -14,9 +14,15 @@ import shlex
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from os import fstat
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
+
+if TYPE_CHECKING:
+    from agent_comms.commander.config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -61,7 +67,7 @@ class WatchClaim:
 
 
 class WatchState:
-    def report(self, event: str) -> None:
+    def report(self, hook: ClaudeHook) -> None:
         """Silent unless the conversation is meant to be watched and is not."""
 
 
@@ -88,9 +94,8 @@ class LapsedWatch(WatchState):
             f"(to stop watching on purpose, remove {self.claim.path})"
         )
 
-    def report(self, event: str) -> None:
-        context = {"hookEventName": event, "additionalContext": self.warning}
-        print(json.dumps({"hookSpecificOutput": context}))
+    def report(self, hook: ClaudeHook) -> None:
+        hook.warn(self.warning)
 
 
 class WatchGuard(ClaudeHookProgram):
@@ -103,9 +108,61 @@ class WatchGuard(ClaudeHookProgram):
         return cls.console_script(f"{main.__module__}:{main.__name__}")
 
 
+class PeerSync(ClaudeHookProgram):
+    """Removed in the same PR that lands P216's shared order and handoff record."""
+
+    events = ("UserPromptSubmit", "PostToolUse", "Stop")
+    commanders = frozenset({"claude-code", "desktop-commander"})
+    verb = "peer-sync"
+    interval = timedelta(minutes=15)
+    warning = (
+        "Peer sync overdue: send the other commander your PRs needed, PRs held and any state "
+        "disagreement over the relay now."
+    )
+
+    @classmethod
+    def command(cls) -> str:
+        return f"agent-comms-commander order {cls.verb}"
+
+    @classmethod
+    def sent(cls, config: CommanderConfig, target: str) -> None:
+        """Record only a completed relay to this commander's counterpart."""
+        if config.commander not in cls.commanders or target not in cls.commanders - {
+            config.commander
+        }:
+            return
+        path = config.peer_sync_log
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as log:
+            fcntl.flock(log, fcntl.LOCK_EX)
+            log.write(f"{datetime.now().astimezone():%H:%M} {target}\n")
+            log.flush()
+
+    @classmethod
+    def overdue(cls, config: CommanderConfig) -> bool:
+        """The append's filesystem clock supplies its date; HH:MM alone cannot."""
+        try:
+            with config.peer_sync_log.open() as log:
+                fcntl.flock(log, fcntl.LOCK_SH)
+                lines = log.readlines()
+                written = datetime.fromtimestamp(fstat(log.fileno()).st_mtime).astimezone()
+        except FileNotFoundError:
+            return True
+        peers = cls.commanders - {config.commander}
+        if not lines or lines[-1].split() != [written.strftime("%H:%M"), *sorted(peers)]:
+            return True
+        elapsed = datetime.now().astimezone() - written
+        return elapsed < timedelta() or elapsed >= cls.interval
+
+    @classmethod
+    def report(cls, hook: ClaudeHook, config: CommanderConfig) -> None:
+        if cls.overdue(config):
+            hook.warn(cls.warning)
+
+
 def main() -> None:
     """Claude Code hook: warn the session whose bridge watch lapsed.
 
     A failure exits nonzero, which Claude Code reports without blocking the session."""
     hook = ClaudeHook.read()
-    WatchClaim(hook.session_id).state().report(hook.hook_event_name)
+    WatchClaim(hook.session_id).state().report(hook)

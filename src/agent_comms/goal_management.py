@@ -34,7 +34,7 @@ from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
 from .turn_lease import TurnCompletion
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
+from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class Goals:
         current.require_commander(actor)
         return operation.prepare(self, current).record(self, problem)
 
-    def apply_problem(self, problem: str, operation: TodoOperation) -> Todo:
+    def apply_problem(self, problem: str, operation: TodoCommand) -> Todo:
         with _store_lock(self._wire_lock_path):
             applied: Todo = self.todos.apply(problem, operation)
             return applied

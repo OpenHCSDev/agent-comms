@@ -18,14 +18,16 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms_hooks import ClaudeBashHook
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
 from ..todos import InstallDeadline
-from .config import Commander, CommanderConfig
+
+if TYPE_CHECKING:
+    from .order import Commander
 
 Words = tuple[str, ...]
 
@@ -51,7 +53,7 @@ class CommanderSession:
     commander: Commander
 
     def is_commander(self) -> bool:
-        name = self.commander.name
+        name = self.commander.commander
         process = self.commander.comms.registry.require(name).process_identity.require(
             f'{name} has no registered process to compare this session with')
         environment = Path(f'/proc/{process.pid}/environ').read_bytes().split(b'\0')
@@ -63,7 +65,7 @@ class CommanderSession:
             commander = self.is_commander()
         except (FileNotFoundError, PermissionError, RelationViolationError) as error:
             return (f'{kind.work.capitalize()} refused: the guard cannot tell whether this '
-                    f'session is {self.commander.name} ({error}).',)
+                    f'session is {self.commander.commander} ({error}).',)
         return kind.install_refusals(self.commander) if commander else ()
 
 
@@ -92,7 +94,7 @@ class RawSendCommand(GuardedCommand):
         if 'send' not in words or 'agent-comms-commander' in {Path(word).name for word in words}:
             return ()
         addressed = pairs & {('--to', unit) for unit in session.commander.units()}
-        if ('--from', session.commander.name) not in pairs or not addressed:
+        if ('--from', session.commander.commander) not in pairs or not addressed:
             return ()
         return ('Raw send to a unit. Use agent-comms-commander order send '
                 '(orders, with deadline) or order say (no work).',)
@@ -120,8 +122,8 @@ class TacticalCommand(GuardedCommand):
         return any(ordered(shape) for shape in cls.shapes)
 
     @classmethod
-    def install_refusals(cls, commander: Commander) -> tuple[str, ...]:
-        return InstallDeadline.read(commander.comms.root).refusals(cls.work, commander.name)
+    def install_refusals(cls, ctx: Commander) -> tuple[str, ...]:
+        return InstallDeadline.read(ctx.comms.root).refusals(cls.work, ctx.commander)
 
 
 @dataclass(frozen=True)
@@ -152,9 +154,9 @@ class CarryCommand(TacticalCommand):
     shapes = (('cutover',),)
 
 
-def main(a: list[str]) -> None:
+def main(a: list[str], ctx: Commander) -> None:
     hook = ClaudeBashHook.read()
-    session = CommanderSession(hook.session_id, Commander.of(CommanderConfig.installed()))
+    session = CommanderSession(hook.session_id, ctx)
     reasons = GuardedCommand.refusals(hook.tool_input.command, session)
     if reasons:
         print(json.dumps({"hookSpecificOutput": {

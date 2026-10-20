@@ -13,7 +13,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Self
+from typing import ClassVar, Iterator, Self
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
@@ -34,6 +34,18 @@ with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as wri
 
 class UpgradeRefused(Exception):
     """The update stopped without permission to discard its original data."""
+    prefix: ClassVar[str] = "upgrade-bus: refused:"
+
+    @property
+    def output(self) -> str:
+        return f"{self.prefix} {self}"
+
+    @classmethod
+    def public_message(cls, output: str) -> str:
+        for line in reversed(output.splitlines()):
+            if line.startswith(cls.prefix):
+                return line
+        return "Installer failed without a declared refusal; private traceback retained on host"
 
 
 def bus_files(root: Path) -> dict[str, str]:

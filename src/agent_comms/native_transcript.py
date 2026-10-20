@@ -20,7 +20,7 @@ from .field_codec import MalformedRecord
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .private_path import FileRevision
-from .transcript_sources import TranscriptSource
+from .transcript_sources import TranscriptRecord, TranscriptSource
 
 
 def reverse_records(
@@ -130,7 +130,7 @@ class PresentSessionCut(SessionCut):
 
 
 @dataclass(frozen=True)
-class NativeRecord:
+class NativeRecord(TranscriptRecord):
     start: int
     end: int
     entry: RecordedEntry | None

@@ -21,21 +21,37 @@ from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cache, cached_property
 from pathlib import Path
-from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
-from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
-from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
+
+sys.path.insert(0, str(
+    Path(__file__).resolve().parents[1] / subprocess.check_output(
+        ["git", "config", "--file", str(Path(__file__).resolve().parents[1] / ".gitmodules"),
+         "--get", "submodule.src/agent_comms/skills/refactor-audit.path"], text=True,
+    ).strip() / "scripts"
+))
+
+import audit
+from audit.handler_declarations import BuiltinHandlerDeclarations
+from audit.measures import FamilyFlattened as AuditFamilyFlattened
+from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
-from cutover.carry import STEPS, Step
+from cutover.carry import STEPS, Carry, Step, carry_parents
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
+AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
+
 
 class Measure(DeclaredFamily, affix="Measure"):
+    @classmethod
+    def blocks(cls, delta: dict[str, int]) -> bool:
+        return any(value > 0 for key, value in delta.items()
+                   if key.partition(":")[0] == cls.__name__)
+
     @staticmethod
     def environment(root: str) -> dict[str, str]:
         return dict(os.environ)
@@ -228,28 +244,7 @@ class TypeErrors(CheckedRevision):
         Tools import the same revision's ``src`` (``upgrade_bus.py`` puts it first), never the
         installed one."""
         paths = dict.fromkeys((Path(root).parts[0], "src"))
-        return {**os.environ, "MYPYPATH": os.pathsep.join(paths)}
-
-
-class SourceLines(Measure):
-    """Budget edited lines, retaining moves across the source boundary (50% similarity)."""
-
-    trailer: typing.ClassVar[str] = "Src-Budget"
-
-    @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        added = removed = 0
-        records = iter(git(repo, "diff", "--no-ext-diff", "--no-textconv", "--find-renames=50%",
-                           "--numstat", "-z", base, head, "--").split(b"\0")[:-1])
-        for record in records:
-            increase, decrease, path = record.split(b"\t", 2)
-            paths = (path,) if path else (next(records), next(records))
-            if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
-                added += int(increase)
-                removed += int(decrease)
-        # Each commit's trailer budgets that commit's lines, so a range's budget is their sum.
-        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
-        return {cls.__name__: removed + sum(int(value) for value in declared.split())}, {cls.__name__: added}
+        return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
 
 
 @dataclass(frozen=True)
@@ -1402,6 +1397,10 @@ class EditedCarry(Measure):
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
                           base, head, "--", str(STEPS)).decode().split("\0")[:-1])
+        @cache
+        def parents() -> dict[str, type[Carry]]:
+            return carry_parents(git(repo, "show", f"{base}:{STEPS}/carry.py"))
+
         edited = 0
         for status in fields:
             path = next(fields)
@@ -1412,7 +1411,7 @@ class EditedCarry(Measure):
                 continue
             if status[0] in "MRC" or status == "T":
                 before = git(repo, "show", f"{base}:{path}")
-                if Step.holds_carry(before):
+                if Step.holds_carry(before, parents()):
                     edited += (status != "M" or cls.conversion(before) !=
                                cls.conversion(git(repo, "show", f"{head}:{path}")))
             elif status == "A":
@@ -1448,7 +1447,9 @@ class UncarriedRecordFormat(Measure):
     @classmethod
     def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, StoredForm]:
         """Each versioned record in the changed modules, measured by that revision's own code."""
-        package = Path(root).parent
+        package = Path(root)
+        while git(repo, "ls-tree", "--name-only", ref, "--", str(package / "__init__.py")):
+            package = package.parent
         modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
                    for path in sorted(changed & python_paths(repo, ref, root))
                    if cls.declares_version(git(repo, "show", f"{ref}:{path}"))]
@@ -1458,7 +1459,8 @@ class UncarriedRecordFormat(Measure):
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             # Extracted source is stamped with its commit the way a build stamps it.
-            WheelStamp(revision(repo, ref)).write(Path(scratch) / root / "package_stamp.py")
+            for stamp in Path(scratch).rglob("package_stamp.py"):
+                WheelStamp(revision(repo, ref)).write(stamp)
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
                                      *modules], cwd=scratch, env=cls.environment(root),
@@ -1520,7 +1522,8 @@ class Comparison:
 
     @property
     def failed(self) -> bool:
-        return any(value > 0 for value in self.delta.values()) or any(self.introduced.values())
+        return (any(measure.blocks(self.delta) for measure in Measure.members_with(Measure))
+                or any(self.introduced.values()))
 
 
 def compare(repo: Path, base: str, head: str, root: str) -> Comparison:

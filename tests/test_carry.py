@@ -14,16 +14,18 @@ from pathlib import Path
 
 import pytest
 from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
-from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, Step, UnorderedSteps
+from cutover.carry import STEPS, Carried, Carry, CarryChain, CarryLedger, Step, UnorderedSteps
+from runtime_check import known
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from tools.upgrade_bus import (
+    BeforeStop,
+    CarryOver,
+    FilesCompared,
     Home,
     Revisions,
     Runtime,
     RuntimeCheck,
-    before_stop,
     carried,
-    carry_all,
 )
 
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
@@ -302,10 +304,11 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
     try:
         installed = TestRuntime(repo.path, home=Home(tmp_path))
         before = bus_files(root)
-        steps = [*before_stop(root, pending, installed, revisions), *carry_all(root, pending, installed, revisions)]
+        steps = (*BeforeStop().all(root, pending, installed, revisions),
+                 *CarryOver().all(root, pending, installed, revisions))
     finally:
         revisions.close()
-    assert carried(root, before, steps) == {"identical": 0, "rewritten": 3}
+    assert carried(root, before, tuple(step.carried for step in steps)) == FilesCompared(0, 3)
     assert (root / "stopped").read_text() == (root / "carried").read_text() == "2"
     assert CarryLedger(root).applied() == ("carry_probe",)
 
@@ -322,10 +325,10 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         opened.execute("BEGIN IMMEDIATE")
         opened.execute("ROLLBACK")
         assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
-        assert carried(tmp_path, before, [{"rewritten": []}]) == {"identical": 1, "rewritten": 0}
+        assert carried(tmp_path, before, ()) == FilesCompared(1, 0)
         opened.execute("UPDATE todo SET id = 2")
         with pytest.raises(UpgradeRefused, match=r"\['todos.sqlite3'\]"):
-            carried(tmp_path, before, [{"rewritten": []}])
+            carried(tmp_path, before, ())
 
 
 def todos_before_order_runs(root: Path, scratch: Path) -> None:
@@ -344,11 +347,11 @@ def todos_before_order_runs(root: Path, scratch: Path) -> None:
         db.commit()
 
 
-def run_step(name: str, root: Path, *flags: str) -> dict:
+def run_step(name: str, root: Path, *flags: str) -> Carried:
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join([str(REPO / "src"), str(REPO / "tools")])}
     output = subprocess.check_output(
         [sys.executable, "-m", f"cutover.{name}", str(root), *flags], env=environment, cwd=REPO, timeout=60)
-    return json.loads(output)
+    return known(Carried, json.loads(output))
 
 
 def retained_read_ledger(root: Path) -> None:
@@ -398,14 +401,14 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
         with monkeypatch.context() as call:
             call.setattr(sys, "argv", [name, str(root), *flags])
             steps[name].main()
-        return json.loads(capsys.readouterr().out)
+        return known(Carried, json.loads(capsys.readouterr().out))
 
     for name in steps:
         before = bus_files(root)
-        carried(root, before, [invoke(name)])
+        carried(root, before, (invoke(name),))
         applied = invoke(name, "--apply")
-        carried(root, before, [applied])
-        assert invoke(name)["changed"] == 0, name
+        carried(root, before, (applied,))
+        assert invoke(name).changed == 0, name
     assert CarryLedger(root).applied() == tuple(step.name for step in chain)
 
     (thread,) = Comms(root).registry.snapshot().threads.values()
@@ -447,8 +450,8 @@ def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_pat
     before = bus_files(root)
     carried(root, before, [run_step("carry_registry_version", root)])
     applied = run_step("carry_registry_version", root, "--apply")
-    assert carried(root, before, [applied]) == {"identical": len(before) - 3, "rewritten": 3}
-    assert run_step("carry_registry_version", root, "--apply")["changed"] == 0
+    assert carried(root, before, (applied,)) == FilesCompared(len(before) - 3, 3)
+    assert run_step("carry_registry_version", root, "--apply").changed == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.goal.to_wire() is None
 
@@ -479,8 +482,8 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     before = bus_files(root)
     applied = run_step("carry_turn_records", root, "--apply")
     carried(root, before, [applied])
-    assert applied["changed"] == carried_count
-    assert run_step("carry_turn_records", root)["changed"] == 0
+    assert applied.changed == carried_count
+    assert run_step("carry_turn_records", root).changed == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert not thread.executing
 
@@ -492,12 +495,12 @@ class Owners(Runtime):
         super().__init__(path)
         object.__setattr__(self, "calls", [])
 
-    def cli(self, root, *arguments):
-        self.calls.append(arguments)
-        if arguments == ("threads",):
-            return {"threads": [{"name": name, "role": "agent", "status": "running"}
-                                for name in ("busy", "idle")]}
-        return {"restart": {"name": json.loads(arguments[-1])["name"]}}
+    def owners(self, root):
+        return ("busy", "idle")
+
+    def queue_restart(self, root, name):
+        self.calls.append(("queue", name))
+        return name
 
     def verify(self, root):
         return {}
@@ -515,11 +518,37 @@ def test_a_live_install_queues_each_owner_and_waits_for_none(comms, tmp_path, mo
     monkeypatch.setattr(upgrade_bus, "prune", lambda keep: {})
     installed, runtime = Owners(tmp_path / "installed"), Owners(tmp_path / "runtime")
     result = upgrade_bus.live(comms.root, (), installed, runtime, None, "worker")
-    assert result["queued"] == {name: {"restart": {"name": name}} for name in ("busy", "idle")}
-    assert [call[:3] for call in runtime.calls if call[0] == "tool"] == [
-        ("tool", "--tool", "comms_queue_restart")] * 2
+    assert result.queued == ("busy", "idle")
+    assert sorted(runtime.calls) == [("queue", "busy"), ("queue", "idle")]
     assert not any(call[0] in ("stop", "start") for call in installed.calls + runtime.calls)
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+
+
+def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(tmp_path, monkeypatch):
+    import tools.upgrade_bus as upgrade_bus
+
+    commands = []
+
+    def run(*command):
+        commands.append(command)
+        return ""
+
+    monkeypatch.setattr(upgrade_bus, "run", run)
+    revisions = Revisions(tmp_path / "repo", tmp_path / "trees")
+    selected = revisions.tree("abcdef123456")
+    assert commands == [
+        ("git", "-C", revisions.repo, "worktree", "add", "--detach", "-q", selected, "abcdef123456"),
+        ("git", "-C", selected, "submodule", "update", "--init", "--recursive", "--checkout"),
+    ]
+
+    def missing_dependency(*command):
+        assert command[3:] == ("submodule", "update", "--init", "--recursive", "--checkout")
+        raise UpgradeRefused("missing pinned dependency")
+
+    monkeypatch.setattr(upgrade_bus, "run", missing_dependency)
+    with pytest.raises(UpgradeRefused, match="missing pinned dependency"):
+        revisions.tree("abcdef123456")
+    assert revisions.trees == {"abcdef123456": selected}
 
 
 def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tmp_path, monkeypatch):
@@ -540,7 +569,7 @@ def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tm
         raise RuntimeError("carry failed after writing")
 
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
-    monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
+    monkeypatch.setattr(upgrade_bus.CarryOver, "all", failed_carry)
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     stack = Installed(tmp_path / "checkout")
     with pytest.raises(RuntimeError, match="carry failed after writing"):
@@ -584,7 +613,7 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
         backup = Backup.take(comms.root, comms.root.parent / "no-route.json",
                              (comms.root,), comms.root.parent / 'backup')
         assert bridge_publishes(comms.root).endswith("database is locked")
-        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
+        assert carried(comms.root, before, ()) == FilesCompared(len(before), 0)
         backup.restore()  # the carry aborted
         failed, = comms.root.parent.glob(f".{comms.root.name}.failed-*")
         assert bridge_publishes(failed).endswith("database is locked")
@@ -629,9 +658,9 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
     with transcripts_held(comms.root), pytest.raises(sqlite3.OperationalError, match="locked"):
         ToolCallIndex.carry(comms.root, apply=True)
 
-    def tool_call_index(root, pending, staged, revisions):
+    def tool_call_index(self, root, pending, staged, revisions):
         step = Step(ToolCallIndex.name(), "HEAD", "ToolCallIndex", ToolCallIndex)
-        return [upgrade_bus.stepped(root, step, partial(ToolCallIndex.carry, root, apply=True))]
+        return (upgrade_bus.stepped(root, step, partial(ToolCallIndex.carry, root, apply=True)),)
 
     class Owner:
         name = "turn-owner"
@@ -653,7 +682,7 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
         def verify(self, root):
             return {"read": ExternalTranscript.path_in(root).exists()}
 
-    monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
+    monkeypatch.setattr(upgrade_bus.CarryOver, "all", tool_call_index)
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "")
     monkeypatch.setattr(upgrade_bus, "TurnInProgress", Owner)
     # A rehearsal places the route under its own home, so the route sits under this one.
@@ -663,10 +692,10 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
     monkeypatch.setattr(upgrade_bus.Publication, "publish", lambda self, previous: None)
     monkeypatch.setattr(upgrade_bus, "prune", lambda keep: {})
     result = install(Installed(tmp_path / "checkout", Home(tmp_path / "home")), comms.root)
-    step, = result["steps"]
-    assert step["changed"] == step["indexes"] > 0
-    assert step["files"]["rewritten"] == 1
-    assert result["read"] == {"read": True}
+    step, = result.passed.steps
+    assert step.carried.changed == step.carried.detail["indexes"] > 0
+    assert step.files.rewritten == 1
+    assert result.passed.read == {"read": True}
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):
@@ -687,4 +716,4 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
         ActivityLog.at(comms.root).emit(Activity.create(unit.name, ActivityState.THINKING))
         with pytest.raises(sqlite3.OperationalError, match="locked"):
             transcript.finish(turn_id="turn", item_id="during", events=())
-        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
+        assert carried(comms.root, before, ()) == FilesCompared(len(before), 0)
