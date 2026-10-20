@@ -41,7 +41,6 @@ from agent_comms.coordination_tables.publications import (
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_input_owner import RegistryOwner
@@ -53,6 +52,7 @@ from agent_comms.publisher import ResponseWrites
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.typed_table import (
     Column,
+    DurableTables,
     ForeignKey,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
@@ -65,7 +65,7 @@ from .field_codec import MalformedRecord
 from .locked_store import RegistryFile
 
 
-class ResponseTable:
+class ResponseTable(DurableTables):
     """An immutable response definition with its write checks and append evidence."""
 
     @classmethod
@@ -247,31 +247,15 @@ class SelectedResponseRoute(TypedRow):
             raise IdentityConflict("response sealed route differs from committed source")
 
 
-def _response_schema() -> dict[str, str]:
-    return {
-        name: sql
-        for table in TypedTable.members_with(ResponseTable)
-        for name, sql in table.schema_objects().items()
-    }
-
-
 def _response_digest(schema: dict[str, str]) -> str:
     return hashlib.sha256(json.dumps(schema, separators=(",", ":")).encode()).hexdigest()
 
 
 def _assert_response_schema(db: sqlite3.Connection) -> None:
-    schema = _response_schema()
-    tables = tuple(table.declared_name for table in TypedTable.members_with(ResponseTable))
+    schema = ResponseTable.declared_schema()
     try:
         meta = ResponseSchemaMeta.one(db, singleton=1)
-        actual = SQLiteSchemaObject.read(
-            db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND tbl_name IN ("
-                + ",".join("?" for _ in tables)
-                + ")",
-                tables,
-            )
-        )
+        actual = ResponseTable.stored_member_schema(db)
     except (sqlite3.Error, MalformedRecord) as error:
         raise PublicationActivationBlocked("private response schema is not installed") from error
     if meta != ResponseSchemaMeta(1, 3, _response_digest(schema)):
@@ -285,14 +269,8 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
 def install_private_response_schema(store: Coordination) -> None:
     """Install the current response tables on a fresh coordinator only."""
     with store.session.writing() as db:
-        exists = SQLiteSchemaObject.read(
-            db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE name=?",
-                (FieldCodec.encode(ResponseSchemaMeta),),
-            )
-        )
-        if not exists:
-            schema = _response_schema()
+        if not ResponseSchemaMeta.present(db):
+            schema = ResponseTable.declared_schema()
             for statement in schema.values():
                 db.execute(statement)
             ResponseSchemaMeta(1, 3, _response_digest(schema)).insert(db)

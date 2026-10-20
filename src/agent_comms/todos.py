@@ -39,7 +39,6 @@ from .child_process import (
     NoIntegerPrinted,
     OrderCheckFailedError,
 )
-from .progress_claims import MergedClaim, ProgressClaim
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -61,6 +60,7 @@ from .messages import InfoKind, Message
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
+from .progress_claims import MergedClaim, ProgressClaim
 from .recorded_time import EventTime, RecordedEventSeconds, RecordedEventTime, UnrecordedEventTime
 from .repo import Repo
 from .repository_name import RepositoryName
@@ -68,7 +68,15 @@ from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
 from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, Index, JsonStorage, TextStorage, TypedStore, TypedTable
+from .typed_table import (
+    Column,
+    DurableTables,
+    Index,
+    JsonStorage,
+    TextStorage,
+    TypedStore,
+    TypedTable,
+)
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -2995,7 +3003,7 @@ def _participant(thread: Thread) -> ThreadIncarnation:
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(TypedStore):
+class TodoStore(TypedStore, DurableTables):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain

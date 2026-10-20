@@ -22,7 +22,7 @@ from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
+from .typed_table import Column, DurableTables, ForeignKey, Index, TypedStore, TypedTable
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
@@ -257,7 +257,7 @@ class GoalWaitTargetRow(TypedTable):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(ThreadOwnedState, TypedStore, WireWakeFile):
+class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
     path: Path = field()
     filename: ClassVar[str] = "goal_waits.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (StoredGoalWaitRow, GoalWaitTargetRow)

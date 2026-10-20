@@ -6,8 +6,6 @@ or owner-control ingress. Historical diagnostics cannot reconstruct a binding.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import sqlite3
 from dataclasses import dataclass, field
@@ -20,7 +18,7 @@ from .field_codec import FieldCodec, Id128Text
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnFence, TurnIdentity
 from .thread_status import ThreadStatus
-from .typed_table import Column, ForeignKey, TypedTable
+from .typed_table import Column, DurableTables, ForeignKey, TypedTable
 
 if TYPE_CHECKING:
     from .goal_attempts import Reservation
@@ -29,23 +27,8 @@ if TYPE_CHECKING:
     from .turn_lease import TurnLeaseFence
 
 
-class GoalLedgerTable:
+class GoalLedgerTable(DurableTables):
     """Declarations in the durable goal-attempt and passive evidence ledger."""
-
-    @classmethod
-    def declared_schema(cls) -> dict[str, str]:
-        return {
-            name: sql
-            for table in TypedTable.members_with(cls)
-            for name, sql in table.schema_objects().items()
-        }
-
-    @classmethod
-    def schema_digest(cls) -> str:
-        """Identity of the actual declarations, including generated family checks."""
-        return hashlib.sha256(
-            json.dumps(cls.declared_schema(), sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
 
 
 @dataclass(frozen=True)

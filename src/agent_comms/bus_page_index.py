@@ -20,8 +20,14 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, MessageDisplayScope, ReadCursor
-from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
+from .read_basis import (
+    ChannelDisplayScope,
+    ConversationCursor,
+    DMDisplayScope,
+    MessageDisplayScope,
+    ReadCursor,
+)
+from .typed_table import Column, DerivedTables, Index, TypedRow, TypedStore, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
@@ -98,7 +104,7 @@ class LatestConversation(TypedRow):
     seq: int
 
 
-class BusPageIndex(TypedStore):
+class BusPageIndex(TypedStore, DerivedTables):
     filename = "bus_page_index.sqlite3"
     rows = tuple(TypedTable.members_with(PageIndexTable))
     schema_error = StaleBusPageIndexError
@@ -114,26 +120,10 @@ class BusPageIndex(TypedStore):
         with ExitStack() as resources:
             db = resources.enter_context(self._attached(
                 lambda: closing(CoordinationStore.read_snapshot(self.path))))
-            if actual := self._schema(db):
-                self.require_schema(actual)
+            if self.stored_schema(db):
+                self.require_schema(db)
             db.execute("ROLLBACK")
             self._resources.enter_context(resources.pop_all())
-            return db
-
-    def _open_writer(self, *, check_same_thread: bool = True):
-        """Keep disposable-schema repair inside the store's WAL attachment boundary."""
-        with ExitStack() as opening:
-            db = opening.enter_context(closing(super()._open_writer(
-                check_same_thread=check_same_thread)))
-            try:
-                self.require_schema(self._schema(db))
-            except StaleBusPageIndexError:
-                db.execute("BEGIN IMMEDIATE")
-                for table in self.rows:
-                    table.drop(db)
-                    table.create(db)
-                db.execute("COMMIT")
-            opening.pop_all()
             return db
 
     def __enter__(self) -> BusPageIndex:
@@ -149,8 +139,8 @@ class BusPageIndex(TypedStore):
             yield False
             return
         with self.snapshot():
-            actual = self._schema(self.connection)
-            saved = BusPageSource.one(self.connection, singleton=1) if actual else None
+            stored = self.stored_schema(self.connection)
+            saved = BusPageSource.one(self.connection, singleton=1) if stored else None
             yield saved is not None and saved.covers(opened)
 
     def covers(self, opened: WireSnapshot) -> bool:
