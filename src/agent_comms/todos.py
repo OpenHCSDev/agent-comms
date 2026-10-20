@@ -414,10 +414,6 @@ class PullRequests:
         return self._read[repo, state, checked.id]
 
 
-def _clock(at: float) -> str:
-    return time.strftime("%H:%M", time.localtime(at))
-
-
 @dataclass(frozen=True)
 class ProgressPoint:
     """A revision and its time in the order's progress; Git rows use committer time."""
@@ -483,7 +479,7 @@ class MovingTrend(DistanceTrend):
 
     @property
     def projection(self) -> str:
-        return f"; distance {self.distance}, projected done {_clock(self.done)}"
+        return f"; distance {self.distance}, projected done {RecordedEventTime(self.done).clock()}"
 
 
 @dataclass(frozen=True)
@@ -780,7 +776,7 @@ class CommittedProgress(GitProgress):
 
     @property
     def state(self) -> str:
-        return f"committed {self.sha} at {_clock(self.at)}, not pushed"
+        return f"committed {self.sha} at {RecordedEventTime(self.at).clock()}, not pushed"
 
 
 @dataclass(frozen=True)
@@ -797,7 +793,7 @@ class PushedProgress(CommittedProgress):
 
     @property
     def state(self) -> str:
-        return f"pushed {self.sha} at {_clock(self.at)}, no PR"
+        return f"pushed {self.sha} at {RecordedEventTime(self.at).clock()}, no PR"
 
 
 @dataclass(frozen=True)
@@ -895,8 +891,7 @@ class PlannedInstallDeadline(InstallDeadline):
         return cls(RecordedEventTime(now + cls.cadence), installer)
 
     def overdue(self, now: float) -> tuple[str, ...]:
-        due = time.strftime("%H:%M", time.localtime(self.at.at))
-        return (f"due {due}, installer {self.installer}",) * (now >= self.at.at)
+        return (f"due {self.at.clock()}, installer {self.installer}",) * (now >= self.at.at)
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
@@ -912,10 +907,10 @@ class PlannedInstallDeadline(InstallDeadline):
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         if not waiting:
             return []
-        due = time.strftime("%H:%M", time.localtime(self.at.at))
         if now > self.at.at:
-            return [f"INSTALL LATE (due {due}), not the orders; waiting: {', '.join(waiting)}"]
-        return [f"INSTALL due {due}; waiting: {', '.join(waiting)}"]
+            return [f"INSTALL LATE (due {self.at.clock()}), not the orders; "
+                    f"waiting: {', '.join(waiting)}"]
+        return [f"INSTALL due {self.at.clock()}; waiting: {', '.join(waiting)}"]
 
 
 @dataclass(frozen=True)
@@ -1295,6 +1290,9 @@ class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
     def instructions(self) -> tuple[str, ...]:
         return ()
 
+    def place(self) -> str:
+        return "-"
+
 
 @dataclass(frozen=True)
 class UnlocatedProblemFinding(ProblemFinding):
@@ -1306,7 +1304,10 @@ class LocatedProblemFinding(ProblemFinding):
     where: FileLine
 
     def instructions(self) -> tuple[str, ...]:
-        return (f"Where: {self.where.to_wire()}",)
+        return (f"Where: {self.place()}",)
+
+    def place(self) -> str:
+        return self.where.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1327,6 +1328,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def pull_request_ids(cls, body: str) -> tuple[str, ...]:
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
+
+    def board_cells(self, todo: Todo) -> str:
+        return f"{self.finding.place()} | unassigned | - | - | -"
 
     def checked(self) -> CheckedProblemOrder:
         raise ValueError("This problem has no checked order.")
@@ -1421,6 +1425,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
+    def board_cells(self, todo: Todo) -> str:
+        last = todo.released[-1:]
+        owner = todo.holder or (f"unassigned: released from {last[0].previous.owner}: "
+                                f"{last[0].reason.text}")
+        check = json.dumps(FieldCodec.encode(self.check)).replace("|", "&#124;")
+        return f"{self.owner.to_wire()} | {owner} | {self.id} | {todo.deadline.clock()} | {check}"
+
     @property
     def phase(self) -> type[OrderPhase]:
         return self.serves
@@ -1444,7 +1455,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         if problems:
             raise ValueError("\n".join(problems))
 
-    pending: ClassVar[bool]
     line: ClassVar[str]
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
@@ -1467,7 +1477,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
                        if item.name not in evidence}, **evidence)
 
-    def merged(self, sha: str) -> ProblemOrder:
+    def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
     @property
@@ -1529,21 +1539,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
                          "its order has none.")
 
-    def require_close(self):
-        raise ValueError("Closing requires recorded installed application evidence.")
-
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         self.require_withdrawal()
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
-
-    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
-        """How this order retired its problem without delivery, as the record and board say."""
-        return ()
-
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
-        """The order waiting on the fleet's install to record it working."""
-        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1591,7 +1590,6 @@ class PendingProblemOrder(CheckedProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
     replacing_message: str
-    pending: ClassVar[bool] = False
     line: ClassVar[str] = "Dropped for a newer order"
 
 
@@ -1782,6 +1780,10 @@ class Assignment:
     previous_owners: tuple[ThreadIncarnation, ...] = field(
         default=(), metadata={"wire_omit_default": True})
 
+    @classmethod
+    def of(cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: str) -> Assignment:
+        return cls(owner.name, owner.wire_birth, parent.name, parent.wire_birth, generation)
+
     def __post_init__(self) -> None:
         _text(self.owner, "Thread name", 128)
         _text(self.parent, "Thread name", 128)
@@ -1921,8 +1923,8 @@ class AssignTodo(TodoOperation):
     """The order's commander gives the problem to a unit."""
     proposed: Assignment
     deadline: EventTime
-    order: PendingProblemOrder
-    goal: GoalRef
+    order: PendingProblemOrder | MergedProblemOrder
+    goal: GoalReference
     traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
 
     def apply(self, current: Todo) -> Todo:
@@ -2346,6 +2348,20 @@ class Todo(TypedTable):
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
 
+    unrequested_goal: ClassVar[GoalReference] = NoGoalReference()
+
+    @classmethod
+    def ordered(cls, todo_id: str, repo: str, text: str, creator: ThreadIncarnation,
+                assignment: Assignment, deadline: EventTime,
+                order: PendingProblemOrder | MergedProblemOrder,
+                goal: GoalReference = unrequested_goal) -> Todo:
+        _text(todo_id, "Todo ID", 128)
+        _text(text, "Todo text", 2000)
+        deadline.require_deadline()
+        goal.require_reference()
+        return cls(todo_id, _repo(repo), text, creator.name, creator.wire_birth, OpenTodoState,
+                   1, goal, assignment, order, deadline)
+
     @property
     def pending(self):
         return self.order.pending
@@ -2725,27 +2741,11 @@ class TodoStore(TypedStore):
         order: PendingProblemOrder,
         goal: GoalRef,
     ) -> Todo:
-        _text(todo_id, "Todo ID", 128)
-        _text(text, "Todo text", 2000)
-        repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
-        deadline.require_deadline()
-        goal.require_reference()
         order.require_writable()
-        proposed = Todo(
-            id=todo_id,
-            repo=repo_id,
-            text=text,
-            creator=identity.name,
-            creator_created=identity.created_at,
-            state=OpenTodoState,
-            revision=1,
-            goal=goal,
-            assignment=Assignment(assignee.name, assignee.created_at,
-                                  identity.name, identity.created_at, generation),
-            deadline=deadline,
-            order=order,
-        )
+        proposed = Todo.ordered(
+            todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
+            deadline, order, goal)
         with self.writing() as db:
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -2804,9 +2804,6 @@ class TodoStore(TypedStore):
         order: PendingProblemOrder,
         traced: FileLine | None = None,
     ) -> Todo:
-        identity = _thread(owner)
-        proposed = Assignment(
-            identity.name, identity.created_at, assigner.name, assigner.wire_birth, generation)
+        proposed = Assignment.of(_thread(owner), assigner, generation)
         return self.apply(
             todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))
-
