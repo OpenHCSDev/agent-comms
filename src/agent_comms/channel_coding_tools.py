@@ -182,7 +182,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             return await super().handle_request(raw)
         except StorageDenied as denial:
             return {"ok": False, "error": str(denial),
-                    "details": FieldCodec.encode(StorageDenialToolDetails(str(denial)))}
+                    "details": StorageDenialToolDetails(str(denial)).to_wire()}
 
     @staticmethod
     def failure_response(error: Exception) -> dict[str, object]:

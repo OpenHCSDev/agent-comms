@@ -4,7 +4,6 @@ import json
 import shlex
 
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import NativeToolDetails
 from delivery_owner_fixture import canonical_agent, reply_turn_finished
 
@@ -46,7 +45,7 @@ async def test_storage_refusal_survives_real_native_result_and_next_call(native_
                  and row['message'].get('role') == 'toolResult']
         assert [tool['toolCallId'] for tool in tools] == ['p303-1', 'p303-2']
         assert tools[0]['isError'] and not forbidden.exists()
-        details = FieldCodec.decode(NativeToolDetails, tools[0]['details'])
+        details = NativeToolDetails.from_wire(tools[0]['details'])
         assert details.storage_refusals()[0].reason == 'StorageRule: writes inside .artifacts are forbidden'
         assert not tools[1]['isError'] and 'P303_NEXT_RAN' in tools[1]['content'][0]['text']
         assert provider.posts == 3

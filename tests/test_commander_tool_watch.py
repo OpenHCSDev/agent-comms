@@ -123,11 +123,10 @@ def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, comma
 
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage', forbidden)
     denial = StorageDenialToolDetails('StorageRule: the write creates a file outside the declared scratch directory')
-    from agent_comms.field_codec import FieldCodec
     line = (json.dumps({'type': 'message', 'id': 'storage-denial',
                         'timestamp': '2026-10-19T22:50:00Z', 'message': {
                             'role': 'toolResult', 'toolCallId': 'write-1', 'toolName': 'write',
-                            'isError': True, 'details': FieldCodec.encode(denial), 'content': []}}) + '\n').encode()
+                            'isError': True, 'details': denial.to_wire(), 'content': []}}) + '\n').encode()
     turns = collections.defaultdict(list)
     tool_watch.follow(commander_script[0], turns, 'worker', line)
     tool_watch.follow(commander_script[0], turns, 'worker', line)

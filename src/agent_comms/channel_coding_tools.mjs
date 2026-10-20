@@ -2,10 +2,12 @@
 export default function channelCodingTools(pi) {
   const refusals = new Map();
   pi.on("session_shutdown", () => refusals.clear());
-  pi.on("tool_result", (event) => {
-    const details = refusals.get(event.toolCallId);
-    refusals.delete(event.toolCallId);
-    if (details) return { details, isError: true };
+  // Blocked calls skip tool_result. message_end runs before the SDK commits
+  // its canonical result object, including those blocked before execution.
+  pi.on("message_end", (event) => {
+    const details = refusals.get(event.message.toolCallId);
+    refusals.delete(event.message.toolCallId);
+    if (details) return { message: { ...event.message, details } };
   });
   pi.on("tool_call", async (event, context) => {
     try {
