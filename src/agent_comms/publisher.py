@@ -299,7 +299,7 @@ class InitialWrites(PrivateWrites):
             if message.seq <= previous:
                 raise ValueError("Initial history must have ascending unique sequences")
             previous = message.seq
-            rows.append(json.dumps(message.to_wire(), ensure_ascii=False) + "\n")
+            rows.append(json.dumps(message.history_snapshot.to_wire(), ensure_ascii=False) + "\n")
         if rows:
             _atomic_write_text(self.log.path, "".join(rows), fsync_parent=True)
 

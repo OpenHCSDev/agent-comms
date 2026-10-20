@@ -52,9 +52,11 @@ from .connector_store import (
 )
 from .messages import Message
 from .commander.standing import UnownedWheelSpin
-from .todos import DirectiveText
+from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_caller import ThreadCaller
-from .tools import CommsChannelsTool, ReadTool, ToolRequest
+from .tools import (
+    CommsChannelsTool, CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+)
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -76,6 +78,24 @@ class DirectorCaller(ThreadCaller):
                 message.target,
                 DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
             )
+
+
+class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
+    """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declared_name):
+    label = "Review PR head"
+    description = "Record the connector reviewer's acceptance of the exact PR commit it reviewed."
+    id: str = tool_field("Problem ID")
+    operation: ReviewedHeadVerdict = tool_field("Accepted PR-head verdict")
+
+    def apply(self, comms: Comms, caller: DirectorCaller) -> TodoChanged:
+        todo = self.operation.reviewed(
+            comms.goals, self.id, comms.registry.require(caller.name).incarnation
+        )
+        return TodoChanged(todo, todo.strike_count)
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
@@ -343,8 +363,14 @@ class Connector:
         return f"{self.issuer}/.well-known/oauth-protected-resource"
 
     @staticmethod
-    def exposed() -> dict[str, type[ToolRequest]]:
-        return {tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)}
+    def exposed() -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
+        tools: dict[str, type[ToolRequest] | type[ConnectorTool]] = {
+            tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)
+        }
+        tools.update({
+            tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
+        })
+        return tools
 
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
@@ -354,7 +380,7 @@ class Connector:
             yield comms
 
     def invoke(
-        self, tool: type[ToolRequest], arguments: Mapping[str, object]
+        self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
         with self.opened_wire() as comms:
             return tool.invoke(comms, arguments, caller=CALLER)
