@@ -51,11 +51,14 @@ class Repo(BaseModel):
         return result.returncode == 0
 
     def has_commit(self, sha: str) -> bool:
-        return subprocess.run(
-            ("git", "-C", str(self.checkout), "cat-file", "-e", f"{sha}^{{commit}}"),
-            capture_output=True,
-            timeout=30,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                ("git", "-C", str(self.checkout), "cat-file", "-e", f"{sha}^{{commit}}"),
+                capture_output=True,
+                timeout=30,
+            ).returncode
+            == 0
+        )
 
     @staticmethod
     def git(checkout: Path, *args: str) -> str:
