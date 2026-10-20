@@ -3,6 +3,7 @@ import asyncio
 from contextlib import suppress
 from dataclasses import replace
 import os
+import signal
 import sys
 
 import pytest
@@ -13,7 +14,7 @@ from agent_comms.cli_protocol import DeliveredOutcome, FailedCoreError
 
 
 class WatchOnly(Operation):
-    async def run(self, bridge):
+    async def execute(self, bridge):
         await bridge.watch()
 
 
@@ -32,6 +33,7 @@ class ReportingBridge(CliBridge):
 @pytest.mark.parametrize('frame,code', [
     ('', 0), ('', 17),
     (FailedCoreError(error='bad root').model_dump_json(), 1),
+    (FailedCoreError(error='bad root').model_dump_json(), -signal.SIGTERM),
 ])
 async def test_watch_exit_is_reported_once_with_exit_and_log_tail(tmp_path, monkeypatch, frame, code):
     start = AttachedChild.start
@@ -39,10 +41,11 @@ async def test_watch_exit_is_reported_once_with_exit_and_log_tail(tmp_path, monk
 
     async def launch(command, **options):
         starts.append(command)
-        script = ('import sys; '
+        exit_code = f'os.kill(os.getpid(), {-code})' if code < 0 else f'sys.exit({code})'
+        script = ('import os, sys; '
                   'sys.stderr.write("old-prefix" + "x" * 20000 + "tail-evidence\\n"); '
                   f'print({frame!r}, flush=True) if {bool(frame)!r} else None; '
-                  f'sys.exit({code})')
+                  + exit_code)
         return await start((sys.executable, '-c', script), **options)
 
     monkeypatch.setattr(AttachedChild, 'start', launch)

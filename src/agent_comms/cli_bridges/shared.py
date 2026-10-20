@@ -176,7 +176,7 @@ class ReceivingMonitor(MonitorEvidence):
                 or any(part.sender != message.sender for part in parts)):
             with bridge.db:
                 replace(delivery, monitor=MismatchedMonitor('Observed parts do not equal the original message')).upsert(bridge.db)
-            print(f'Monitor parts mismatch; message remains pending: {delivery.id}', file=sys.stderr, flush=True)
+            bridge.log(f'Monitor parts mismatch; message remains pending: {delivery.id}')
             return
         await replace(delivery, monitor=record).finish(bridge, DeliveredOutcome)
 
@@ -551,6 +551,10 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return '\n'.join((f'Comms out · {message.sender} → {message.target}',
                           message.body, f'Message ID: {message.message_id}', *result.notices))
 
+    @staticmethod
+    def log(text: str) -> None:
+        print(text, file=sys.stderr, flush=True)
+
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
@@ -567,11 +571,11 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         result = await self.deliver(message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
-        print(f'{result.declared_name}: {message.message_id} from {message.sender}', file=sys.stderr, flush=True)
+        self.log(f'{result.declared_name}: {message.message_id} from {message.sender}')
 
     async def watch(self) -> None:
         await self.prepare_delivery()
-        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
+        self.log(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay')
         while True:
             await self.comms.bus.when_open(self.watch_child)
 
@@ -588,9 +592,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
                 await item.handle(self, child)
             outcome = await child.wait()
             if outcome.interrupted:
-                print(f'Core watch PID {child.pid} {outcome.summary}; '
-                      'reopening its subscription, retaining delivery attempts.',
-                      file=sys.stderr, flush=True)
+                self.log(f'Core watch PID {child.pid} {outcome.summary}; '
+                         'reopening its subscription, retaining delivery attempts.')
                 return
             await raise_child_exit(child, '')
         finally:
@@ -611,7 +614,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
                 ).format()
             )
-            print(failure, file=sys.stderr, flush=True)
+            self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
 
@@ -783,7 +786,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         print(self.encode(self.sent_text(result)), flush=True)
 
     async def report_failure(self, text: str) -> None:
-        print(text, file=sys.stderr, flush=True)
+        self.log(text)
 
 
 def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptions) -> None:

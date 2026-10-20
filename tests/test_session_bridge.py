@@ -48,11 +48,10 @@ async def test_bridge_survives_its_watch_child_being_signalled(tmp_path, monkeyp
     from test_bus_route_counts_locking import _case
     from dataclasses import replace
 
-    home = tmp_path.parent / 'home'
-    home.mkdir(exist_ok=True)
-    monkeypatch.setenv('HOME', str(home))
-    endpoint_directory = tmp_path.parent / 'w'
-    monkeypatch.setattr(WatchClaim, 'directory', classmethod(lambda cls: endpoint_directory))
+    # Use the real WatchClaim locator. Relative HOME and a shared owned cwd keep
+    # its sockaddr_un spelling short without moving any file outside scratch.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('HOME', '.')
     comms = _case(tmp_path / 'wire', monkeypatch)
     recipient = comms.registry.require('recipient')
     comms.registry.declare(replace(recipient, execution=ExternalThreadExecution))
@@ -80,19 +79,12 @@ async def test_bridge_survives_its_watch_child_being_signalled(tmp_path, monkeyp
         assert len(children) == 1, children
         return ProcessIdentity.capture(int(children[0]))
 
-    # Only the socket locator is controlled: the normal HOME-based path exceeds
-    # sockaddr_un under the mandated persistent scratch directory.
-    driver = ('import sys\nfrom pathlib import Path\n'
-              'from agent_comms_hooks.watch import WatchClaim\n'
-              'directory = Path(sys.argv.pop(1))\n'
-              'WatchClaim.directory = classmethod(lambda cls: directory)\n'
-              'from agent_comms.cli_bridges.claude import main\nmain()\n')
-    command = (sys.executable, '-c', driver, str(endpoint_directory), 'serve',
+    command = (str(Path(sys.executable).with_name('agent-comms-claude-bridge')), 'serve',
                '--root', str(comms.root), '--bus-thread', 'recipient', '--session', session,
                '--state', str(state), '--owner', json.dumps(FieldCodec.encode_record(owner)),
                '--transcript', str(transcript))
     with log_path.open('wb') as log:
-        bridge = ParentedProcess.launch(command, env=environment, output=log)
+        bridge = ParentedProcess.launch(command, cwd=tmp_path, env=environment, output=log)
         try:
             async with asyncio.timeout(20):
                 while not claim.socket_path.exists():
