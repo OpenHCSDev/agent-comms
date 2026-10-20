@@ -1181,7 +1181,7 @@ class Skipped(Outcome):
 
 
 @dataclass(frozen=True)
-class Installed(Outcome):
+class RuntimeInstalled(Outcome):
     passed: Passed
     queued: tuple[QueuedRestart, ...]
     started: tuple[OwnerStartResult, ...]
@@ -1272,7 +1272,7 @@ class ChangedInstall(Install):
     def rehearsal(self) -> Rehearsed:
         return rehearse(self.root, self.pending, self.runtime, self.revisions, self.check)
 
-    def live(self) -> Installed:
+    def live(self) -> RuntimeInstalled:
         return live(
             self.root, self.pending, self.installed, self.runtime, self.revisions, self.installer
         )
@@ -1297,7 +1297,7 @@ def live(
     runtime: Runtime,
     revisions: Revisions,
     installer: str,
-) -> Installed:
+) -> RuntimeInstalled:
     """The rehearsal's passes on the bus. Owners keep their turns: each restarts onto the
     new runtime when its own turn ends, and the previous runtime stays until none uses it."""
     steps = BeforeStop().all(root, pending, runtime, revisions)
@@ -1324,7 +1324,7 @@ def live(
         raise
     queued = runtime.queue_restarts(root)
     started = runtime.start_dead(root)
-    return Installed(
+    return RuntimeInstalled(
         passed, queued, started, services, str(backup.path), prune({runtime.path, installed.path})
     )
 

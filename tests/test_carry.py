@@ -520,7 +520,7 @@ def test_a_live_install_queues_each_owner_and_waits_for_none(comms, tmp_path, mo
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
     monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
-    monkeypatch.setattr(upgrade_bus.Publication, "publish", lambda self, previous: None)
+    monkeypatch.setattr(upgrade_bus.Publication, "publish", lambda self, previous, root: None)
     monkeypatch.setattr(upgrade_bus, "prune", lambda keep: {})
     installed, runtime = Owners(tmp_path / "installed"), Owners(tmp_path / "runtime")
     result = upgrade_bus.live(comms.root, (), installed, runtime, None, "worker")
@@ -695,7 +695,7 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
     monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
     monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
     monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
-    monkeypatch.setattr(upgrade_bus.Publication, "publish", lambda self, previous: None)
+    monkeypatch.setattr(upgrade_bus.Publication, "publish", lambda self, previous, root: None)
     monkeypatch.setattr(upgrade_bus, "prune", lambda keep: {})
     result = install(Installed(tmp_path / "checkout", Home(tmp_path / "home")), comms.root)
     step, = result.passed.steps
