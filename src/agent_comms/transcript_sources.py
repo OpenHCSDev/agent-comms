@@ -45,7 +45,7 @@ class AssignedSourceIdentity:
         return self.root, self.recipient.require_recorded().created_at
 
     def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
-        return self.root == other.root and self.recipient.same_publication_birth(other.recipient)
+        return self.root == other.root and self.recipient == other.recipient
 
 
 class WireFrontier(DeclaredFamily, affix="WireFrontier"):
