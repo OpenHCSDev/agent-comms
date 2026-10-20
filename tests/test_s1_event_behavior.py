@@ -376,7 +376,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             with pytest.raises(RequestError):
                 await execution.run()
         assert not comms.registry.require(name).active_turn.executing
-        assert owner.inputs.state(session.session_id).inbox is None
+        assert not owner.inputs.state(session.session_id).turn_open()
         if provider_status == 200:
             assert native.provider.posts == (2 if committed_progress else 1)
         inputs = stored_inputs(comms.root).rows

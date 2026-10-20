@@ -5,8 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 from collections.abc import AsyncIterator, Callable, Iterator
-from contextlib import contextmanager, suppress
-from pathlib import Path
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, ClassVar
 
 from . import agent_events as events
@@ -14,6 +13,7 @@ from . import turn_failure as failures
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .diagnostics import FailureReason
+from .native_startup import SessionLoad
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -90,9 +90,8 @@ class PreflightWait(TurnWait):
             "spawn_ms": watchdog.spawn_ms,
             "budget_ms": budget_ms,
         }
-        if watchdog.session_bytes is not None:
-            session.output.diagnostic["session_bytes"] = watchdog.session_bytes
-        session_size = watchdog.session_bytes if watchdog.session_bytes is not None else "unknown"
+        session.output.diagnostic.update(watchdog.session_load.diagnostic)
+        session_size = watchdog.session_load.summary
         session.output.record_failure(
             failures.InputIdUnavailable(
                 "Pi native input-ID capability preflight timed out "
@@ -201,18 +200,14 @@ class ProgressWatchdog:
     def launching(self, clock: Callable[[], float], session_file: str | None) -> None:
         self.clock = clock
         self.launch_started_at = clock()
-        self.session_bytes: int | None = None
-        if session_file:
-            # A new session has no file yet; any other stat failure is real.
-            with suppress(FileNotFoundError):
-                self.session_bytes = Path(session_file).stat().st_size
+        self.session_load = SessionLoad.capture(session_file)
 
     def spawned(self, reused: bool) -> None:
         self.spawn_ms = 0 if reused else round((self.clock() - self.launch_started_at) * 1000)
 
     def reading(self) -> None:
         self.preflight_wait.budget = self.startup.readiness_timeout(
-            self.session_bytes, base_seconds=self.preflight_wait.budget
+            self.session_load, base_seconds=self.preflight_wait.budget
         )
         self.preflight_wait.restart()
         self.now = self.last_model_progress = self.clock()
@@ -260,9 +255,7 @@ class ProgressWatchdog:
             return self.poll_wait
         if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock:
             return self.input_wait
-        if self.phase.model_wait(self.model_wait.timeout()) is None:
-            return self.unbounded_wait
-        return self.model_wait
+        return self.phase.model_wait(self.model_wait, self.unbounded_wait)
 
     def state(
         self,
@@ -286,16 +279,10 @@ class ProgressWatchdog:
             return b"\n"
         read_task = asyncio.create_task(session.native.reader.readline())
         reject_task = asyncio.create_task(session.rejected_signal.wait())
-        finish_task = (
-            asyncio.create_task(session.finish_event.wait())
-            if session.finish_event is not None and (not session.stats.requested)
-            else None
-        )
-        tasks = {read_task, reject_task}
-        if finish_task is not None:
-            tasks.add(finish_task)
-        forwarding = session.native.forwarding_task
-        observed = tasks | {forwarding} if forwarding is not None else tasks
+        finish_tasks = session.finish_signal.waiters(settling=session.stats.requested)
+        tasks = {read_task, reject_task, *finish_tasks}
+        forwarding = session.native.forwarding
+        observed = tasks.union(forwarding.tasks)
         wait = self.wait_for(session)
         try:
             with wait.charge(self.clock):
@@ -309,14 +296,11 @@ class ProgressWatchdog:
                 done = {task for task in observed if task.done()}
             if not done:
                 raise wait.expired(session)
-            if forwarding is not None and forwarding in done:
-                await session.native.shutdown()
-                if not forwarding.cancelled():
-                    forwarding.result()
+            if await forwarding.finish_if_done(session.native, done):
                 return b""
             if read_task in done:
                 return read_task.result()
-            if finish_task is not None and finish_task in done:
+            if done.intersection(finish_tasks):
                 read_task.cancel()
                 await asyncio.gather(read_task, return_exceptions=True)
                 if session.awaiting_native_attestation:

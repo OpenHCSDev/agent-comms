@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,6 +11,57 @@ from .diagnostics import PublicationMeasurements
 
 if TYPE_CHECKING:
     from .native_pi import NativePiRpcLaunch
+
+
+class SessionLoad(ABC):
+    """The observed session size owns its startup allowance and diagnostics."""
+
+    @property
+    @abstractmethod
+    def diagnostic(self) -> dict[str, int]: ...
+
+    @property
+    @abstractmethod
+    def summary(self) -> str: ...
+
+    @abstractmethod
+    def extra_steps(self, step_bytes: int) -> int: ...
+
+    @classmethod
+    def capture(cls, session_file: str | None) -> SessionLoad:
+        if session_file is None:
+            return UnmeasuredSessionLoad()
+        try:
+            return MeasuredSessionLoad(Path(session_file).stat().st_size)
+        except FileNotFoundError:
+            return UnmeasuredSessionLoad()
+
+
+class UnmeasuredSessionLoad(SessionLoad):
+    summary = "unknown"
+
+    @property
+    def diagnostic(self) -> dict[str, int]:
+        return {}
+
+    def extra_steps(self, step_bytes: int) -> int:
+        return 0
+
+
+@dataclass(frozen=True)
+class MeasuredSessionLoad(SessionLoad):
+    size: int
+
+    @property
+    def diagnostic(self) -> dict[str, int]:
+        return {"session_bytes": self.size}
+
+    @property
+    def summary(self) -> str:
+        return str(self.size)
+
+    def extra_steps(self, step_bytes: int) -> int:
+        return max(0, (self.size - 1) // step_bytes)
 
 
 @dataclass(frozen=True)
@@ -21,7 +73,7 @@ class NativeStartupPolicy:
     readiness_max_seconds: float = 35.0
 
     def readiness_timeout(
-        self, session_bytes: int | None, *, base_seconds: float | None = None
+        self, session_load: SessionLoad, *, base_seconds: float
     ) -> float:
         """Bound get_state wait by saved-session size, not the model/turn clock.
 
@@ -29,13 +81,10 @@ class NativeStartupPolicy:
         extra seconds for each full 8 MiB beyond the first 8 MiB, up to 35s.
         Missing/unreadable sessions retain the ten-second base bound.
         """
-        base = self.readiness_seconds if base_seconds is None else base_seconds
-        extra_steps = (
-            max(0, (session_bytes - 1) // self.readiness_step_bytes)
-            if session_bytes is not None and session_bytes > 0
-            else 0
+        extra_steps = session_load.extra_steps(self.readiness_step_bytes)
+        return min(
+            self.readiness_max_seconds, base_seconds + extra_steps * self.readiness_step_seconds,
         )
-        return min(self.readiness_max_seconds, base + extra_steps * self.readiness_step_seconds)
 
 
 NATIVE_STARTUP_POLICY = NativeStartupPolicy()

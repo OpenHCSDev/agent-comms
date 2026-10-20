@@ -1541,7 +1541,7 @@ class TestAgentTurnForwarding:
             assert any(update.status == "in_progress" for update in tools[1:])
             assert tools[-1].status == "completed"
             assert str(native.project) in tools[-1].content[0].content.text
-            assert not agent.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in agent.inputs.drained.values())
+            assert not agent.turns.turn_state(session).active.phase.busy and not any(state.turn_open() for state in agent.inputs.drained.values())
         assert native.provider.posts == 2 and len(native.saved_inputs()) == 2
 
     async def test_turn_sets_wire_activity(self, native_backend):
@@ -1938,7 +1938,7 @@ class TestQueueControl:
         wired.registry.declare(
             wired.registry.new_thread(name='peer', tags=frozenset(), worktree=str(tmp_path / 'proj'))
         )
-        agent.inputs.state("proj").inbox = __import__("asyncio").Queue()
+        agent.inputs.state('proj').open_inbox()
         agent.inputs.state("proj").queued = {}
         response = await agent.prompt(
             session_id="proj",

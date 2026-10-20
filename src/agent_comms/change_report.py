@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
@@ -16,8 +17,24 @@ from typing import Any, ClassVar
 from .field_codec import MalformedRecord, WireValue
 
 
+class SourceReference(ABC):
+    """A source reference either supplies its location or explains why it is required."""
+
+    @classmethod
+    def from_optional(cls, location: FileLine | None) -> SourceReference:
+        return NoSourceReference() if location is None else location
+
+    @abstractmethod
+    def require(self, reason: str) -> FileLine: ...
+
+
+class NoSourceReference(SourceReference):
+    def require(self, reason: str) -> FileLine:
+        raise ValueError(reason)
+
+
 @dataclass(frozen=True, slots=True)
-class FileLine(WireValue):
+class FileLine(WireValue, SourceReference):
     """One source reference spelled ``file.py:line`` on the wire."""
 
     file: str
@@ -30,6 +47,9 @@ class FileLine(WireValue):
             raise ValueError(f"FileLine file must be a single nonempty path: {self.file!r}")
         if type(self.line) is not int or self.line < 1:
             raise ValueError(f"FileLine line must be a positive line number: {self.line!r}")
+
+    def require(self, reason: str) -> FileLine:
+        return self
 
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()

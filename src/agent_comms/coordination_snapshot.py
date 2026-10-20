@@ -15,7 +15,12 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
+from agent_comms.coordination_tables.attempts import (
+    AttemptRecord,
+    NoPreviousAttempt,
+    PreviousAttempt,
+    ReplayAssessments,
+)
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
@@ -99,10 +104,12 @@ class RecoverySnapshot:
     def completed_response(self) -> bool:
         return self.execution.lifecycle.completed
 
+    @property
+    def previous_attempt(self) -> PreviousAttempt:
+        return self.attempt if self.attempt is not None else NoPreviousAttempt()
+
     def require_attempt(self) -> AttemptRecord:
-        if self.attempt is None:
-            raise StaleFence("execution has no authorized attempt")
-        return self.attempt
+        return self.previous_attempt.require()
 
     def require_current_attempt(self) -> AttemptRecord:
         if not self.is_current:

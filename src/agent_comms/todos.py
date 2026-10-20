@@ -15,7 +15,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -29,7 +29,7 @@ from uuid import uuid4
 
 from . import skills
 from .bus_publication import AgentOrigin
-from .change_report import FileLine
+from .change_report import FileLine, SourceReference
 from .channel_targets import CommandTarget
 from .child_process import (
     BoundedRun,
@@ -1963,8 +1963,41 @@ class GoalRef(RecordMember, GoalReference):
         return self.goal_id
 
 
+class TodoHolder(ABC):
+    """Current, released and absent holders own their assignment behaviour."""
+
+    def held(self, current: Todo) -> Assignment:
+        raise TodoError(f"{current.id} has no open order.")
+
+    @abstractmethod
+    def previous_assignment(self) -> Assignment: ...
+
+    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
+        return False
+
+    def proposed_assignment(self, proposed: Assignment) -> Assignment:
+        return proposed
+
+    @abstractmethod
+    def require_trace(self, owner: str, traced: SourceReference) -> None: ...
+
+    def successor(self, proposed: Assignment, current: Todo) -> Assignment:
+        return proposed
+
+    def current_assignments(self) -> tuple[Assignment, ...]:
+        return ()
+
+
+class NoTodoHolder(TodoHolder):
+    def previous_assignment(self) -> Assignment:
+        raise TodoError("Problem has no previous holder.")
+
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
+        pass
+
+
 @dataclass(frozen=True, slots=True)
-class Assignment:
+class Assignment(TodoHolder):
     owner: str
     owner_created: float
     parent: str
@@ -1995,14 +2028,23 @@ class Assignment:
         """Who made the assignment: the order's commander, or Core's stall watcher."""
         return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
-    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
+    def held(self, current: Todo) -> Assignment:
+        return self
+
+    def proposed_assignment(self, proposed: Assignment) -> Assignment:
+        return replace(proposed, previous_owners=self.previous_owners)
+
+    def current_assignments(self) -> tuple[Assignment, ...]:
+        return (self,)
+
+    def owned_by(self, actor: ThreadIncarnation, generation: str) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
 
-    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
         owners = {self.owner, *(previous.name for previous in self.previous_owners)}
-        if owner != self.owner and len(owners) >= 2 and traced is None:
-            raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
-                             "and pass --traced PATH:LINE.")
+        if owner != self.owner and len(owners) >= 2:
+            traced.require(f"This problem has had {sorted(owners)}; read the failing path "
+                           "and pass --traced PATH:LINE.")
 
     def previous_assignment(self) -> Assignment:
         """The current holder supplies its own assignment for retirement."""
@@ -2503,12 +2545,18 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 
 
 @dataclass(frozen=True)
-class ReleaseTodo(TodoOperation, StoryEvent):
+class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
 
     def previous_assignment(self) -> Assignment:
         """The release keeps the assignment of the holder it removed."""
         return self.previous
+
+    def proposed_assignment(self, proposed: Assignment) -> Assignment:
+        return self.previous.handed_to(proposed)
+
+    def require_trace(self, owner: str, traced: SourceReference) -> None:
+        self.previous.require_trace(owner, traced)
 
     def story_text(self) -> str:
         return f"{self.actor.name} released {self.previous.owner}: {self.reason.text}"
@@ -2773,18 +2821,18 @@ class Todo(TypedTable):
     @property
     def holder(self) -> str | None:
         """The unit holding this problem; None once it is closed or released."""
-        return None if self.assignment is None else self.assignment.owner
+        return next((held.owner for held in self.holder_state.current_assignments()), None)
 
     @property
-    def holder_state(self) -> Assignment | ReleaseTodo:
-        """An ordered problem's current holder, or the release that removed it."""
-        return self.assignment or self.released[-1]
+    def holder_state(self) -> TodoHolder:
+        """Decode the stored optional assignment once into its behaviour owner."""
+        if self.assignment is not None:
+            return self.assignment
+        return self.released[-1] if self.released else NoTodoHolder()
 
     def held(self) -> Assignment:
         """The open order's assignment; a problem nobody holds has no order work."""
-        if self.assignment is None:
-            raise TodoError(f"{self.id} has no open order.")
-        return self.assignment
+        return self.holder_state.held(self)
 
     @property
     def strike_count(self) -> int:
@@ -2821,23 +2869,17 @@ class Todo(TypedTable):
             raise TodoConflict(self)
 
     def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
-        if self.assignment is None or not self.assignment.owned_by(actor, generation):
+        if generation is None or not self.holder_state.owned_by(actor, generation):
             raise TodoConflict(self)
 
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
-        if self.assignment is not None:
-            return replace(proposed, previous_owners=self.assignment.previous_owners)
-        if self.released:  # the released owner joins the next owner's history
-            return self.released[-1].previous.handed_to(proposed)
-        return proposed
+        return self.holder_state.proposed_assignment(proposed)
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
         self.order.require_transfer(self)
-        if self.assignment is not None:
-            self.assignment.require_trace(proposed.owner, traced)
-            proposed = self.assignment.successor(proposed, self)
-        elif self.released:
-            self.released[-1].previous.require_trace(proposed.owner, traced)
+        holder = self.holder_state
+        holder.require_trace(proposed.owner, SourceReference.from_optional(traced))
+        proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
@@ -2851,7 +2893,7 @@ class Todo(TypedTable):
                        revision=released.revision + 1)
 
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
-        if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
+        if self.holder_state.owned_by(owner, goal_id):
             raise TodoConflict(self)
 
     def sent_in(self, message_id: str) -> bool:
@@ -3164,8 +3206,8 @@ class TodoStore(TypedStore):
         problems."""
         return frozenset(
             assignment.owner for todo in self.history_for_commander(commander)
-            for assignment in (todo.assignment, *(release.previous for release in todo.released))
-            if assignment)
+            for assignment in (*todo.holder_state.current_assignments(),
+                               *(release.previous for release in todo.released)))
 
     def _open(self, where: str, parameters: tuple,
               state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
@@ -3226,10 +3268,10 @@ class TodoStore(TypedStore):
         """Release every open problem the unit holds from this commander in one write; each
         records the same reason, and its order and strikes stay."""
         with self.writing() as db:
-            held = tuple((todo, assignment) for todo in self._rows(
+            held = tuple((todo, todo.held()) for todo in self._rows(
                 db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
                 (unit, actor.name, actor.wire_birth))
-                if todo.state.open and (assignment := todo.assignment))
+                if todo.state.open)
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)

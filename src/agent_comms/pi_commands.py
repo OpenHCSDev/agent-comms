@@ -69,6 +69,12 @@ class PiCommand(DeclaredFamily):
         default_factory=lambda: uuid4().hex, metadata={"wire_absent_none": True}
     )
 
+    def require_id(self) -> str:
+        """Operations that correlate an input require the command's actual ID."""
+        if self.id is None:
+            raise ValueError("A correlated native input requires its command ID")
+        return self.id
+
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return False
@@ -210,8 +216,6 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
                 if not session.native.attestation.uncertain:
                     context.context_window.update_size(session.usage)
             yield session.context_info()
-            if session.persistent_session is None:
-                session.finish_request()
 
 
 CATALOG_TIMEOUT = 10  # seconds for one metadata child to start and answer

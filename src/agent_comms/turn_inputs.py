@@ -66,14 +66,17 @@ class InputForwarding:
         return not self.uncertain and not self.unresolved
 
     def acknowledge(self, response: Response) -> None:
-        if response.success is True and any(item.id == response.id for item in self.pending.values()):
-            self.accepted.add(response.id)
+        if response.success is True:
+            for item in self.pending.values():
+                public_id = item.require_id()
+                if public_id == response.id:
+                    self.accepted.add(public_id)
         self.changed.set()
 
     def retire(self, native_id: str) -> commands.Prompt:
         """Remove one exact native identity from the sole pending index."""
         item = self.pending.pop(native_id)
-        self.accepted.discard(item.id)
+        self.accepted.discard(item.require_id())
         self.changed.set()
         return item
 
@@ -99,8 +102,12 @@ class InputForwarding:
         selected = frozenset(input_id.value for input_id in input_ids)
         while True:
             self.changed.clear()
-            candidates = tuple(key for key, entry in self.pending.items() if entry.id in selected)
-            if not candidates or all(self.pending[key].id in self.accepted for key in candidates):
+            candidates = tuple(
+                key for key, entry in self.pending.items() if entry.require_id() in selected
+            )
+            if not candidates or all(
+                self.pending[key].require_id() in self.accepted for key in candidates
+            ):
                 return candidates
             await self.changed.wait()
 
@@ -115,7 +122,7 @@ class InputForwarding:
         for native_id in response.data.require_payload().require_requested(command.input_ids):
             removed = self.retire(native_id)
             session.rejected_commands.append(events.InputCleared(
-                id=removed.id, native_id=native_id, text=removed.message,
+                id=removed.require_id(), native_id=native_id, text=removed.message,
             ))
         session.rejected_signal.set()
         return True
@@ -138,7 +145,9 @@ class InputForwarding:
             return True
         first = self.pending[candidates[0]]
         async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
-            with status.phase.send_running(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
+            with status.phase.send_running(
+                session.interrupt_boundary, first.require_id(), candidates[0], first.message,
+            ) as outcome:
                 completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
                     session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
                 ))
@@ -184,8 +193,9 @@ class InputForwarding:
         entry = self.pending.get(native_id)
         if entry is None or message.text != entry.message:
             return False, None
-        if not session.notify_input_started(entry.id, native_id, entry.message):
+        public_id = entry.require_id()
+        if not session.input_start.following(public_id, native_id, entry.message):
             return False, None
         self.retire(native_id)
         self.started = True
-        return True, entry.id
+        return True, public_id

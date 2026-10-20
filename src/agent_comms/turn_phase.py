@@ -33,8 +33,8 @@ class StallExempt:
 class NoModelWait:
     """Native-owned excursions have no Core model-progress deadline."""
 
-    def model_wait(self, backstop: object) -> None:
-        return None
+    def model_wait[Wait](self, backstop: Wait, unbounded: Wait) -> Wait:
+        return unbounded
 
 
 class ClosingTurn:
@@ -97,8 +97,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         """Display this phase while preserving the acquired drain readiness."""
         return activity.with_status(self.activity_state, self.activity_detail)
 
-    def model_wait(self, backstop: float | None) -> float | None:
-        """Core's no-event backstop for this phase; None where nothing bounds it here."""
+    def model_wait[Wait](self, backstop: Wait, unbounded: Wait) -> Wait:
+        """Select the actual wait capability rather than flatten it to a nullable timeout."""
         return backstop
 
     def input_started(self) -> TurnPhase:
