@@ -432,13 +432,16 @@ class SnapshotOpening(ABC):
     def capture(self, log: WireLog, resources: ExitStack): ...
 
 
+@dataclass(frozen=True)
 class CurrentSnapshotOpening(SnapshotOpening):
+    contention: StoreLockContention = field(default_factory=partial(StoreLockContention, math.inf))
+
     def through(self, log: WireLog, lock: WireStoreLock) -> int:
         return 0
 
     @contextmanager
     def capture(self, log: WireLog, resources: ExitStack):
-        with log.locked(mode=SharedLock()) as lock:
+        with log.locked(mode=SharedLock(), contention=self.contention) as lock:
             metadata = (
                 log.private_marker_unlocked()
                 if log.path.exists() or log.metadata_path.exists()
@@ -448,6 +451,10 @@ class CurrentSnapshotOpening(SnapshotOpening):
             opened = log._open_snapshot_unlocked(resources, metadata, through)
             opened = lock.check_snapshot(opened, metadata)
         yield opened
+
+
+# A fresh cut that waits as long as a writer holds the bus.
+FRESH_SNAPSHOT_OPENING = CurrentSnapshotOpening()
 
 
 class SequencedSnapshotOpening(CurrentSnapshotOpening):
