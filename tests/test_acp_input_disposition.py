@@ -285,7 +285,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
                 outcome for outcome in sender_view.sent_notifications
                 if outcome.message.reference == message.reference
             )
-            assert sent_read.state.startswith("Read ")
+            assert sent_read.state.read and sent_read.state.delivered
             assert sent_read.read_at_ms == assignment.updated_at_ms
             assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.
@@ -476,6 +476,8 @@ sys.path[:0] = [sys.argv[4], sys.argv[5]]
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import NativeBackendFixture
 from agent_comms.comms import Comms
+from agent_comms import native_package
+native_package.MANIFEST = Path(sys.argv[6])
 from agent_comms.queued_input import InitialInput
 from stored_inputs import sent_text, stored_inputs
 async def main():
@@ -491,7 +493,8 @@ asyncio.run(main())
 """
     result = await BoundedRun.run(
         (sys.executable, "-c", code, str(native.root), str(native.project),
-         str(native.session), str(Path(__file__).parent), str(Path(__file__).parents[1] / "src")),
+         str(native.session), str(Path(__file__).parent), str(Path(__file__).parents[1] / "src"),
+         str(native.package.path.parents[3] / "pi-native.sha256")),
         timeout=15, cwd=native.project,
     )
     assert result.outcome == ExitedOutcome(17), result.stderr.decode()

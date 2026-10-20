@@ -108,11 +108,11 @@ class TestHistory:
     def test_global_channel_history(self, chat):
         chat.messaging.send("PR111", "#all", "hello").message.message_id
         assert [m.body for m in read_history(chat, "#all")] == ["hello"]
-        with pytest.raises(ValueError, match="not a channel"):
+        with pytest.raises(ValueError, match="DM history requires --as <participant>"):
             read_history(chat, "broadcast")
 
     def test_channel_history_rejects_dm_target(self, chat):
-        with pytest.raises(ValueError, match="not a channel"):
+        with pytest.raises(ValueError, match="DM history requires --as <participant>"):
             read_history(chat, "fixer")
 
 

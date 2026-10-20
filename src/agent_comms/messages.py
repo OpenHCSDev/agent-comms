@@ -473,7 +473,8 @@ class Message:
         public = {
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
-        kind = MessageKind.member_named(public[FieldCodec.record_key(Message, 'type')])
+        plan = FieldCodec.field_plan(Message, 'type')
+        kind = FieldCodec.decode(plan.annotation, plan.raw(public))
         return kind.decode_message({"ts": 0.0, **public})
 
     @classmethod
