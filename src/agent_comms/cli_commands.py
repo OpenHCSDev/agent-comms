@@ -617,7 +617,8 @@ class NativeContextInspection(CliResult):
 
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
-    DeclaredFamily, DeclaredOptions, Command, affix="CliCommand", discovery_package="agent_comms"
+    DeclaredFamily, DeclaredOptions, Command, affix="CliCommand",
+    discovery_package="agent_comms.tools",
 ):
     multiple_targets: ClassVar[bool] = False
 
