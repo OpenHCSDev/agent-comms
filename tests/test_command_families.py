@@ -24,6 +24,7 @@ from agent_comms.messages import InfoKind
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
+from agent_comms.private_path import PrivateSocketRole
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
     RuntimeRequest,
@@ -175,13 +176,15 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
         assert entry.matches_name("owner")
         return "session"
 
-    async def awaiting_input_keys(session_id):
+    from agent_comms.input_attempt import OwnerQueueInputDeliveryScope
+
+    async def delivery_scope(session_id):
         assert session_id == "session"
-        return frozenset()
+        return OwnerQueueInputDeliveryScope(frozenset())
 
     agent = SimpleNamespace(
         _comms=comms,
-        inputs=SimpleNamespace(awaiting_input_keys=awaiting_input_keys),
+        inputs=SimpleNamespace(delivery_scope=delivery_scope),
         sessions=SimpleNamespace(
             bindings={"session": "owner"},
             require_owned_session=require_owned_session,
@@ -214,7 +217,8 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             with pytest.raises(RuntimeError) as refused:
                 await proxy.request("contract_probe", **invalid)
             assert str(refused.value) == str(declared.value)
-        reader, writer = await asyncio.open_unix_connection(server.path)
+        with PrivateSocketRole.address(server.path) as address:
+            reader, writer = await asyncio.open_unix_connection(address)
         try:
             invalid = {"action": "not-a-request", "thread": "owner"}
             with pytest.raises(ValueError) as declared:

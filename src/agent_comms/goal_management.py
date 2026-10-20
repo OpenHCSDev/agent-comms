@@ -41,9 +41,9 @@ if TYPE_CHECKING:
 from .goal_presentation import GoalSnapshot, GoalWaitTarget, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
     ReservedInput,
-    UnobservedInputDeliveryScope,
     UnresolvedInput,
 )
 from .input_disposition import DeliveryOverview, InputDispositions
@@ -138,7 +138,7 @@ class Goals:
         name: str,
         *,
         include_history: bool = False,
-        scope: InputDeliveryScope = UnobservedInputDeliveryScope(),
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
@@ -152,7 +152,7 @@ class Goals:
             )
 
     def dismiss_historical_inputs(
-        self, name: str, *, scope: InputDeliveryScope = UnobservedInputDeliveryScope()
+        self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
         with _store_lock(self._wire_lock_path):

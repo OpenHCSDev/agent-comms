@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
 from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
     HistoricalInput,
     InputAttempt,
@@ -19,7 +20,6 @@ from .input_attempt import (
     ReservedInput,
     StartedInput,
     StoredInput,
-    UnobservedInputDeliveryScope,
     UnresolvedInput,
 )
 from .input_origin import InputOrigin, UnattributedInputOrigin
@@ -148,7 +148,7 @@ class InputDocument:
         owners: frozenset[str],
         *,
         include_history: bool = False,
-        scope: InputDeliveryScope = UnobservedInputDeliveryScope(),
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         current: list[UnresolvedInput] = []
         historical: list[HistoricalInput] = []
@@ -405,7 +405,7 @@ class InputDispositions(TypedStore):
         self,
         owners: frozenset[str],
         *,
-        scope: InputDeliveryScope = UnobservedInputDeliveryScope(),
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         def dismiss(document: InputDocument) -> InputDocument:
             changed = {

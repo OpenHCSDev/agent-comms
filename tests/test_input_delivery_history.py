@@ -6,6 +6,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
 )
@@ -93,39 +95,41 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    from goal_owner_fixture import activate_empty_source
+    with LaunchRoot.from_path(comms.root).selected():
+        owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+        session = (await owner.new_session(str(tmp_path / "project"))).session_id
+        seed(comms, session)
+        updates = []
 
-    activate_empty_source(owner)
-    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
-    session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    seed(comms, session)
-    updates = []
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.extend(
+                    update for update in decode_updates(kwargs["update"].field_meta)
+                    if isinstance(update, InputDeliveryChangedUpdate)
+                )
 
-    class Client:
-        async def session_update(self, **kwargs):
-            updates.append(kwargs["update"])
-
-    owner.sessions.client = Client()
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
-    before = comms.goals.unresolved_inputs(session)
-    try:
-        await owner.inputs.emit_input_delivery_changed(session, client=Client())
-        assert updates == [], "An idle owner has no currently awaiting inputs to replay"
-        snapshot = await proxy.request("input_dispositions")
-        assert snapshot["historicalCount"] == 5
-        assert snapshot["historicalInputs"] == []
-        with pytest.raises(RuntimeError, match="Expected.*bool"):
-            await proxy.request("input_dispositions", include_history="yes")
-        cleared = await proxy.request("dismiss_historical_inputs")
-        assert cleared["historicalCount"] == 0 and cleared["inputs"] == []
-        assert updates[-1].field_meta["agentComms"]["inputDeliveryChanged"] is True
-        assert await proxy.request("input_dispositions") == cleared
-        detailed = await proxy.request("input_dispositions", include_history=True)
-        assert len(detailed["historicalInputs"]) == 5
-        assert comms.goals.unresolved_inputs(session) == before
-        assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not any(state.wake_task for state in owner.inputs.drained.values())
-    finally:
-        owner.sessions.client = None
-        await proxy.close()
-        await owner.shutdown()
+        owner.sessions.client = Client()
+        proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+        before = comms.goals.unresolved_inputs(session)
+        try:
+            await owner.inputs.emit_input_delivery_changed(session, client=Client())
+            assert updates == [InputDeliveryChangedUpdate()]
+            snapshot = await proxy.request("input_dispositions")
+            assert snapshot["historicalCount"] == 5
+            assert snapshot["historicalInputs"] == []
+            with pytest.raises(RuntimeError, match="Expected.*bool"):
+                await proxy.request("input_dispositions", include_history="yes")
+            updates.clear()
+            cleared = await proxy.request("dismiss_historical_inputs")
+            assert cleared["historicalCount"] == 0 and cleared["inputs"] == []
+            assert updates == [InputDeliveryChangedUpdate()]
+            assert await proxy.request("input_dispositions") == cleared
+            detailed = await proxy.request("input_dispositions", include_history=True)
+            assert len(detailed["historicalInputs"]) == 5
+            assert comms.goals.unresolved_inputs(session) == before
+            assert not any(state.pending_turns for state in owner.inputs.drained.values())
+            assert not any(state.wake_task for state in owner.inputs.drained.values())
+        finally:
+            owner.sessions.client = None
+            await proxy.close()
+            await owner.shutdown()

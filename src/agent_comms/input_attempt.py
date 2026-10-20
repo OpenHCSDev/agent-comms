@@ -179,6 +179,9 @@ class OwnerQueueInputDeliveryScope(InputDeliveryScope, declared_name="owner_queu
         return row.key not in self.keys
 
 
+UNOBSERVED_DELIVERY_SCOPE = UnobservedInputDeliveryScope()
+
+
 @dataclass(frozen=True)
 class UnresolvedInput:
     """An unresolved input as a reply shows it; its owner, claim and origin stay in the store."""
