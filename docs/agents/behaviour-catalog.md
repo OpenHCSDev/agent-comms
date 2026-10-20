@@ -16,7 +16,7 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - Failure 5, It redefined "the real app" until something passed: no pattern cites it yet
 - Failure 6, It ignored direct orders: no pattern cites it yet
 - Failure 7, It described its intentions as its accomplishments: `board_disagrees`, `uncounted_check`
-- Failure 8, It drowned the work in ceremony: `plain_text`, `undeclared_audience`
+- Failure 8, It drowned the work in ceremony: `plain_text`
 - Failure 9, It merged over its own checks and broke things in circles: no pattern cites it yet
 - Failure 10, It invented rules and blamed them on Tristan: no pattern cites it yet
 - Failure 11, It hid known failures until asked: no pattern cites it yet
@@ -64,16 +64,6 @@ Checked by:
 - check in `agent_comms.todos.PlainText`
 
 Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Hate jargon."; Failure 8: October 9 postmortem: repeated permission exchanges and reports replaced delivery; one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence lines were committed in one night.
-
-## undeclared_audience
-
-A send to a channel, which reaches many threads, names no thread as its audience.
-
-Checked by:
-
-- check in `agent_comms.channel_targets.ChannelTarget.addressed`
-
-Learned from: commit dc4fb3bfa; Failure 8: October 9 postmortem: repeated permission exchanges and reports replaced delivery; one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence lines were committed in one night.
 
 ## repeated_strike
 
