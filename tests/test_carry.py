@@ -466,9 +466,10 @@ def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_pat
     with pytest.raises(RegistryNeedsConversion):
         RegistryStore.at(root).read()
     chain = CarryChain.at(REPO, "HEAD").steps
-    for step in chain[:-1]:
+    position = next(i for i, step in enumerate(chain)
+                    if step.name == "carry_registry_version")
+    for step in chain[:position]:
         CarryLedger(root).record(step.name)
-    assert chain[-1].name == "carry_registry_version"
 
     before = bus_files(root)
     dry = [run_step("carry_registry_version", root)]

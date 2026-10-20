@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import publish_initial
 from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind, Message
 from agent_comms.todos import Assignment, PeerAcceptedVerdict
+from conftest import publish_initial
 
 
 def test_public_only_imported_order_is_not_lost(tmp_path):
@@ -22,7 +22,9 @@ def test_public_only_imported_order_is_not_lost(tmp_path):
     verdict = PeerAcceptedVerdict(
         1, reviewer.incarnation, Assignment('worker', 1.0, 'reviewer', 1.0, 'one'),
         'tool-call', quote='Review the imported old order', peer=original.message_id)
-    assert verdict.prepare(SimpleNamespace(bus=comms.bus), SimpleNamespace(holder='worker')) is verdict
+    assert verdict.prepare(
+        SimpleNamespace(bus=comms.bus), SimpleNamespace(holder='worker')
+    ) is verdict
 
 
 def test_peer_order_before_recent_three_megabytes_is_found(tmp_path):
@@ -42,7 +44,9 @@ def test_peer_order_before_recent_three_megabytes_is_found(tmp_path):
     verdict = PeerAcceptedVerdict(
         1, reviewer.incarnation, Assignment('worker', 1.0, 'reviewer', 1.0, 'one'),
         'tool-call', quote='Fix the old retained order', peer=original.message_id)
-    assert verdict.prepare(SimpleNamespace(bus=comms.bus), SimpleNamespace(holder='worker')) is verdict
+    assert verdict.prepare(
+        SimpleNamespace(bus=comms.bus), SimpleNamespace(holder='worker')
+    ) is verdict
     with pytest.raises(ValueError, match='does not exist'):
         PeerAcceptedVerdict(
             1, reviewer.incarnation, Assignment('worker', 1.0, 'reviewer', 1.0, 'one'),
