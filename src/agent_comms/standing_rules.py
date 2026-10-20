@@ -256,18 +256,26 @@ class DiskLow(UndatedStandingRule):
     free_gib: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, commander: str) -> tuple[DiskLow, ...]:
         rule = comms.registry.storage_rule
         free = rule.free_gib()
-        return (cls(rule, free),) if rule.cleanup_due(free) else ()
+        member = DiskFloorLow if rule.below_floor(free) else cls
+        return (member(rule, free),) if rule.cleanup_due(free) else ()
+
+    def floor_warning(self) -> str:
+        return ""
 
     def line(self) -> str:
-        floor = (
-            f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"
-            if self.rule.below_floor(self.free_gib)
-            else ""
-        )
         return (
             f"DISK LOW: {self.rule.volume} has {self.free_gib:.1f} GiB free (cleanup due under"
-            f" {self.rule.cleanup_gib:g} GiB{floor}) -> put a cleanup owner on it now"
+            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()})"
+            " -> put a cleanup owner on it now"
         )
+
+
+@dataclass(frozen=True)
+class DiskFloorLow(DiskLow, declared_name=None):
+    """The allocation-floor warning, selected by DiskLow rather than a second rule scan."""
+
+    def floor_warning(self) -> str:
+        return f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"
