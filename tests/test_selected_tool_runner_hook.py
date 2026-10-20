@@ -52,7 +52,7 @@ def nominal_broker_stub(monkeypatch):
         assert row.attempt_ordinal == claim_scope.attempt_ordinal == 1
         assert row.stage is FullNativeExecution and row.sent_owner_claimed_generation == UnrecordedNativeClaim()
         assert (
-            comms.registry.snapshot().claimed_generations[owner]
+            comms.registry.snapshot().claim_generation(owner)
             == claim_scope.owner_claimed_generation
         )
         bound.append((claim_scope, owner, session_dir, input_id))

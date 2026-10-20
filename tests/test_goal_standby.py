@@ -38,7 +38,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     store = comms.goals.open_goal_store()
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"))
     owner = comms.registry.require("parent")
-    claim_scope = comms.registry.snapshot().claimed_generations["parent"]
+    claim_scope = comms.registry.snapshot().claim_generation("parent")
     if changed == "claim_scope":
         claim_scope += 1
     elif changed == "pid":

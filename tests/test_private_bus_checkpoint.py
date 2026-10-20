@@ -260,7 +260,7 @@ def test_claim_and_keyed_response_append_share_checked_prefix(tmp_path: Path) ->
         with NativeBoundary(comms.bus) as boundary:
             owner = boundary.registry.require("sender")
             scope = NativeClaim(
-                owner_claimed_generation=boundary.registry.claimed_generations[owner.name],
+                owner_claimed_generation=boundary.registry.claim_generation(owner.name),
                 operation_id="a" * 32, turn_id="claim-turn", input_id="claim-input",
             )
             acquired = comms.bus.publisher._publish_acquisition_unlocked(

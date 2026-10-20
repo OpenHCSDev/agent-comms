@@ -132,7 +132,7 @@ class CheckRoot:
             edit.document.threads.update(declarations)
             # Old messages can name people outside the selected workers. Keep
             # only their deleted-name record, never their sessions or authority.
-            for name in snapshot.claimed_generations:
+            for name in snapshot.retired_names:
                 if not edit.document.taken(name):
                     edit.document.advance_claim(name)
                     edit.document.owners.advance(name)

@@ -210,7 +210,7 @@ class Goals:
                     key,
                     message.seq,
                     thread.name,
-                    snapshot.claimed_generations[thread.name],
+                    snapshot.claim_generation(thread.name),
                     message.target,
                     message.body,
                 )

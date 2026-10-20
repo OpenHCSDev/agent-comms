@@ -109,7 +109,7 @@ class GoalScheduler:
         store = self.comms.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.require_ready()
-        self.comms.goals.ready_goal_grant_locked(thread, snapshot.claimed_generations[thread.name], generation)
+        self.comms.goals.ready_goal_grant_locked(thread, snapshot.claim_generation(thread.name), generation)
         return (ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id),)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:

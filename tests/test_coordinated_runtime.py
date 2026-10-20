@@ -984,9 +984,9 @@ async def test_project_change_during_native_full_turn_denies_response(tmp_path: 
     async def change_project(*args, **kwargs):
         result = await runner(*args, **kwargs)
         current = comms.registry.require("beta")
-        before = comms.registry.snapshot().claimed_generations["beta"]
+        before = comms.registry.snapshot().claim_generation("beta")
         comms.registry.declare(replace(current, worktree=str(other_project)))
-        assert comms.registry.snapshot().claimed_generations["beta"] == before
+        assert comms.registry.snapshot().claim_generation("beta") == before
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", change_project)
@@ -1472,7 +1472,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
                 # A same-UID caller can supply a fresh epoch in a dataclass.
                 # The locked registry snapshot must attest that THIS turn was
                 # created in that epoch, not merely compare caller assertions.
-                new_generation = comms.registry.snapshot().claimed_generations["beta"]
+                new_generation = comms.registry.snapshot().claim_generation("beta")
                 assert new_generation != revoked_generation
                 kwargs["owner_witness"] = replace(
                     kwargs["owner_witness"], claimed_generation=new_generation

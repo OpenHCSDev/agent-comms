@@ -41,7 +41,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         # source of a runnable prompt. It carries no fabricated native start.
         owner.inputs.dispositions.record(
             "acp:old-native-unknown", seq=None, owner=session,
-            claim_scope=comms.registry.snapshot().claimed_generations[session],
+            claim_scope=comms.registry.snapshot().claim_generation(session),
             target=session, text="Uncertain old native input must never replay",
         )
         original = stored_inputs(owner.inputs.dispositions.root).lookup("acp:old-native-unknown")

@@ -63,7 +63,7 @@ class OrdinaryClaimRule(ReservationRule):
     explanation = "The ordinary owner claim_scope generation changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        return check.registry.claimed_generations.get(check.canonical) != check.claim_scope
+        return check.registry.claim_generation(check.canonical) != check.claim_scope
 
 
 class OrdinaryProcessRule(ReservationRule):

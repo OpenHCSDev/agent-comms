@@ -42,7 +42,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     registry.register(updated, **kwargs)
     after = registry.snapshot()
     assert (after.owner_generations['owner'] > before.owner_generations['owner']) == advances_owner
-    assert (after.claimed_generations['owner'] > before.claimed_generations['owner']) == advances_owner
+    assert (after.claim_generation('owner') > before.claim_generation('owner')) == advances_owner
     assert (after.threads['owner'].turn_record == lease.record) == preserves_record
     assert (after.threads['owner'].turn_lease == lease) == (preserves_record and not advances_owner)
     # P482 (1b9feceea) lets the original lease retire a revoked record, but
@@ -71,7 +71,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     registry.register(registry.new_thread('owner', frozenset(), str(tmp_path)))
     original = registry.snapshot()
     expected = original.threads['owner']
-    claim_scope = original.claimed_generations['owner']
+    claim_scope = original.claim_generation('owner')
     registry.register(replace(expected, title='changed'))
     with pytest.raises(RelationViolationError, match='changed'):
         registry.fence_idle_owners(((expected, claim_scope),))
@@ -79,7 +79,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     registry.register(current, new_owner=True)
     with pytest.raises(RelationViolationError, match='claim_scope'):
         registry.fence_idle_owners(((current, claim_scope),))
-    generation = registry.snapshot().claimed_generations['owner']
+    generation = registry.snapshot().claim_generation('owner')
     assert registry.fence_idle_owners(((current, generation),))[0][1] > generation
     assert registry.status('owner').stopped
 
@@ -89,7 +89,7 @@ def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
     for name in ("first", "second"):
         registry.register(registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
-    selected = tuple((before.threads[name], before.claimed_generations[name]) for name in ("first", "second"))
+    selected = tuple((before.threads[name], before.claim_generation(name)) for name in ("first", "second"))
     registry.lease_local_turn('second', 'busy')
     protected = registry.snapshot()
     with pytest.raises(RelationViolationError, match="idle before restart"):

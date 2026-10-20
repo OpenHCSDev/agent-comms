@@ -69,7 +69,7 @@ def acquire_message(comms: Comms, name: str, path: Path) -> Message:
     with NativeBoundary(comms.bus) as boundary:
         owner = boundary.registry.require(name)
         scope = NativeClaim(
-            owner_claimed_generation=boundary.registry.claimed_generations[name],
+            owner_claimed_generation=boundary.registry.claim_generation(name),
             operation_id=secrets.token_hex(16), turn_id=f"turn-{name}", input_id=f"input-{name}",
         )
         claim = comms.bus.publisher._publish_acquisition_unlocked(

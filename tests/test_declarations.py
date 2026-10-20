@@ -217,22 +217,23 @@ class TestRegistration:
         registry = Registration(tmp_path / "registry.json")
         owner = registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid()))
         registry.register(owner)
-        before = registry.snapshot().claimed_generations["a"]
+        before = registry.snapshot().claim_generation("a")
         registry.register(replace(owner, session_file=str(tmp_path / "session.jsonl")))
-        assert registry.snapshot().claimed_generations["a"] == before
-        assert Registration(registry.store.path).snapshot().claimed_generations["a"] == before
+        assert registry.snapshot().claim_generation("a") == before
+        assert Registration(registry.store.path).snapshot().claim_generation("a") == before
 
         registry.register(replace(registry.require("a"), process_identity=ProcessIdentity.capture(os.getppid())))
-        assert registry.snapshot().claimed_generations["a"] > before
+        assert registry.snapshot().claim_generation("a") > before
 
     def test_owner_claim_follows_same_owner_rename(self, tmp_path: Path) -> None:
         registry = Registration(tmp_path / "registry.json")
         registry.register(registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
-        before = registry.snapshot().claimed_generations["a"]
+        before = registry.snapshot().claim_generation("a")
         registry.rename("a", "renamed-a")
         snapshot = Registration(registry.store.path).snapshot()
-        assert snapshot.claimed_generations["renamed-a"] == before
-        assert "a" not in snapshot.claimed_generations
+        assert snapshot.claim_generation("renamed-a") == before
+        assert snapshot.claim_generation("a") == before
+        assert not hasattr(snapshot, "claimed_generations")
 
     def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
         registry = Registration(tmp_path / "registry.json")
@@ -244,7 +245,7 @@ class TestRegistration:
         )
         original = registry.require("agent-comms-ux")
         registry.rename("agent-comms-ux", "pr17")
-        claim_scope = registry.snapshot().claimed_generations["pr17"]
+        claim_scope = registry.snapshot().claim_generation("pr17")
         registry.lease_local_turn("pr17", "goal-turn")
 
         assert registry.rename("pr17", "agent-comms-ux") == ("pr17", "agent-comms-ux")
@@ -256,7 +257,7 @@ class TestRegistration:
         assert reopened.require("agent-comms-ux").created_at == original.created_at
         assert reopened.require("agent-comms-ux").goal == original.goal
         assert reopened.require("child").parent == "agent-comms-ux"
-        assert snapshot.claimed_generations["agent-comms-ux"] == claim_scope
+        assert snapshot.claim_generation("agent-comms-ux") == claim_scope
         assert reopened.release_turn(reopened.require("pr17").turn_lease)[0]
 
     def test_other_owner_writes_do_not_invalidate_private_generation(self, tmp_path: Path):
