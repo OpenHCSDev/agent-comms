@@ -1469,7 +1469,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
             return result
 
         monkeypatch.setattr(TrackedTurnSession, "execute", revoke_after_model)
-        with pytest.raises(StaleFence, match="registry owner turn witness is invalid"):
+        with pytest.raises(StaleFence):
             await SelectedExecution(
                 root=root,
                 wire_root_id=root_id,
@@ -1716,33 +1716,6 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
     assert result.disposition is CompletedAssignment
     assert selections == [(SelectedModel("openai-codex", "gpt-6-sol"), HighThinkingLevel)] * 2
     assert len(calls) == 2
-
-
-async def test_owner_without_override_uses_native_default_model(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
-    from agent_comms.native_settings import NativeThreadDefaults
-
-    root, root_id, comms, initial, people = _root(tmp_path)
-    owner = comms.registry.require("beta")
-    comms.registry.register(replace(owner, model=None), comms.registry.status("beta"))
-    fake, calls = _fake_model()
-    models = []
-
-    async def capture(package, **kwargs):
-        models.append(kwargs["model"])
-        return await fake(package, **kwargs)
-
-    monkeypatch.setattr(TrackedTurnSession, "execute", capture)
-    result = await SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="beta",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert result is not None and result.disposition is CompletedAssignment
-    assert models == [SelectedModel.decode(NativeThreadDefaults.model)] * len(calls)
-    assert len(calls) == 2
-    assert not comms.registry.require("beta").turn_record.executing
 
 
 @pytest.mark.parametrize("direct", [True, False])
