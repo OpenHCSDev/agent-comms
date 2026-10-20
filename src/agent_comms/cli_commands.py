@@ -984,7 +984,7 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendCliCommand(Send, CliCommand):
+class SendCliCommand(CliCommand, Send):
     # A bare annotation would inherit Send's default; field() keeps --from required.
     sender: Annotated[str, Argument(flags=("--from",))] = field()
 
