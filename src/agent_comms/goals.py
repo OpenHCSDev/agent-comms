@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from .threads import Thread
     from .thread_status import ThreadStatus
     from .turn_context import TurnContext
+    from .context_segments.wake import WakeGoalValue
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -669,7 +670,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
     @abstractmethod
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> object: ...
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue: ...
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
@@ -738,8 +739,10 @@ class NoGoal(NullMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return False
 
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> None:
-        return None
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
+        from .context_segments.wake import NoWakeGoalContext
+
+        return NoWakeGoalContext()
 
     shows_document: ClassVar[bool] = False
     shows_progress: ClassVar[bool] = False
@@ -845,10 +848,14 @@ class Goal(RecordMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return waits.clear(self.id, wait_id=wait_id)
 
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> dict[str, object]:
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
+        from .context_segments.wake import WakeGoalContext
+
         todos = self.order.todos(goals, owner, self.id)
-        return {"text": self.order.goal_text(self), "status": self.state.declared_name,
-                "progress": self.order.progress(self, todos)}
+        return WakeGoalContext(
+            text=self.order.goal_text(self), state=self.state,
+            progress=self.order.progress(self, todos),
+        )
 
     shows_document: ClassVar[bool] = True
 

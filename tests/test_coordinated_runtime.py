@@ -1895,6 +1895,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
         assert context["title"] == "Channel delivery implementation"
         assert context["tags"] == ["team"]
         assert context["current_goal"]["text"] == "Restore channel subscribers"
+        assert context["current_goal"]["status"] == {"kind": "active"}
         assert context["current_goal"]["progress"] == "Routing fixed"
         assert context["original_assignment"].startswith("Bootstrap:")
         assert "Answer direct requests, engage owned work, and ignore chatter" in prompt

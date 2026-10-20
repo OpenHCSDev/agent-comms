@@ -9,13 +9,14 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 from agent_comms.presentation import SentMessageOutcome
 
 from ..bus_publication import CommittedDelivery
+from ..goal_states import GoalState
 from ..threads import Thread
 from ..turn_context import (
     InstructionFile,
@@ -27,6 +28,30 @@ from ..turn_context import (
 from ..wake_policy import WakePolicy
 
 
+class WakeGoalValue(SubclassUnion):
+    """A woken thread's goal, including the declared absence of one."""
+
+
+class NoWakeGoalContext(NullMember, WakeGoalValue):
+    pass
+
+
+@dataclass(frozen=True)
+class WakeGoalContext(RecordMember, WakeGoalValue):
+    text: str
+    state: GoalState = field(metadata={"wire_name": "status"})
+    progress: str
+
+
+@dataclass(frozen=True)
+class WakeWorkContext(RecordMember):
+    name: str
+    title: str | None
+    tags: tuple[str, ...]
+    original_assignment: str | None
+    current_goal: WakeGoalValue
+
+
 @dataclass(frozen=True, kw_only=True)
 class SelectedWakeSegment(InstructionSegment):
     """Original sealed sources and their captured owner, never wake authority."""
@@ -36,7 +61,7 @@ class SelectedWakeSegment(InstructionSegment):
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
     sent_outcomes: tuple[SentMessageOutcome, ...]
-    work_context: dict[str, object]
+    work_context: WakeWorkContext
 
     sent_limit = 5
 
@@ -98,7 +123,7 @@ class SelectedWakeSegment(InstructionSegment):
             separators=(",", ":"),
         )
         work_context = json.dumps(
-            self.work_context,
+            FieldCodec.encode(self.work_context),
             ensure_ascii=True,
             separators=(",", ":"),
         )
