@@ -2916,6 +2916,11 @@ class TodoStore(TypedStore):
     filename: ClassVar[str] = "todos.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
 
+    def source_paths(self) -> tuple[Path, ...]:
+        """SQLite's database and WAL both feed the observed order board."""
+        path = self.path
+        return path, path.with_name(path.name + "-wal")
+
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
         try:

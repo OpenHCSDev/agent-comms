@@ -15,6 +15,10 @@ class RevisionView(DeclaredFamily, affix="View"):
         return before != current
 
 
+class CommanderView(RevisionView):
+    """Orders, publication clocks and expanded unit history."""
+
+
 class RegistrationsView(RevisionView):
     pass
 
