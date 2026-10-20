@@ -127,6 +127,25 @@ class NativeInputOffsets(Carry):
                 db.execute("PRAGMA foreign_keys=OFF")
                 db.execute("BEGIN EXCLUSIVE")
                 rewrite_table(db, NativeRuntimeInput, rows)
+                # Rows that name a dropped input (its owner's cursor, its triage
+                # sources) go with it; the schema's own foreign keys name them.
+                dropped = [input_id for input_id, _file, _entry in deleted]
+                marks = ",".join("?" * len(dropped))
+                # Their tables are frozen by triggers at runtime; this one-shot step
+                # lifts those triggers inside its transaction and restores the
+                # exact same SQL, so the schema digest is unchanged.
+                for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+                    for key in db.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
+                        if dropped and key[2] == NativeRuntimeInput.declared_name:
+                            guards = db.execute(
+                                "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name=?",
+                                (table,),
+                            ).fetchall()
+                            for name, _sql in guards:
+                                db.execute(f'DROP TRIGGER "{name}"')
+                            db.execute(f'DELETE FROM "{table}" WHERE "{key[3]}" IN ({marks})', dropped)
+                            for _name, sql in guards:
+                                db.execute(sql)
                 rewrite_table(
                     db,
                     NativeRuntimeSchemaMeta,
