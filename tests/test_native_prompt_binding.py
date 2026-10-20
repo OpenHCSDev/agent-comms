@@ -16,7 +16,9 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-from native_proof_cases import emitted_context, read_proof_rows, write_proof_rows
+from native_proof_cases import (
+    append_input_entry, emitted_context, read_proof_rows, recorded_context, write_proof_rows,
+)
 
 import pytest
 
@@ -206,15 +208,11 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         # Real pinned native semantics: the tracked digest covers the
         # pi-input-request-v1 request envelope, not bare prompt bytes.
         digest = digest_override or native_request_digest(prompt)
-        entries.append(
-            {
-                "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
-                "id": entry_id,
-                "message": {"role": "user", "inputId": input_id, "inputDigest": digest},
-            }
-        )
-        session_file.write_text("".join(json.dumps(row) + "\n" for row in entries))
-        session_file.chmod(0o600)
+        session_entry_start = append_input_entry(session_file, {
+            "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
+            "id": entry_id,
+            "message": {"role": "user", "inputId": input_id, "inputDigest": digest},
+        })
         context_digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
@@ -228,10 +226,9 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
                 "committedAtMs": 1_791_964_800_000 + generation,
             }
         )
-        proof_file = Path(str(session_file) + ".input-proof")
         write_proof_rows(session_file, proof_rows)
         reply = json.dumps({"decision": decision}) if _is_triage_request(_) else "42"
-        from agent_comms.native_pi import NativeContextProof, NativeTurnResult
+        from agent_comms.native_pi import NativeTurnResult
 
         observer = _.get("observe_event")
         if observer is not None:
@@ -241,9 +238,8 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
             await observer(emitted_context(proof_rows[-1]))
         return NativeTurnResult(
             reply,
-            NativeContextProof(
-                input_id, "isolated-session", entry_id, generation, context_digest,
-                1_791_964_800_000 + generation, session_file,
+            recorded_context(
+                session_file, proof_rows[-1], session_entry_start=session_entry_start,
             ),
         )
 
