@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -25,7 +26,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
     NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, StrikeReason, Todo, UnreadProgress)
 from agent_comms.connector import CALLER
-from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
+from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsChangeProblemTool
 
 from test_commander_problem_orders import create, native_judge_edits
 
@@ -150,7 +151,7 @@ def test_idle_reads_external_execution_and_requires_an_actual_recent_turn(standi
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     comms.transcripts.external("external-working").finish(
-        turn_id="current", item_id="answer", events=(AssistantTranscript("working", position="answer"),))
+        turn_id="current", item_id="answer", events=(AssistantTranscript("working", position="answer", timestamp=time.time()),))
     names = [thread.name for thread in module.WheelSpin.idle(comms, "lead")]
     assert "external-working" in names
     assert "external-empty" not in names and "worker" not in names
@@ -229,10 +230,11 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
 
 
 def test_unjudged_follows_the_unjudged_edits(commander, standing):
+    from agent_comms.commander import judge
     comms, state, module = standing
     assert lines(comms, module.Unjudged) == []
     create(commander, 'P1')
-    native_judge_edits(commander, module.judge, [dict(id=f'e{n}', at=200., path='a.py',
+    native_judge_edits(commander, judge, [dict(id=f'e{n}', at=200., path='a.py',
         hunks=[dict(old='before', new='after')]) for n in range(70)])
     assert lines(comms, module.Unjudged) == ["UNJUDGED 70 edits -> judge or fork a judge slice"]
 
@@ -372,8 +374,9 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)}))
+    CommanderConfig.installed().model_copy(update={"repos": (
+        Repo(checkout=checkout, github="fleet/growth"),)}).write(Path.home())
+    CommanderConfig.installed.cache_clear()
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "

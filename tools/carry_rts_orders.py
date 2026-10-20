@@ -95,7 +95,7 @@ class RtsOrder:
             run=run,
         )
         if isinstance(self.merged, str):
-            return order.copy_as(todos.MergedProblemOrder, commit=self.merged)
+            return todos.MergedProblemOrder(original=order, sha=self.merged)
         return order
 
 
@@ -145,7 +145,8 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     todo.state.require_open(todo)
                 else:
                     print(f"{pid} order {row.msg}", file=sys.stderr, flush=True)
-                    repo = Repo.of(Path(order.owner.file).parent)
+                    base = order.original if isinstance(order, todos.MergedProblemOrder) else order
+                    repo = Repo.of(Path(base.owner.file).parent)
                     text = problems[pid].text
                     todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
                 todo = todos.AssignTodo(todo.revision, proposed, due, order, todo.goal).apply(todo)

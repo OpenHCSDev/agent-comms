@@ -256,6 +256,9 @@ def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
             record["root"] = str(copy)
         (home / route).write_text(json.dumps(record))
         (home / route).chmod(0o600)
+    # Claude Code's transcripts are read-only input that carries date from;
+    # the copy reads the real ones.
+    (home / ".claude").symlink_to(Path.home() / ".claude")
     return home
 
 
