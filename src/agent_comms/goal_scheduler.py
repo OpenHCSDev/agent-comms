@@ -28,7 +28,7 @@ from .goal_attempts import (
     GoalAttemptError,
     StaleAttemptError,
 )
-from .goal_presentation import GoalSnapshot
+from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
@@ -50,12 +50,11 @@ GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 class GoalSessionPublication:
     """One session's last published goal and its publication lifetime."""
 
-    snapshot: GoalSnapshot | None = None
+    snapshot: GoalPublicationSnapshot = field(default_factory=UnpublishedGoalSnapshot)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def in_standby(self) -> bool:
-        snapshot = self.snapshot
-        return snapshot is not None and snapshot.execution.standby()
+        return self.snapshot.standby()
 
 
 class GoalScheduler:
