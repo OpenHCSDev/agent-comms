@@ -23,6 +23,7 @@ from .field_codec import (
     EnvelopeSequence,
     FieldCodec,
     Id128Text,
+    NullMember,
     ProjectionSequence,
     RecordMember,
     ResourcePathText,
@@ -138,6 +139,41 @@ class AssignmentBinding:
 
 @dataclass(frozen=True)
 class ClaimScope(SubclassUnion, ABC, affix=""):
+    """What one acquisition belongs to; its member answers reuse, liveness and operation use."""
+
+    def reuses(self, other: RecordedScope) -> bool:
+        return self == other
+
+    def belongs_to(self, attempt: AttemptRecord) -> bool:
+        return False
+
+    @abstractmethod
+    def held_at(self, claimed_generation: int) -> bool:
+        """Whether the owner's current claimed generation still holds this acquisition."""
+
+    @abstractmethod
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None: ...
+
+
+@dataclass(frozen=True)
+class UnrecordedScope(NullMember, ClaimScope):
+    """Bus history written before claims recorded a scope: ``admission`` is null or absent.
+
+    Nothing ties such a holder to a current input, so it is never live, and it
+    consumed no operation.
+    """
+
+    def held_at(self, claimed_generation: int) -> bool:
+        return False
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class RecordedScope(ClaimScope, declared_name=None):
+    """Every acquisition published today records the input generation and operation it serves."""
+
     owner_claimed_generation: int = field(metadata={"wire_name": "owner_admission_generation"})
     operation_id: Annotated[str, Id128Text]
     turn_id: str
@@ -147,25 +183,26 @@ class ClaimScope(SubclassUnion, ABC, affix=""):
         GenerationCounter.require_positive(self.owner_claimed_generation)
         TurnId.for_registration(self.turn_id)
 
-    def reuses(self, other: ClaimScope) -> bool:
-        return self == other
+    def held_at(self, claimed_generation: int) -> bool:
+        return claimed_generation == self.owner_claimed_generation
 
-    def belongs_to(self, attempt: AttemptRecord) -> bool:
-        return False
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        if is_used(self.operation_id):
+            raise IdentityConflict("Claim operation was already consumed")
 
 
 @dataclass(frozen=True)
-class NativeClaim(RecordMember, ClaimScope):
+class NativeClaim(RecordMember, RecordedScope):
     """A tool acquisition belongs to one ordinary native input."""
 
     input_id: Annotated[str, BoundedText]
 
-    def reuses(self, other: ClaimScope) -> bool:
+    def reuses(self, other: RecordedScope) -> bool:
         return replace(self, operation_id=other.operation_id) == other
 
 
 @dataclass(frozen=True)
-class WakeClaim(RecordMember, ClaimScope):
+class WakeClaim(RecordMember, RecordedScope):
     """A selected N/K execution bound into the durable resource-claim row."""
 
     wire_root_id: Annotated[str, Id128Text]
@@ -291,10 +328,15 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
 
 
 @dataclass(frozen=True)
-class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
-    claims: tuple[Annotated[str, ResourcePathText], ...]
+class Acquisition(ClaimTransition, declared_name=None):
+    """A transition that acquires its resources under one fresh generation."""
+
+    claims: tuple[Annotated[str, ResourcePathText], ...] = field(kw_only=True)
     # The stored bus row carries both sides of a transition; an acquisition's release side is empty.
-    releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
+    releases: tuple[ClaimRelease, ...] = field(
+        default=(), kw_only=True, metadata={"wire_required": True})
+    generation: Annotated[str, Id128Text] = field(kw_only=True)
+    claim_scope: ClassVar[ClaimScope]
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -314,8 +356,7 @@ class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
         )
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        if is_used(self.claim_scope.operation_id):
-            raise IdentityConflict("Claim operation was already consumed")
+        self.claim_scope.require_new_operation(is_used)
 
     def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
         for resource in self.claims:
@@ -328,6 +369,23 @@ class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
         for resource in self.claims:
             remaining[resource] = self.claimed(resource)
         return ClaimProjection(self.seq, remaining)
+
+
+@dataclass(frozen=True)
+class WakeClaims(RecordMember, Acquisition, AcquiringClaim):
+    """An acquisition published today; its row records the scope it serves."""
+
+    claim_scope: RecordedScope = field(metadata={"wire_name": "admission"})
+
+
+@dataclass(frozen=True)
+class UnscopedClaims(RecordMember, Acquisition):
+    """An ordinary turn's tool acquisition written before claims recorded a scope.
+
+    Only bus history holds this row; no writer publishes one.
+    """
+
+    claim_scope: ClassVar[ClaimScope] = UnrecordedScope()
 
 
 @dataclass(frozen=True)
@@ -353,7 +411,7 @@ class ReleasedClaims(RecordMember, ClaimTransition):
 
 class ResourceClaim:
     def acquire(
-        self, scope: ClaimScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+        self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
     ) -> ClaimOwner:
         return publish()
 
@@ -371,7 +429,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         FieldCodec.require_fields(self)
 
     def acquire(
-        self, scope: ClaimScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+        self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
     ) -> ClaimOwner:
         return self if self.claim_scope.reuses(scope) and self.live(registry) else publish()
 
@@ -384,8 +442,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         return any(
             registry.status(thread.name).active
             and thread.process_alive
-            and registry.claimed_generations[thread.name]
-            == self.claim_scope.owner_claimed_generation
+            and self.claim_scope.held_at(registry.claimed_generations[thread.name])
             for thread in registry.threads_for(incarnation)
         )
 
