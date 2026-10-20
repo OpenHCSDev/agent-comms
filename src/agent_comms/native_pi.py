@@ -36,7 +36,7 @@ from .private_path import (
     TrustedAncestorRole,
     fsync_directory,
 )
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, DurableTables, Index, TypedTable
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -232,7 +232,7 @@ class NativeContextRecord(NativeInputCommit):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextJournal(NativeContextRecord, TypedTable):
+class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
     schema: Literal[2]
@@ -295,10 +295,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 before = os.fstat(held.fileno())
                 NativeSessionFileRole.require(before)
                 db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
-                actual = SQLiteSchemaObject.read(
-                    db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
-                )
-                if SQLiteSchemaObject.differences(actual, cls.schema_objects()):
+                if cls.schema_differs(db):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
                     raise NativePiUnavailable("Native proof inode changed while opening")

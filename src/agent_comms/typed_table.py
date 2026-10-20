@@ -499,6 +499,7 @@ class TableSchema(ABC):
     a store names its rows.
     """
 
+    __slots__ = ()
     schema_error: ClassVar[type[Exception]] = RelationViolationError
 
     @classmethod
@@ -518,9 +519,16 @@ class TableSchema(ABC):
 
     @staticmethod
     def stored_schema(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        """The file's own objects; SQLite's sqlite_sequence for AUTOINCREMENT is not one."""
         return SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+
+    @staticmethod
+    def every_stored_object(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        """Every object with SQL, SQLite's own included, for files that declare all of them."""
+        return SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
 
     @classmethod
     def stored_member_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
@@ -546,6 +554,12 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} differs from its declaration")
 
     @classmethod
+    def require_member_schema(cls, db: sqlite3.Connection) -> None:
+        """For tables sharing a file: only their own objects are compared."""
+        if cls.member_schema_differs(db):
+            raise cls.schema_error(f"{cls.__name__} differs from its declaration")
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         for row in cls.schema_rows():
             row.create(db)
@@ -558,6 +572,8 @@ class TableSchema(ABC):
 
 class DerivedTables(TableSchema):
     """Rows derived from another source: a schema that differs is dropped and recreated empty."""
+
+    __slots__ = ()
 
     @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
@@ -576,6 +592,8 @@ class DerivedTables(TableSchema):
 
 class DurableTables(TableSchema):
     """Rows nothing else can rebuild: a schema that differs is refused; only a carry moves it."""
+
+    __slots__ = ()
 
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:

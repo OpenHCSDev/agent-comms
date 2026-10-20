@@ -51,7 +51,6 @@ from .typed_table import (
     ForeignKey,
     Index,
     DerivedTables,
-    SQLiteSchemaObject,
     SqlValue,
     TypedTable,
 )
@@ -962,10 +961,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         Only the writer changes which rows are indexed. A read-only archive
         keeps the same saved check and the index file it names.
         """
-        actual = SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE name=?", (FieldCodec.encode(cls),),
-        ))
-        if SQLiteSchemaObject.differences(actual, cls.schema_objects()):
+        if cls.member_schema_differs(db):
             raise RelationViolationError("Private bus checked prefix record schema is unavailable.")
         try:
             row = cls.one(db, singleton=1)
