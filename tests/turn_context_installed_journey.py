@@ -81,11 +81,20 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_pi import NativeContextProof
     from agent_comms.runtime import RuntimeConnection, socket_path
-    from agent_comms.turn_context import ContextSourceText, NativeProvenance
+    from agent_comms.turn_context import (
+        ContextSourceText, NativeProvenance, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
+    )
 
     service = owner._comms
-    manifest, = (value for value in ContextCliCommand(thread=thread.name).manifests(service)
-                  if value.turn.identity.value == original_input.turn_id)
+    page = service.contexts.page(thread.name, service.registry)
+    while True:
+        selected = tuple(resource.value for resource in page.resources
+                         if resource.value.turn.identity.value == original_input.turn_id)
+        if selected or not page.has_older():
+            break
+        page = service.contexts.page(thread.name, service.registry, cursor=page.older)
+    manifest, = selected
+    record = FieldCodec.encode(page.reference(manifest))
     request_id = manifest.require_request_id()
     proof = NativeContextProof.read_evidence(Path(thread.require_saved_session()), original_input.native_id)
     native_sources = tuple(source for segment in manifest.segments
@@ -94,11 +103,12 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     assert all(source.request_generation == proof.request_generation
                and source.context_digest == proof.llm_context_digest
                and source.identity.session_id == proof.session_id for source in native_sources)
-    system = next(segment for segment in manifest.segments if segment.kind == 'system_layer')
+    system = next(segment for segment in manifest.segments if segment.kind is SystemLayerSegment)
     assert system.captured_text and system.public_text_recorded
-    assert any(segment.captured_text for segment in manifest.segments if segment.kind == 'tool_catalog')
+    assert any(segment.captured_text for segment in manifest.segments
+               if segment.kind is ToolCatalogSegment)
     position = next(i for i, segment in enumerate(manifest.segments)
-                    if segment.kind == 'transcript' and len(segment.contributors) > 1)
+                    if segment.kind is TranscriptSegment and len(segment.contributors) > 1)
     group = manifest.selected_segment(position)
     part = next(i for i, part in enumerate(group.contributors) if not part.public_text_recorded)
     selected = manifest.selected_segment(position, (part,))
@@ -107,14 +117,15 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     connection = RuntimeConnection(service, thread.name,
         socket_path(service.root, thread.require_process().pid))
     try:
-        params = dict(turn=FieldCodec.encode(manifest.turn), request_id=request_id, segment=position)
+        params = dict(turn=FieldCodec.encode(manifest.turn), request_id=request_id,
+                      record=record, segment=position)
         root = FieldCodec.decode(ContextSourceText,
             await connection.request('context_recorded_segment', **params))
         exact_child = FieldCodec.decode(ContextSourceText,
             await connection.request('context_recorded_segment', **params, contributors=[part]))
         original_system = FieldCodec.decode(ContextSourceText,
             await connection.request('context_recorded_segment', turn=FieldCodec.encode(manifest.turn),
-                request_id=request_id, segment=manifest.segments.index(system)))
+                request_id=request_id, record=record, segment=manifest.segments.index(system)))
         assert root.text != exact_child.text
         assert exact_child.text in root.text
         assert original_system.text == '\n'.join(system.captured_text)
@@ -458,7 +469,7 @@ def complete_history_controls(root):
         context = TurnContext.for_owner(owner, turn, f'Original private source {generation} π', (), (), service.goals)
         observation = ContextManifest(context.thread, context.turn,
             tuple(segment.manifest(0) for segment in context.segments), 'fixture-original-estimate')
-        service.bus.log.record_context(observation)
+        service.contexts.record(observation)
         originals.append(observation)
     service.registry.rename(owner.name, 'history-renamed')
     renamed = service.registry.require('history-renamed')
@@ -466,15 +477,16 @@ def complete_history_controls(root):
     continuation = replace(second, thread=renamed.incarnation,
         turn=replace(second.turn, occurrence=replace(second.turn.occurrence,
                                                    incarnation=renamed.incarnation)))
-    service.bus.log.record_context(continuation)
+    service.contexts.record(continuation)
     future_context = TurnContext.for_owner(renamed,
         RecordedContextTurn(TurnId('original-history-3'), TurnIdentity(renamed.incarnation, 3)),
         'Later original private source', (), (), service.goals)
     future = ContextManifest(future_context.thread, future_context.turn,
         tuple(segment.manifest(0) for segment in future_context.segments), 'fixture-original-estimate')
-    service.bus.log.record_context(future)
+    service.contexts.record(future)
     expected = (*originals, continuation, future)
-    before = hashlib.sha256(service.bus.log.path.read_bytes()).hexdigest()
+    protected = tuple(path for path in (service.contexts.path, service.bus.log.path) if path.exists())
+    before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in protected}
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None)
     outputs = []
@@ -491,8 +503,8 @@ def complete_history_controls(root):
     assert query('history-renamed', '--turn', '1')['manifests'] == FieldCodec.encode((originals[0],))
     assert query('history-original', '--turn', '2')['manifests'] == FieldCodec.encode((originals[1], continuation))
     difference = query('history-renamed', '--turn', '2', '--diff')
-    assert difference == continuation.changed_since(originals[0])
-    assert query('history-original', '--diff') == future.changed_since(continuation)
+    assert difference == continuation.changed_since(originals[0]).to_wire()
+    assert query('history-original', '--diff') == future.changed_since(continuation).to_wire()
     assert 'No preceding recorded turn' in query('history-renamed', '--turn', '1', '--diff', accepted=False)['error']
     reopened = Comms(wire)
     assert tuple(reversed(tuple(ContextCliCommand(thread='history-original').manifests(reopened)))) == expected
@@ -500,11 +512,11 @@ def complete_history_controls(root):
     service.registry.remove('history-renamed')
     service.registry.register(replace(renamed, created_at=19002.0))
     assert 'No original context manifest' in query('history-renamed', '--turn', '1', accepted=False)['error']
-    after = hashlib.sha256(service.bus.log.path.read_bytes()).hexdigest()
+    after = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in protected}
     assert before == after
     acknowledgement = dict(state='INSTALLED_HISTORICAL_CLI_PASS', python=sys.executable,
         core=agent_comms.__file__, original_records=FieldCodec.encode(expected),
-        queries=outputs, wire_sha256=after, original_wire_unchanged=True,
+        queries=outputs, original_file_hashes=after, original_files_unchanged=True,
         native_prompts=0, provider_calls=0, public_mutations=0, original_input_replays=0)
     (root / 'context-history-acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
     print(json.dumps({key: value for key, value in acknowledgement.items()

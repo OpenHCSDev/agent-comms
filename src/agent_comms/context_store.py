@@ -6,13 +6,16 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal, Self, cast
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .registration import Registration
+from .thread_identity import ThreadIncarnation
 from .turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
@@ -29,7 +32,7 @@ from .typed_table import Column, Index, TypedStore, TypedTable
 class ContextStoreIdentity:
     value: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         Id128Text.from_text(self.value)
 
 
@@ -37,6 +40,15 @@ class ContextStoreIdentity:
 class ContextStoreInfo(TypedTable):
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
     source: ContextStoreIdentity
+
+    @classmethod
+    def source_in(cls, db: sqlite3.Connection) -> ContextStoreIdentity | None:
+        row = cls.one(db, singleton=1)
+        if row is None:
+            if ContextRequest.exists(db):
+                raise RelationViolationError("Recorded context store identity is missing")
+            return None
+        return row.source
 
 
 @dataclass(frozen=True)
@@ -47,12 +59,16 @@ class ContextEntry(TypedTable):
     manifest: SegmentManifest
 
     @classmethod
-    def capture(cls, entry: ContextEntryManifest):
+    def capture(cls, entry: ContextEntryManifest) -> Self:
         ref = entry.reference
         return cls(ref.identity.session_id, ref.identity.session_file, ref.entry_id, entry.manifest)
 
     @classmethod
-    def original(cls, db, reference: ContextEntryReference) -> SegmentManifest:
+    def original(
+        cls,
+        db: sqlite3.Connection,
+        reference: ContextEntryReference,
+    ) -> SegmentManifest:
         row = cls.one(
             db,
             session_id=reference.identity.session_id,
@@ -72,7 +88,7 @@ class ContextSegmentVersion(TypedTable):
     indexes = (Index(("digest",), unique=True),)
 
     @classmethod
-    def append(cls, db, segment: RecordedSegmentManifest) -> int:
+    def append(cls, db: sqlite3.Connection, segment: RecordedSegmentManifest) -> int:
         encoded = json.dumps(FieldCodec.encode(segment), sort_keys=True, separators=(",", ":"))
         digest = hashlib.sha256(encoded.encode()).hexdigest()
         row = cls.one(db, digest=digest)
@@ -98,14 +114,17 @@ class ContextRequest(TypedTable):
     indexes = (Index(("thread_name", "thread_birth", "id")),)
 
     @classmethod
-    def owner_filter(cls, owners):
+    def owner_filter(
+        cls,
+        owners: tuple[ThreadIncarnation, ...],
+    ) -> tuple[str, tuple[object, ...]]:
         return (
             "(thread_name,thread_birth) IN (" + ",".join("(?,?)" for _ in owners) + ")",
             tuple(value for owner in owners for value in (owner.name, owner.wire_birth)),
         )
 
     @classmethod
-    def append(cls, db, record: RecordedContextManifest) -> int:
+    def append(cls, db: sqlite3.Connection, record: RecordedContextManifest) -> int:
         versions = tuple(ContextSegmentVersion.append(db, part) for part in record.segments)
         identity = FieldCodec.decode(
             RecordedContextIdentity, FieldCodec.project(record, "identity")
@@ -120,7 +139,7 @@ class ContextRequest(TypedTable):
             ).lastrowid,
         )
 
-    def recorded(self, db) -> RecordedContextManifest:
+    def recorded(self, db: sqlite3.Connection) -> RecordedContextManifest:
         parts = []
         for version in self.versions:
             row = ContextSegmentVersion.one(db, id=version)
@@ -145,7 +164,11 @@ class ContextManifestCursor:
     comparison: ClassVar[str]
     descending: ClassVar[bool]
 
-    def available(self, db, owners):
+    def available(
+        self,
+        db: sqlite3.Connection,
+        owners: tuple[ThreadIncarnation, ...],
+    ) -> Self | None:
         where, parameters = ContextRequest.owner_filter(owners)
         return (
             self
@@ -173,7 +196,12 @@ class ContextManifestReference:
     source: ContextStoreIdentity
     record_id: int
 
-    def read(self, store: ContextStore, name, registry) -> ContextManifest:
+    def read(
+        self,
+        store: ContextStore,
+        name: str,
+        registry: Registration,
+    ) -> ContextManifest:
         page = store.page(
             name, registry, cursor=BeforeContextManifest(self.source, self.record_id + 1), limit=1
         )
@@ -211,19 +239,19 @@ class ContextStore(TypedStore):
     schema_error = StoredHistoryUnreadable
 
     @contextmanager
-    def snapshot(self):
+    def snapshot(self) -> Iterator[sqlite3.Connection]:
         try:
             with super().snapshot() as db:
                 yield db
         except (MalformedRecord, sqlite3.DatabaseError) as error:
             raise StoredHistoryUnreadable(f"Unreadable recorded context: {error}") from error
 
-    def initialize(self, db) -> ContextStoreIdentity:
-        row = ContextStoreInfo.one(db, singleton=1)
-        if row is None:
-            row = ContextStoreInfo(1, ContextStoreIdentity(uuid.uuid4().hex))
-            row.insert(db)
-        return row.source
+    def initialize(self, db: sqlite3.Connection) -> ContextStoreIdentity:
+        source = ContextStoreInfo.source_in(db)
+        if source is None:
+            source = ContextStoreIdentity(uuid.uuid4().hex)
+            ContextStoreInfo(1, source).insert(db)
+        return source
 
     def record(self, manifest: ContextManifest) -> None:
         with self.writing() as db:
@@ -240,7 +268,12 @@ class ContextStore(TypedStore):
             record, entries = RecordedContextManifest.capture(manifest, prior)
             self.append(db, record, entries)
 
-    def append(self, db, record: RecordedContextManifest, entries=()) -> int:
+    def append(
+        self,
+        db: sqlite3.Connection,
+        record: RecordedContextManifest,
+        entries: tuple[ContextEntryManifest, ...] = (),
+    ) -> int:
         self.initialize(db)
         record.turn.require_recorded()
         for entry in entries:
@@ -249,9 +282,14 @@ class ContextStore(TypedStore):
             ContextEntry.capture(entry).insert_if_absent(db)
         return ContextRequest.append(db, record)
 
-    def resolve(self, db, source: ContextStoreIdentity, row: ContextRequest) -> CapturedContext:
+    def resolve(
+        self,
+        db: sqlite3.Connection,
+        source: ContextStoreIdentity,
+        row: ContextRequest,
+    ) -> CapturedContext:
         records = {row.id: row.recorded(db)}
-        references = set()
+        references: set[ContextEntryReference] = set()
         for position, part in enumerate(records[row.id].segments):
             references.update(part.entries)
             for predecessor in part.predecessors(row.id):
@@ -268,7 +306,15 @@ class ContextStore(TypedStore):
         record = records[row.id]
         return CapturedContext(source, row.id, record, record.restore(entries, records))
 
-    def page(self, name, registry, *, cursor=None, previous=(), limit=None) -> ContextManifestPage:
+    def page(
+        self,
+        name: str,
+        registry: Registration,
+        *,
+        cursor: ContextManifestCursor | None = None,
+        previous: tuple[CapturedContext, ...] = (),
+        limit: int | None = None,
+    ) -> ContextManifestPage:
         limit = self.max_page_rows if limit is None else limit
         if not 1 <= limit <= self.max_page_rows:
             raise ValueError("Context page row limit exceeds its source budget")
@@ -276,12 +322,9 @@ class ContextStore(TypedStore):
         incarnation = snapshot.require(name).incarnation
         owners = incarnation.recorded_names(snapshot)
         with self.snapshot() as db:
-            info = ContextStoreInfo.one(db, singleton=1)
-            if info is None:
-                if ContextRequest.exists(db):
-                    raise RelationViolationError("Recorded context store identity is missing")
+            source = ContextStoreInfo.source_in(db)
+            if source is None:
                 return ContextManifestPage((), None, None)
-            source = info.source
             where, parameters = ContextRequest.owner_filter(owners)
             if cursor is not None:
                 if cursor.source != source:
@@ -297,14 +340,16 @@ class ContextStore(TypedStore):
                 descending=descending,
                 limit=limit,
             )
-            rows, size = [], 0
+            rows: list[ContextRequest] = []
+            size = 0
             for row in candidates:
                 if rows and size + row.size > self.max_page_bytes:
                     break
                 rows.append(row)
                 size += row.size
             rows.sort(key=lambda row: row.id)
-            older = newer = None
+            older: BeforeContextManifest | None = None
+            newer: AfterContextManifest | None = None
             if rows:
                 older = BeforeContextManifest(source, rows[0].id).available(db, owners)
                 newer = AfterContextManifest(source, rows[-1].id).available(db, owners)

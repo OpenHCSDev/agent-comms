@@ -11,6 +11,7 @@ from abc import abstractmethod
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import BinaryIO
 
 from agent_comms.checkpoint_seals import FinalSeal
 from agent_comms.context_store import ContextEntry, ContextStore
@@ -33,8 +34,10 @@ from agent_comms.private_path import FileRevision
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.turn_context import (
     ContextEntryManifest,
+    ContextEntryReference,
     RecordedContextManifest,
     RecordedSegmentManifest,
+    SegmentManifest,
     TranscriptSegment,
 )
 from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -64,9 +67,9 @@ class RecordedContextManifestSources(TypedTable):
 
 class ContextObservation(DeclaredFamily, affix="Observation"):
     @abstractmethod
-    def move(self, move, offset): ...
+    def move(self, move: ContextMove, offset: int) -> None: ...
 
-    def recorded(self):
+    def recorded(self) -> RecordedContextManifest:
         raise RelationViolationError("Context predecessor is not a recorded request")
 
 
@@ -74,7 +77,7 @@ class ContextObservation(DeclaredFamily, affix="Observation"):
 class ContextEntryManifestObservation(ContextObservation):
     entries: tuple[ContextEntryManifest, ...]
 
-    def move(self, move, offset):
+    def move(self, move: ContextMove, offset: int) -> None:
         for entry in self.entries:
             move.entry(entry)
 
@@ -83,10 +86,10 @@ class ContextEntryManifestObservation(ContextObservation):
 class RecordedContextManifestObservation(ContextObservation):
     manifest: RecordedContextManifest
 
-    def recorded(self):
+    def recorded(self) -> RecordedContextManifest:
         return self.manifest
 
-    def move(self, move, offset):
+    def move(self, move: ContextMove, offset: int) -> None:
         move.request(self.manifest, offset)
 
 
@@ -100,25 +103,29 @@ class ContextEnvelope:
 class MovedRequest:
     record_id: int
     recorded: RecordedContextManifest
-    values: tuple
-    references: tuple
-    ordinal: int
+    values: tuple[SegmentManifest, ...]
+    references: tuple[tuple[ContextEntryReference, ...], ...]
 
 
 class ContextMove:
     """One bounded look-behind per owner; original predecessor reads stay on the input."""
 
-    def __init__(self, source, context_db, store):
+    def __init__(
+        self,
+        source: BinaryIO,
+        context_db: sqlite3.Connection,
+        store: ContextStore,
+    ) -> None:
         self.source, self.context_db, self.store = source, context_db, store
-        self.previous = {}
-        self.entries = set()
+        self.previous: dict[ThreadIncarnation, MovedRequest] = {}
+        self.entries: set[ContextEntryReference] = set()
         self.count = 0
 
-    def entry(self, entry):
+    def entry(self, entry: ContextEntryManifest) -> None:
         ContextEntry.capture(entry).insert_if_absent(self.context_db)
         self.entries.add(entry.reference)
 
-    def original(self, offset):
+    def original(self, offset: int) -> RecordedContextManifest:
         here = self.source.tell()
         try:
             self.source.seek(offset)
@@ -128,7 +135,12 @@ class ContextMove:
         finally:
             self.source.seek(here)
 
-    def value(self, record, position, offset):
+    def value(
+        self,
+        record: RecordedContextManifest,
+        position: int,
+        offset: int,
+    ) -> tuple[SegmentManifest, tuple[ContextEntryReference, ...]]:
         part = record.segments[position]
         header, references = part.manifest, part.entries
         for predecessor in part.predecessors(offset):
@@ -143,10 +155,12 @@ class ContextMove:
                 header = replace(header, captured_text=old.captured_text)
         return header, tuple(references)
 
-    def request(self, record, offset):
+    def request(self, record: RecordedContextManifest, offset: int) -> None:
         old = self.previous.get(record.thread)
-        ordinal = 1 if old is None else old.ordinal + 1
-        parts, values, all_references = [], [], []
+        ordinal = 1 if old is None else old.recorded.recording_turn + 1
+        parts: list[RecordedSegmentManifest] = []
+        values: list[SegmentManifest] = []
+        all_references: list[tuple[ContextEntryReference, ...]] = []
         for position, _part in enumerate(record.segments):
             header, references = self.value(record, position, offset)
             compiled, entries = header.kind.record_manifest(header)
@@ -163,31 +177,36 @@ class ContextMove:
                 if candidate.manifest.kind is header.kind:
                     previous = candidate
             if references:
-                prior, keyframe = (), None
-                if previous is not None and ordinal % TranscriptSegment.keyframe_interval:
+                prior: tuple[ContextEntryReference, ...] = ()
+                keyframe: int | None = None
+                if (
+                    old is not None
+                    and previous is not None
+                    and ordinal % TranscriptSegment.keyframe_interval
+                ):
                     prior, keyframe = previous.reference_keyframe(
                         old.references[position], old.record_id
                     )
                 rewritten = RecordedSegmentManifest.entry_delta(header, references, prior, keyframe)
-            elif previous is not None:
+            elif old is not None and previous is not None:
                 rewritten = previous.record_text(header, old.values[position], old.record_id)
             else:
                 rewritten = RecordedSegmentManifest(header)
             parts.append(rewritten)
             values.append(header)
             all_references.append(references)
-        rewritten = replace(record, segments=tuple(parts))
+        converted = replace(record, segments=tuple(parts), recording_turn=ordinal)
         # The store owns logical IDs; legacy byte positions never become keys.
-        record_id = self.store.append(self.context_db, rewritten)
+        record_id = self.store.append(self.context_db, converted)
         self.previous[record.thread] = MovedRequest(
-            record_id, rewritten, tuple(values), tuple(all_references), ordinal
+            record_id, converted, tuple(values), tuple(all_references)
         )
         self.count += 1
 
 
 class ContextManifests(Carry):
     @classmethod
-    def backup_files(cls, root):
+    def backup_files(cls, root: Path) -> tuple[Path, ...]:
         return (
             root / "bus.jsonl",
             root / "bus_meta.json",
@@ -197,7 +216,7 @@ class ContextManifests(Carry):
         )
 
     @classmethod
-    def derived_files(cls, root):
+    def derived_files(cls, root: Path) -> tuple[Path, ...]:
         # Exact old disposable formats, never sessions, annotations or claims.
         patterns = (
             "bus_page_index.sqlite3*",
@@ -209,7 +228,7 @@ class ContextManifests(Carry):
         return tuple(path for pattern in patterns for path in root.glob(pattern))
 
     @classmethod
-    def carry(cls, root, *, apply):
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
         path = root / "private_bus_checkpoint.sqlite3"
         if not path.exists():
             return Carried(0)
@@ -226,7 +245,7 @@ class ContextManifests(Carry):
         return cls._rewrite(root)
 
     @staticmethod
-    def message_bytes(value, raw):
+    def message_bytes(value: dict[str, object], raw: bytes) -> tuple[bytes, int]:
         # Old claim envelopes were labeled info. Their existing claim object
         # binds the same seq/id/owner, but today's declaration is ClaimNoticeKind.
         # Repair only that label, never a claim, body, identity or signed row.
@@ -249,21 +268,23 @@ class ContextManifests(Carry):
         return (json.dumps(changed, ensure_ascii=False, separators=(",", ":")) + "\n").encode(), 1
 
     @classmethod
-    def _rewrite(cls, root):
+    def _rewrite(cls, root: Path) -> Carried:
         """Convert the selected stopped root under Carry's existing wire lock.
 
         Practice runs select an already copied root through the normal Carry
         entrypoint. There is deliberately no live-source copying operation.
         """
-        source_log = target_log = WireLog(root / "bus.jsonl")
-        index_path = _path(source_log.path)
-        old_tables = (ContextEntrySources, RecordedContextManifestSources)
+        log = WireLog(root / "bus.jsonl")
+        index_path = _path(log.path)
+        old_tables: tuple[type[TypedTable], ...] = (
+            ContextEntrySources, RecordedContextManifestSources,
+        )
         with ExitStack() as lifetime:
             with closing(_connect(index_path, readonly=True)) as source_db:
-                marker = source_log.private_marker_unlocked()
+                marker = log.private_marker_unlocked()
                 witness = CheckedPrefix.read_witness(source_db)
                 marker.seal.check_final(witness, index_path)
-                stream = lifetime.enter_context(source_log.path.open("rb"))
+                stream = lifetime.enter_context(log.path.open("rb"))
                 witness.require_source(marker, os.fstat(stream.fileno()), stream)
                 witness.require_current_revision(os.fstat(stream.fileno()))
                 expected = {
@@ -280,10 +301,11 @@ class ContextManifests(Carry):
                     expected,
                 ):
                     raise RelationViolationError("Context conversion input SQL schema differs")
-                stage = lifetime.enter_context(
-                    tempfile.TemporaryDirectory(prefix=".move-context-", dir=root)
+                stage = Path(
+                    lifetime.enter_context(
+                        tempfile.TemporaryDirectory(prefix=".move-context-", dir=root)
+                    )
                 )
-                stage = Path(stage)
                 staged_index = stage / index_path.name
                 staged_index.touch(mode=0o600)
                 index_db = lifetime.enter_context(closing(sqlite3.connect(staged_index)))
@@ -293,7 +315,9 @@ class ContextManifests(Carry):
             # Carry still owns the stopped root's wire lock.
             if ContextStore.path_in(root).exists():
                 raise RelationViolationError("Context conversion needs an absent destination store")
-            store = ContextStore(root)
+            # Failed preparation must not leave a partial destination store.
+            # Carry's installer backup owns recovery once publication starts.
+            store = ContextStore(stage)
             output_path = stage / "bus.jsonl"
             old_digest = new_digest = _SEED
             scan = WireScan(marker)
@@ -306,8 +330,8 @@ class ContextManifests(Carry):
                     WireRecord.rows(stream, end=witness.offset), 1
                 ):
                     old_digest = _chain(old_digest, raw)
-                    value = FieldCodec.parse(raw)
-                    if "observation" in value:
+                    value = FieldCodec.decode(dict[str, object], FieldCodec.parse(raw))
+                    if FieldCodec.record_key(ContextEnvelope, "observation") in value:
                         FieldCodec.decode(ContextEnvelope, value).observation.move(move, offset)
                     else:
                         original_length = len(raw)
@@ -319,7 +343,11 @@ class ContextManifests(Carry):
                             if row is None or (row.offset, row.length) != (offset, original_length):
                                 raise RelationViolationError("Original message SQL pointer differs")
                             DeliverySources.update(
-                                index_db, where="seq=?", parameters=(row.seq,), offset=output.tell()
+                                index_db,
+                                where="seq=?",
+                                parameters=(row.seq,),
+                                offset=output.tell(),
+                                length=len(raw),
                             )
                         output.write(raw)
                         new_digest = _chain(new_digest, raw)
@@ -352,21 +380,22 @@ class ContextManifests(Carry):
             derived = cls.derived_files(root)
             for path in derived:
                 path.unlink()
-            os.replace(output_path, target_log.path)
+            os.replace(output_path, log.path)
             # Rename changes ctime. Bind the canonical file's actual revision,
             # not the temporary name's earlier stat values.
             saved = replace(
                 saved,
-                mtime_ns=target_log.path.stat().st_mtime_ns,
-                ctime_ns=target_log.path.stat().st_ctime_ns,
+                mtime_ns=log.path.stat().st_mtime_ns,
+                ctime_ns=log.path.stat().st_ctime_ns,
             )
             with closing(sqlite3.connect(staged_index)) as final_index, final_index:
                 CheckedPrefix.delete(final_index, where="singleton=1")
                 saved.insert(final_index)
-            os.replace(staged_index, _path(target_log.path))
-            _directory_sync(target_log.path)
-            marker.seal_with(FinalSeal.capture(saved.witness(), _path(target_log.path)))
-            target_log.write_metadata_unlocked(marker)
+            os.replace(staged_index, _path(log.path))
+            os.replace(store.path, ContextStore.path_in(root))
+            _directory_sync(log.path)
+            marker.seal_with(FinalSeal.capture(saved.witness(), _path(log.path)))
+            log.write_metadata_unlocked(marker)
             return Carried(
                 move.count + 1,
                 {"bus_bytes": size, "requests": move.count, "claim_labels_fixed": claim_labels},

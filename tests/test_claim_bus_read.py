@@ -64,7 +64,7 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
         7,
         2,
     )
-    comms.bus.log.record_context(ContextManifest(
+    comms.contexts.record(ContextManifest(
         owner.incarnation,
         RecordedContextTurn(TurnId(f"turn-{generation}"), TurnIdentity(owner.incarnation, generation)),
         (segment,),

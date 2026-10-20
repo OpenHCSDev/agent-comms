@@ -147,3 +147,22 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
         with pytest.raises(ValueError, match='predecessor'):
             replace(last.segments[2], previous=rows[32].id).restore(
                 {}, {rows[32].id: delta}, position=2)
+
+
+def test_missing_store_identity_refuses_reads_and_further_records(tmp_path):
+    from agent_comms.context_store import ContextStoreInfo
+    from agent_comms.errors import RelationViolationError
+
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    original = context(owner, tmp_path, 2, 1)
+    comms.contexts.record(original)
+    with comms.contexts.writing() as db:
+        ContextStoreInfo.delete(db, where='singleton=1')
+    with pytest.raises(RelationViolationError, match='store identity is missing'):
+        comms.contexts.page('Alice', comms.registry)
+    with pytest.raises(RelationViolationError, match='store identity is missing'):
+        comms.contexts.record(original)
+    with comms.contexts.snapshot() as db:
+        assert not ContextStoreInfo.exists(db)
+        assert ContextRequest.count(db) == 1

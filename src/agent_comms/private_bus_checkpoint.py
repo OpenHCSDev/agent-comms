@@ -13,7 +13,6 @@ submits native input nor marks a message handled.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sqlite3
 import stat
@@ -22,7 +21,7 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast
 
 from .bus_source_page import AddressedPage
@@ -36,11 +35,11 @@ from .envelope_claim_transitions import (
 from .coordination_tables.publications import PublicationIntents
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
-from .store_files import ExclusiveLock, LockMode, SharedLock
+from .store_files import ExclusiveLock, LockMode
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from .message_reference import MessageReference
 from .messages import Message
-from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
+from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
 from .thread_identity import ThreadIncarnation
@@ -49,7 +48,6 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .wire_log import WireLog, WireSnapshot
     from .retained_task_facts import ExactTaskFact
-    from .registration import Registration
     from .registry_document import RegistrySnapshot
 
 OriginalSource = TypeVar("OriginalSource")

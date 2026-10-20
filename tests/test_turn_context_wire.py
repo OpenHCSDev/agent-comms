@@ -2,6 +2,7 @@
 from bus_history import read_history
 from conftest import publish_initial
 import hashlib
+import json
 
 import pytest
 
@@ -22,6 +23,22 @@ def manifest(owner, generation=1):
     source=OwnerProvenance(owner.incarnation, 'original-input-source')
     segment=SegmentManifest(TranscriptSegment,(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
+
+
+def corrupt_context_kind(comms, name, kind):
+    """Damage only one owner's stored payload, not its schema or message bus."""
+    from agent_comms.context_store import ContextRequest, ContextSegmentVersion
+
+    selected = comms.contexts.page(name, comms.registry).resources[-1]
+    with comms.contexts.writing() as db:
+        request = ContextRequest.one(db, id=selected.record_id)
+        assert request is not None
+        version = ContextSegmentVersion.one(db, id=request.versions[0])
+        assert version is not None
+        encoded = FieldCodec.encode(version.segment)
+        encoded['manifest']['kind'] = kind
+        db.execute(f'UPDATE {ContextSegmentVersion.declared_name} SET segment=? WHERE id=?',
+                   (json.dumps(encoded), version.id))
 
 
 def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_path):

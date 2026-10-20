@@ -189,8 +189,34 @@ def test_conversion_preserves_messages_claim_tables_and_context_values(tmp_path,
         assert actual.value.segments[:2] == wanted.segments[:2]
         assert actual.value.segments[2].contributors == wanted.segments[2].contributors
     assert page.resources[1].recorded.segments[2].inherited_entries == 2
+    assert [resource.recorded.recording_turn for resource in page.resources] == [1, 2]
     assert conversion.ContextManifests.carry(comms.root, apply=True).changed == 0
     assert not hasattr(conversion.ContextManifests, "copy")
     comms.contexts.record(context(comms.registry.require("Alice"), tmp_path, 4, 3))
     with comms.contexts.snapshot() as db:
         assert ContextRequest.count(db) == 3
+    assert comms.contexts.page("Alice", comms.registry).resources[-1].recorded.recording_turn == 3
+
+
+def test_failed_preparation_preserves_source_and_leaves_no_partial_store(tmp_path, monkeypatch):
+    comms, _, _ = old_copy(tmp_path)
+    protected = (comms.bus.log.path, _path(comms.bus.log.path), comms.root / "bus_meta.json")
+    original = {path: path.read_bytes() for path in protected}
+    request = conversion.ContextMove.request
+
+    def interrupted(move, record, offset):
+        request(move, record, offset)
+        raise OSError("generated interruption before publication")
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(conversion.ContextMove, "request", interrupted)
+        with (
+            _store_lock(comms.root / "wire"),
+            pytest.raises(OSError, match="before publication"),
+        ):
+            conversion.ContextManifests.carry(comms.root, apply=True)
+    assert {path: path.read_bytes() for path in protected} == original
+    assert not comms.contexts.path.exists()
+    assert not list(comms.root.glob(".move-context-*"))
+    with _store_lock(comms.root / "wire"):
+        assert conversion.ContextManifests.carry(comms.root, apply=True).detail["requests"] == 2

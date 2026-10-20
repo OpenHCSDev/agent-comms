@@ -21,9 +21,9 @@ from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from .context_store import CapturedContext
     from .input_attempt import StoredInput
     from .presentation import ThreadView
-    from .context_store import CapturedContext
     from .relationships import PeerRelation
     from .threads import Thread
 
@@ -402,7 +402,9 @@ class RecordedSegmentManifest:
             raise ValueError("Context predecessor is not an earlier record")
         return (self.previous,)
 
-    def reference_keyframe(self, references, offset):
+    def reference_keyframe(
+        self, references: tuple[ContextEntryReference, ...], offset: int | None,
+    ) -> tuple[tuple[ContextEntryReference, ...], int | None]:
         if self.previous is None:
             return references[:len(self.entries)], offset
         return references[:self.inherited_entries], self.previous
@@ -415,7 +417,10 @@ class RecordedSegmentManifest:
         return self.reference_keyframe(references, offset)
 
     @classmethod
-    def entry_delta(cls, header, references, prior=(), keyframe_offset=None):
+    def entry_delta(
+        cls, header: SegmentManifest, references: tuple[ContextEntryReference, ...],
+        prior: tuple[ContextEntryReference, ...] = (), keyframe_offset: int | None = None,
+    ) -> Self:
         inherited = 0
         for before, current in zip(prior, references, strict=False):
             if before != current:
@@ -464,7 +469,8 @@ class RecordedSegmentManifest:
         if self.inherited_entries and (
                 previous is None or self.inherited_entries > len(previous.contributors)):
             raise ValueError("Recorded transcript prefix is missing")
-        contributors = (previous.contributors[:self.inherited_entries] if previous is not None else ())
+        contributors = (previous.contributors[:self.inherited_entries]
+                        if previous is not None else ())
         contributors += tuple(entries[reference] for reference in self.entries)
         membership = tuple(
             source
@@ -1132,7 +1138,9 @@ class RecordedContextIdentity:
     request_id: str | None = field(default=None, kw_only=True, metadata={"wire_omit_default": True})
     recording_turn: int = field(default=1, kw_only=True, metadata={"wire_omit_default": True})
 
-    def with_segments(self, segments: tuple[RecordedSegmentManifest, ...]) -> RecordedContextManifest:
+    def with_segments(
+        self, segments: tuple[RecordedSegmentManifest, ...],
+    ) -> RecordedContextManifest:
         return RecordedContextManifest(self.thread, self.turn, self.counter, segments,
             request_id=self.request_id, recording_turn=self.recording_turn)
 

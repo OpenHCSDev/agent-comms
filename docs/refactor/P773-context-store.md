@@ -151,7 +151,35 @@ The generated-data and CLI batch passes 21 tests on the rebased branch. The
 context store assigns its own logical IDs; the converter cannot choose IDs from
 old byte positions. AST enumeration covers 407 src modules and 59 tools modules,
 with no parse omissions; lexical attribute matches are not receiver-identity proof.
-The source debt check failed; its report remains in owned scratch. Full saved-bus
-conversion size, old-test API migration, debt cleanup and actual Toad history/DM
-acceptance remain unfinished. These drafts are not ready to install.
-There is no valid bus-bytes-after-conversion result.
+The source debt check failed at that earlier head; its report remains in owned
+scratch. These drafts are not ready to install. There is no valid full saved-bus
+bytes-after-conversion result.
+
+## Continued after the failed installation stop
+
+No original input or send was repeated. Conversion now prepares the new context
+store in its existing staging directory, not beside the original bus; an injected
+pre-publication failure leaves original bus/index/metadata bytes unchanged and no
+partial destination store. Publication recovery still belongs to the installer's
+existing whole-operation backup, not a claimed multi-file atomic rename.
+ContextStoreInfo owns the missing-identity check for both readers and writers, so
+recording cannot silently replace the identity of an existing nonempty store.
+The converter regenerates recording ordinals from the ordered requests and lets
+the store allocate IDs; its look-behind no longer keeps a duplicate ordinal.
+
+All located old bus-context API callers have been migrated, including the native
+read drivers and their logical store references. Runtime observation envelopes
+are rejected rather than silently skipped. The candidate-notification check now
+requires context recording to leave message bytes, sequences and work unchanged.
+The focused backend/store/observer batch passes 68 tests. ContextStore and the
+converter have no errors in the targeted type-check output. The larger initial
+batch had eight failures; two are also present in the current main snapshot,
+and main has since repaired the old claim tests and snapshot-entry assertions.
+Rebase and final checks are recorded with the delivery below. No automated Toad
+test was run, and native driver migration is not installed acceptance.
+
+Before these checks the resource check reported 19.8 GiB free on /home and 18.2 GiB available
+RAM, with warnings only. No full bus copy or build was started: a fresh copy of
+the roughly 15.7 GB bus would cross the 10 GiB free-space floor before allowing
+for conversion output. Full historical conversion needs an already copied source
+and adequate room. Actual Toad history/DM acceptance is still owed.
