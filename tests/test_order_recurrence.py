@@ -1,12 +1,13 @@
 """Recurring problems must replace their duplicated fact with a declaration."""
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderVerb
-from agent_comms.todos import Derivation, Slop, TodoError
+from agent_comms.todos import Derivation, LocatedProblemFinding, Slop, TodoError
 from test_commander_problem_orders import create, order_body
 
 
@@ -67,3 +68,13 @@ def test_recurrence_uses_the_recorded_seven_day_window(commander, age, refused):
     todo = create(commander, 'P1')
     previous = todo.order.checked()
     assert bool(todo.recurrence((previous.owner,), comms.root, 100 + age)) is refused
+
+
+def test_recurrence_also_matches_a_previous_where(commander):
+    comms, _ = commander
+    todo = create(commander, 'P1')
+    previous = replace(todo.order.checked(),
+                       finding=LocatedProblemFinding(FileLine('broken.py', 1)))
+    todo = replace(todo, order=previous)
+    refusal, = todo.recurrence((FileLine('broken.py', 9),), comms.root, 101)
+    assert previous.owner.to_wire() in refusal and 'Where: broken.py:1' in refusal

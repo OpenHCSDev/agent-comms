@@ -2673,7 +2673,9 @@ class Todo(TypedTable):
         return tuple({order.id: order for order in (*self.order_history, *additional)
                       if order.id not in current}.values())
 
-    def recurrence(self, locations: tuple[FileLine, ...], root: Path, now: float) -> tuple[str, ...]:
+    def recurrence(
+        self, locations: tuple[FileLine, ...], root: Path, now: float,
+    ) -> tuple[str, ...]:
         recent = tuple(order for order in self.order_history
                        if order.at.since(now - 7 * 86400)
                        and order.at.recorded_at("An earlier order") <= now
@@ -2682,7 +2684,8 @@ class Todo(TypedTable):
             return ()
         previous = max(recent, key=lambda order: order.at.chronology())
         age = now - previous.at.recorded_at("An earlier order")
-        return (f'{self.id}: {previous.owner.to_wire()} ({age:.0f}s old)',)
+        finding = ''.join(f'; {line}' for line in previous.finding.instructions())
+        return (f'{self.id}: {previous.owner.to_wire()} ({age:.0f}s old){finding}',)
 
     @property
     def held_order_ids(self) -> tuple[str, ...]:
