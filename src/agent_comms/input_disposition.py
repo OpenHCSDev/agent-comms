@@ -27,7 +27,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 from .tool_result import ToolResult
-from .typed_table import Column, Index, TypedStore, TypedTable, sql_literal
+from .typed_table import Column, DurableTables, Index, TypedStore, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -200,7 +200,7 @@ def _members(column: str, values) -> tuple[str, tuple]:
 
 
 @dataclass(frozen=True, slots=True)
-class InputDispositions(TypedStore):
+class InputDispositions(TypedStore, DurableTables):
     """Indexed durable input rows; each operation reads only the rows it names."""
 
     root: Path

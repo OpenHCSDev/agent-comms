@@ -21,7 +21,7 @@ from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileRevision
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
+from .typed_table import Column, DerivedTables, Index, TypedStore, TypedTable
 from .wake_policy import WakePolicy
 from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireLog, WireSnapshot
 from .wire_record import WireRecord
@@ -257,7 +257,7 @@ class FirstBuild(ResumeIndex):
         return 0
 
 
-class WakeCandidateIndex(TypedStore):
+class WakeCandidateIndex(TypedStore, DerivedTables):
     """Bounded candidate pages and maintenance of their disposable source state.
 
     Never call ``maintain`` in the send or wake path. Each call only
@@ -272,6 +272,7 @@ class WakeCandidateIndex(TypedStore):
 
     filename = "wake_candidates.sqlite3"
     rows = tuple(TypedTable.members_with(CandidateTable))
+    schema_error = ProjectionRebuildRequiredError
 
     def __init__(self, log: WireLog):
         if log.path.name != log.filename:
@@ -281,14 +282,6 @@ class WakeCandidateIndex(TypedStore):
     @property
     def root(self) -> Path:
         return self.log.path.parent
-
-    def require_schema(self, actual: list[SQLiteSchemaObject]) -> None:
-        try:
-            super().require_schema(actual)
-        except RelationViolationError as error:
-            raise ProjectionRebuildRequiredError(
-                "candidate index schema changed; reset required"
-            ) from error
 
     @staticmethod
     def _validate_limits(max_rows: int, max_bytes: int) -> None:

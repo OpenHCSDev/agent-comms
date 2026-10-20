@@ -6,21 +6,21 @@ Waiting rows are also the status source; no activity event mirrors their state.
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
 import os
 import threading
 import time
+from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 from uuid import uuid4
 
 from .activity import ActivityState
 from .child_process import ProcessIdentity
-from .thread_identity import ThreadIncarnation
 from .declared_family import DeclaredFamily
-from .typed_table import Column, JsonStorage, TypedStore, TypedTable
+from .thread_identity import ThreadIncarnation
+from .typed_table import Column, DurableTables, JsonStorage, TypedStore, TypedTable
 from .wire_watch import ModifiedWatchSource, WireWatch
 
 
@@ -102,7 +102,7 @@ class RoomClaim(TypedTable):
 
 
 @dataclass(frozen=True)
-class RoomLedger(TypedStore):
+class RoomLedger(TypedStore, DurableTables):
     root: Path
     filename = "work_room.sqlite3"
     rows = (WorkPeak, RoomClaim)

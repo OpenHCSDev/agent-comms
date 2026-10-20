@@ -26,9 +26,10 @@ from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
 from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
-from .transcript_sources import NoDraft, TranscriptDraft, TranscriptRecord, TranscriptSource
+from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
 from .typed_table import (
     Column,
+    DurableTables,
     ForeignKey,
     Index,
     RealStorage,
@@ -393,7 +394,7 @@ class StoreRead(TranscriptSource):
             parameters).fetchone()[0]
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscript(TranscriptSource, TypedStore):
+class ExternalTranscript(TranscriptSource, TypedStore, DurableTables):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path

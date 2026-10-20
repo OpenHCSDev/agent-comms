@@ -7,11 +7,12 @@ the declared columns and field types without upgrading existing storage.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
 import types
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, fields
@@ -489,6 +490,98 @@ class SQLiteTableName(TypedRow):
         db.execute(f"DROP TABLE {_identifier(self.name)}")
 
 
+class TableSchema(ABC):
+    """The tables of one SQLite file, and the one reader of the SQL SQLite stored for them.
+
+    The file's schema is derived from its member rows' declarations. Whether a stored
+    schema that differs is rebuilt or refused is the file's parent: DerivedTables or
+    DurableTables. A marker class every table of a file inherits names its members;
+    a store names its rows.
+    """
+
+    schema_error: ClassVar[type[Exception]] = RelationViolationError
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return tuple(TypedTable.members_with(cls))
+
+    @classmethod
+    def declared_schema(cls) -> dict[str, str]:
+        return {name: sql for row in cls.schema_rows() for name, sql in row.schema_objects().items()}
+
+    @classmethod
+    def schema_digest(cls) -> str:
+        """Identity of the actual declarations, including generated family checks."""
+        return hashlib.sha256(
+            json.dumps(cls.declared_schema(), sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+    @staticmethod
+    def stored_schema(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        return SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+
+    @classmethod
+    def stored_member_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        """Only the member tables' objects, for tables that share a file with others."""
+        names = tuple(row.declared_name for row in cls.schema_rows())
+        return SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND tbl_name IN ("
+            + ",".join("?" for _ in names) + ")", names))
+
+    @classmethod
+    def schema_differs(cls, db: sqlite3.Connection) -> bool:
+        return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
+
+    @classmethod
+    def member_schema_differs(cls, db: sqlite3.Connection) -> bool:
+        return bool(SQLiteSchemaObject.differences(
+            cls.stored_member_schema(db), cls.declared_schema()))
+
+    @classmethod
+    def require_schema(cls, db: sqlite3.Connection) -> None:
+        """Readers use only the declared schema, whichever kind of file this is."""
+        if cls.schema_differs(db):
+            raise cls.schema_error(f"{cls.__name__} differs from its declaration")
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        for row in cls.schema_rows():
+            row.create(db)
+
+    @classmethod
+    @abstractmethod
+    def reconcile_schema(cls, db: sqlite3.Connection) -> None:
+        """The writer's answer to a stored schema that differs from the declaration."""
+
+
+class DerivedTables(TableSchema):
+    """Rows derived from another source: a schema that differs is dropped and recreated empty."""
+
+    @classmethod
+    def reset_schema(cls, db: sqlite3.Connection) -> None:
+        """Inside the caller's transaction: every stored table goes, the declared ones come."""
+        for stored in SQLiteTableName.stored(db):
+            stored.drop(db)
+        cls.create_schema(db)
+
+    @classmethod
+    def reconcile_schema(cls, db: sqlite3.Connection) -> None:
+        if cls.schema_differs(db):
+            db.execute("BEGIN IMMEDIATE")
+            cls.reset_schema(db)
+            db.execute("COMMIT")
+
+
+class DurableTables(TableSchema):
+    """Rows nothing else can rebuild: a schema that differs is refused; only a carry moves it."""
+
+    @classmethod
+    def reconcile_schema(cls, db: sqlite3.Connection) -> None:
+        cls.require_schema(db)
+
+
 @dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
@@ -850,17 +943,17 @@ class StoreWriter(DurableFile, SQLiteFile, FileStore):
         """Borrow one committed write transaction from this lifetime owner."""
 
 
-class TypedStore(StoreWriter):
+class TypedStore(StoreWriter, TableSchema):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
-    Members name the file and their rows. A transaction installs an absent
-    store; a snapshot reads it as an empty in-memory schema without creating
-    storage. An existing store whose schema differs from its declaration raises.
+    Members name the file and their rows, and inherit DerivedTables or DurableTables.
+    A transaction installs an absent store; a snapshot reads it as an empty in-memory
+    schema without creating storage. Readers refuse a schema that differs; the
+    writer reconciles it as the member's kind of file does.
     """
 
     rows: ClassVar[tuple[type[TypedTable], ...]]
     synchronous: ClassVar[str] = "FULL"
-    schema_error: ClassVar[type[Exception]] = RelationViolationError
     root: Path
 
     @property
@@ -868,14 +961,8 @@ class TypedStore(StoreWriter):
         return self.path_in(self.root)
 
     @classmethod
-    def declared_schema(cls) -> dict[str, str]:
-        return {name: sql for row in cls.rows for name, sql in row.schema_objects().items()}
-
-    @staticmethod
-    def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return SQLiteSchemaObject.read(connection.execute(
-            "SELECT name,sql FROM sqlite_master "
-            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return cls.rows
 
     @contextmanager
     def _attached(
@@ -920,12 +1007,13 @@ class TypedStore(StoreWriter):
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # This query attaches an existing WAL before releasing the boundary.
-            if not self._schema(connection):
+            if not self.stored_schema(connection):
                 connection.execute("BEGIN IMMEDIATE")
-                if not self._schema(connection):
-                    for row in self.rows:
-                        row.create(connection)
+                if not self.stored_schema(connection):
+                    self.create_schema(connection)
                 connection.execute("COMMIT")
+            # Under the attachment boundary: a derived file is rebuilt, a durable one refused.
+            self.reconcile_schema(connection)
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
             ]:
@@ -947,23 +1035,17 @@ class TypedStore(StoreWriter):
             else:
                 connection = lifetime.enter_context(closing(
                     sqlite3.connect(":memory:", isolation_level=None)))
-                for row in self.rows:
-                    row.create(connection)
+                self.create_schema(connection)
                 CoordinationStore._configure_reader(connection)
                 CoordinationStore.begin_snapshot(connection)
-            self.require_schema(self._schema(connection))
+            self.require_schema(connection)
             yield connection
-
-    def require_schema(self, actual: list[SQLiteSchemaObject]) -> None:
-        if SQLiteSchemaObject.differences(actual, self.declared_schema()):
-            raise self.schema_error(f"{self.filename} differs from its declaration")
 
     @contextmanager
     def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Own attachment and schema; joined workers may borrow one serialized connection."""
         with self._attached(lambda: closing(self._open_writer(
                 check_same_thread=check_same_thread))) as connection:
-            self.require_schema(self._schema(connection))
             yield connection
 
     @contextmanager

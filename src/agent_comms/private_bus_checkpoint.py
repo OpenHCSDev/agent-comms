@@ -50,8 +50,8 @@ from .typed_table import (
     Column,
     ForeignKey,
     Index,
+    DerivedTables,
     SQLiteSchemaObject,
-    SQLiteTableName,
     SqlValue,
     TypedTable,
 )
@@ -163,10 +163,7 @@ class PrefixWitness(PrefixSeal):
         # with nothing to index is sealed over the file as written, with the record it names.
         with db:
             db.execute("BEGIN IMMEDIATE")
-            for stored in SQLiteTableName.stored(db):
-                stored.drop(db)
-            for table in TypedTable.members_with(CheckpointTable):
-                table.create(db)
+            CheckpointTable.reset_schema(db)
             CheckedPrefix.from_witness(empty).upsert(db)
         return empty.index_tail(bus, marker, db, path, info)
 
@@ -603,7 +600,7 @@ class CheckedRead:
 
 
 
-class CheckpointTable:
+class CheckpointTable(DerivedTables):
     """Source-derived rows bound by the canonical writer's durable seal."""
 
 
@@ -921,8 +918,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
             fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
             os.close(fd)
             with closing(_connect(staged)) as db:
-                for table in TypedTable.members_with(CheckpointTable):
-                    table.create(db)
+                CheckpointTable.create_schema(db)
                 with bus.path.open("rb") as stream:
                     info = os.fstat(stream.fileno())
                     digest = _SEED
@@ -1077,15 +1073,7 @@ class CheckpointSchema(ABC):
 
     @classmethod
     def of(cls, db: sqlite3.Connection) -> CheckpointSchema:
-        declared = {
-            name: sql
-            for table in TypedTable.members_with(CheckpointTable)
-            for name, sql in table.schema_objects().items()
-        }
-        stored = SQLiteSchemaObject.read(
-            db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
-        )
-        if SQLiteSchemaObject.differences(stored, declared):
+        if CheckpointTable.schema_differs(db):
             return StaleCheckpointSchema()
         return DeclaredCheckpointSchema()
 
