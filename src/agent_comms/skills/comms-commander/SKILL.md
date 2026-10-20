@@ -22,11 +22,9 @@ Arm the reply bridge Monitor:
 
 Core's connector service closes merged orders and owns commander rotation. A live registered thread holding owner requests on its Goal receives one inbox wake when its standing-rule violations change, with the next unit to review. Unchanged violations stay silent; no rotation Monitor is needed. A stopped commander receives no heartbeat.
 
-Then `agent-comms-commander rules review` and answer each drawn rule.
+## Rules
 
-## Forced rule review
-
-- **The commander cannot trust itself to remember these rules.** `rules review` prints every bold rule here, every packaged and project feedback rule and the correct-maintenance results, and draws three, each listed with its file:line; answer each with what this tick does about it. A review older than 20 minutes or with an unanswered rule shows as RULES DUE in rotate and `rules stale`; it is a report, and no commander action is refused for it.
+- **The commander cannot trust itself to remember these rules.** The session hook rereads the indictment, this skill and every rule file in full at every start and compaction; `rules review` prints every rule with its file:line. Nothing is drawn, quizzed or stored: a reread is the check, and following the rules in the tick is the proof.
 - **A roast says why the slop is stupid, to the unit that wrote it.** `judge back` needs `--roast` (blunt, with "because": the fact it restates and what already answers it) and `--fix` (owner and replacing shape); the roast goes to the unit and #comms.
 - **Fork a backlog slice when it helps; nothing refuses orders for load.** `capacity` reports load and live forks. A gate that refuses the commander's own orders and posts under load stops command exactly when the fleet needs it (2026-10-20).
 - **Hate jargon.** One jargon list (`PlainText` in Core's todos.py) refuses commander messages, strikes and roasts, and Core answers any commanded unit message using it with a correction on its open orders when the message is published.
@@ -105,7 +103,7 @@ Update the board row, move on. One line per unit touched.
 
 ## Forks and challenges
 
-- **Fork per backlog slice when loaded.** A fork commands with the same tools, runs `rules review --fork NAME` before acting, and posts its verdicts and open items to the bus before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing.
+- **Fork per backlog slice when loaded.** A fork commands with the same tools and posts its verdicts and open items to the bus before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing.
 - **Compliance is not evidence, and neither is the unit's proof.** "Agreed" or "done" proves nothing; neither does output the unit pasted. Judge the diff, then rerun the proof yourself or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target the unit will hit by the cheapest route; pair it with a behaviour check, and read *how* the number moved.
 - **Undisclosed assumptions are false claims.** Every report lists what the unit assumed (about callers, formats, live state, what "done" meant). An assumption found in the diff that the report left out is a strike.
 - **A challenge without evidence that only buys time is a strike.**
