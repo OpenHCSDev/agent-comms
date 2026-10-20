@@ -31,7 +31,8 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable, NativePiRpcLaunch
 from .native_package import VerifiedNativePackage
-from .launch_runtime import LaunchRoot, LaunchRuntime, RestartEnvironment
+from .launch_root import LaunchRoot
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .threads import Thread
 from .wire_watch import WatchSource, WireWatch
 

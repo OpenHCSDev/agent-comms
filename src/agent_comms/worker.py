@@ -12,7 +12,8 @@ from contextlib import suppress
 from .acp import CommsAgent
 from .comms import Comms, wire
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRoot, LaunchRuntime, ThreadLaunch
+from .launch_root import LaunchRoot
+from .launch_runtime import LaunchRuntime, ThreadLaunch
 
 
 async def run() -> None:

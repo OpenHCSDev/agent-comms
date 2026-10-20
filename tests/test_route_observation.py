@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.active_route import ActiveRoute, CommsRoute, LocalRoute, read_active_route, resolve_comms_route
-from agent_comms.launch_runtime import LaunchRoot
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint

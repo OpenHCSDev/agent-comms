@@ -19,7 +19,7 @@ from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import client_wire
 from .coordination_errors import CoordinationError
-from .launch_runtime import LaunchRoot
+from .launch_root import LaunchRoot
 
 
 def _fail(error: BaseException) -> int:

@@ -24,7 +24,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from .launch_runtime import LaunchRoot
+from .launch_root import LaunchRoot
 
 
 @dataclass(frozen=True, slots=True)

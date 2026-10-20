@@ -18,7 +18,8 @@ from .cli_result import CliResult
 from .comms import Comms
 from .fresh_private_session import create_fresh_private_session
 from .goals import NoGoal
-from .launch_runtime import LaunchRoot, ThreadLaunch
+from .launch_root import LaunchRoot
+from .launch_runtime import ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry
 from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility

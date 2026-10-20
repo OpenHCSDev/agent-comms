@@ -5,70 +5,18 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Callable, Mapping, MutableMapping
-from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .launch_root import LaunchRoot
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText, TextRepresentation
 
 
 class CallingThreadUnavailable(RelationViolationError):
     """The process environment does not declare its owner thread."""
-
-
-@dataclass(frozen=True)
-class LaunchRoot:
-    """A process's selected root travels in its arguments, never its environment."""
-
-    path: Annotated[Path, PathText]
-    argument: ClassVar[str] = "--comms-root"
-    environment_name: ClassVar[str] = "AGENT_COMMS_ROOT"
-    _current: ClassVar[LaunchRoot | None] = None
-
-    def __post_init__(self) -> None:
-        # Fix the caller's cwd/home meaning before any later chdir or await.
-        # Keep symlink components so private-root validation can still refuse them.
-        object.__setattr__(self, "path", self.path.expanduser().absolute())
-
-    @classmethod
-    def current(cls) -> LaunchRoot:
-        if cls._current is None:
-            raise RelationViolationError("Comms requires an explicit launch root (--comms-root or --root).")
-        return cls._current
-
-    def install(self) -> None:
-        LaunchRoot._current = self
-
-    @contextmanager
-    def selected(self):
-        """A client invocation borrows its selection without changing later callers."""
-        previous = LaunchRoot._current
-        self.install()
-        try:
-            yield self
-        finally:
-            LaunchRoot._current = previous
-
-    def arguments(self) -> tuple[str, str]:
-        return self.argument, str(self.path)
-
-    @classmethod
-    def startup(cls, arguments: list[str]) -> None:
-        if cls.argument in arguments:
-            index = arguments.index(cls.argument)
-            if index + 1 == len(arguments):
-                raise ValueError(f"{cls.argument} requires a root")
-            record = FieldCodec.decode(cls, {"path": arguments[index + 1]})
-            record.install()
-            del arguments[index:index + 2]
-
-    @classmethod
-    def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
-        """Construct child inheritance without granting an implicit root override."""
-        return {name: value for name, value in source.items() if name != cls.environment_name}
 
 
 @dataclass(frozen=True)
@@ -91,6 +39,9 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
+        return LaunchRoot.environment(self._environment(source))
+
+    def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
             RestartEnvironment.inherit(source).for_interpreter(self.interpreter).without_pythonpath(),
             virtual_env=str(self.prefix),
@@ -105,8 +56,8 @@ class LaunchRuntime:
 class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its original import environment too."""
 
-    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
-        return LaunchRoot.environment(source)
+    def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
+        return dict(source)
 
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
@@ -230,7 +181,7 @@ class RestartEnvironment(EnvironmentRecord):
 
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
         """Preserve source credentials/settings; replace the declared runtime fields."""
-        result = LaunchRoot.environment(source)
+        result = dict(source)
         encoded = self.encode()
         for declaration in fields(self):
             if declaration.metadata.get("runtime"):

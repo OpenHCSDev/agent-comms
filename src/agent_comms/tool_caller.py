@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .cli_result import ToolCatalogResult, ThreadToolCatalogResult
-from .launch_runtime import CallingThreadUnavailable, LaunchRoot
+from .launch_root import LaunchRoot
+from .launch_runtime import CallingThreadUnavailable
 from .field_codec import WireForm
 from .presentation import MessageNotification, ThreadRecord
 from .tool_result import ToolResult

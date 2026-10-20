@@ -53,7 +53,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .agent_event_updates import AcpEventConsumer
-from .launch_runtime import LaunchRoot
+from .launch_root import LaunchRoot
 from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
