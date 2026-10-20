@@ -130,6 +130,37 @@ def test_human_duplicate_check_includes_retained_rows_without_delivery_pointers(
 
 
 
+def test_sparse_imported_prefix_keeps_references_and_accepts_fresh_human_send(tmp_path):
+    from agent_comms.message_reference import MessageReference
+    from agent_comms.private_bus_checkpoint import PublicMessages
+    from agent_comms.wire_record import PublicWireRecord
+
+    source, _ = _root(tmp_path)
+    first = Message('sender', 'Alice', 'selected original', InfoKind, seq=7)
+    second = Message('Alice', 'sender', 'selected answer', InfoKind, seq=43,
+                     answers=(MessageReference(first.seq, first.message_id),))
+    copied = Comms(tmp_path / 'selected')
+    for thread in source.registry.snapshot().threads.values():
+        copied.registry.declare(thread)
+    copied.messaging.initialize_private_initial_protocol(history=(first, second))
+    before = copied.bus.log.path.read_bytes()
+    with copied.bus.log.checked_read() as checked:
+        PublicMessages.require_contiguous(checked.connection)
+        assert [(row.seq, row.previous_seq) for row in PublicMessages.select(
+            checked.connection, order_by=('seq',))] == [(7, 6), (43, 42)]
+    restored = tuple(Message.from_wire(json.loads(row)) for row in before.splitlines())
+    assert restored == (first, second)
+    fresh = copied.messaging.send_user_message('Alice', 'fresh human input', worktree=str(tmp_path))
+    assert fresh.seq == 44
+    assert copied.bus.log.path.read_bytes().startswith(before)
+    # A gap after the imported boundary is still this root's uncertain allocation.
+    after = PublicWireRecord(Message('sender', 'Alice', 'own gap', InfoKind, seq=46))
+    public, = after.checkpoint_rows(0, 1, fresh.seq, second.seq)
+    assert (public.seq, public.previous_seq) == (46, 44)
+    with pytest.raises(ValueError, match='not increasing'):
+        after.sequence_after(46)
+
+
 def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     comms, root_id = _root(tmp_path)
     with pytest.raises(RelationViolationError, match="already installed"):
