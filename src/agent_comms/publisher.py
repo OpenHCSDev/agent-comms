@@ -9,8 +9,6 @@ from contextlib import ExitStack
 from dataclasses import replace
 from functools import partial
 from itertools import groupby
-
-from .bus_activity_index import ActivityClocks
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +19,7 @@ from agent_comms.coordination_tables.publications import (
 
 from .active_route import guard_original_root_write
 from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
+from .bus_activity_index import ActivityClocks
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     InitialOrigin,
@@ -32,10 +31,10 @@ from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (
     ClaimOwner,
     ClaimRelease,
+    ClaimScope,
     ClaimTransition,
-    FileClaimPath,
-    WakeClaim,
-    _release_resource,
+    ReleasedClaims,
+    WakeClaims,
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
@@ -44,7 +43,7 @@ from .errors import (
 )
 from .field_codec import FieldCodec, Id128Text
 from .mentions import ThreadMention
-from .messages import ClaimNoticeKind, Message
+from .messages import ClaimMessage, ClaimNoticeKind, Message
 from .private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
@@ -55,14 +54,14 @@ from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
-
     from .coordination_session import NativeBoundary
     from .private_bus_checkpoint import CheckedRead
     from .registration import Registration
+    from .threads import Thread
 
 from .catalog_document import CatalogDocument
-from .channels import Channel
 from .catalog_store import ChannelCatalog
+from .channels import Channel
 from .wire_log import WireLog, WireStoreLock
 from .wire_metadata import WireMetadata
 
@@ -159,63 +158,32 @@ class ClaimWrites(PrivateWrites):
                 paths = (Path(claim.resource) for claim in released)
                 names = ", ".join(str(path.relative_to(worktree) if path.is_relative_to(worktree)
                                       else path) for path in paths)
-                self._publish_claim_envelope_unlocked(
+                self._publish_claim_transition_unlocked(
                     boundary.bus_lock, boundary.registry,
                     Message(owner.name, owner.name, f"{wording}: {names}", ClaimNoticeKind),
-                    worktree=worktree, incarnation=incarnation, activity=boundary.activity,
-                    releases=tuple(ClaimRelease(claim.resource, claim.generation)
-                                   for claim in released),
-                )
+                    partial(ReleasedClaims, incarnation=incarnation,
+                            releases=tuple(ClaimRelease(claim.resource, claim.generation)
+                                           for claim in released)), activity=boundary.activity)
 
-    def publish_claim_envelope(
-        self,
-        message: Message,
-        *,
-        worktree: Path,
-        incarnation: str,
-        claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path | ClaimRelease] = (),
-    ) -> Message:
-        """One guarded message and whole-set claim transition in ONE bus row.
+    def _publish_acquisition_unlocked(
+        self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, owner: Thread,
+        resource: str, claim: ClaimScope, *, activity: ActivityClocks,
+    ) -> ClaimOwner:
+        def publish() -> ClaimOwner:
+            transition = self._publish_claim_transition_unlocked(
+                bus_lock, snapshot, ClaimNoticeKind.claimed(owner),
+                partial(WakeClaims, incarnation=str(owner.created_at), claims=(resource,),
+                        generation=Id128Text.mint(), claim_scope=claim), activity=activity)
+            return transition.claimed(resource)
+        with bus_lock.current_source(self.log, self.log.private_marker_unlocked()) as source:
+            previous = source.claim(resource)
+        return previous.acquire(claim, snapshot, publish)
 
-        Caller must hold the global Comms wire lock; the bus lock serializes all
-        cooperating claim decisions. Failed durability returns UNKNOWN: a later
-        guarded reader may re-fsync/adopt a complete visible row, but the caller
-        MUST NOT replay its message or provider/tool work automatically.
-        """
-        with self.opened_activity() as activity, self.log.locked() as bus_lock:
-            return self._publish_claim_envelope_unlocked(
-                bus_lock, self._registry.snapshot(), message,
-                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases, activity=activity,
-            )
-
-    def _publish_claim_envelope_unlocked(
-        self,
-        bus_lock: WireStoreLock,
-        snapshot: RegistrySnapshot,
-        message: Message,
-        *,
-        worktree: Path,
-        incarnation: str,
-        claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path | ClaimRelease] = (),
-        claim: WakeClaim | None = None,
-        activity: ActivityClocks,
-    ) -> Message:
-        """The claim envelope under a held bus lock and its locked registry snapshot."""
-        if message.claim_transition is not None or (not claims and not releases):
-            raise RelationViolationError("A claim send needs exactly one fresh transition.")
-        if (
-            isinstance(claims, (str, bytes))
-            or isinstance(releases, (str, bytes))
-            or not isinstance(claims, Sequence)
-            or not isinstance(releases, Sequence)
-        ):
-            raise RelationViolationError("Claim and release sets must be finite sequences.")
-        if len(claims) + len(releases) > ClaimTransition.max_resources:
-            raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        if claim is not None and (not claims or releases):
-            raise RelationViolationError("Bound claims require the selected wake boundary.")
+    def _publish_claim_transition_unlocked[Change: ClaimTransition](
+        self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, message: Message,
+        make_transition: Callable[..., Change], *, activity: ActivityClocks,
+    ) -> Change:
+        """One typed transition, checked before append under the registry cut."""
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")
@@ -230,40 +198,17 @@ class ClaimWrites(PrivateWrites):
                 message, sender=sender, target=target,
                 sequence=last_sequence + 1, snapshot=snapshot,
             )
-            owner_incarnation = str(incarnation)
-            requested = tuple(sorted(path.normalized(worktree) for path in claims))
-            release_records: list[ClaimRelease] = []
-            for release in releases:
-                if isinstance(release, ClaimRelease):
-                    # Recorded incarnation/generation, not current project,
-                    # determines whether this exact resource may be released.
-                    release_records.append(release)
-                else:
-                    resource = _release_resource(worktree, release)
-                    current = source.claim(resource)
-                    if current is None:
-                        raise RelationViolationError("Cannot release an unclaimed resource.")
-                    release_records.append(ClaimRelease(resource, current.generation))
-            release_records.sort(key=lambda release: release.resource)
-            held = source.claims_for(requested).values()
-            superseded = tuple(previous for current in held
-                               for previous in current.require_holder(
-                                   stored.sender, owner_incarnation, snapshot))
-            transition = ClaimTransition(
-                stored.sender, owner_incarnation, stored.seq, stored.message_id,
-                requested, tuple(release_records),
-                Id128Text.mint() if requested else None, claim,
-                superseded=superseded,
-            )
-            source.prepare_claim(transition)  # pre-append conflict is synchronous
-        stored = replace(stored, claim_transition=transition)
+            transition = make_transition(owner=stored.sender, seq=stored.seq,
+                                         message_id=stored.message_id)
+            source.prepare_claim(transition, snapshot)
+        stored = ClaimMessage.of(stored, transition)
         try:
             self.log.append_private_unlocked(metadata, stored.to_wire())
         except (OSError, RelationViolationError) as error:
             raise ClaimEnvelopeUnknownError(
                 "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
             ) from error
-        return stored
+        return transition
 
 
 class InitialWrites(PrivateWrites):
@@ -350,8 +295,6 @@ class InitialWrites(PrivateWrites):
         self, bus_lock: WireStoreLock, message: Message, *, origin: InitialOrigin, activity: ActivityClocks
     ) -> Message:
         """An ordinary initial cohort under the held bus lock."""
-        if message.claim_transition is not None:
-            raise RelationViolationError("An initial cohort cannot carry resource claims.")
         with ExitStack() as resources:
             _require_no_private_owner_rename(self.log.path.parent)
             metadata = self.log.private_marker_unlocked()

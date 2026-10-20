@@ -7,17 +7,17 @@ from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import (
-    IntegrityViolationError,
-    StaleFence,
-    RecoveryBlocked,
-    PublicationUncertain,
     IdentityConflict,
+    IntegrityViolationError,
+    PublicationUncertain,
+    RecoveryBlocked,
+    StaleFence,
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
-from agent_comms.coordination_tables.publications import PublicationIntents, PublicationEvidence
+from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
@@ -220,9 +220,9 @@ class RecoverySnapshot:
         self, session, outcome, reason_code: str | None,
         boundary: NativeBoundary | None = None,
     ) -> None:
-        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
         from .coordination_tables.assignments import WakeAssignment
-        from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
+        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
+        from .coordination_tables.executions import CurrentExecutions, ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
 
         db = session._connection
@@ -292,8 +292,8 @@ class RecoverySnapshot:
     def finish_publications(self, session, boundary: NativeBoundary) -> None:
         """Release this one native attempt only when every original route settled."""
         from .attempt_states import SucceededAttempt
-        from .execution_states import CompletedExecution
         from .coordination_tables.executions import CurrentExecutions
+        from .execution_states import CompletedExecution
 
         if not all(row.lifecycle.published for row in self.require_wire_responses()):
             return
@@ -343,11 +343,7 @@ class RecoverySnapshot:
             current = source.claim_projection()
         owned = tuple(
             claim for claim in current.values()
-            if claim.claim_scope is not None
-            and claim.claim_scope.execution_id == attempt.execution_id
-            and claim.claim_scope.attempt_ordinal == attempt.attempt_ordinal
-            and claim.claim_scope.recipient_lookup == attempt.owner_lookup
-            and claim.claim_scope.participant_generation == attempt.owner_generation
+            if claim.claim_scope.belongs_to(attempt)
         )
         bus.publisher.release_resources(boundary, owned, outcome.release_wording)
 

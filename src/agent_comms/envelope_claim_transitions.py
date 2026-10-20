@@ -12,17 +12,29 @@ from __future__ import annotations
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .coordination_errors import IdentityConflict
-from .errors import RelationViolationError, UnregisteredThreadError
+from .field_codec import (
+    BoundedText,
+    EnvelopeSequence,
+    FieldCodec,
+    Id128Text,
+    ProjectionSequence,
+    RecordMember,
+    ResourcePathText,
+    Sha256Text,
+    SubclassUnion,
+)
 from .message_reference import MessageReference
-from .field_codec import (BoundedText, EnvelopeSequence, FieldCodec, Id128Text, ProjectionSequence,
-                          ResourcePathText, Sha256Text)
-from .thread_identity import GenerationCounter, TurnId
+from .thread_identity import GenerationCounter, RecordedThreadIncarnation, TurnId
+
+if TYPE_CHECKING:
+    from .coordination_tables.attempts import AttemptRecord
+    from .registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -124,23 +136,55 @@ class AssignmentBinding:
             raise ClaimTransitionError("Assignment revision must be positive.")
 
 
-@dataclass(frozen=True, slots=True)
-class WakeClaim:
+@dataclass(frozen=True)
+class ClaimScope(SubclassUnion, ABC, affix=""):
+    owner_claimed_generation: int = field(metadata={"wire_name": "owner_admission_generation"})
+    operation_id: Annotated[str, Id128Text]
+    turn_id: str
+
+    def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
+        GenerationCounter.require_positive(self.owner_claimed_generation)
+        TurnId.for_registration(self.turn_id)
+
+    def reuses(self, other: ClaimScope) -> bool:
+        return self == other
+
+    def belongs_to(self, attempt: AttemptRecord) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class NativeClaim(RecordMember, ClaimScope):
+    """A tool acquisition belongs to one ordinary native input."""
+
+    input_id: Annotated[str, BoundedText]
+
+    def reuses(self, other: ClaimScope) -> bool:
+        return replace(self, operation_id=other.operation_id) == other
+
+
+@dataclass(frozen=True)
+class WakeClaim(RecordMember, ClaimScope):
     """A selected N/K execution bound into the durable resource-claim row."""
 
-    wire_root_id: str
+    wire_root_id: Annotated[str, Id128Text]
     source_seq: int
     source_message_id: Annotated[str, BoundedText]
     wake_assignment_id: Annotated[str, BoundedText] = field(metadata={"wire_name": "wake_claim_id"})
     wake_revision: int
-    recipient_lookup: str
+    recipient_lookup: Annotated[str, Id128Text]
     execution_id: Annotated[str, BoundedText]
-    operation_id: Annotated[str, Id128Text]
-    owner_claimed_generation: int = field(metadata={"wire_name": 'owner_admission_generation'})
-    turn_id: str
     participant_generation: int
     attempt_ordinal: int
-    version: int = field(default=1, metadata={"wire_required": True})
+    version: Literal[1] = field(default=1, metadata={"wire_required": True})
+
+    def belongs_to(self, attempt: AttemptRecord) -> bool:
+        # The attempts table's primary key fixes its immutable participant identity.
+        return (
+            self.execution_id == attempt.execution_id
+            and self.attempt_ordinal == attempt.attempt_ordinal
+        )
 
     @property
     def binding(self) -> AssignmentBinding:
@@ -157,24 +201,16 @@ class WakeClaim:
         return MessageReference(self.source_seq, self.source_message_id)
 
     def __post_init__(self) -> None:
-        Id128Text.decode(self.wire_root_id)
-        Id128Text.decode(self.recipient_lookup)
+        super().__post_init__()
         try:
-            FieldCodec.decode(Literal[1], self.version)
-            AssignmentBinding(
-                self.wake_assignment_id,
-                self.wake_revision,
-                self.recipient_lookup,
-                self.source,
-                self.execution_id,
-            )
-            GenerationCounter.require_positive(self.owner_claimed_generation)
+            self.binding
             GenerationCounter.require_positive(self.participant_generation)
             if FieldCodec.decode(int, self.attempt_ordinal) <= 0:
                 raise ValueError("attempt ordinal must be positive")
         except ValueError as error:
-            raise ClaimTransitionError("Wake claim_scope version or revision is invalid.") from error
-        TurnId.for_registration(self.turn_id)
+            raise ClaimTransitionError(
+                "Wake claim_scope version or revision is invalid."
+            ) from error
         try:
             assignment = FieldCodec.decode(str, self.wake_assignment_id)
             if not assignment.startswith("cohort-v1:"):
@@ -193,123 +229,150 @@ class ClaimRelease:
         FieldCodec.require_fields(self)
 
 
-@dataclass(frozen=True, slots=True)
-class ClaimTransition:
-    """Claims and releases in ONE future message row, never independent writes."""
+@dataclass(frozen=True)
+class ClaimIdentity:
+    owner: Annotated[str, BoundedText]
+    incarnation: Annotated[str, BoundedText]
+    seq: Annotated[int, EnvelopeSequence]
+    message_id: Annotated[str, BoundedText]
+
+
+@dataclass(frozen=True)
+class AcquiringClaim(ClaimIdentity):
+    generation: Annotated[str, Id128Text]
+    claim_scope: ClaimScope = field(metadata={"wire_name": "admission"})
+
+
+@dataclass(frozen=True)
+class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
+    """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
 
-    owner: Annotated[str, BoundedText]
-    incarnation: Annotated[str, BoundedText]
-    seq: Annotated[int, EnvelopeSequence]
-    message_id: Annotated[str, BoundedText]
-    claims: tuple[Annotated[str, ResourcePathText], ...] = field(
-        default=(), metadata={"wire_required": True})
-    releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
-    generation: str | None = field(default=None, metadata={"wire_required": True})
-    claim_scope: WakeClaim | None = field(
-        default=None, metadata={"wire_name": 'admission', "wire_omit_default": True, "wire_nonnull": True}
-    )
-
-    superseded: tuple[ClaimOwner, ...] = field(default=(), metadata={"wire_omit_default": True})
-
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
-        if any(owner.resource not in self.claims for owner in self.superseded):
-            raise ClaimTransitionError("A claim transfer must acquire its original resource.")
-        if len({owner.resource for owner in self.superseded}) != len(self.superseded):
-            raise ClaimTransitionError("A claim transfer cannot repeat a resource.")
-        if not self.claims and not self.releases:
-            raise ClaimTransitionError("Empty claim transitions are not meaningful.")
+        if not self.resources or len(self.resources) > self.max_resources:
+            raise ClaimTransitionError("Claim transitions need a bounded resource set.")
         if len(set(self.resources)) != len(self.resources):
             raise ClaimTransitionError("Duplicate or overlapping resources are not supported.")
-        if self.claims:
-            Id128Text.decode(self.generation)
-        elif self.generation is not None:
-            raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
-        if self.claim_scope is not None and (
-                not self.claims or self.releases):
-            raise ClaimTransitionError("Wake claim_scope requires a claim-only transition.")
+
+    @property
+    @abstractmethod
+    def resources(self) -> tuple[str, ...]: ...
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        """A selected operation stays consumed even after its resources release."""
-        if self.claim_scope is not None and is_used(self.claim_scope.operation_id):
-            raise IdentityConflict("Wake claim operation was already consumed")
+        """A release consumes no acquisition operation."""
+
+    def claimed(self, resource: str) -> ClaimOwner:
+        raise ClaimTransitionError("Release originals do not acquire resources.")
+
+    def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
+        return self.project(previous)
+
+    @abstractmethod
+    def project(self, previous: ClaimProjection) -> ClaimProjection: ...
+
+    def remaining(
+        self, previous: ClaimProjection, releases: tuple[ClaimRelease, ...]
+    ) -> dict[str, ClaimOwner]:
+        if self.seq <= previous.last_seq:
+            raise ClaimTransitionError("Claim sequence must increase.")
+        remaining = dict(previous)
+        for release in releases:
+            current = remaining.get(release.resource)
+            if current is None:
+                raise ClaimTransitionError("Cannot release a resource without a live claim.")
+            if (current.incarnation, current.generation) != (self.incarnation, release.generation):
+                raise ClaimTransitionError(
+                    "Only the exact owner incarnation/generation may release."
+                )
+            del remaining[release.resource]
+        return remaining
+
+
+@dataclass(frozen=True)
+class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
+    claims: tuple[Annotated[str, ResourcePathText], ...]
 
     @property
     def resources(self) -> tuple[str, ...]:
-        return (*self.claims, *(release.resource for release in self.releases))
+        return self.claims
 
     def claimed(self, resource: str) -> ClaimOwner:
-        """Derive a current owner from this original acquisition, never another schema."""
-        if resource not in self.claims or self.generation is None:
-            raise ClaimTransitionError("Resource is not part of this claim acquisition.")
-        return ClaimOwner(resource, self.owner, self.incarnation, self.generation,
-                          self.seq, self.message_id, self.claim_scope)
+        if resource not in self.claims:
+            raise ClaimTransitionError("Resource is not part of this acquisition.")
+        return ClaimOwner(
+            resource=resource,
+            **{declared.name: getattr(self, declared.name) for declared in fields(AcquiringClaim)},
+        )
 
-    def apply(self, previous: ClaimProjection) -> ClaimProjection:
-        """Update claims for the affected resources together.
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        if is_used(self.claim_scope.operation_id):
+            raise IdentityConflict("Claim operation was already consumed")
 
-        Check only the rows being changed and the last processed claim sequence.
-        Unrelated resources do not affect the update, and no bus replay is needed.
-        """
-        if self.seq <= previous.last_seq:
-            raise ClaimTransitionError("Claim sequence must increase.")
-        next_state = dict(previous)
-        for owner in self.superseded:
-            if previous.get(owner.resource) != owner:
-                raise ClaimTransitionError("Claim transfer differs from its recorded holder.")
-        for release in self.releases:
-            current = next_state.get(release.resource)
-            if current is None:
-                raise ClaimTransitionError("Cannot release a resource without a live claim.")
-            # Renaming preserves incarnation; exact generation fences release
-            # after somebody else acquires this same resource.
-            if (current.incarnation, current.generation) != (self.incarnation, release.generation):
-                raise ClaimTransitionError("Only the exact owner incarnation/generation may release.")
+    def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
         for resource in self.claims:
-            if existing := next_state.get(resource):
-                existing.require_recorded_holder(self.owner, self.incarnation, self.superseded)
-        for release in self.releases:
-            del next_state[release.resource]
+            if resource in previous and previous[resource].live(registry):
+                previous[resource].require_holder(self.owner, self.incarnation)
+        return self.project(previous)
+
+    def project(self, previous: ClaimProjection) -> ClaimProjection:
+        remaining = self.remaining(previous, ())
         for resource in self.claims:
-            next_state[resource] = self.claimed(resource)
-        return ClaimProjection(self.seq, next_state)
+            remaining[resource] = self.claimed(resource)
+        return ClaimProjection(self.seq, remaining)
 
 
-@dataclass(frozen=True, slots=True)
-class ClaimOwner:
+@dataclass(frozen=True)
+class ReleasedClaims(RecordMember, ClaimTransition):
+    releases: tuple[ClaimRelease, ...]
+
+    @property
+    def resources(self) -> tuple[str, ...]:
+        return tuple(release.resource for release in self.releases)
+
+    def project(self, previous: ClaimProjection) -> ClaimProjection:
+        return ClaimProjection(self.seq, self.remaining(previous, self.releases))
+
+
+class ResourceClaim:
+    def acquire(
+        self, scope: ClaimScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+    ) -> ClaimOwner:
+        return publish()
+
+
+@dataclass(frozen=True)
+class UnclaimedResource(ResourceClaim):
+    """A checked resource has not been acquired."""
+
+
+@dataclass(frozen=True)
+class ClaimOwner(AcquiringClaim, ResourceClaim):
     resource: Annotated[str, ResourcePathText]
-    owner: Annotated[str, BoundedText]
-    incarnation: Annotated[str, BoundedText]
-    generation: Annotated[str, Id128Text]
-    seq: Annotated[int, EnvelopeSequence]
-    message_id: Annotated[str, BoundedText]
-    claim_scope: WakeClaim | None = field(default=None, metadata={"wire_name": 'admission'})
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
 
-    def require_holder(
-        self, owner: str, incarnation: str, registry: RegistryProvenance,
-    ) -> tuple[ClaimOwner, ...]:
-        """Check the registry's current holder; return a retired claim's exact prior record."""
-        try:
-            current = registry.require(owner)
-        except UnregisteredThreadError as error:
-            raise ClaimConflict(self) from error
-        if str(current.created_at) != incarnation:
-            raise ClaimConflict(self)
-        self.require_recorded_holder(owner, incarnation, (self,))
-        return (self,) if self.incarnation != incarnation else ()
+    def acquire(
+        self, scope: ClaimScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+    ) -> ClaimOwner:
+        return self if self.claim_scope.reuses(scope) and self.live(registry) else publish()
 
-    def require_recorded_holder(
-        self, owner: str, incarnation: str, superseded: tuple[ClaimOwner, ...],
-    ) -> None:
-        if self.owner != owner:
+    def require_holder(self, owner: str, incarnation: str) -> None:
+        if (self.owner, self.incarnation) != (owner, incarnation):
             raise ClaimConflict(self)
-        if self.incarnation != incarnation and self not in superseded:
-            raise ClaimConflict(self)
+
+    def live(self, registry: RegistrySnapshot) -> bool:
+        incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
+        return any(
+            registry.status(thread.name).active
+            and thread.process_alive
+            and registry.claimed_generations[thread.name]
+            == self.claim_scope.owner_claimed_generation
+            for thread in registry.threads_for(incarnation)
+        )
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,8 +385,10 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
-        if any(value.resource != key or value.seq > self.last_seq
-               for key, value in self._claims.items()):
+        if any(
+            value.resource != key or value.seq > self.last_seq
+            for key, value in self._claims.items()
+        ):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))
 
@@ -335,22 +400,3 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
 
     def __len__(self) -> int:
         return len(self._claims)
-
-
-def _release_resource(worktree: Path, path: str | Path) -> str:
-    """Identify a prior absolute claim even if its original file was deleted."""
-    physical_root = worktree.resolve(strict=True)
-    raw = path if isinstance(path, str) else str(path)
-    supplied = Path(raw)
-    if str(supplied) != raw:
-        raise RelationViolationError("Claim release requires canonical spelling.")
-    if ".." in supplied.parts:
-        raise RelationViolationError("Claim release cannot traverse parent directories.")
-    candidate = supplied if supplied.is_absolute() else physical_root / supplied
-    try:
-        resolved = candidate.resolve(strict=False)
-    except (OSError, RuntimeError, ValueError) as error:
-        raise RelationViolationError(f"Cannot resolve claim release {candidate}: {error}") from error
-    if resolved != candidate:
-        raise RelationViolationError("Claim release cannot use symlink aliases.")
-    return str(resolved)

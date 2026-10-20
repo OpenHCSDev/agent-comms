@@ -11,12 +11,15 @@ from agent_comms.check_root import CheckRoot
 from agent_comms.cli import main
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
-from agent_comms.envelope_claim_transitions import ClaimRelease, ClaimTransition
+from agent_comms.envelope_claim_transitions import (
+    ClaimRelease, NativeClaim, ReleasedClaims, WakeClaims,
+)
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
+from agent_comms.messages import ClaimMessage
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_digests import LastTurns, TurnDigestRead
@@ -106,13 +109,17 @@ def test_initial_history_retains_display_not_source_claim_authority(source, tmp_
         message = next(history.newest_messages())
     owner = source.registry.require(message.sender).incarnation.require_recorded()
     resource = str(tmp_path / "retained.py")
-    retained = replace(message, claim_transition=ClaimTransition(
-        owner=message.sender, incarnation=owner.lookup,
-        seq=message.seq, message_id=message.message_id,
-        claims=() if release else (resource,),
-        releases=(ClaimRelease(resource, "a" * 32),) if release else (),
-        generation=None if release else "a" * 32,
-    ))
+    identity = dict(owner=message.sender, incarnation=owner.lookup,
+                    seq=message.seq, message_id=message.message_id)
+    if release:
+        transition = ReleasedClaims(**identity, releases=(ClaimRelease(resource, "a" * 32),))
+    else:
+        transition = WakeClaims(
+            **identity, claims=(resource,), generation="a" * 32,
+            claim_scope=NativeClaim(owner_claimed_generation=1, operation_id="b" * 32,
+                                    turn_id="history-copy", input_id="history-copy"),
+        )
+    retained = ClaimMessage.of(message, transition)
 
     class ClaimHistoryCheckRoot(CheckRoot):
         def _populate(self, copied):
@@ -121,8 +128,8 @@ def test_initial_history_retains_display_not_source_claim_authority(source, tmp_
     root = tmp_path / "claim-history"
     with ClaimHistoryCheckRoot(source, ("A", "B"), root).open() as copied:
         with copied.bus.log.opened_wire_snapshot() as history:
-            assert next(history.newest_messages()) == message
-        assert retained.claim_transition is not None
+            assert next(history.newest_messages()) == retained.history_snapshot
+        assert retained.claim_transition is transition
     assert not root.exists()
     assert source.registry.require("A").name == "A"
     with source.bus.log.opened_wire_snapshot() as history:
