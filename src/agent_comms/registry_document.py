@@ -82,9 +82,9 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
         selected = (self.threads.values() if names is None else
-                    (self.require(name) for name in set(names)))
+                    (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
         return (executor for thread in selected
-                if self.status(thread.name).in_view(visibility)
+                if thread is not None and self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
 
     def channel_audience(self) -> Iterator[Thread]:
