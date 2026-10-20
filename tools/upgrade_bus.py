@@ -43,12 +43,8 @@ from pathlib import Path
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src the checkout being upgraded has installed.
-REPO = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(REPO / "src"), str(REPO)]
-
-from tools import publish_runtime
-from tools.cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
-from tools.cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.coordination_database import CoordinationStore
@@ -60,7 +56,11 @@ from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, Ma
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
+from tools import publish_runtime
+from tools.cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
+from tools.cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 
+REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
@@ -127,8 +127,10 @@ class Stack:
 
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
-        run(self.python, "-m", publish_runtime.__name__, "--refresh", cwd=self.checkout,
-            env=self.environment(self.checkout))
+        run(
+            self.python, "-m", publish_runtime.__name__, "--refresh",
+            cwd=self.checkout, env=self.environment(self.checkout),
+        )
 
     def environment(self, *paths: Path) -> dict:
         """``paths`` first; then this checkout's ``src``. ``home`` holds the route its clients read."""
