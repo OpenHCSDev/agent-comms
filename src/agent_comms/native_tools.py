@@ -11,8 +11,10 @@ from typing import ClassVar
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import CodingCall, SelectedToolDenied
+from .recorded_time import EventTime
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
+
 
 class NativeToolDeclaration(ToolDeclaration):
     """A declared tool participating in the existing native owner check."""
@@ -63,8 +65,11 @@ class NativeRequestTools:
         return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
 
     @classmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]) -> CoordinationCall:
-        return CoordinationCall(call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
+    def create_call(
+        cls, call_id: str, arguments: dict[str, object]
+    ) -> CoordinationCall:
+        return CoordinationCall(
+            call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
@@ -171,7 +176,8 @@ class MutatingPathTool(PathTool):
     def storage_effects(self, cwd):
         return (WriteStorageEffect(physical_path(self.path, cwd)),)
 
-    def edit_calls(self, call_id, at, thread, problem):
+    def edit_calls(self, call_id: str, at: EventTime, thread: str,
+                   problem: str) -> tuple[EditCall, ...]:
         return (EditCall(call_id, at, thread, self.path, self.replacements(), problem),)
 
 

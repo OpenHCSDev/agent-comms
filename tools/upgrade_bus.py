@@ -30,7 +30,6 @@ import json
 import os
 import shutil
 import signal
-import stat
 import subprocess
 import sys
 import tempfile
@@ -49,7 +48,6 @@ from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarr
 from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -233,27 +231,9 @@ def carry_all(
 def copy_bus(root: Path, copy: Path) -> None:
     """Hold the wire; SQLite owns each committed database copy and its companions."""
     # The maintenance files describe the live root; a copy is a new root and starts open.
-    held = set(MaintenanceBarrier(root / "registry.json").witness_paths)
-
-    def transient(directory: str, names: list[str]) -> set[str]:
-        omitted = set()
-        # A database sorts before its companions. Never stat/copy a transient
-        # WAL or SHM name after discovering the database that owns it.
-        for name in sorted(names):
-            path = Path(directory) / name
-            if name in omitted or path in held:
-                omitted.add(name)
-                continue
-            if stat.S_ISSOCK(path.lstat().st_mode):
-                omitted.add(name)
-            elif path.is_file() and not path.is_symlink() and CoordinationStore.is_database(path):
-                omitted.update(companion.name for companion in CoordinationStore.files(path)[1:])
-        return omitted
-
-    from agent_comms.store_files import _store_lock
-
+    held = MaintenanceBarrier(root / "registry.json").witness_paths
     with _store_lock(root / "wire"):
-        shutil.copytree(root, copy, symlinks=True, ignore=transient, copy_function=StoreBackup.copy_file)
+        StoreBackup.copy_tree(root, copy, excluded=held)
 
 
 def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
