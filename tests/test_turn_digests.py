@@ -82,8 +82,9 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
 
 
 def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, monkeypatch):
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.cli_bridges.claude import ClaudeBridge
-    from agent_comms.cli_bridges.shared import Binding, Options, Watch
+    from agent_comms.cli_bridges.shared import Binding, Options, Serve, Watch
     from agent_comms.wire_watch import WatchSource, WireWatch
 
     home = tmp_path / 'home'
@@ -105,7 +106,10 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
     store = Binding.open(state)
     db = store.__enter__()
     binding = Binding(str(comms.root), 'claude', 'session')
-    bridge = ClaudeBridge(Options(Watch(), binding, state), binding, db)
+    with pytest.raises(ValueError, match='does not own a live transcript subscription'):
+        Watch().transcript_source()
+    operation = Serve(owner=ProcessIdentity.capture(os.getpid()), transcript=path)
+    bridge = ClaudeBridge(Options(operation, binding, state), binding, db)
 
     async def publish():
         task = asyncio.create_task(bridge.publish_transcript())
