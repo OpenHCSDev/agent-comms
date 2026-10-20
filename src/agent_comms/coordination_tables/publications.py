@@ -242,9 +242,9 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
                 ("execution_id", "exact_target"),
             ),
             ForeignKey(
-                ("execution_id", "exact_target", "obligation_receipt_required"),
+                ("execution_id", "exact_target", "obligation_publication_required"),
                 ResponseObligation,
-                ("execution_id", "exact_target", "receipt_settled"),
+                ("execution_id", "exact_target", "publication_settled"),
                 deferred=True,
             ),
         )

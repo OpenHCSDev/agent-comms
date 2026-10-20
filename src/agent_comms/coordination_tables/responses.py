@@ -134,7 +134,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         ("execution_id", "exact_target", "success_terminal"),
         ("execution_id", "exact_target", "retryable"),
         ("execution_id", "exact_target", "intent_settled"),
-        ("execution_id", "exact_target", "receipt_settled"),
+        ("execution_id", "exact_target", "publication_settled"),
     )
 
     @classmethod
