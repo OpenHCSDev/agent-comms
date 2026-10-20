@@ -108,56 +108,95 @@ class TacticalCommand(GuardedCommand):
     def refused(cls, words: Words, session: CommanderSession, cwd: Path) -> tuple[str, ...]:
         return session.refusals(cls) if cls.runs(words) else ()
 
+    @staticmethod
+    def _python_target(args: list[str]) -> tuple[str, str, list[str]]:
+        module = len(args) > 2 and args[1] == "-m"
+        target = args[2] if module else args[1] if len(args) > 1 else ""
+        if not target or target.startswith("-"):
+            return "", "", []
+        namespace = (
+            target.rpartition(".")[0].rsplit(".", 1)[-1] if module else Path(target).parent.name
+        )
+        name = target.rsplit(".", 1)[-1] if module else Path(target).stem
+        return name, namespace, args[3:] if module else args[2:]
+
+    @staticmethod
+    def _shell_target(args: list[str]) -> tuple[str, str, list[str]]:
+        if len(args) < 2 or args[1].startswith("-"):
+            return "", "", []
+        return Path(args[1]).stem, "", args[2:]
+
+    @staticmethod
+    def _direct_target(args: list[str]) -> tuple[str, str, list[str]]:
+        return Path(args[0]).stem, "", args[1:]
+
+    @staticmethod
+    def _systemctl_args(args: list[str]) -> list[str]:
+        while args and args[0] in ("--user", "--system", "--no-pager"):
+            args = args[1:]
+        return [arg.removesuffix(".service") for arg in args[:2]]
+
+    @staticmethod
+    def _uv_args(args: list[str]) -> list[str]:
+        return args[1:] if args and args[0] in ("pip", "tool") else args
+
     @classmethod
     def runs(cls, words: Words) -> bool:
         """ShellInvocation has already split simple commands with shlex and skipped heredocs."""
         args = list(words)
-        while args:
-            prefix = Path(args[0]).name
-            if prefix not in ('sudo', 'env', 'timeout', 'nice'):
-                break
+        prefixes = {
+            "sudo": (False, False),
+            "env": (True, False),
+            "timeout": (False, True),
+            "nice": (False, False),
+        }
+        value_options = (
+            "-u",
+            "-g",
+            "--user",
+            "--group",
+            "-p",
+            "--prompt",
+            "--unset",
+            "-k",
+            "--kill-after",
+            "-s",
+            "--signal",
+            "-n",
+            "--adjustment",
+        )
+        while args and (rule := prefixes.get(Path(args[0]).name)) is not None:
             args.pop(0)
-            while args and args[0].startswith('-'):
+            while args and args[0].startswith("-"):
                 option = args.pop(0)
-                if option == '--':
+                if option == "--":
                     break
-                if option in ('-u', '-g', '--user', '--group', '-p', '--prompt',
-                              '--unset', '-k', '--kill-after', '-s', '--signal', '-n',
-                              '--adjustment') and args:
+                if option in value_options and args:
                     args.pop(0)
-            if prefix == 'env':
-                while args and '=' in args[0]:
+            assignments, duration = rule
+            if assignments:
+                while args and "=" in args[0]:
                     args.pop(0)
-            elif prefix == 'timeout' and args:
-                args.pop(0)  # the duration, not a command
+            if duration and args:
+                args.pop(0)
         if not args:
             return False
         program = Path(args[0]).name
-        target, arguments, namespace = args[0], args[1:], ''
-        if program == 'python' or (program.startswith('python') and
-                                   program[6:].replace('.', '').isdigit()):
-            module = len(args) > 2 and args[1] == '-m'
-            target = args[2] if module else args[1] if len(args) > 1 else ''
-            if not target or target.startswith('-'):
-                return False
-            arguments = args[3:] if module else args[2:]
-            namespace = target.rpartition('.')[0].rsplit('.', 1)[-1] if module else Path(target).parent.name
-            name = target.rsplit('.', 1)[-1] if module else Path(target).stem
-        elif program in ('bash', 'sh'):
-            if len(args) < 2 or args[1].startswith('-'):
-                return False
-            target, arguments = args[1], args[2:]
-            name = Path(target).stem
-        else:
-            name = Path(target).stem
-        if name == 'systemctl':
-            while arguments and arguments[0] in ('--user', '--system', '--no-pager'):
-                arguments = arguments[1:]
-            arguments = [arg.removesuffix('.service') for arg in arguments[:2]]
-        elif name == 'uv' and arguments and arguments[0] in ('pip', 'tool'):
-            arguments = arguments[1:]
-        return any(shape[0] in (name, namespace) and
-                   tuple(arguments[:len(shape) - 1]) == shape[1:] for shape in cls.shapes)
+        runners = {"python": cls._python_target, "bash": cls._shell_target, "sh": cls._shell_target}
+        runner = runners.get(program, cls._direct_target)
+        if (
+            runner is cls._direct_target
+            and program.startswith("python")
+            and program[6:].replace(".", "").isdigit()
+        ):
+            runner = cls._python_target
+        name, namespace, arguments = runner(args)
+        argument_forms = {"systemctl": cls._systemctl_args, "uv": cls._uv_args}
+        arguments = argument_forms.get(name, list)(arguments)
+        return any(
+            shape[0] in (name, namespace) and tuple(arguments[: len(shape) - 1]) == shape[1:]
+            for shape in cls.shapes
+        )
 
     @classmethod
     def install_refusals(cls, ctx: Commander) -> tuple[str, ...]:
