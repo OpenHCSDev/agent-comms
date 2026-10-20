@@ -1039,6 +1039,8 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 class PeerSyncVerb(OrderVerb, declared_name=PeerSync.verb):
     """Run the hook against the selected commander's existing context and session owner."""
 
+    help = "inject or block when the selected commander owes its peer a relay"
+
     def run(self, ctx: Commander) -> None:
         hook = ClaudeHook.read()
         if CommanderSession(hook.session_id, ctx).is_commander():
