@@ -151,6 +151,14 @@ class ResolvedLock(BaseModel):
         return result
 
 
+@dataclass(frozen=True)
+class UnbuiltRuntime:
+    prefix: Path
+
+    def matches(self, lock: Path, python: Path, core: str) -> bool:
+        return False
+
+
 class RuntimeResolution(InstalledBuildManifest):
     packages: dict[str, PackageRecord]
 
@@ -163,8 +171,11 @@ class RuntimeResolution(InstalledBuildManifest):
         return cls.model_validate_json((prefix / cls.record_path().name).read_bytes())
 
     @classmethod
-    def installed(cls) -> RuntimeResolution:
-        return cls.at(LaunchRuntime.installed().prefix)
+    def installed(cls) -> RuntimeResolution | UnbuiltRuntime:
+        prefix = LaunchRuntime.installed().prefix
+        if not (prefix / cls.record_path().name).is_file():
+            return UnbuiltRuntime(prefix)
+        return cls.at(prefix)
 
     @classmethod
     def capture(cls, python: Path, core: str) -> RuntimeResolution:
