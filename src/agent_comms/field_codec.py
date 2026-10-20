@@ -198,7 +198,8 @@ class FieldPlan:
     def projected_fields(self, view: str):
         annotation = FieldCodec.view_annotation(self.annotation, view)
         metadata = dict(self.declared.metadata)
-        metadata.pop("wire_inline", None)
+        for flag in ("wire_inline", "wire_exclude", "wire_bind"):
+            metadata.pop(flag, None)
         metadata["wire_name"] = self.setting(f"{view}_name", self.key)
         default = self.view_default(view, annotation)
         yield self.name, annotation, field(default_factory=default, metadata=metadata)
@@ -356,12 +357,14 @@ class InlineFieldPlan(DeclaredFieldPlan):
     metadata_flag = "wire_inline"
 
     def projected_fields(self, view: str):
-        return FieldCodec.view_fields(self.inlined, view)
+        _, representation = FieldCodec._representation(self.annotation)
+        return FieldCodec.view_fields(self.inlined, "wire" if representation is not None else view)
 
     @cached_property
     def inlined(self) -> type:
-        inline = cast("type[InlineRecord] | None", FieldCodec._representation(self.annotation)[1])
-        return cast(type, self.annotation) if inline is None else inline.wire_record()
+        target, representation = FieldCodec._representation(self.annotation)
+        return (cast(type, target) if representation is None
+                else representation.wire_record_as(target))
 
     @cached_property
     def record(self):
@@ -432,6 +435,10 @@ class FieldRepresentation(ABC):
         return cls.decode(value)
 
     @classmethod
+    def wire_record_as(cls, target: object) -> type:
+        return cast("type[InlineRecord]", cls).wire_record()
+
+    @classmethod
     def schema_declaration(cls, target: object) -> type:
         return cls
 
@@ -463,6 +470,10 @@ class WireForm(_WireEncoding):
     def schema_declaration(cls, target: object) -> type:
         record = cast(type, target)
         return FieldCodec.view_type(record, record.wire_view)
+
+    @classmethod
+    def wire_record_as(cls, target: object) -> type:
+        return cls.schema_declaration(target)
 
     @classmethod
     def decode_as(cls, target: object, value: object) -> object:
@@ -1218,7 +1229,7 @@ class FieldCodec(Sealed):
         origin, args = get_origin(target), get_args(target)
         if origin in (Union, types.UnionType):
             return Union[tuple(cls.view_annotation(item, view) for item in args)]
-        if origin in (list, tuple, frozenset, dict):
+        if origin in (list, tuple):
             projected = tuple(item if item is Ellipsis else cls.view_annotation(item, view)
                               for item in args)
             return origin[projected]

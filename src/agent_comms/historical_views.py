@@ -26,6 +26,7 @@ from .message_page import (
 )
 from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
 from .messages import Message
+from .message_provenance import HistoryMessageProvenance
 from .private_path import FileIdentity, FileRevision, PresentPath
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
@@ -340,16 +341,11 @@ class HistoricalMessage(Message):
         return 0, self.source_order, self.seq
 
     @property
-    def display_metadata(self) -> dict:
-        return {
-            "history": {
-                "source": self.source.original_root,
-                "wire_root_id": self.source.wire_root_id,
-                "bus_identity": FieldCodec.encode(self.source.bus_identity),
-                "sender_created_at": self.sender_created_at,
-                "target_created_at": self.target_created_at,
-            },
-        }
+    def history_provenance(self) -> HistoryMessageProvenance:
+        return HistoryMessageProvenance(
+            self.source.original_root, self.source.wire_root_id, self.source.bus_identity,
+            self.sender_created_at, self.target_created_at,
+        )
 
     def to_wire(self) -> dict:
         # Provenance is a view, never a change to the original public message.

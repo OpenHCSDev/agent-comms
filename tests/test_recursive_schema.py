@@ -103,9 +103,7 @@ def test_schema_failure_releases_its_document_and_new_members_are_discovered():
     assert not any('BrokenReply' in name for name in after['$defs'])
 
 
-def test_native_json_schema_validator_accepts_recursive_values(native_runtime_package):
-    schema = FieldCodec.value_schema(RecursiveReply)
-    value = FieldCodec.encode(RecursiveReply('root', (RecursiveReply('child'),)))
+def assert_native_validation(package, schema, value, invalid):
     result = subprocess.run(
         ('node', '--input-type=module', '-e', '''
 import {join} from 'node:path';
@@ -113,22 +111,29 @@ import {pathToFileURL} from 'node:url';
 import {readFileSync} from 'node:fs';
 const {validateToolArguments} = await import(pathToFileURL(join(process.argv[1],
   'node_modules/@earendil-works/pi-ai/dist/utils/validation.js')));
-const {schema, value} = JSON.parse(readFileSync(0, 'utf8'));
+const {schema, value, invalid} = JSON.parse(readFileSync(0, 'utf8'));
 const tool = {name:'recursive_reply', description:'recursive wire declaration', parameters:schema};
 validateToolArguments(tool, {name:tool.name, arguments:value});
 let refused = false;
 try { validateToolArguments(tool, {name:tool.name,
-  arguments:{...value, children:[{text:{invalid:true}}]}}); }
+  arguments:invalid}); }
 catch { refused = true; }
 if (!refused) throw new Error('invalid nested value accepted');
-''', str(native_runtime_package.path)),
-        input=json.dumps(dict(schema=schema, value=value)), text=True, capture_output=True,
+''', str(package.path)),
+        input=json.dumps(dict(schema=schema, value=value, invalid=invalid)), text=True, capture_output=True,
         timeout=10, check=False,
     )
     assert result.returncode == 0, result.stderr
 
 
-def test_thread_listing_view_rejects_unknown_keys_and_wrong_activity(comms):
+def test_native_json_schema_validator_accepts_recursive_values(native_runtime_package):
+    schema = FieldCodec.value_schema(RecursiveReply)
+    value = FieldCodec.encode(RecursiveReply('root', (RecursiveReply('child'),)))
+    assert_native_validation(native_runtime_package, schema, value,
+                             {**value, 'children': [{'text': {'invalid': True}}]})
+
+
+def test_thread_listing_view_rejects_unknown_keys_and_wrong_activity(comms, native_runtime_package):
     from agent_comms.cli_commands import ThreadsCliCommand
     from agent_comms.presentation import ThreadRecord
     from agent_comms.tool_caller import ThreadListing
@@ -144,3 +149,46 @@ def test_thread_listing_view_rejects_unknown_keys_and_wrong_activity(comms):
         invalid = {**reply, 'threads': [{**reply['threads'][0], **change}]}
         with pytest.raises(MalformedRecord):
             FieldCodec.decode(ThreadListing, invalid)
+        assert_native_validation(native_runtime_package, FieldCodec.value_schema(ThreadListing),
+                                 reply, invalid)
+    missing = {**reply, 'threads': [{key: value for key, value in reply['threads'][0].items()
+                                   if key != 'activity_detail'}]}
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(ThreadListing, missing)
+
+
+def test_history_result_members_preserve_declared_wire_shapes(native_runtime_package):
+    from dataclasses import replace
+    from agent_comms.history_result import (ChannelHistoryPageResult, DmHistoryPageResult,
+                                            EverythingHistoryPageResult, HistoryPageResult)
+    from agent_comms.message_provenance import HistoryMessageProvenance
+    from agent_comms.messages import Message, MessageKind
+    from agent_comms.page_traversal import HistoryCursor
+    from agent_comms.recorded_bus import NoRecordedBus
+
+    message = Message(sender='lead', target='worker', body='hello',
+                      type=MessageKind.member_named('info'), timestamp=10.0, seq=3)
+    for member, name, key in ((DmHistoryPageResult, 'worker', 'dm'),
+                              (EverythingHistoryPageResult, '#any', 'everything'),
+                              (ChannelHistoryPageResult, '#team', 'messages')):
+        page = member.for_target(name, (message,), False)
+        expected = {key: [message.to_wire()], 'before': 3, 'has_older': False}
+        if member is ChannelHistoryPageResult:
+            expected['channel'] = name
+        assert FieldCodec.encode(page) == expected
+        received = FieldCodec.decode(HistoryPageResult, expected)
+        assert type(received) is member
+        assert FieldCodec.encode(received) == expected
+
+    provenance = HistoryMessageProvenance('/original', 'a' * 32, NoRecordedBus(), None, 1.0)
+    archived = DmHistoryPageResult(
+        (replace(DmHistoryPageResult.for_target('worker', (message,), False).messages[0],
+                 history=provenance),), False, before=HistoryCursor('archive', 3))
+    wire = FieldCodec.encode(archived)
+    assert wire['dm'][0]['history'] == FieldCodec.encode(provenance)
+    assert FieldCodec.encode(FieldCodec.decode(HistoryPageResult, wire)) == wire
+    invalid = {**wire, 'dm': [{**wire['dm'][0], 'history': {'unrecognized': True}}]}
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(HistoryPageResult, invalid)
+    assert_native_validation(native_runtime_package, FieldCodec.value_schema(HistoryPageResult),
+                             wire, invalid)

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar, Type, cast
 
 from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
+from .message_provenance import HistoryMessageProvenance
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
@@ -460,9 +461,14 @@ class Message:
     history_source = None
 
     @property
+    def history_provenance(self) -> HistoryMessageProvenance | None:
+        return None
+
+    @property
     def display_metadata(self) -> dict:
-        """Live messages carry no historical provenance decoration."""
-        return {}
+        """Both public renderers encode the same declared provenance value."""
+        provenance = self.history_provenance
+        return {} if provenance is None else {"history": FieldCodec.encode(provenance)}
 
     def to_wire(self) -> dict:
         return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)}
