@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import io
 import json
@@ -11,6 +12,7 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..child_process import BoundedRun, ChildOutcome, ChildResult, ExitedOutcome
 from ..commander.order import OrderFile
 from ..field_codec import FieldCodec
 from ..progress_claims import MergedClaim
@@ -22,14 +24,20 @@ from .lifecycle import LifecycleRun
 
 @dataclass(frozen=True)
 class DeliveryOutcome:
-    exit_code: int
+    outcome: ChildOutcome
     pending: bool
     order_line: str
     refusal: str
 
     @classmethod
-    def saved(cls, todo: Todo, process: subprocess.CompletedProcess[str]) -> DeliveryOutcome:
-        return cls(process.returncode, todo.pending, todo.order.line, process.stderr)
+    def saved(cls, todo: Todo, process: ChildResult) -> DeliveryOutcome:
+        return cls(
+            process.outcome, todo.pending, todo.order.line, process.stderr.decode(errors="replace")
+        )
+
+    @property
+    def delivered(self) -> bool:
+        return self.outcome.successful and not self.pending
 
 
 @dataclass(frozen=True)
@@ -41,13 +49,15 @@ class DeliveryComparison(ParityComparison):
     def passed(self) -> bool:
         return (
             len(self.cases) == 3
-            and not self.cases[0][2].pending
+            and self.cases[0][2].delivered
             and all(
-                (current.exit_code, current.pending) == (native.exit_code, native.pending)
+                (current.outcome, current.pending) == (native.outcome, native.pending)
                 and current.order_line == native.order_line
                 and (
                     all(
-                        commit in outcome.refusal and "not in" in outcome.refusal
+                        outcome.outcome == ExitedOutcome(1)
+                        and commit in outcome.refusal
+                        and "not in" in outcome.refusal
                         for outcome in (current, native)
                     )
                     if current.pending
@@ -125,14 +135,14 @@ class DeliveryRepository:
 
 class DeliveredCommitCase:
     @staticmethod
-    def invoke(program: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def invoke(program: str, *arguments: str) -> ChildResult:
         source = str(Path(__file__).resolve().parents[2])
-        return subprocess.run(
-            (sys.executable, "-c", program, *arguments),
-            capture_output=True,
-            text=True,
-            timeout=120,
-            env={**os.environ, "PYTHONPATH": source},
+        return asyncio.run(
+            BoundedRun.run(
+                (sys.executable, "-c", program, *arguments),
+                timeout=120,
+                env={**os.environ, "PYTHONPATH": source},
+            )
         )
 
     @classmethod
