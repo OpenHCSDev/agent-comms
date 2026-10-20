@@ -112,14 +112,14 @@ def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path, *, thr
 
 @pytest.mark.skipif(os.name != "posix", reason="nonblocking shared flock acceptance")
 def test_registry_readers_share_lock_and_exclude_writer(tmp_path):
+    from test_locked_store import assert_writer_excluded
     registry = Registration(tmp_path / "registry.json")
     registry.register(owner(tmp_path, registry=registry))
     other = RegistryStore(registry.store.path)
     with registry.store.reading():
         with other.locked(mode=SharedLock(), blocking=False):
             assert other._read_unlocked().threads["owner"].name == "owner"
-        with pytest.raises(BlockingIOError), other.locked(blocking=False):
-            pytest.fail("writer entered during reader")
+        assert_writer_excluded(other.path)
     with other.locked(blocking=False):
         assert other._read_unlocked().threads["owner"].name == "owner"
 

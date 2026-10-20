@@ -76,11 +76,15 @@ class CommanderReread(ClaudeTranscriptHook):
         return 0
 
     def due(self, tokens: int) -> bool:
-        """Before the session start hook wrote the parts there is nothing to reread."""
+        """Before the session start hook wrote the parts there is nothing to reread.
+
+        Context smaller than the mark means a compaction dropped what was read, so the
+        reread is due at once; otherwise a mark set before compaction is never reached.
+        """
         if not self.mark.exists():
             return False
         last = RereadMark.decode(json.loads(self.mark.read_text()))
-        return tokens - last.tokens >= self.every
+        return tokens < last.tokens or tokens - last.tokens >= self.every
 
     def write_parts(self) -> None:
         """The parts the session start hook wrote stay current for the session."""

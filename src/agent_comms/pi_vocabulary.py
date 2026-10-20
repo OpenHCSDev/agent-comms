@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, FieldRepresentation
+from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -24,6 +25,11 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     @classmethod
     def error_notice(cls, message) -> str:
         return ""
+
+    @classmethod
+    def measured(cls, total: PiCount) -> PiCount:
+        """The context usage a message ending this way measures with its reported total."""
+        return total
 
     @classmethod
     def unpublished_attempt(cls):
@@ -117,6 +123,7 @@ class FailedPiStop(FinishedPiStop):
 
     @classmethod
     async def apply(cls, session, message):
+        session.output.record_native_failure(message)
         if not cls.interrupted(session):
             session.output.record_failure(cls.declared_failure(message))
         async for event in super().apply(session, message):
@@ -143,6 +150,12 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
         return False
 
     @classmethod
+    def measured(cls, total: PiCount) -> PiCount:
+        # Pi measures context from its last message that neither errored nor
+        # aborted; a failed request's billed total is not the session's context.
+        return UnreportedCount()
+
+    @classmethod
     async def apply(cls, session, message):
         async for event in super().apply(session, message):
             yield event
@@ -150,13 +163,11 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
             # A refusal the recovery is re-requesting is interim evidence; the
             # recovery's own end event reports the final outcome.
             return
-        from .acp_failure import NativeMessageFailureSource
-
         for diagnostic in message.diagnostics:
             session.watchdog.phase = diagnostic.turn_phase(session.watchdog.phase)
         error = session.output.error(
             (message.error_message or "").strip() or f"Model request {cls.declared_name}",
-            message.diagnostics, source=NativeMessageFailureSource(message),
+            message.diagnostics, source=session.output.native_failure_source,
         )
         if not cls.interrupted(session):
             yield error

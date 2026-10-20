@@ -357,7 +357,7 @@ class RuntimeConnection:
                 "Thread identity changed; open a new attachment."
             ) from error
         if (not entry.matches_name(self._identity.name)
-                or self._identity.renamed(entry.thread.name) != entry.thread.incarnation):
+                or self._identity != entry.thread.incarnation):
             raise OwnerIdentityChangedError("Thread identity changed; open a new attachment.")
         return entry
 

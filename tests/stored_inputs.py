@@ -9,9 +9,7 @@ from agent_comms.input_disposition import InputDispositionRow, InputDispositions
 
 
 def stored_inputs(root: Path) -> InputDocument:
-    if not (InputDispositions.path_in(root)).exists():
-        return InputDocument({})
-    with closing(sqlite3.connect(InputDispositions.path_in(root))) as connection:
+    with InputDispositions(root).snapshot() as connection:
         return InputDocument({row.key: row.attempt for row in InputDispositionRow.select(connection)})
 
 

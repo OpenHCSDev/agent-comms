@@ -251,6 +251,10 @@ class SealExclude(ViewExclusion):
     pass
 
 
+class IdentityExclude(ViewExclusion):
+    pass
+
+
 class SnapshotName(ViewName):
     pass
 
@@ -1147,6 +1151,8 @@ class FieldCodec(Sealed):
                 return Any, representations[0] if representations else _JsonValueRepresentation
         if representations:
             return target, representations[0]
+        if target is object:
+            return Any, _JsonValueRepresentation
         if target is Any:
             return target, _AnyDecoder
         if isinstance(target, type) and issubclass(target, WireValue):

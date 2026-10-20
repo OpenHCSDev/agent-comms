@@ -9,17 +9,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from uuid import uuid4
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from .field_codec import MalformedRecord
-from .input_disposition import InputDispositions
-from .registration import Registration
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
 from agent_comms.coordination_contracts import (
     MAX_REASON_CODE_CHARS,
 )
-from agent_comms.errors import RelationViolationError
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -35,12 +31,19 @@ from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
 )
 from agent_comms.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
+from .coordination_database import CoordinationStore
+from .field_codec import MalformedRecord
+from .input_disposition import InputDispositions
+from .locked_store import RegistryFile
+from .registration import Registration
+
 if TYPE_CHECKING:
-    from agent_comms.owner_lifecycle import OwnerReleaseEvidence
     from agent_comms.coordination_session import NativeBoundary
+    from agent_comms.owner_lifecycle import OwnerReleaseEvidence
 
 _OWNER_LOSS_ISSUER = object()
 
@@ -77,7 +80,7 @@ class VerifiedOwnerLoss:
         from agent_comms.comms import Comms
         from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
 
-        if store.session.path.name != "coordination.sqlite3":
+        if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
         with store.session.boundary(comms.bus) as boundary:
@@ -222,13 +225,13 @@ class RecoveryMonitorCapability:
         evidence together without copying a store or replaying an input.
         """
         uncertain = False
-        if (root / "coordination.sqlite3").is_file():
-            with Coordination(str(root / "coordination.sqlite3")) as store:
+        if (CoordinationStore.path_in(root)).is_file():
+            with Coordination(str(CoordinationStore.path_in(root))) as store:
                 uncertain = any(attempt.lifecycle.preserve_check
                                 for attempt in AttemptRecord.select(store.session._connection))
         inputs = InputDispositions(root)
         if inputs.path.is_file():
-            names = frozenset(Registration(root / "registry.json").snapshot().threads)
+            names = frozenset(Registration(RegistryFile.path_in(root)).snapshot().threads)
             uncertain = uncertain or bool(inputs.unresolved(names).rows)
         if uncertain:
             destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")
@@ -243,7 +246,7 @@ class RecoveryMonitorCapability:
         """An explicit stop retires only the exited owner's original local attempt."""
         from .comms import Comms
 
-        if not (root / "coordination.sqlite3").exists():
+        if not (CoordinationStore.path_in(root)).exists():
             return  # No native coordinator, hence no selected attempt claims.
         acknowledgement = Comms(root).owners.releases.get(owner.name)
         if not acknowledgement.matches(owner):
@@ -256,7 +259,7 @@ class RecoveryMonitorCapability:
         from .coordination_response import PublicationAppendDispatches
         from .coordination_tables.executions import CurrentExecutions
 
-        path = root / "coordination.sqlite3"
+        path = CoordinationStore.path_in(root)
         if not path.exists():
             return
         with Coordination(str(path)) as store:
@@ -288,7 +291,7 @@ class RecoveryMonitorCapability:
         """Settle the old input without re-running it or fabricating delivery."""
         from .native_entries import NativeEntry
         from .native_pi import NativeContextProof, NativePiUnavailable
-        from .native_prompt_binding import expected_prompt_matches_journal, expected_prompt_bindings
+        from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
         from .pi_vocabulary import PendingStopReason
         from .private_path import FileRevision
 
@@ -403,8 +406,8 @@ class RecoveryMonitorCapability:
         from agent_comms.native_entries import MessageEntry, NativeEntry
         from agent_comms.native_pi import NativeContextProof
         from agent_comms.native_prompt_binding import (
-            expected_prompt_matches_journal,
             expected_prompt_bindings,
+            expected_prompt_matches_journal,
         )
 
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:

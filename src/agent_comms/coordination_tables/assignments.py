@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 
-from agent_comms import field_codec
 from agent_comms.assignment_states import AssignmentState
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -19,7 +18,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import projected, SnapshotExclude, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
@@ -107,24 +106,24 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
             engagement.execution_id,
         )
 
-    assignment_id: typing.Annotated[
+    assignment_id: Annotated[
         str,
-        field_codec.WireName("claim_id"),
+        WireName("claim_id"),
         Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
     ]
-    recipient: typing.Annotated[str, Column(check="length(recipient) BETWEEN 1 AND 256")]
+    recipient: Annotated[str, Column(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: str
-    wire_seq: typing.Annotated[int, Column(check="wire_seq > 0")]
-    message_id: typing.Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
+    wire_seq: Annotated[int, Column(check="wire_seq > 0")]
+    message_id: Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
     audience: MessageAudience
-    lifecycle: typing.Annotated[AssignmentState, field_codec.SnapshotExclude(True)]
-    accepted_at_ms: typing.Annotated[int, Column(check="accepted_at_ms >= 0")]
-    updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= accepted_at_ms")]
-    revision: typing.Annotated[int, Column(check="revision > 0")] = dataclass_field(default=1)
-    resolver_version: typing.Annotated[
+    lifecycle: Annotated[AssignmentState, SnapshotExclude()]
+    accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
+    updated_at_ms: Annotated[int, Column(check="updated_at_ms >= accepted_at_ms")]
+    revision: Annotated[int, Column(check="revision > 0")] = dataclass_field(default=1)
+    resolver_version: Annotated[
         str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
     ] = dataclass_field(default=RESOLVER_VERSION)
-    policy_version: typing.Annotated[
+    policy_version: Annotated[
         str, Column(check="length(policy_version) BETWEEN 1 AND 256")
     ] = dataclass_field(default=POLICY_VERSION)
 
@@ -173,45 +172,45 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def durable_key(self) -> tuple[str, int]:
         return (self.recipient_lookup, self.wire_seq)
 
-    exact_target: typing.Annotated[
+    exact_target: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.decision.exact_target')",
             check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    wake_mode: typing.Annotated[
+    wake_mode: Annotated[
         str,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    triage_verdict: typing.Annotated[
+    triage_verdict: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="({assignment_verdict})",
             check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    disposition: typing.Annotated[
+    disposition: Annotated[
         str,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.kind')",
             check="disposition IN ({assignment_names})",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    execution_id: typing.Annotated[
+    execution_id: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.decision.execution_id')",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    claim_status_kind: typing.Annotated[
+    claim_status_kind: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END"),
     ] = dataclass_field(init=False, default=None, compare=False)
     checks = ("COALESCE(({assignment_binding}), 0)",)
@@ -297,9 +296,9 @@ END"""
 
 @dataclass(frozen=True, slots=True)
 class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execution_claims"):
-    execution_id: typing.Annotated[str, Column(primary_key=True)]
-    assignment_id: typing.Annotated[str, field_codec.WireName("claim_id"), Column(unique=True)]
-    ordinal: typing.Annotated[int, Column(primary_key=True, check="ordinal>=0")]
+    execution_id: Annotated[str, Column(primary_key=True)]
+    assignment_id: Annotated[str, WireName("claim_id"), Column(unique=True)]
+    ordinal: Annotated[int, Column(primary_key=True, check="ordinal>=0")]
     unique = (("execution_id", "assignment_id"),)
 
     def __post_init__(self) -> None:

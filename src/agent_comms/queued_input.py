@@ -7,25 +7,24 @@ birth identity and input generation; the registry resolves its name before compa
 from __future__ import annotations
 
 import os
-import typing
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, Annotated
 
 from acp import RequestError
 
-from agent_comms import field_codec
 
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .coordination_cohort import pending_sealed_assignments
+from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text
+from .field_codec import Id128Text, WireName
 from .goals import GoalDeclaration, NoGoal
 from .image_inputs import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -34,7 +33,7 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
-from .turn_goal_permission import AcceptedGoalPermission
+from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 
 if TYPE_CHECKING:
@@ -57,7 +56,7 @@ class InputHandoffRefused(RelationViolationError):
 
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
-    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName("admission")]
+    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
     goal: GoalDeclaration = field(default_factory=NoGoal)
 
     @classmethod
@@ -106,7 +105,7 @@ class QueuedInput:
         return AcceptedFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
         )
 
     @classmethod
@@ -260,7 +259,7 @@ class QueuedInput:
         snapshot.status(owner.name).require_running()
         owner.require_local_process(ProcessIdentity.capture(os.getpid()))
         owner.turn_record.read().require_idle()
-        claim_scope = snapshot.claimed_generations[owner.name]
+        claim_scope = snapshot.claim_generation(owner.name)
         if not self.current(owner, claim_scope):
             raise RelationViolationError("Queued input acceptance context changed")
         if not row.queued_for(owner.incarnation, claim_scope, self.text):
@@ -322,7 +321,7 @@ class DeliveredInput(QueuedInput):
         return DeliveredFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
             origins=(self.message,),
         )
 
@@ -355,7 +354,7 @@ class DeliveredInput(QueuedInput):
             document = inputs.dispositions.read(tuple(
                 InputDispositions.bus_key(source.message, owner) for source, _ in accepted
             ))
-            with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(CoordinationStore.path_in(inputs.comms.root))) as store:
                 for source, assignment in accepted:
                     message = source.message
                     key = InputDispositions.bus_key(message, owner)
@@ -445,7 +444,7 @@ class DeliveredInput(QueuedInput):
             }
             if not rows:
                 return 0  # Without work, no SQLite connection is needed, let alone a writer.
-            path = str(comms.root / "coordination.sqlite3")
+            path = str(CoordinationStore.path_in(comms.root))
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
                     owner.incarnation.lookup, frozenset(rows),
@@ -472,11 +471,12 @@ class DeliveredInput(QueuedInput):
         Pi takes each one after its current tool batch. A turn that cannot take
         follow-ups leaves them pending for the ordinary wake after it ends.
         """
-        inbox = await inputs.effects.turns.active_backend_inbox(session_id)
-        # A turn takes later inputs once its first one is in.
-        if inbox is None or not inputs.state(session_id).turn_started():
+        turn = await inputs.effects.turns.active_backend_turn(session_id)
+        # Only the started member owns both the inbox and its original input.
+        if not turn.has_source:
             return
-        store_path = inputs.comms.root / "coordination.sqlite3"
+        inbox = turn.require_inbox()
+        store_path = CoordinationStore.path_in(inputs.comms.root)
         lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
@@ -522,7 +522,7 @@ class DeliveredInput(QueuedInput):
 
     async def settle(self, inputs: InputDrain, state) -> None:
         await Coordination.run_async(
-            inputs.comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(inputs.comms.root),
             lambda store: store.assignments.transition_preengagement(
                 self.assignment.assignment_id, state,
                 expected_revision=self.assignment.revision,

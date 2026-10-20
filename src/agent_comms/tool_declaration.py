@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import json
-import typing
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
-from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, WireName
 from .native_tool_call import SelectedToolDenied
 from .recorded_time import EventTime
 
@@ -22,8 +20,8 @@ def one_line(text: str, limit: int) -> str:
 
 @dataclass(frozen=True)
 class ReplacementEdit:
-    old_text: typing.Annotated[str, field_codec.WireName("oldText")]
-    new_text: typing.Annotated[str, field_codec.WireName("newText")]
+    old_text: Annotated[str, WireName("oldText")]
+    new_text: Annotated[str, WireName("newText")]
 
 
 @dataclass(frozen=True)

@@ -39,7 +39,7 @@ from .field_codec import (
     ValueDecoder,
     compile_decoder,
 )
-from .locked_store import RootFile
+from .locked_store import DurableFile, FileStore, SQLiteFile
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -678,10 +678,24 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
-        rows = cls.select(db, **key)
-        if len(rows) > 1:
-            raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
+        rows = cls._keyed(db, key)
         return next(iter(rows), None)
+
+    @classmethod
+    def require(cls, db: sqlite3.Connection, **key: object) -> Self:
+        """The one row a reference names; a missing row is corruption."""
+        rows = cls._keyed(db, key)
+        if not rows:
+            raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
+        return rows[0]
+
+    @classmethod
+    def _keyed(cls, db: sqlite3.Connection, key: dict[str, object]) -> list[Self]:
+        """At most one row is stored for a key; a repeated key is corruption."""
+        stored = cls.select(db, **key)
+        if len(stored) > 1:
+            raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
+        return stored
 
     @classmethod
     def present(cls, db: sqlite3.Connection) -> bool:
@@ -781,7 +795,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreWriter(RootFile):
+class StoreWriter(DurableFile, SQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers."""
 
     def __init__(self, path: Path) -> None:
@@ -795,6 +809,10 @@ class StoreWriter(RootFile):
     def store(self) -> StoreWriter:
         """The store whose committed row changes this writer publishes."""
         return self
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        return super().files_in(root) | frozenset(cls._source_paths(cls.path_in(root)))
 
     @staticmethod
     def _source_paths(path: Path) -> tuple[Path, ...]:

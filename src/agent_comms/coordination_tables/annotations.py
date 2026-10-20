@@ -1,9 +1,8 @@
 """Durable label/request declarations; the existing coordinator owns storage."""
 from __future__ import annotations
 
-import typing
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.message_reference import MessageReference
@@ -18,31 +17,29 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
     label: ModelLabel
     created_at_ms: int
     # SQLite NULL requests its original rowid allocation, not a lifecycle state.
-    id: typing.Annotated[int | None, Column(primary_key=True, auto_increment=True)] = field(
-        default=None
-    )
-    segment_digest: typing.Annotated[
+    id: Annotated[int | None, Column(primary_key=True, auto_increment=True)] = None
+    segment_digest: Annotated[
         str, Column(generated="json_extract(label, '$.span.segment_sha256')")
     ] = field(init=False, compare=False)
-    offset: typing.Annotated[
+    offset: Annotated[
         int, Column(generated="json_extract(label, '$.span.coordinates.offset')")
     ] = field(init=False, compare=False)
-    length: typing.Annotated[
+    length: Annotated[
         int, Column(generated="json_extract(label, '$.span.coordinates.length')")
     ] = field(init=False, compare=False)
-    question: typing.Annotated[
+    question: Annotated[
         type[SpanQuestion], Column(generated="json_extract(label, '$.question.question')")
     ] = field(init=False, compare=False)
-    question_version: typing.Annotated[
+    question_version: Annotated[
         str, Column(generated="json_extract(label, '$.question.sha256')")
     ] = field(init=False, compare=False)
-    classifier: typing.Annotated[
+    classifier: Annotated[
         type[Classifier], Column(generated="json_extract(label, '$.classifier.classifier')")
     ] = field(init=False, compare=False)
-    classifier_pin: typing.Annotated[
+    classifier_pin: Annotated[
         str, Column(generated="json_extract(label, '$.classifier.pin')")
     ] = field(init=False, compare=False)
-    label_kind: typing.Annotated[
+    label_kind: Annotated[
         type[SpanLabel], Column(generated="json_extract(label, '$.kind')")
     ] = field(init=False, compare=False)
 
@@ -84,32 +81,30 @@ class AnnotationRequestsRow(CoordinatorTable, TypedTable):
     request: DisclosureRequest
     outcome: AnnotationOutcome
     created_at_ms: int
-    id: typing.Annotated[int | None, Column(primary_key=True, auto_increment=True)] = field(
-        default=None
-    )
-    segment_digest: typing.Annotated[
+    id: Annotated[int | None, Column(primary_key=True, auto_increment=True)] = None
+    segment_digest: Annotated[
         str, Column(generated="json_extract(request, '$.span.segment_sha256')")
     ] = field(init=False, compare=False)
-    offset: typing.Annotated[
+    offset: Annotated[
         int, Column(generated="json_extract(request, '$.span.coordinates.offset')")
     ] = field(init=False, compare=False)
-    length: typing.Annotated[
+    length: Annotated[
         int, Column(generated="json_extract(request, '$.span.coordinates.length')")
     ] = field(init=False, compare=False)
-    question: typing.Annotated[
+    question: Annotated[
         type[SpanQuestion], Column(generated="json_extract(request, '$.question.question')")
     ] = field(init=False, compare=False)
-    question_version: typing.Annotated[
+    question_version: Annotated[
         str, Column(generated="json_extract(request, '$.question.sha256')")
     ] = field(init=False, compare=False)
-    classifier: typing.Annotated[
+    classifier: Annotated[
         type[Classifier], Column(generated="json_extract(request, '$.classifier.classifier')")
     ] = field(init=False, compare=False)
-    classifier_pin: typing.Annotated[
+    classifier_pin: Annotated[
         str, Column(generated="json_extract(request, '$.classifier.pin')")
     ] = field(init=False, compare=False)
 
-    grant_reference: typing.Annotated[
+    grant_reference: Annotated[
         MessageReference, Column(generated="json_extract(request, '$.grant')")
     ] = field(init=False, compare=False)
 

@@ -65,10 +65,10 @@ from install_gate import PracticeMeasurement, prepare_runtime_home
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.candidate_maintenance import drain_candidate_catchup
-from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
+from agent_comms.storage_rules import StorageRule
 from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
@@ -244,7 +244,7 @@ class Stack:
     @contextmanager
     def practice_copy(
         self, root: Path, into: Path
-    ) -> Iterator[tuple[Comms, PracticeMeasurement]]:
+    ) -> Iterator[tuple[Path, PracticeMeasurement]]:
         """Let the installed reader create and hold an old-format copy until carry finishes.
 
         The staged reader cannot open the old sealed index before its carry runs.
@@ -265,7 +265,7 @@ class Stack:
                     f"Installed practice copy failed: {cast(TextIO, child.stderr).read()}"
                 )
             measurement = FieldCodec.decode(PracticeMeasurement, FieldCodec.parse(ready))
-            yield Comms(into), measurement
+            yield into, measurement
         finally:
             # The staged reader can own background work on the copied bus;
             # finish it before the installed reader retires the directory.
@@ -389,8 +389,7 @@ def carry_all(
 
 def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str,
              installed: Stack) -> dict:
-    source = Comms(root)
-    parent = source.registry.storage_rule.initial_roots(installer).scratch
+    parent = StorageRule.load(root).initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
         tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
@@ -402,18 +401,18 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str,
         stack = replace(stack, home=home)
         stack.prepare_native()
         target = run("git", "-C", stack.checkout, "rev-parse", "HEAD").strip()
-        pending = CarryChain.at(revisions.repo, target).pending(CarryLedger(copied.root).applied())
+        pending = CarryChain.at(revisions.repo, target).pending(CarryLedger(copied).applied())
         for path in stack.backup_files(root, pending, revisions):
-            destination = copied.root / path.relative_to(root)
+            destination = copied / path.relative_to(root)
             if path.exists() and not destination.exists():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
-        stopping = before_stop(copied.root, pending, stack, revisions)
-        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
+        stopping = before_stop(copied, pending, stack, revisions)
+        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
             MaintenanceOperator.current()).nonce
-        with transcripts_held(copied.root):
-            before = bus_files(copied.root)
-        report = carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
+        with transcripts_held(copied):
+            before = bus_files(copied)
+        report = carry_and_read(copied, before, pending, stack, stack, revisions, stopping)
         return {**report, "copy": asdict(measurement)}
 
 

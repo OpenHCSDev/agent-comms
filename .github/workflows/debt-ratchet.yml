@@ -1,84 +1,39 @@
 name: Merge queue
 
 on:
-  status:
+  pull_request:
+    branches: [main]
   merge_group:
     types: [checks_requested]
-  workflow_dispatch:
-    inputs:
-      enter_queue:
-        description: Enqueue the already reviewed head after successful checks
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
-concurrency:
-  group: merge-queue-${{ github.event.sha || github.sha }}
-  cancel-in-progress: false
-
 jobs:
-  dispatch-reviewed:
-    if: github.event_name == 'status' && github.event.state == 'success'
-    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
-    timeout-minutes: 5
-    steps:
-      - name: Dispatch checks on the approved PR head, not the default-branch status event
-        env:
-          RUN_ID: ${{ github.run_id }}
-          REVIEWED_HEAD: ${{ github.event.sha }}
-          REVIEW_CONTEXT: ${{ github.event.context }}
-        run: |
-          set -euo pipefail
-          request=$(python3 -c 'import shlex, sys; print(shlex.join(sys.argv[1:]))' \
-            "$RUN_ID" dispatch "$REVIEWED_HEAD" "$REVIEW_CONTEXT")
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$request"
-
   ratchet:
-    if: github.event_name != 'status'
     name: debt-${{ matrix.kind }}
-    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         kind: [src, tools]
     steps:
-      - name: Check the exact GitHub run through the restricted host entrypoint
-        env:
-          RUN_ID: ${{ github.run_id }}
-          CHECK_KIND: ${{ matrix.kind }}
-        run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID $CHECK_KIND"
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-  practice-install:
-    if: github.event_name != 'status'
-    name: install-rehearsal
-    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
-    timeout-minutes: 60
-    steps:
-      - name: Practice install; private buses and logs never enter the runner sandbox
-        env:
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID install"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
 
-  enqueue-approved:
-    if: github.event_name == 'workflow_dispatch' && inputs.enter_queue
-    needs: [ratchet, practice-install]
-    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
-    timeout-minutes: 5
-    steps:
-      - name: Enter GitHub's queue after approval and successful checks
+      - name: Install agent-comms
+        run: python -m pip install -e .
+
+      - name: No new structural debt against the base
         env:
-          RUN_ID: ${{ github.run_id }}
+          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
         run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID enqueue"
+          PYTHONPATH=src:tools python tools/debt_ratchet.py \
+            --root ${{ matrix.kind }} --base "$BASE" --head HEAD

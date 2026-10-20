@@ -203,7 +203,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
 
     comms = Comms(tmp_path / "wire")
     declared = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
-    generation = comms.registry.snapshot().claimed_generations[declared.name]
+    generation = comms.registry.snapshot().claim_generation(declared.name)
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
@@ -211,7 +211,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     assert comms.owners.releases.get(declared.name).current(snapshot, declared, generation)
 
     waiting = comms.registry.declare(comms.registry.new_thread('waiting', frozenset(), str(tmp_path)))
-    before = comms.registry.snapshot().claimed_generations[waiting.name]
+    before = comms.registry.snapshot().claim_generation(waiting.name)
     comms.registry.register(
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
         new_owner=True,
@@ -301,7 +301,7 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
     assert isinstance(phase, FencedOwnerBatch)
     assert len(phase.captured) == len(phase.unconfirmed) == 1
     assert phase.captured[0][0].process_identity == child.identity
-    assert phase.exited_processes == phase.retired == ()
+    assert phase.retired == ()
     assert phase.launches[0].process == child.identity
     assert child.alive(), "Stale fence must not authorize forced retirement"
     assert comms.registry.require("worker").require_process().pid == child.identity.pid
@@ -329,12 +329,13 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     assert comms.registry.status("worker").running
     agent = CommsAgent(comms, runtime_enabled=True)
 
-    def unprepared():
-        raise NativePackageError("Pinned native package directory is missing")
+    async def unavailable_source(*args):
+        raise PublicationActivationBlocked("owner source unavailable before binding")
 
-    # A private wire whose installation has no prepared native package.
-    monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", unprepared)
-    with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
+    # Package preflight is constructor-owned now. Inject the acquisition failure
+    # after start_owner takes custody, so shutdown must still retire the owner.
+    monkeypatch.setattr(agent.sessions, "_acquire_loaded", unavailable_source)
+    with pytest.raises(PublicationActivationBlocked, match="before binding"):
         await agent.sessions.start_owner(str(tmp_path), "worker")
     await agent.shutdown()
     assert comms.registry.status("worker").stopped

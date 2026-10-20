@@ -20,6 +20,8 @@ from agent_comms.coordination_errors import CoordinationError, ParticipantNotReg
 
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
+from .coordination_database import CoordinationStore
+from .native_entries import ImportedSessionWriter
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
 from .tool_result import ToolResult
@@ -28,29 +30,33 @@ if TYPE_CHECKING:
     from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
+from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ThreadImported, ImportSnapshot
+from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .input_disposition import InputDispositions
+from .launch_runtime import LaunchRuntime
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
-from .launch_runtime import LaunchRuntime
-from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
+from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
-    PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
-    RegistryPrivacy, _require_no_private_owner_rename,
+    PrivateOwnerRenameIntent,
+    PrivateRegistryGuard,
+    PublicRegistry,
+    RegistryPrivacy,
+    _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
+from .thread_identity import AgentThreadRole, NoThreadText, ThreadRole
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
-from .thread_identity import AgentThreadRole, ThreadRole
-from .agent_backend import RuntimeLocation
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
@@ -174,13 +180,13 @@ class ThreadManagement:
         project = Path(directory).expanduser().resolve()
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
-        session_path = self.root / "imported_sessions" / f"{uuid4().hex}.jsonl"
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
         thread = self.registry.new_thread(
             name,
             tags,
             str(project),
             session_file=str(session_path),
-            title=snapshot.title,
+            title=NoThreadText.from_input(snapshot.title),
             model=model,
         )
         with _store_lock(self._wire_lock_path):
@@ -469,7 +475,7 @@ class ThreadManagement:
                 )
                 spec.task.record_first_input(
                     partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
-                        claim_scope=self.registry.snapshot().claimed_generations[owned.name],
+                        claim_scope=self.registry.snapshot().claim_generation(owned.name),
                     ))
                 return owned
             except OSError:
@@ -550,11 +556,11 @@ class PrivateOwnerRename(ThreadRename):
         root, registry = self.threads.root, self.threads.registry
         before, new_name = self.before, self.new_name
         _require_no_private_owner_rename(root)
-        coordinator = root / "coordination.sqlite3"
+        coordinator = CoordinationStore.path_in(root)
         if not coordinator.exists() or before.name == new_name:
             return self.registry_renamed()
-        # Validate every deterministic registry/SQL name refusal *before* advancing a committed
-        # private owner's generation. The wire lock excludes cooperating sends until both agree.
+        # Validate registry/SQL name refusals before renaming the private owner.
+        # The wire lock excludes cooperating sends until both agree.
         registry.status(before.name).require_self_rename()
         if registry.snapshot().taken(new_name, owner=before.name):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
@@ -574,32 +580,28 @@ class PrivateOwnerRename(ThreadRename):
                                      generation=generation,
                                      wire_root_id=self.registry_privacy.root_id.hex(),
                                      ).write(root)
-            # An old selected attempt stays fenced in its old generation; never retry or
-            # reassign it after this ownership change.
-            store.participants.advance_generation(
+            store.participants.rename_owner(
                 person.lookup, new_name, expected_generation=generation)
             try:
                 return self.registry_renamed()
             except BaseException as error:
                 # Registry persistence can fail after the SQL CAS. If its atomic snapshot still
-                # names the old owner, make a NEW generation for that owner instead of leaving a
-                # committed coordinator pointing at the new name. Neither generation may inherit
-                # an old native input.
+                # names the old owner, restore that name without revoking its active attempt.
                 uncertain = RelationViolationError(
                     "Private owner rename is uncertain; inspect both authorities.")
                 try:
                     if registry.require(before.name).name == before.name:
-                        store.participants.advance_generation(
-                            person.lookup, before.name, expected_generation=generation + 1)
+                        store.participants.rename_owner(
+                            person.lookup, before.name, expected_generation=generation)
                 except BaseException as compensation:
                     # Ambiguous dual-store failure: the inspection needs both failures.
-                    uncertain.add_note(f"Compensating generation advance failed: {compensation!r}")
+                    raise uncertain from compensation
                 raise uncertain from error
 
     def applied(self, title: str | None) -> RenameThreadResult:
         result = ThreadRename.applied(self, title)
         # The wire lock and the check in renamed() make a present intent this rename's own;
         # it completes only after both authorities and the ancillary stores agree.
-        if (self.threads.root / PRIVATE_OWNER_RENAME_PENDING).exists():
+        if PrivateOwnerRenameIntent.path_in(self.threads.root).exists():
             PrivateOwnerRenameIntent.complete(self.threads.root)
         return result

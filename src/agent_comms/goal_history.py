@@ -12,18 +12,17 @@ import os
 import sqlite3
 import stat
 import time
-import typing
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from agent_comms import field_codec
 
 from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
+from .locked_store import DurableFile, SQLiteFile
 from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTable
 
 
@@ -45,16 +44,16 @@ class RecordedGoalRevision:
 class GoalHistoryEntry(TypedTable):
     # The durable kind field is a journal fact, not the TypedTable family tag.
 
-    sequence: typing.Annotated[int | None, Column(primary_key=True)]
+    sequence: Annotated[int | None, Column(primary_key=True)]
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
-    before: typing.Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
-    after: typing.Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
-    owner_created_at: typing.Annotated[float, field_codec.HistoryExclude(True)] = field(
+    before: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+    after: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+    owner_created_at: Annotated[float, HistoryExclude()] = field(
         kw_only=True
     )
-    state: typing.Annotated[
-        Literal["pending", "committed", "aborted", "uncertain"], field_codec.HistoryExclude(True)
+    state: Annotated[
+        Literal["pending", "committed", "aborted", "uncertain"], HistoryExclude()
     ] = field(kw_only=True)
     indexes = (Index(("owner_created_at", "sequence")),)
 
@@ -70,18 +69,15 @@ class GoalHistoryEntry(TypedTable):
         return FieldCodec.encode_record(self.recorded())
 
 
-class GoalHistoryStore:
+class GoalHistoryStore(DurableFile, SQLiteFile):
     """One journal per registry root; callers hold the registry file lock."""
+
+    filename = "goal_history.sqlite3"
 
     def __init__(self, registry_path: Path):
         self.registry_path = registry_path
-        self.path = self.path_for(registry_path)
+        self.path = self.path_in(registry_path.parent)
         self._initialize()
-
-    @classmethod
-    def path_for(cls, registry_path: Path) -> Path:
-        """The journal shares its registry's directory."""
-        return registry_path.with_name("goal_history.sqlite3")
 
     @classmethod
     def acquire_read_only(cls, registry_path: Path) -> tuple[GoalHistoryEntry, ...]:
@@ -91,7 +87,7 @@ class GoalHistoryStore:
         current goals or reconciles pending writes. Missing/foreign storage is a
         refusal, not permission to manufacture a history baseline.
         """
-        path = cls.path_for(registry_path)
+        path = cls.path_in(registry_path.parent)
         try:
             before = path.lstat()
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()

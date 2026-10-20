@@ -13,13 +13,13 @@ import hashlib
 import json
 import os
 import secrets
-import typing
 from contextlib import suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Annotated
 
-from agent_comms import field_codec
+from .coordination_database import CoordinationStore
+from .locked_store import DurableFile, PatternFile
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
@@ -32,7 +32,7 @@ from .comms import Comms
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
 from .store_files import _store_lock
@@ -54,7 +54,7 @@ class SelectedWriteBinding:
     root_id: str
     source: MessageReference
     assignment_id: str
-    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName("admission")]
+    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,7 +69,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     claim_id: str
     owner: str
     incarnation: float
-    claim_epoch: typing.Annotated[int, field_codec.WireName("admission_epoch")]
+    claim_epoch: Annotated[int, WireName("admission_epoch")]
     expected_attempt_ordinal: Literal[1]
     operation_id: str
     resource: str
@@ -113,16 +113,14 @@ class AppliedWriteIntent(SelectedWriteIntent, declared_name="applied"):
     pass
 
 
-class SelectedWritePlans:
+class SelectedWritePlans(DurableFile, PatternFile):
+    filename = "{source_seq}-{lookup}.json"
+    root_directory = "selected-write-plans"
+
     def __init__(self, comms: Comms, root_id: str):
         self.comms = comms
         self.root_id = root_id
-        self.directory = comms.root / "selected-write-plans"
-
-    def _path(self, source_seq: int, lookup: str) -> Path:
-        if type(source_seq) is not int or source_seq <= 0:
-            raise IdentityConflict("Selected write requires a positive source sequence")
-        return self.directory / f"{source_seq}-{lookup}.json"
+        self.directory = comms.root / self.root_directory
 
     def _prepare_dir(self) -> None:
         with suppress(FileExistsError):
@@ -175,6 +173,8 @@ class SelectedWritePlans:
         contents: str,
     ) -> SelectedWriteAcceptedUpdate:
         """Persist exactly one predispatch operator intent; no native/model call."""
+        if type(source_seq) is not int or source_seq <= 0:
+            raise IdentityConflict("Selected write requires a positive source sequence")
         try:
             FieldCodec.decode(str, source_message_id)
             FieldCodec.decode(str, resource)
@@ -192,13 +192,13 @@ class SelectedWritePlans:
             if marker.root_id != self.root_id or not marker.claims:
                 raise IdentityConflict("Selected write requires matching private claim root")
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
-            if not owner.process_identity.runs_here() or owner.turn_record.read().executing:
+            if not owner.process_identity.runs_here() or owner.turn_record.executing:
                 raise IdentityConflict("Selected write owner is not idle in this process")
             initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = owner.incarnation.lookup
-            with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(CoordinationStore.path_in(self.comms.root))) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
                 selected = [
                     assignment
@@ -211,7 +211,7 @@ class SelectedWritePlans:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
             path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))
             self._prepare_dir()
-            record_path = self._path(source_seq, lookup)
+            record_path = self.path_in(self.directory, source_seq=str(source_seq), lookup=lookup)
             operation_id = Id128Text.mint()
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
@@ -247,7 +247,7 @@ class SelectedWritePlans:
         self, assignment: WakeAssignment, owner: Thread, claimed_generation: int
     ) -> PlannedWrite | None:
         lookup = owner.incarnation.lookup
-        path = self._path(assignment.wire_seq, lookup)
+        path = self.path_in(self.directory, source_seq=str(assignment.wire_seq), lookup=lookup)
         row = self._read(path)
         if row is None:
             return None
@@ -261,7 +261,8 @@ class SelectedWritePlans:
         return row.planned(owner.worktree)
 
     def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
-        path = self._path(assignment.wire_seq, owner.incarnation.lookup)
+        path = self.path_in(self.directory, source_seq=str(assignment.wire_seq),
+                            lookup=owner.incarnation.lookup)
         row = self._read(path)
         if row is None:
             raise IdentityConflict("Selected write intent is missing")

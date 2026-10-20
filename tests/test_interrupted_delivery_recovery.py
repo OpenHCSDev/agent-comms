@@ -136,7 +136,7 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
                 assert selected is not None
                 leased = selected.owner.thread
                 inbox = agent.inputs.bind_native_turn("beta", leased)
-                agent.inputs.state("beta").first_source = SelectedOriginalInput.answering("selected batch")
+                agent.inputs.state('beta').capture_first_source(SelectedOriginalInput.answering('selected batch'))
                 following = await Coordination.run_worker(partial(
                     publish_initial, comms, "sender", "beta", "following message",
                 ))
@@ -155,7 +155,7 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
                         selected.transition(PromptAcceptancePhase()), delivery,
                     ), 5)
                     timer.cancel()
-                    assert type(comms.registry.require("beta").active_turn.phase) is PromptAcceptancePhase
+                    assert type(comms.registry.require("beta").turn_record.read().require_active().phase) is PromptAcceptancePhase
                     (placed,) = agent.inputs.state("beta").queued.values()
                     assert placed.message == following and inbox.qsize() == 1
                 finally:
@@ -207,7 +207,7 @@ async def test_delivery_worker_retires_unplaced_inputs_after_cancellation_or_inb
     comms, agent, root_id = _session(tmp_path)
     leased = comms.agents.begin_turn("beta", "delivery-worker-turn")
     inbox = agent.inputs.bind_native_turn("beta", leased.thread)
-    agent.inputs.state("beta").first_source = SelectedOriginalInput.answering("live selected work")
+    agent.inputs.state('beta').capture_first_source(SelectedOriginalInput.answering('live selected work'))
     message = publish_initial(comms, "sender", "beta", "worker-held delivery")
     path = comms.root / "coordination.sqlite3"
     lookup = RecordedThreadIncarnation("fixture", leased.thread.created_at).lookup
@@ -230,7 +230,7 @@ async def test_delivery_worker_retires_unplaced_inputs_after_cancellation_or_inb
         await asyncio.wait_for(entered.wait(), 5)
         assert threads and threads != [main_thread]
         if retire_inbox:
-            agent.inputs.state("beta").inbox = None
+            agent.inputs.state('beta').retire_turn(agent.inputs.state('beta').require_inbox())
         else:
             delivery.cancel()
         release.set()

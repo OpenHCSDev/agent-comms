@@ -2,7 +2,7 @@
 
 from bus_history import read_history
 from agent_comms.native_package import VerifiedNativePackage
-from conftest import publish_initial
+from conftest import await_event_or_task, publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
 import os
@@ -24,16 +24,16 @@ from agent_comms.coordination_cohort import next_sealed_assignment
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messages import AlertKind, InfoKind, Message
 from agent_comms.threads import Thread
 from agent_comms.private_path import FileRevision
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import StoreLockContention, _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_checked_observation_waits_and_joins_its_owned_worker(tmp_path, monkeypatch):
+async def test_checked_observation_waits_and_joins_its_owned_worker(tmp_path):
     comms, agent, root_id = _session(tmp_path)
     log = comms.bus.log
     # A busy original source is pending, not an unavailable inbox. Cancelling
@@ -52,20 +52,20 @@ async def test_checked_observation_waits_and_joins_its_owned_worker(tmp_path, mo
 
     # Once acquired, cancellation must join the original callback before its
     # descriptor closes. The worker consumes the prefix record off the loop.
-    entered, finish = threading.Event(), threading.Event()
+    entered, finish = asyncio.Event(), threading.Event()
+    loop = asyncio.get_running_loop()
     loop_thread = threading.get_ident()
 
     def consume(source):
         assert threading.get_ident() != loop_thread
         source.require_current()
-        entered.set()
+        loop.call_soon_threadsafe(entered.set)
         assert finish.wait(5)
         return source.committed_sequence()
 
     task = asyncio.create_task(log.read_checked_async(consume))
     try:
-        while not entered.is_set():
-            await asyncio.sleep(0.01)
+        await await_event_or_task(entered.wait(), task)
         task.cancel()
         await asyncio.sleep(0.04)
         assert not task.done()
@@ -85,30 +85,15 @@ async def test_checked_observation_waits_and_joins_its_owned_worker(tmp_path, mo
     # waits on this same process while preventing the awaited file close.
     entered.clear()
     finish.clear()
-    returned = threading.Event()
-    run_worker = Coordination.run_worker
-
-    async def observe_worker(operation):
-        def complete():
-            try:
-                return operation()
-            finally:
-                returned.set()
-        return await run_worker(complete)
-
-    with monkeypatch.context() as observation:
-        observation.setattr(Coordination, "run_worker", observe_worker)
-        task = asyncio.create_task(log.read_checked_async(consume))
-        while not entered.is_set():
-            await asyncio.sleep(0.01)
-        finish.set()
-        # Deliberately keep this loop from processing the completed Future.
-        # The real worker/prefix record/lock must nevertheless be closed.
-        assert returned.wait(5)
-        assert not task.done()
-        with log.checked_read(blocking=False) as source:
-            source.require_current()
-        await task
+    task = asyncio.create_task(log.read_checked_async(consume))
+    await await_event_or_task(entered.wait(), task)
+    finish.set()
+    # This synchronous wait keeps the loop from processing the completed
+    # Future; the worker must release the real lock regardless.
+    with log.checked_read(contention=StoreLockContention(5.0)) as source:
+        source.require_current()
+    assert not task.done()
+    await task
 
     # Callback refusal remains the original error and releases its resource.
     failure = ValueError("original consumer refusal")
@@ -152,7 +137,7 @@ async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path, monkeypatch):
+async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path):
     comms, agent, _root_id = _session(tmp_path)
     origin = Message("user", "#team", "publication ownership", InfoKind)
     execution = OwnedTurn(
@@ -171,34 +156,22 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
                 ("committed progress", True),
             ]
             progress.result = events.Done("refused", False)
-            entered, finish = threading.Event(), threading.Event()
-            publish = progress.publish_checkpoint
-            loop_thread = threading.get_ident()
-
-            def held_publication():
-                assert threading.get_ident() != loop_thread
-                entered.set()
-                assert finish.wait(5)
-                return publish()
-
-            monkeypatch.setattr(progress, "publish_checkpoint", held_publication)
-            task = asyncio.create_task(progress.publish_result())
-            try:
-                while not entered.is_set():
-                    await asyncio.sleep(0.01)
+            # A real writer holds the bus, so the failure notice's worker waits
+            # on the flock while the turn is cancelled.
+            with _store_lock(comms.root / "bus.jsonl"):
+                task = asyncio.create_task(progress.publish_result())
+                await asyncio.sleep(0.04)
                 task.cancel()
                 await asyncio.sleep(0.04)
                 assert not task.done()
                 assert comms.registry.require("beta").turn_lease == execution.turn_lease
-            finally:
-                finish.set()
             with pytest.raises(asyncio.CancelledError):
                 await task
             rows = read_history(comms)
             assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
-            assert "[Open diagnostic]" in rows[-1].body
+            assert rows[-1].type is AlertKind
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
-    assert not comms.registry.require("beta").active_turn.executing
+    assert not comms.registry.require("beta").executing
 
 
 def _covered_session(tmp_path):
@@ -424,7 +397,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         recovered = []
         monkeypatch.setattr(comms.goals, "recover_closed_goal_wait", recovered.append)
         sender = comms.registry.require("sender")
-        agent.inputs.effects.turns.goals.goal_snapshots["beta"] = GoalSnapshot(None, GoalExecution(
+        agent.inputs.effects.turns.goals.publication("beta").snapshot = GoalSnapshot(None, GoalExecution(
             GoalExecutionState.STANDBY, "goal", (GoalWaitTarget(sender.incarnation.require_recorded()),),
         ))
         comms.registry.declare(comms.registry.new_thread('unrelated', frozenset(), str(tmp_path)))
@@ -433,7 +406,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         for _ in range(3):
             await tick()
         assert len(drains) == settled + 2 and recovered == ["beta"]
-        agent.inputs.effects.turns.goals.goal_snapshots.pop("beta")
+        agent.inputs.effects.turns.goals.publications.pop("beta")
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()

@@ -1,8 +1,7 @@
 
-import dataclasses
 import json
 import re
-import typing
+from typing import Annotated
 
 import pytest
 
@@ -27,7 +26,7 @@ class TestToolCatalog:
             name="catalog-owner", tags=frozenset(), worktree="/wt", service_tier=ServiceTier.STANDARD,
         )
         comms.registry.declare(thread)
-        flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package")
+        flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package", comms.root)
         assert flag == "--comms-catalog"
         payload = json.loads(Path(path).read_text())
         assert payload == ToolsCliCommand(name=thread.name).apply(comms).to_wire()
@@ -208,9 +207,9 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
         label = "Inspect an inbox"
         description = "Test-only declaration extends the complete adapter path."
         context = "thread"
-        target: typing.Annotated[str, *tool_field("Selected peer", binding=SubjectBinding)]
-        viewer: typing.Annotated[str, *tool_field("Viewing thread")]
-        include_body: typing.Annotated[bool, *tool_field("Include message bodies")] = dataclasses.field(default=False)
+        target: Annotated[str, *tool_field("Selected peer", binding=SubjectBinding)]
+        viewer: Annotated[str, *tool_field("Viewing thread")]
+        include_body: Annotated[bool, *tool_field("Include message bodies")] = False
 
         def apply(self, comms, caller: ToolCaller) -> InboxInspected:
             messages = comms.bus.inbox(self.viewer, CommandTarget.named(self.target))

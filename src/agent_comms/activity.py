@@ -6,21 +6,26 @@ import json
 import os
 import threading
 import time
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, Annotated
 
-from agent_comms import field_codec
 
 from .bus_projection import NoCheckpoint
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .field_codec import (
+    FieldCodec,
+    projected,
+    ArtifactExclude,
+    WireName,
+    WireOmitDefault,
+    WireRequired,
+)
 from .locked_store import RuntimeFile
 from .private_path import FileRevision
 from .store_files import (
@@ -98,7 +103,7 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     owner: OwnerIdentity
     error_type: str
     reason: str
-    recorded_at: typing.Annotated[float, field_codec.ArtifactExclude(True)] = field(compare=False)
+    recorded_at: Annotated[float, ArtifactExclude()] = field(compare=False)
 
     @property
     @abstractmethod
@@ -211,8 +216,8 @@ class ActivityData:
     thread: str
     state: ActivityState
     detail: str = ""
-    timestamp: typing.Annotated[
-        float, field_codec.WireName("ts"), field_codec.WireRequired(True)
+    timestamp: Annotated[
+        float, WireName("ts"), WireRequired()
     ] = field(default_factory=time.time)
 
     @classmethod
@@ -244,9 +249,7 @@ class ActivityData:
 class Activity(ActivityData):
     """Original persisted event; its nullable diagnostic is external metadata."""
 
-    diagnostic: typing.Annotated[DrainDiagnostic | None, field_codec.WireOmitDefault(True)] = field(
-        default=None
-    )
+    diagnostic: Annotated[DrainDiagnostic | None, WireOmitDefault()] = None
 
     @classmethod
     def create(cls, thread: str, state: ActivityState, detail: str = "") -> Self:

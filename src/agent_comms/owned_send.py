@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .turn_goal_permission import TurnGoalPermission
 
 _LOG = logging.getLogger(__name__)
 
@@ -171,6 +172,10 @@ class OwnedSend(CodingToolOwner):
         except InputAlreadyCleared:
             decision = RefusedSend()
         yield decision
+
+    @property
+    def goal_permission(self) -> TurnGoalPermission:
+        return self.original.goal_permission
 
     def verify(self, store, turn, snapshot) -> None:
         """Recheck the running original without binding it or consuming its wait again."""

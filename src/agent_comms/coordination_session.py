@@ -18,6 +18,9 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
+from agent_comms.locked_store import RegistryFile
+from agent_comms.store_files import StoreLockContention
+from agent_comms.wire_log import CurrentSnapshotOpening, WireLog
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
@@ -80,22 +83,24 @@ class NativeBoundary(ExitStack):
 
     def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
         super().__init__()
-        from .diagnostics import PublicationMeasurements
+        from agent_comms.diagnostics import PublicationMeasurements
 
-        self.bus, self.blocking = bus, blocking
-        self.contention = contention
+        # One budget for every lock the boundary takes, the activity cut included.
+        self.bus = bus
+        self.contention = contention or StoreLockContention.for_blocking(blocking)
         self.measurements = measurements if measurements is not None else PublicationMeasurements()
 
     def __enter__(self):
         from .store_files import ExclusiveLock, SharedLock, StoreLock
 
         try:
-            self.activity = self.enter_context(self.bus.opened_activity())
+            self.activity = self.enter_context(
+                self.bus.opened_activity(CurrentSnapshotOpening(self.contention)))
             with self.measurements.operation("file_exclusion"):
                 locks = self.enter_context(StoreLock.ordered(
                     {self.bus: SharedLock(), self.bus.log: ExclusiveLock(),
                      self.bus._registry.store: SharedLock()},
-                    blocking=self.blocking, contention=self.contention))
+                    contention=self.contention))
             self.bus_lock = locks[self.bus.log]
             with self.measurements.operation("registry_snapshot"):
                 self.registry = self.bus._registry.store.read_snapshot_unlocked()
@@ -114,8 +119,8 @@ class NativeCoordinationSession(CoordinationSession):
         from . import message_bus, publisher, registration
 
         return message_bus.MessageBus(
-            self.path.parent / "bus.jsonl",
-            registration.Registration(self.path.parent / "registry.json"),
+            WireLog.path_in(self.path.parent),
+            registration.Registration(RegistryFile.path_in(self.path.parent)),
             publisher.ClaimWrites,
         )
 

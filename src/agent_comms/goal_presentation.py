@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
@@ -185,8 +185,26 @@ class IdleGoalExecution(NullMember, ThreadGoalExecution):
         pass
 
 
+class GoalPublicationSnapshot(ABC):
+    """Last published goal projection, including the not-yet-published state."""
+
+    @abstractmethod
+    def changed_by(self, current: GoalSnapshot) -> bool: ...
+
+    @abstractmethod
+    def standby(self) -> bool: ...
+
+
+class UnpublishedGoalSnapshot(NullMember, GoalPublicationSnapshot):
+    def changed_by(self, current: GoalSnapshot) -> bool:
+        return True
+
+    def standby(self) -> bool:
+        return False
+
+
 @dataclass(frozen=True)
-class GoalSnapshot:
+class GoalSnapshot(GoalPublicationSnapshot):
     """A thread's current goal and its scheduling projection, read together.
 
     The execution, when present, schedules exactly this goal.
@@ -194,6 +212,14 @@ class GoalSnapshot:
 
     goal: GoalDeclaration
     execution: ThreadGoalExecution
+
+    def changed_by(self, current: GoalSnapshot) -> bool:
+        # Domain identity ignores renames, but a published wait target includes
+        # its current name. Compare the declared presentation fields as well.
+        return asdict(self) != asdict(current)
+
+    def standby(self) -> bool:
+        return self.execution.standby()
 
     @classmethod
     def from_snapshot(cls, snapshot: GoalSnapshot, *extra: object) -> Self:

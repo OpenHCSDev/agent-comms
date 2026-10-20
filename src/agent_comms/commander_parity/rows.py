@@ -192,7 +192,7 @@ class StorageHygieneParityRow(ParityRow):
 class OrderOnlyContactParityRow(ParityRow):
     number = 20
     capability = "Commander reaches units only through orders"
-    current = "`send_guard.py` (PreToolUse hook)"
+    current = "Nothing: the PreToolUse send guard was deleted"
     native = "Harness hook checking Core order tools"
     phases = (ControlPlanePhase,)
 

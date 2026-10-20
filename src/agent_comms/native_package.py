@@ -18,9 +18,11 @@ import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, Literal
 
-from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
-from .private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
+from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
@@ -62,15 +64,6 @@ def pinned_package_in(root: Path) -> Path:
 
 def pinned_location() -> Path:
     return pinned_package_in(MANIFEST.parent)
-
-
-def native_environment(cache: Path) -> Path:
-    """Require the pinned inputs, then key the environment by sources and manifest.
-
-    stack/bin/pi-native-test-env builds this stack-shaped directory; an installed
-    artifact is never evidence that the checkout's current sources were built.
-    """
-    return cache / NativeBuildInputs(_resource_root().parent).require_pinned(MANIFEST)
 
 
 def pinned_native_package() -> Path:
@@ -245,12 +238,46 @@ def write_native_manifest(root: Path) -> None:
 
 
 
-def _sha256_hex(value: object) -> bool:
-    """This file runs without its package, so it cannot reach field_codec.Sha256Text."""
-    try:
-        return len(value) == 64 and bytes.fromhex(value).hex() == value  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return False
+@dataclass(frozen=True)
+class NativeSourceDeclaration:
+    """The package's source declaration, decoded before any filesystem work."""
+
+    path: Annotated[Path, PathText]
+    snapshot: Annotated[Path, PathText]
+    sha256: Annotated[str, Sha256Text]
+    byte_count: Annotated[int, WireName("bytes")]
+
+    def __post_init__(self) -> None:
+        if not self.path.is_absolute() or self.snapshot.is_absolute() or self.byte_count < 0:
+            raise NativePackageError("Native extension source declaration is invalid")
+
+    def load(self, snapshot_root: Path) -> NativeSource:
+        try:
+            snapshot_path = (snapshot_root / self.snapshot).resolve(strict=True)
+            snapshot_path.relative_to(snapshot_root)
+            content = snapshot_path.read_bytes()
+        except (OSError, ValueError) as error:
+            raise NativePackageError("Native extension source snapshot is unavailable") from error
+        if len(content) != self.byte_count or hashlib.sha256(content).hexdigest() != self.sha256:
+            raise NativePackageError(
+                "Native extension source snapshot differs from its declaration"
+            )
+        return NativeSource(self.path, content)
+
+
+@dataclass(frozen=True)
+class NativeExtensionEntry:
+    entry: str
+    sources: tuple[NativeSourceDeclaration, ...] = ()
+
+
+@dataclass(frozen=True)
+class NativeImportsManifest:
+    version: Literal[2]
+    extension_entries: Annotated[
+        tuple[NativeExtensionEntry, ...], WireName("extensionEntries")
+    ]
+    peer_aliases: Annotated[dict[str, str], WireName("peerAliases")]
 
 
 @dataclass(frozen=True)
@@ -259,40 +286,6 @@ class NativeSource:
 
     destination: Path
     content: bytes
-
-    @classmethod
-    def declared(cls, value: object, snapshot_root: Path) -> NativeSource:
-        if not isinstance(value, dict):
-            raise NativePackageError("Native extension source declaration is invalid")
-        path = value.get("path")
-        snapshot = value.get("snapshot")
-        digest = value.get("sha256")
-        byte_count = value.get("bytes")
-        if not isinstance(path, str) or not Path(path).is_absolute():
-            raise NativePackageError("Native extension source declaration is invalid")
-        if not isinstance(snapshot, str) or Path(snapshot).is_absolute():
-            raise NativePackageError("Native extension source declaration is invalid")
-        if not _sha256_hex(digest):
-            raise NativePackageError("Native extension source declaration is invalid")
-        if not isinstance(byte_count, int) or isinstance(byte_count, bool):
-            raise NativePackageError("Native extension source declaration is invalid")
-        if byte_count < 0:
-            raise NativePackageError("Native extension source declaration is invalid")
-        try:
-            snapshot_path = (snapshot_root / snapshot).resolve(strict=True)
-            snapshot_path.relative_to(snapshot_root)
-            content = snapshot_path.read_bytes()
-        except (OSError, ValueError) as error:
-            raise NativePackageError("Native extension source snapshot is unavailable") from error
-        if len(content) != byte_count:
-            raise NativePackageError(
-                "Native extension source snapshot differs from its declaration"
-            )
-        if hashlib.sha256(content).hexdigest() != digest:
-            raise NativePackageError(
-                "Native extension source snapshot differs from its declaration"
-            )
-        return cls(Path(path), content)
 
     def is_installed(self) -> bool:
         try:
@@ -340,24 +333,17 @@ class NativeSource:
 def install_declared_sources(root: Path, snapshot_root: Path) -> None:
     """Install the source snapshots committed by a verified native package."""
     try:
-        manifest = json.loads((root / "dist/agent-comms-imports.json").read_text())
+        manifest = FieldCodec.decode(NativeImportsManifest, FieldCodec.parse(
+            (root / "dist/agent-comms-imports.json").read_text()))
         snapshot_root = snapshot_root.resolve(strict=True)
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, MalformedRecord) as error:
         raise NativePackageError("Native extension source manifest is unavailable") from error
-    declarations = manifest.get("extensionEntries")
-    if not isinstance(declarations, list):
-        raise NativePackageError("Native extension source declarations are invalid")
 
     sources: list[NativeSource] = []
     destinations: set[Path] = set()
-    for declaration in declarations:
-        if not isinstance(declaration, dict):
-            raise NativePackageError("Native extension source declaration is invalid")
-        values = declaration.get("sources", [])
-        if not isinstance(values, list):
-            raise NativePackageError("Native extension source declaration is invalid")
-        for value in values:
-            source = NativeSource.declared(value, snapshot_root)
+    for entry in manifest.extension_entries:
+        for declaration in entry.sources:
+            source = declaration.load(snapshot_root)
             if source.destination in destinations:
                 raise NativePackageError("Native extension source destination is declared twice")
             destinations.add(source.destination)
@@ -400,9 +386,13 @@ class VerifiedNativePackage:
             for line in MANIFEST.read_text().splitlines()
             if line.startswith(TREE_PREFIX)
         ]
-        if len(pins) != 1 or not _sha256_hex(pins[0]):
+        if len(pins) != 1:
             raise NativePackageError("Pinned native package tree commitment unavailable")
-        if package_tree_digest(self.path) != pins[0]:
+        try:
+            digest = FieldCodec.decode(Annotated[str, Sha256Text], pins[0])
+        except MalformedRecord as error:
+            raise NativePackageError("Pinned native package tree commitment unavailable") from error
+        if package_tree_digest(self.path) != digest:
             raise NativePackageError("Native package tree differs from pinned artifact")
 
     @property
@@ -420,15 +410,6 @@ class VerifiedNativePackage:
         """Node reads no ambient options, module paths or compile cache."""
         return {**{name: value for name, value in environment.items() if name not in AMBIENT_NODE},
                 "NODE_DISABLE_COMPILE_CACHE": "1"}
-
-    @classmethod
-    def from_environment(cls, cache: Path) -> VerifiedNativePackage:
-        """Acquire this checkout's declared test environment once, not the live install."""
-        environment = native_environment(cache)
-        manifest = environment / MANIFEST.name
-        if manifest.read_bytes() != MANIFEST.read_bytes():
-            raise NativePackageError("Native environment and source pins disagree")
-        return cls.acquire(pinned_package_in(environment))
 
     @classmethod
     def acquire(cls, root: Path) -> VerifiedNativePackage:

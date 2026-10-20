@@ -11,6 +11,7 @@ from .coordination_tables.participants import OwnerGenerations
 from .reservation_rules import ReservationRule, RuleCheck
 from .text_digest import TextDigest
 from .threads import Thread
+from .turn_goal_permission import GoalPermission
 
 if TYPE_CHECKING:
     from .native_input_record import NativeInputRecord
@@ -26,6 +27,7 @@ class RegistryIdentityCheck(RuleCheck):
     expected_claim: int
     claim_scope: int | None
     process: ProcessIdentity
+    goal_permission: GoalPermission
 
     def worktree_matches(self) -> bool:
         return self.actual.worktree == self.expected.worktree
@@ -79,10 +81,21 @@ class GoalRegistryClaimCheck(GoalRegistryIdentityCheck, RegistryClaimCheck):
 
 class RegistryIncarnationRule(ReservationRule):
     check_type = RegistryIdentityCheck
-    explanation = "The registered thread incarnation changed before native send."
+    explanation = "The registered thread incarnation or name changed before native send."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.incarnation != check.expected.incarnation
+        return (
+            check.actual.incarnation != check.expected.incarnation
+            or check.actual.name != check.expected.name
+        )
+
+
+class RegistryNameRule(ReservationRule):
+    check_type = RegistryIdentityCheck
+    explanation = "The captured owner name changed."
+
+    def violated(self, check: RegistryIdentityCheck) -> bool:
+        return check.actual.name != check.expected.name
 
 
 class RegistryProcessRule(ReservationRule):
@@ -163,7 +176,7 @@ class RegistryGoalRule(ReservationRule):
     explanation = "The captured goal changed."
 
     def violated(self, check: GoalRegistryIdentityCheck) -> bool:
-        return check.actual.goal != check.expected.goal
+        return not check.goal_permission.allows(check.actual.goal)
 
 
 @dataclass(frozen=True, kw_only=True)

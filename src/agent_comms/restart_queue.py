@@ -12,23 +12,22 @@ import fcntl
 import json
 import os
 import sys
-import typing
 import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
-from agent_comms import field_codec
 
 from .child_process import ParentedProcess, ProcessIdentity
 from .comms import Comms, wire
+from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
@@ -46,7 +45,7 @@ DIRECTORY = "owner-restart-queue"
 
 @dataclass(frozen=True, kw_only=True)
 class RestartState(DeclaredFamily, affix="Restart"):
-    reason: typing.Annotated[str, field_codec.WireOmitDefault(True)] = field(default="")
+    reason: Annotated[str, WireOmitDefault()] = ""
     pending: ClassVar[bool] = False
     attempting: ClassVar[bool] = False
     active: ClassVar[bool] = False
@@ -389,7 +388,7 @@ async def run(comms: Comms) -> None:
         async for _ in WireWatch.observations(
             WatchSource.file(comms.registry.store.path),
             WatchSource.file(comms.registry.store.guard_path),
-            WatchSource.file(comms.root / "coordination.sqlite3"),
+            WatchSource.file(CoordinationStore.path_in(comms.root)),
             WatchSource.file(comms.root / "coordination.sqlite3-wal"),
             DirectoryWatchSource(queue.active_directory),
         ):

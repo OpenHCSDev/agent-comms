@@ -7,18 +7,16 @@ permission to send and live-context ownership. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-import typing
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from agent_comms import field_codec
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import IdentityConflict, StaleFence
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import (
     NativeInputContext,
@@ -49,9 +47,9 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
 
         install_native_runtime_schema(store)
 
-    singleton: typing.Annotated[Literal[1], Column(primary_key=True, check="singleton=1")]
+    singleton: Annotated[Literal[1], Column(primary_key=True, check="singleton=1")]
     version: Literal[7] = field(default=7, kw_only=True)
-    ddl_digest: typing.Annotated[str, Column(check="length(ddl_digest)=64")]
+    ddl_digest: Annotated[str, Column(check="length(ddl_digest)=64")]
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -213,22 +211,22 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             return ()
         return self.execution.published_replies(db, owner_lookup)
 
-    input_id: typing.Annotated[
+    input_id: Annotated[
         str,
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
     ]
-    stage: typing.Annotated[
+    stage: Annotated[
         type[NativeInputExecution], Column(check=NativeInputExecution.sql_constraint("stage"))
     ]
-    execution_id: typing.Annotated[str | None, Column(references=(ExecutionRecord, "execution_id"))]
+    execution_id: Annotated[str | None, Column(references=(ExecutionRecord, "execution_id"))]
     attempt_ordinal: int | None
-    owner_lookup: typing.Annotated[str, Column(references=(Participants, "participant_lookup"))]
+    owner_lookup: Annotated[str, Column(references=(Participants, "participant_lookup"))]
     owner_thread: str
-    owner_generation: typing.Annotated[int, Column(check="owner_generation>0")]
-    owner_token_digest: typing.Annotated[str, Column(check="length(owner_token_digest)=64")]
-    sent_owner_claimed_generation: typing.Annotated[
+    owner_generation: Annotated[int, Column(check="owner_generation>0")]
+    owner_token_digest: Annotated[str, Column(check="length(owner_token_digest)=64")]
+    sent_owner_claimed_generation: Annotated[
         NativeClaimEpoch,
-        field_codec.WireName("sent_owner_admission_generation"),
+        WireName("sent_owner_admission_generation"),
         Column(
             record_key=True,
             check="{sent_owner_claimed_generation}>0",
@@ -238,28 +236,20 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     ] = field(default_factory=UnrecordedNativeClaim)
     session_id: str | None = None
     session_file: str | None = None
-    session_entry_id: typing.Annotated[str | None, field_codec.NativeContext(str)] = field(
-        default=None
-    )
-    session_entry_start: typing.Annotated[
+    session_entry_id: Annotated[str | None, NativeContext(str)] = None
+    session_entry_start: Annotated[
         NativeInputPosition,
         NativeInputLocation.position_column,
-        field_codec.NativeContext(RecordedNativePosition),
+        NativeContext(RecordedNativePosition),
     ] = field(default_factory=UnrecordedNativePosition)
-    request_generation: typing.Annotated[int | None, field_codec.NativeContext(int)] = field(
-        default=None
-    )
-    llm_context_digest: typing.Annotated[str | None, field_codec.NativeContext(str)] = field(
-        default=None
-    )
-    committed_at_ms: typing.Annotated[int | None, field_codec.NativeContext(int)] = field(
-        default=None
-    )
+    request_generation: Annotated[int | None, NativeContext(int)] = None
+    llm_context_digest: Annotated[str | None, NativeContext(str)] = None
+    committed_at_ms: Annotated[int | None, NativeContext(int)] = None
     verdict: Annotated[
         type[SelectedTriage] | None,
         RecordedTriageText,
         Column(check=RecordedTriageText.sql_constraint("verdict")),
-    ] = field(default=None)
+    ] = None
 
     without_rowid = True
     unique = (("execution_id", "attempt_ordinal"),)
@@ -342,21 +332,21 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     def context_anchor(self) -> str | None:
         return self.session_id
 
-    wire_root_id: typing.Annotated[
+    wire_root_id: Annotated[
         str,
         Column(
             primary_key=True,
             check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'",
         ),
     ]
-    recipient_lookup: typing.Annotated[
+    recipient_lookup: Annotated[
         str, Column(primary_key=True, references=(Participants, "participant_lookup"))
     ]
-    owner_thread: typing.Annotated[str, Column(check="owner_thread<>''")]
-    owner_generation: typing.Annotated[int, Column(primary_key=True, check="owner_generation>0")]
-    owner_claimed_generation: typing.Annotated[
+    owner_thread: Annotated[str, Column(check="owner_thread<>''")]
+    owner_generation: Annotated[int, Column(primary_key=True, check="owner_generation>0")]
+    owner_claimed_generation: Annotated[
         int,
-        field_codec.WireName("owner_admission_generation"),
+        WireName("owner_admission_generation"),
         Column(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
     ]
 
@@ -366,22 +356,22 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
 
         return OwnerGenerations(owner_lookup=self.recipient_lookup, owner_thread=self.owner_thread, generation=self.owner_generation)
 
-    covered_seq: typing.Annotated[int, Column(check="covered_seq>=0")]
-    injected_seq: typing.Annotated[
+    covered_seq: Annotated[int, Column(check="covered_seq>=0")]
+    injected_seq: Annotated[
         int, Column(check="injected_seq>=0 AND injected_seq<=covered_seq")
     ]
-    input_id: typing.Annotated[
+    input_id: Annotated[
         str | None,
         Column(references=(NativeRuntimeInput, "input_id")),
-        field_codec.NativeContext(str),
+        NativeContext(str),
     ]
-    stage: typing.Annotated[
+    stage: Annotated[
         type[NativeInputExecution] | None,
         Column(check=NativeInputExecution.sql_constraint("stage")),
-        field_codec.NativeContext(type[NativeInputExecution]),
+        NativeContext(type[NativeInputExecution]),
     ]
-    session_id: typing.Annotated[str | None, field_codec.NativeContext(str)]
-    request_generation: typing.Annotated[int | None, field_codec.NativeContext(int)]
+    session_id: Annotated[str | None, NativeContext(str)]
+    request_generation: Annotated[int | None, NativeContext(int)]
 
     without_rowid = True
     checks = (

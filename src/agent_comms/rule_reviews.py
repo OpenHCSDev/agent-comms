@@ -5,12 +5,11 @@ from __future__ import annotations
 import re
 import sqlite3
 import time
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -26,8 +25,8 @@ if TYPE_CHECKING:
 class DrawnRule(TypedTable):
     """One rule a reviewer's latest review drew."""
 
-    reviewer: typing.Annotated[str, Column(primary_key=True)]
-    n: typing.Annotated[int, Column(primary_key=True, check="n>0")]
+    reviewer: Annotated[str, Column(primary_key=True)]
+    n: Annotated[int, Column(primary_key=True, check="n>0")]
     rule: str
     drawn_at: float
 
@@ -36,8 +35,8 @@ class DrawnRule(TypedTable):
 class RuleAnswer(TypedTable):
     """What a reviewer's tick does about drawn rule ``n``; without one the rule is unanswered."""
 
-    reviewer: typing.Annotated[str, Column(primary_key=True)]
-    n: typing.Annotated[int, Column(primary_key=True, check="n>0")]
+    reviewer: Annotated[str, Column(primary_key=True)]
+    n: Annotated[int, Column(primary_key=True, check="n>0")]
     text: str
 
 

@@ -143,8 +143,8 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
             await execution.run()
         assert store.snapshot(goal.id).lifecycle == expected_state
         assert not comms.registry.require(name).executing
-        assert owner.inputs.state(session.session_id).inbox is None
-        assert owner.inputs.state(session.session_id).first_source is None
+        assert not owner.inputs.state(session.session_id).turn_open()
+        assert not owner.inputs.state(session.session_id).turn_started()
         assert not owner.inputs.input_keys(session.session_id)
         assert tuple(owner.inputs.state(session.session_id).pending_turns) == pending_before
         if failure == "receipt_capture":
@@ -202,8 +202,8 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
         original, = stored_inputs(owner.inputs.dispositions.root).rows.values()
         assert isinstance(original, NotSentInput)
         assert comms.registry.require(name).turn_lease is None
-        assert owner.inputs.state(session.session_id).first_source is None
-        assert owner.inputs.state(session.session_id).inbox is None
+        assert not owner.inputs.state(session.session_id).turn_started()
+        assert not owner.inputs.state(session.session_id).turn_open()
         assert not owner.turns.persistent_backends
     finally:
         release.set()

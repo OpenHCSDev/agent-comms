@@ -1,14 +1,19 @@
 """Shared fixtures: an isolated Comms wire per test."""
-from agent_comms.native_package import pinned_native_package
+from agent_comms.native_package import pinned_location, pinned_native_package
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
+import asyncio
 import os
+import subprocess
+import sys
 import tempfile
+from collections.abc import Awaitable
 from contextlib import AsyncExitStack
 from pathlib import Path
 
 import pytest
+from xdist import is_xdist_worker
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
@@ -20,6 +25,36 @@ from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
+
+
+class TranscriptRecords:
+    """Fixed test time, projected through each record's declared constructor."""
+
+    def __init__(self):
+        from agent_comms.field_codec import RecordedTimestamp
+
+        self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
+
+    def event(self, declaration, *args, **facts):
+        return declaration(*args, timestamp=self.timestamp.at.timestamp(), **facts)
+
+    def entry(self, declaration, **facts):
+        return declaration(timestamp=self.timestamp, **facts)
+
+    def message(self, payload, **coordinates):
+        from agent_comms.native_entries import MessageEntry
+        from agent_comms.pi_payloads import PiMessage
+
+        entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
+        return {**entry.to_wire(), "message": payload}
+
+    def session(self, **coordinates):
+        from agent_comms.native_entries import SessionEntry
+
+        return self.entry(SessionEntry, **coordinates)
+
+
+transcript_records = TranscriptRecords()
 
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
@@ -34,6 +69,20 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_TASK",
     "PI_WORKTREE",
 })
+
+
+async def await_event_or_task(event: Awaitable[object], task: asyncio.Task) -> object:
+    """A producer failure ends its event wait with the original exception."""
+    observed = asyncio.ensure_future(event)
+    try:
+        done, _ = await asyncio.wait((observed, task), return_when=asyncio.FIRST_COMPLETED)
+        if task in done:
+            await task
+        assert observed.done(), 'Producer finished without the expected event'
+        return observed.result()
+    finally:
+        observed.cancel()
+        await asyncio.gather(observed, return_exceptions=True)
 
 
 def reader(root: Path) -> Comms:
@@ -55,11 +104,16 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
             origin=AgentOrigin(),
         )
 
-def pytest_addoption(parser):
-    from agent_comms.storage_rules import StorageRule
+def pytest_sessionstart(session):
+    """The controller derives this checkout's pinned native package before any worker runs.
 
-    parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
-                     help="Root of the native test environments stack/bin/pi-native-test-env builds")
+    prepare-pi-native keys its build by the pin and reuses a verified one, so an
+    unchanged pin costs nothing and a changed pin rebuilds without anyone remembering.
+    """
+    if is_xdist_worker(session) or pinned_location().is_dir():
+        return
+    root = Path(__file__).resolve().parents[1]
+    subprocess.run([str(root / "stack/bin/prepare-pi-native"), "--python", sys.executable], check=True)
 
 
 @pytest.fixture
@@ -89,19 +143,11 @@ def cursor_delivery(source_reads):
 
 
 @pytest.fixture(scope="session")
-def native_runtime_package(pytestconfig):
-    """The artifact of this checkout's own pin from its test environment; the pins must agree."""
-    from agent_comms import native_package
+def native_runtime_package():
+    """The artifact of this checkout's own pin, never the installed package's."""
+    from agent_comms.native_package import VerifiedNativePackage
 
-    return native_package.VerifiedNativePackage.from_environment(pytestconfig.getoption("native_cache"))
-
-
-@pytest.fixture(autouse=True)
-def _native_runtime_resources_are_explicit(monkeypatch, native_runtime_package):
-    """Source tests use the same reviewed native resource as their installed interpreter."""
-    from agent_comms import native_package
-
-    monkeypatch.setattr(native_package, "MANIFEST", native_runtime_package.path.parents[3] / "pi-native.sha256")
+    return VerifiedNativePackage.acquire(pinned_native_package())
 
 
 @pytest.fixture(autouse=True)
@@ -197,6 +243,10 @@ def private_comms(private_directory):
     root.mkdir(mode=0o700)
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
+    from agent_comms.launch_root import LaunchRoot
+
+    LaunchRoot.from_path(root).install()
+    comms.route.launch().require_private().check()
     return comms
 
 
@@ -265,6 +315,15 @@ def root(tmp_path: Path) -> Path:
     return tmp_path / "comms"
 
 
+def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
+    """Declare exactly the test's named channels and members, never inferred ones."""
+    for channel in channels:
+        comms.channels.create_tag(channel)
+    for thread in threads:
+        comms.registry.declare(thread)
+    return comms
+
+
 @pytest.fixture
 def comms(root: Path) -> Comms:
     return Comms(root)
@@ -281,13 +340,15 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order: ())
 
-    for created, name in enumerate(("lead", "worker"), 1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))
+    declare_test_bus(comms, channels=("comms",), threads=(
+        comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created))
+        for created, name in enumerate(("lead", "worker"), 1)
+    ))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     from agent_comms.commander.config import CommanderConfig
     CommanderConfig(commander="lead", root=comms.root,
-        state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
+        state=tmp_path / "state",
         repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
         disk=tmp_path).write(tmp_path)
     return comms, ThreadCaller("lead")
@@ -341,15 +402,14 @@ def thread_registration(tmp_path_factory):
 @pytest.fixture
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
-    comms.registry.declare(comms.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'))
-    comms.registry.declare(
-        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent='PR111', task='fix auth')
-    )
-    return comms
+    return declare_test_bus(comms, channels=("base", "auth"), threads=(
+        comms.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'),
+        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent='PR111', task='fix auth'),
+    ))
 
 
 @pytest.fixture
-def selected_model(monkeypatch, tmp_path, native_runtime_package):
+def selected_model(monkeypatch, tmp_path):
     """Declare a source-test runtime; native validation and package checks stay real.
 
     Its CLI helpers must consume this Core, not an older installed console script.
@@ -373,8 +433,6 @@ def selected_model(monkeypatch, tmp_path, native_runtime_package):
         entrypoint = runtime.interpreter.with_name(name)
         entrypoint.write_text(
             f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {source!r})\n"
-            "from pathlib import Path\nimport agent_comms.native_package as native_package\n"
-            f"native_package.MANIFEST = Path({str(native_runtime_package.path.parents[3] / 'pi-native.sha256')!r})\n"
             f"from {module} import main\nraise SystemExit(main())\n"
         )
         entrypoint.chmod(0o700)

@@ -20,6 +20,7 @@ import tokenize
 import tomllib
 import types
 import typing
+from typing import Annotated
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Callable, Iterator
@@ -48,6 +49,8 @@ sys.path.insert(
 )
 
 import audit
+from audit.findings import Package as AuditPackage, ParsedModule as AuditModule, RawShape
+from audit.repository import Repository as AuditRepository
 from audit.handler_declarations import BuiltinHandlerDeclarations
 from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
@@ -662,6 +665,17 @@ class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
         spelling = NoneSpelling()
         spelling.dispatch_sync(node)
         return spelling.found
+
+class RawRecordShapes(PerFileMeasure):
+    """Reuse the overlay's raw-shape detector for every production file."""
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        text = source.decode()
+        module = AuditModule(filename, text, ast.parse(text, filename), filename)
+        package = AuditPackage(AuditRepository(Path.cwd()), "", filename, (module,), ())
+        return sum(1 for facts in package.functions[filename]
+                   for _finding in RawShape.from_facts(facts, package))
 
 
 class FunctionLocalImport(PerFileMeasure):
@@ -1479,7 +1493,7 @@ class AnyInTypeExpression(MroDispatch):
         members = [node.slice]
         if origin is typing.Literal:
             members = []  # Literal members are values, not types.
-        if origin is typing.Annotated:
+        if origin is Annotated:
             members = getattr(node.slice, "elts", members)[:1]  # The rest is metadata.
         for member in members:
             self.dispatch_sync(member)

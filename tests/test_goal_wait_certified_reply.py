@@ -45,7 +45,7 @@ def test_first_wait_ignores_unreserved_reply_before_goal_publication(tmp_path):
     inputs = InputDispositions(comms.root)
     inputs.record(
         f"bus:{old.seq}", seq=old.seq, owner="owner", target="owner", text=old.body,
-        claim_scope=comms.registry.snapshot().claimed_generations["owner"],
+        claim_scope=comms.registry.snapshot().claim_generation("owner"),
     )
     assert list(comms.goals.goal_input_review("owner", goal.id, ["peer"]).reviewed_inputs) == [
         f"bus:{old.seq}"
@@ -161,7 +161,7 @@ async def test_native(retained_native_acp_owner, *, source_reads):
     goal = comms.goals.update_goal(sid, SetGoalAction(text="Process the original peer reply"))
     old_key = "acp:historical-unknown"
     owner = comms.registry.require(sid)
-    claim_scope = comms.registry.snapshot().claimed_generations[sid]
+    claim_scope = comms.registry.snapshot().claim_generation(sid)
     agent.inputs.dispositions.record(
         old_key, seq=None, owner=sid, claim_scope=claim_scope, target=sid,
         text="HISTORICAL_UNKNOWN_MUST_NOT_REPLAY",
@@ -213,7 +213,7 @@ async def test_native(retained_native_acp_owner, *, source_reads):
             assert await turn == 1
         assert isinstance(comms.goals.goal_wait(sid), NoGoalWait)
         assert comms.registry.require(sid).goal == parked_goal
-        assert not comms.registry.require(sid).active_turn.executing
+        assert not comms.registry.require(sid).turn_record.executing
         handled = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
         assert not handled.unresolved and handled.has_native_binding
         assert not agent.inputs.state(sid).queued

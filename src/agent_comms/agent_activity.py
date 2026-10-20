@@ -10,6 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .locked_store import RegistryFile
 from .native_input_owner import RegistryOwner
 from .notification_progress import AcknowledgedProgress
 
@@ -122,7 +123,7 @@ class AgentActivity:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             # A tool-use hook runs outside any watch; maintenance refuses it like a send.
-            MaintenanceBarrier(self._wire_lock_path.parent / "registry.json").assert_open_unlocked()
+            MaintenanceBarrier(RegistryFile.path_in(self._wire_lock_path.parent)).assert_open_unlocked()
             self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
@@ -242,7 +243,7 @@ class AgentActivity:
         """A successful later backend turn disproves only an older drain failure."""
         snapshot = self.registry.snapshot()
         thread = snapshot.require(lease.identity.incarnation.name)
-        if thread.turn_lease != lease.renamed(thread.name) or thread.backend != backend:
+        if thread.turn_lease != lease or thread.backend != backend:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()

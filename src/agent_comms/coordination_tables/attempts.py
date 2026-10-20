@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import typing
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from enum import IntFlag
-from typing import Final
+from typing import TYPE_CHECKING, Final, Annotated
 
-from agent_comms import field_codec
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -18,16 +17,24 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    IntegrityViolationError,
+    RecoveryBlocked,
+    StaleFence,
+)
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
     TypedTable,
 )
+
+if TYPE_CHECKING:
+    from agent_comms.coordination_snapshot import RecoverySnapshot
 
 
 class ReplayFact(IntFlag):
@@ -47,8 +54,43 @@ class ReplayFact(IntFlag):
 APPROVED_REPLAY_FACT_MASK: Final = sum(fact.value for fact in ReplayFact)
 
 
+class PreviousAttempt(ABC):
+    """Start policy consumes an attempt capability, not the snapshot's optional SQL row."""
+
+    @abstractmethod
+    def require_attempt(self) -> AttemptRecord: ...
+
+    @abstractmethod
+    def require_retry(self, snapshot: RecoverySnapshot) -> None: ...
+
+    @abstractmethod
+    def require_newer_owner(self, generation: int) -> None: ...
+
+
+class NoPreviousAttempt(PreviousAttempt):
+    def require_newer_owner(self, generation: int) -> None:
+        pass
+
+    def require_attempt(self) -> AttemptRecord:
+        raise StaleFence("execution has no authorized attempt")
+
+    def require_retry(self, snapshot: RecoverySnapshot) -> None:
+        raise RecoveryBlocked("frozen v2 cannot resume an unstarted deferral")
+
+
 @dataclass(frozen=True, slots=True)
-class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
+class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
+    def require_attempt(self) -> AttemptRecord:
+        return self
+
+    def require_retry(self, snapshot: RecoverySnapshot) -> None:
+        if not snapshot.can_retry:
+            raise RecoveryBlocked("retry requires final death, replay proof, and budget")
+
+    def require_newer_owner(self, generation: int) -> None:
+        if generation <= self.owner_generation:
+            raise StaleFence("retry must use a strictly newer owner generation")
+
     def advance(
         self,
         session,
@@ -93,24 +135,24 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
             generation=self.owner_generation,
         )
 
-    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
-    attempt_ordinal: typing.Annotated[int, Column(primary_key=True, check="attempt_ordinal > 0")]
+    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
+    attempt_ordinal: Annotated[int, Column(primary_key=True, check="attempt_ordinal > 0")]
     owner_lookup: str
-    owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
-    owner_generation: typing.Annotated[int, Column(check="owner_generation > 0")]
-    owner_token_digest: typing.Annotated[
+    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
+    owner_generation: Annotated[int, Column(check="owner_generation > 0")]
+    owner_token_digest: Annotated[
         str,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
     ]
-    lifecycle: typing.Annotated[AttemptState, field_codec.SnapshotExclude(True)]
-    revision: typing.Annotated[int, Column(check="revision > 0")]
+    lifecycle: Annotated[AttemptState, SnapshotExclude()]
+    revision: Annotated[int, Column(check="revision > 0")]
     last_progress_at_ms: int | None
-    reason_code: typing.Annotated[
+    reason_code: Annotated[
         str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
     ]
-    created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
-    updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
+    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
     @projected(view="snapshot", name="phase")
     def snapshot_phase(self):
@@ -147,47 +189,47 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
         ):
             raise ValueError("attempt progress time is inconsistent")
 
-    phase: typing.Annotated[
+    phase: Annotated[
         str,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    lease_expires_at_ms: typing.Annotated[
+    lease_expires_at_ms: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
             check="lease_expires_at_ms >= 0",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    backend_done: typing.Annotated[
+    backend_done: Annotated[
         bool,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
             check="backend_done IN (0,1)",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    process_dead: typing.Annotated[
+    process_dead: Annotated[
         bool,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
             check="process_dead IN (0,1)",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    phase_kind: typing.Annotated[
+    phase_kind: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated=(
                 "CASE\n       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE 'active' END"
             )
         ),
     ] = dataclass_field(init=False, default=None, compare=False)
-    active_required_status: typing.Annotated[
+    active_required_status: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END"),
     ] = dataclass_field(init=False, default=None, compare=False)
     checks = (
@@ -300,11 +342,11 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
     def allows_retry(self) -> bool:
         return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
 
-    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
-    facts: typing.Annotated[ReplayFact, Column(check="facts >= 0 AND facts <= 1023")]
-    replay_safe: typing.Annotated[bool, Column()]
-    side_effects_possible: typing.Annotated[bool, Column()]
-    revision: typing.Annotated[int, Column(check="revision > 0")]
+    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
+    facts: Annotated[ReplayFact, Column(check="facts >= 0 AND facts <= 1023")]
+    replay_safe: Annotated[bool, Column()]
+    side_effects_possible: Annotated[bool, Column()]
+    revision: Annotated[int, Column(check="revision > 0")]
 
     @classmethod
     def accumulate(cls, db, execution_id: str, observed: ReplayFact) -> None:
@@ -394,7 +436,7 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if self.facts != ReplayFact.NONE and self.replay_safe:
             raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
 
-    retry_authorized: typing.Annotated[
+    retry_authorized: Annotated[
         int | None,
         Column(
             generated=(

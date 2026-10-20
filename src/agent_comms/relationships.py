@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import json
 import time
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
 
 from agent_comms import field_codec
 
@@ -27,7 +26,7 @@ from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import Goal, GoalMentionBinding
-from .locked_store import LockedStore, RootFile
+from .locked_store import DurableFile, LockedStore
 from .messages import Message
 from .peer_relevance import (
     ChannelmateRelevance,
@@ -513,13 +512,11 @@ class RelationshipOrder:
 
 @dataclass(frozen=True, slots=True)
 class RelationshipDocument:
-    collaborations: typing.Annotated[tuple[Collaboration, ...], field_codec.WireRequired(True)] = (
-        field(default=())
+    collaborations: Annotated[tuple[Collaboration, ...], field_codec.WireRequired()] = (
+        ()
     )
-    orders: typing.Annotated[tuple[RelationshipOrder, ...], field_codec.WireRequired(True)] = field(
-        default=()
-    )
-    version: typing.Annotated[Literal[2], field_codec.WireRequired(True)] = field(default=2)
+    orders: Annotated[tuple[RelationshipOrder, ...], field_codec.WireRequired()] = ()
+    version: Annotated[Literal[2], field_codec.WireRequired()] = 2
 
     def __post_init__(self):
         pairs = [edge.pair_identity for edge in self.collaborations]
@@ -656,7 +653,7 @@ class RemoveRelationshipEdit(RelationshipEdit):
         )
 
 
-class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocument]):
+class RelationshipStore(DurableFile, ThreadOwnedState, LockedStore[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"

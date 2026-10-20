@@ -6,7 +6,7 @@ import asyncio
 import os
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from acp import RequestError
 from acp.schema import (
@@ -23,7 +23,7 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from . import agent_events as events
 from .acp_extension import (
     CoordinationChangedUpdate,
@@ -39,7 +39,7 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
-from .thread_identity import AcpThreadRole
+from .thread_identity import NO_THREAD_TEXT, AcpThreadRole, ThreadText
 from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
@@ -64,7 +64,7 @@ class SessionLifecycle:
         self.launched_owners: set[str] = set()
         self.client: Any = None
         self.titles: dict[str, str] = {}
-        self.display_titles: dict[str, str | None] = {}
+        self.display_titles: dict[str, ThreadText] = {}
         self.worktrees: dict[str, str] = {}
         self.proxies: dict[str, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
@@ -249,7 +249,7 @@ class SessionLifecycle:
     async def _bind_loaded(self, thread: Thread, session_id: str) -> None:
         await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
-        await self.transcript.replay(session_id, thread.name)
+        await self.transcript.replay(session_id, self.transcript.runtime)
         await self.effects.inputs.emit_input_delivery_changed(session_id)
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
@@ -265,7 +265,7 @@ class SessionLifecycle:
                 self.proxies[session_id] = proxy
             except IncompatibleOwnerError as error:
                 # History is Core's own store; only owner requests need the owner's Core.
-                await self.transcript.replay(session_id, thread.name)
+                await self.transcript.replay(session_id, self.transcript.runtime)
                 self.proxies[session_id] = error.owner
                 return LoadSessionResponse(field_meta={
                     **await self.metadata(thread.name, session_id=session_id),
@@ -310,13 +310,16 @@ class SessionLifecycle:
                 self.worktrees[session_id] = thread.worktree
             return name
 
-    async def publish_metadata(self, session_id: str, *, title: str | None = None) -> None:
-        """Publish the complete current session state through its existing transport."""
+    @boundary_decoder
+    async def publish_metadata(
+        self, session_id: str, *, title: ThreadText = NO_THREAD_TEXT,
+    ) -> None:
+        """Encode the thread's title once for the ACP metadata boundary."""
         await self.runtime.session_update(
             session_id=session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",
-                title=title,
+                title=cast(str | None, FieldCodec.encode(title)),
                 field_meta=await self.metadata(self.require(session_id), session_id=session_id),
             ),
         )

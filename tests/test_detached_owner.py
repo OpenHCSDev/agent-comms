@@ -14,6 +14,7 @@ from agent_comms.acp_extension import CoordinationChangedUpdate, TurnChangedUpda
 from agent_comms.child_process import ParentedProcess
 from agent_comms.comms import wire
 from compaction_loopback import LoopbackProvider
+from conftest import await_event_or_task
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX detached owner")
@@ -94,14 +95,15 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
     name, owner, turn = None, None, None
     try:
         name = (await first.new_session(str(project))).session_id
-        owner = comms.registry.require(name).pid
+        owner = comms.registry.require(name).require_process().pid
         assert owner != os.getpid() and os.getpgid(owner) == owner
         turn = asyncio.create_task(first.prompt(name, [{"type": "text", "text": "work"}]))
-        await asyncio.wait_for(started.wait(), 15)
+        async with asyncio.timeout(15):
+            await await_event_or_task(started.wait(), turn)
         await first.shutdown()
         turn.cancel()
         await asyncio.gather(turn, return_exceptions=True)
-        assert comms.registry.require(name).process_alive and comms.registry.require(name).active_turn.executing
+        assert comms.registry.require(name).process_alive and comms.registry.require(name).turn_record.executing
         attachments = await asyncio.gather(
             second.load_session(str(project), name), third.load_session(str(project), name)
         )
@@ -116,11 +118,11 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         release.set()
         await asyncio.wait_for(settled.wait(), 15)
         assert provider.posts == 1
-        assert not comms.registry.require(name).active_turn.executing
+        assert not comms.registry.require(name).turn_record.executing
         await second.shutdown()
         await third.shutdown()
         assert comms.registry.require(name).process_alive
-        assert comms.registry.require(name).pid == owner
+        assert comms.registry.require(name).require_process().pid == owner
     finally:
         release.set()
         if turn is not None:
@@ -130,7 +132,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
             await client.shutdown()
         if name is None and "project" in comms.registry:
             name = "project"
-            owner = comms.registry.require(name).pid
+            owner = comms.registry.require(name).require_process().pid
         if name is not None:
             comms.owners.stop(name)
         if owner is not None:

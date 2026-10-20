@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-import typing
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Annotated
 from uuid import uuid4
 
-from agent_comms import field_codec
 
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, boundary_decoder, WireAbsentNone, WireName, WireOmitDefault
 from .image_inputs import ImageInput
 from .native_package import VerifiedNativePackage
 from .native_session_reopen import NativeSessionIdentity
@@ -67,9 +65,16 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: typing.Annotated[str | None, field_codec.WireAbsentNone(True)] = field(
+    id: Annotated[str | None, WireAbsentNone()] = field(
         default_factory=lambda: uuid4().hex
     )
+
+    @boundary_decoder
+    def require_id(self) -> str:
+        """Operations that correlate an input require the command's actual ID."""
+        if self.id is None:
+            raise ValueError("A correlated native input requires its command ID")
+        return self.id
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -139,26 +144,24 @@ class UnknownCommand(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class Prompt(PiCommand):
-    input_id: typing.Annotated[
-        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("inputId")
-    ] = field(default=None)
-    message: typing.Annotated[
-        str, field_codec.WireOmitDefault(True), field_codec.WireName("message")
-    ] = field(default=None)
-    images: typing.Annotated[tuple[ImageInput, ...] | None, field_codec.WireOmitDefault(True)] = (
-        field(default=None)
+    input_id: Annotated[
+        str | None, WireOmitDefault(), WireName("inputId")
+    ] = None
+    message: Annotated[str, WireOmitDefault()] = None
+    images: Annotated[tuple[ImageInput, ...] | None, WireOmitDefault()] = (
+        None
     )
-    context_contributions: typing.Annotated[
+    context_contributions: Annotated[
         tuple[InputContributionCoordinates, ...],
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("contextContributions"),
-    ] = field(default=())
-    owner_tools: typing.Annotated[OwnerToolConnection, field_codec.WireName("ownerTools")]
-    streaming_behavior: typing.Annotated[
+        WireOmitDefault(),
+        WireName("contextContributions"),
+    ] = ()
+    owner_tools: Annotated[OwnerToolConnection, WireName("ownerTools")]
+    streaming_behavior: Annotated[
         Literal[None, "steer", "followUp"],
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("streamingBehavior"),
-    ] = field(default=None)
+        WireOmitDefault(),
+        WireName("streamingBehavior"),
+    ] = None
 
     @classmethod
     def on_response(
@@ -218,8 +221,6 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
                 if not session.native.attestation.uncertain:
                     context.context_window.update_size(session.usage)
             yield session.context_info()
-            if session.persistent_session is None:
-                session.finished = True
 
 
 CATALOG_TIMEOUT = 10  # seconds for one metadata child to start and answer
@@ -296,9 +297,9 @@ class InterruptSteering(PiCommand):
         if response.success is False:
             yield events.Error(text=str(response.error or "Send now was refused"))
 
-    input_ids: typing.Annotated[
-        list[str] | None, field_codec.WireOmitDefault(True), field_codec.WireName("inputIds")
-    ] = field(default=None)
+    input_ids: Annotated[
+        list[str] | None, WireOmitDefault(), WireName("inputIds")
+    ] = None
 
 
 class SettingCommand(CatalogQuery):
@@ -353,24 +354,24 @@ class SetModel(SettingCommand):
 
     result_type = events.ModelChanged
     error_message = "Model change failed"
-    provider: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    model_id: typing.Annotated[
-        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("modelId")
-    ] = field(default=None)
+    provider: Annotated[str | None, WireOmitDefault()] = None
+    model_id: Annotated[
+        str | None, WireOmitDefault(), WireName("modelId")
+    ] = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetThinkingLevel(SettingCommand):
     result_type = events.ThinkingChanged
     error_message = "Thinking level change failed"
-    level: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    level: Annotated[str | None, WireOmitDefault()] = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetSteeringMode(PiCommand):
     """How many waiting steers Pi hands the model at one step: "all" or "one-at-a-time"."""
 
-    mode: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    mode: Annotated[str | None, WireOmitDefault()] = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -378,7 +379,7 @@ class ClearQueue(PiCommand):
     """Remove exactly the selected queued native inputs."""
 
     response_payload = QueueClearedData
-    input_ids: typing.Annotated[tuple[str, ...], field_codec.WireName("inputIds")]
+    input_ids: Annotated[tuple[str, ...], WireName("inputIds")]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -387,20 +388,16 @@ class Compact(NativeQuery):
 
     response_payload = CompactionData
     writes_session = True
-    custom_instructions: typing.Annotated[
-        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("customInstructions")
-    ] = field(default=None)
+    custom_instructions: Annotated[
+        str | None, WireOmitDefault(), WireName("customInstructions")
+    ] = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class ExtensionUiResponse(PiCommand):
-    cancelled: typing.Annotated[bool | None, field_codec.WireOmitDefault(True)] = field(
-        default=None
-    )
-    confirmed: typing.Annotated[bool | None, field_codec.WireOmitDefault(True)] = field(
-        default=None
-    )
-    value: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    cancelled: Annotated[bool | None, WireOmitDefault()] = None
+    confirmed: Annotated[bool | None, WireOmitDefault()] = None
+    value: Annotated[str | None, WireOmitDefault()] = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -412,7 +409,7 @@ class NewSession(MutatesSession, PiCommand):
 class SwitchSession(MutatesSession, NativeQuery):
     response_payload = SessionSwitchData
     strict_response = True
-    session_path: typing.Annotated[str, field_codec.WireName("sessionPath")]
+    session_path: Annotated[str, WireName("sessionPath")]
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,9 +1,8 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
 import sqlite3
-import typing
 from dataclasses import dataclass, field, replace
-from typing import Type
+from typing import Annotated, Type
 
 import pytest
 
@@ -24,14 +23,14 @@ from agent_comms.typed_table import (
 
 @dataclass(frozen=True)
 class TableParentRow(TypedTable):
-    key: typing.Annotated[str, Column(primary_key=True)]
+    key: Annotated[str, Column(primary_key=True)]
     count: int = 0
     unique = (("key", "count"),)
 
 
 @dataclass(frozen=True)
 class TableChildRow(TypedTable):
-    key: typing.Annotated[str, Column(primary_key=True)]
+    key: Annotated[str, Column(primary_key=True)]
     parent: str
     enabled: bool
     detail: tuple[str, ...]
@@ -126,13 +125,13 @@ def test_index_owns_unique_partial_creation():
 def test_new_row_declaration_needs_no_other_edit():
     @dataclass(frozen=True)
     class AddedTableRow(TypedTable):
-        label: typing.Annotated[str, Column(unique=True, index=True)]
+        label: Annotated[str, Column(unique=True, index=True)]
         child: TableChildRow
         event: Type[MessageKind] = InfoKind
         representation: type[SqlStorage] = IntegerStorage
-        exact: typing.Annotated[int, Column(storage=ExactStorage)] = field(default=7)
-        ordinal: typing.Annotated[int | None, Column(primary_key=True, auto_increment=True)] = field(default=None, compare=False)
-        label_size: typing.Annotated[int | None, Column(generated="length(label)")] = field(default=None, init=False, compare=False)
+        exact: Annotated[int, Column(storage=ExactStorage)] = 7
+        ordinal: Annotated[int | None, Column(primary_key=True, auto_increment=True)] = field(default=None, compare=False)
+        label_size: Annotated[int | None, Column(generated="length(label)")] = field(default=None, init=False, compare=False)
 
     @dataclass(frozen=True)
     class Projection(TypedRow):

@@ -1,8 +1,8 @@
 """Publication content identity, separate from actual bus delivery evidence."""
 
 import json
-import typing
-from dataclasses import dataclass, field, replace
+from typing import Annotated
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -40,7 +40,7 @@ def test_publication_snapshot_is_frozen_content_not_delivery_enrichment():
 def test_new_declared_delivery_field_inherits_snapshot_without_consumer_edit():
     @dataclass(frozen=True, slots=True)
     class DeliveredMessage(Message):
-        delivery_observation: typing.Annotated[int, field_codec.PublicationExclude(True)] = field(default=0)
+        delivery_observation: Annotated[int, field_codec.PublicationExclude()] = 0
         annotation: str = "original"
 
     original = DeliveredMessage("owner", "#team", "answer", InfoKind, timestamp=42.0)
@@ -87,16 +87,16 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
                 RelationViolationError, match="checkpoint prefix tail changed"
             ):
                 case.bus.log.keyed_publication_unlocked(intent)
-        # The public locked read refuses changed bytes at its earlier warm barrier.
-        with pytest.raises(RelationViolationError, match="checkpoint prefix tail changed"):
-            case.bus.log.read_keyed_response(intent)
-        # check this isolated candidate through the real cold reader, not a
-        # forged index. Frozen SQL intent still forbids content substitution.
-        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-        marker.checkpoint_version = None
-        marker.checkpoint_seal = None
-        case.bus.log.write_metadata_unlocked(marker)
-        install_private_bus_checkpoint(case.bus.log)
+            # Public reads borrow this checked lock; changed bytes still fail.
+            with pytest.raises(RelationViolationError):
+                case.bus.log.read_keyed_response(intent)
+            # Certify the isolated changed source while its original writer
+            # remains held, never by reopening a missing live checkpoint.
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+            install_private_bus_checkpoint(case.bus.log, _bus_locked=True)
         before = case.bus.log.path.read_bytes()
         with pytest.raises(RelationViolationError, match="Response publication intent conflicts"):
             case.bus.log.read_keyed_response(intent)

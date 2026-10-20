@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import os
 import sys
-import typing
 from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, cast
 
 from pydantic import BaseModel
 
-from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -24,8 +22,16 @@ from .field_codec import (
     JsonShapeMember,
     PathText,
     TextRepresentation,
+    boundary_decoder,
+    NativeScope,
+    RuntimeScope,
+    WireName,
+    WireOmitDefault,
 )
 from .launch_root import LaunchRoot
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -202,40 +208,40 @@ class RestartEnvironment(EnvironmentRecord):
     stay in /proc and are read only from the exact selected process at execution.
     """
 
-    home: typing.Annotated[
-        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("HOME")
-    ] = field(default=None)
-    path: typing.Annotated[
+    home: Annotated[
+        str | None, WireOmitDefault(), WireName("HOME")
+    ] = None
+    path: Annotated[
         str | None,
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("PATH"),
-        field_codec.RuntimeScope(True),
-    ] = field(default=None)
-    pythonpath: typing.Annotated[
+        WireOmitDefault(),
+        WireName("PATH"),
+        RuntimeScope(),
+    ] = None
+    pythonpath: Annotated[
         ImportPath,
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("PYTHONPATH"),
-        field_codec.RuntimeScope(True),
+        WireOmitDefault(),
+        WireName("PYTHONPATH"),
+        RuntimeScope(),
     ] = field(default_factory=NoImportPath)
-    virtual_env: typing.Annotated[
+    virtual_env: Annotated[
         str | None,
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("VIRTUAL_ENV"),
-        field_codec.RuntimeScope(True),
-    ] = field(default=None)
-    config: typing.Annotated[
-        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("XDG_CONFIG_HOME")
-    ] = field(default=None)
+        WireOmitDefault(),
+        WireName("VIRTUAL_ENV"),
+        RuntimeScope(),
+    ] = None
+    config: Annotated[
+        str | None, WireOmitDefault(), WireName("XDG_CONFIG_HOME")
+    ] = None
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
     native_config: Annotated[
         Path,
         PathText,
-        field_codec.WireName("AGENT_COMMS_NATIVE_CONFIG_DIR"),
-        field_codec.NativeScope(True),
-    ] = field(default=default_agent_directory)
+        WireName("AGENT_COMMS_NATIVE_CONFIG_DIR"),
+        NativeScope(),
+    ] = default_agent_directory
     agent_directory: Annotated[
-        Path, PathText, field_codec.WireName("PI_CODING_AGENT_DIR"), field_codec.NativeScope(True)
-    ] = field(default=default_agent_directory)
+        Path, PathText, WireName("PI_CODING_AGENT_DIR"), NativeScope()
+    ] = default_agent_directory
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
@@ -276,7 +282,7 @@ class RestartEnvironment(EnvironmentRecord):
         native = (
             plan.key
             for plan in FieldCodec.field_plans(type(self))
-            if plan.setting(field_codec.NativeScope, False)
+            if plan.setting(NativeScope, False)
         )
         return {key: encoded[key] for key in native}
 
@@ -290,7 +296,7 @@ class RestartEnvironment(EnvironmentRecord):
         result = dict(source)
         encoded = self.encode()
         for plan in FieldCodec.field_plans(type(self)):
-            if plan.setting(field_codec.RuntimeScope, False):
+            if plan.setting(RuntimeScope, False):
                 name = plan.key
                 result.pop(name, None)
                 if name in encoded:
@@ -330,31 +336,42 @@ class ThreadLaunch(EnvironmentRecord):
     the record and readers decode it.
     """
 
-    name: typing.Annotated[str, field_codec.WireName("AGENT_COMMS_THREAD")]
-    worktree: typing.Annotated[str, field_codec.WireName("PI_WORKTREE")]
+    name: Annotated[str, WireName("AGENT_COMMS_THREAD")]
+    worktree: Annotated[str, WireName("PI_WORKTREE")]
     tags: Annotated[
         frozenset[str],
         TagListText,
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("AGENT_COMMS_TAGS"),
-    ] = field(default=frozenset())
-    parent: typing.Annotated[
-        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_PARENT_ID")
-    ] = field(default=None)
-    task: typing.Annotated[
-        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_TASK")
-    ] = field(default=None)
+        WireOmitDefault(),
+        WireName("AGENT_COMMS_TAGS"),
+    ] = frozenset()
+    parent: Annotated[
+        str | None, WireOmitDefault(), WireName("PI_PARENT_ID")
+    ] = None
+    task: Annotated[
+        str | None, WireOmitDefault(), WireName("PI_TASK")
+    ] = None
     managed: Annotated[
         bool,
         FlagText,
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("AGENT_COMMS_MANAGED"),
-    ] = field(default=False)
-    startup_input: typing.Annotated[
+        WireOmitDefault(),
+        WireName("AGENT_COMMS_MANAGED"),
+    ] = False
+    startup_input: Annotated[
         str | None,
-        field_codec.WireOmitDefault(True),
-        field_codec.WireName("AGENT_COMMS_STARTUP_INPUT_KEY"),
-    ] = field(default=None)
+        WireOmitDefault(),
+        WireName("AGENT_COMMS_STARTUP_INPUT_KEY"),
+    ] = None
+
+    @classmethod
+    @boundary_decoder
+    def from_thread(cls, thread: Thread) -> ThreadLaunch:
+        return cls(
+            thread.name,
+            thread.worktree,
+            frozenset(thread.tags),
+            thread.parent,
+            cast(str | None, FieldCodec.encode(thread.task)),
+        )
 
     @classmethod
     def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:

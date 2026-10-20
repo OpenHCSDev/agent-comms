@@ -11,15 +11,17 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
+from .coordination_database import CoordinationStore
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
 )
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
@@ -35,6 +37,10 @@ from .selected_tool_broker import (
 )
 from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageDenied
+from .turn_goal_permission import TurnGoalPermission
+
+if TYPE_CHECKING:
+    from .pi_payloads import PiToolResult
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -43,6 +49,10 @@ class CodingToolOwner(ABC):
     owner_name: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+
+    @property
+    @abstractmethod
+    def goal_permission(self) -> TurnGoalPermission: ...
 
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
@@ -56,7 +66,9 @@ class CodingToolOwner(ABC):
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
         def check(store: Coordination) -> None:
-            self.verify(store, turn, self.comms.registry.snapshot())
+            snapshot = self.comms.registry.snapshot()
+            self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
+            self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(turn.launch.session.directory, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
@@ -67,8 +79,12 @@ class CodingToolOwner(ABC):
 
         reservation = await self.reserve_room(call)
         async with reservation.checking(), self.check_lock:
-            await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+            await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
+
+    def tool_completed(self, call: CodingCall, result: PiToolResult) -> None:
+        """The checked terminal shares its actual publication with this turn's grant."""
+        call.published_goal(result, self.goal_permission)
 
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
@@ -80,12 +96,13 @@ class CodingToolOwner(ABC):
         raise SelectedToolDenied("An ordinary input has no selected original")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SelectedCodingToolOwner(CodingToolOwner):
     store: Coordination
     claim_scope: WakeClaim
     session_dir: Path
     input_id: str
+    goal_permission: TurnGoalPermission = field()
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
@@ -127,10 +144,27 @@ class CodingToolMode(NativeToolMode):
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
                      *NativeToolDeclaration.extension_arguments(package))
         thread = self.owner.comms.registry.require(self.owner.owner_name)
-        return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
+        return thread.native_launch_arguments(
+            NativeArguments.parse(arguments), package, self.owner.comms.root,
+        )
 
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         return await CodingToolSocket.open(turn, ownership, self.owner)
+
+@dataclass(frozen=True)
+class CodingToolRequest:
+    """The native coding socket's object-valued call, not a Codex rollout item."""
+
+    token: str = field(repr=False)
+    call_id: str
+    name: str
+    arguments: object
+
+    def authenticate(self, expected_token: str) -> CodingCall:
+        if self.token != expected_token:
+            raise SelectedToolDenied("Coding request is not authenticated")
+        return CodingCall.decode(self.call_id, self.name, self.arguments)
+
 
 class CodingToolSocket(ToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
@@ -146,14 +180,11 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
-        value = FieldCodec.parse(raw)
-        if (
-            type(value) is not dict
-            or set(value) != {"token", "call_id", "name", "arguments"}
-            or value["token"] != self.listener.token
-        ):
-            raise SelectedToolDenied("Coding request is not authenticated")
-        return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
+        try:
+            request = FieldCodec.decode(CodingToolRequest, FieldCodec.parse(raw))
+        except MalformedRecord as error:
+            raise SelectedToolDenied("Coding request is not authenticated") from error
+        return request.authenticate(self.listener.token)
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
         # The owner rechecks authority after its unlocked room wait. The
@@ -166,6 +197,8 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
         _, call = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
+        if not event.is_error:
+            self.owner.tool_completed(call, event.result)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

@@ -4,24 +4,30 @@ from __future__ import annotations
 
 import math
 import time
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Annotated
 
-from agent_comms import field_codec
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    FieldPlan,
+    SlicePolicy,
+    WireName,
+    WireRequired,
+)
 from .registration_change import (
     InitialRegistration,
     RegistrationChange,
     UpdatedRegistration,
 )
 from .registry_provenance import (
+    DeletedThread,
     RegisteredRecipient,
     RegistryNames,
     RegistryProvenance,
@@ -49,6 +55,8 @@ from .threads import Thread
 from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
+    from .activity import ObservedActivity
+    from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
     from .bus_publication import CommittedDelivery
 
@@ -94,7 +102,8 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
         selected = (self.threads.values() if names is None else
-                    {thread.name: thread for thread in map(self.require, names)}.values())
+                    (self.threads[name] for name in dict.fromkeys(map(self.canonical_name, names))
+                     if name in self.threads))
         return (executor for thread in selected
                 if self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
@@ -171,8 +180,8 @@ class ThreadSlice[Value](ABC):
         """A copy an edit can change without changing ``value``."""
 
     @staticmethod
-    def of(plan: field_codec.FieldPlan) -> type[ThreadSlice]:
-        for policy in field_codec.SlicePolicy.single(plan.annotation):
+    def of(plan: FieldPlan) -> type[ThreadSlice]:
+        for policy in SlicePolicy.single(plan.annotation):
             if issubclass(policy.value, ThreadSlice):
                 return policy.value
         raise TypeError(f"{plan.name} declares no thread slice")
@@ -237,26 +246,26 @@ class WholeDocumentValue(ThreadSlice[int]):
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
-    version: typing.Annotated[
-        Literal[1], field_codec.SlicePolicy(WholeDocumentValue), field_codec.WireRequired(True)
-    ] = field(default=1)
-    threads: typing.Annotated[dict[str, Thread], field_codec.SlicePolicy(OwnRow)] = field(
+    version: Annotated[
+        Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
+    ] = 1
+    threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
-    statuses: typing.Annotated[dict[str, ThreadStatus], field_codec.SlicePolicy(OwnRow)] = field(
+    statuses: Annotated[dict[str, ThreadStatus], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
-    last_seen: typing.Annotated[dict[str, float], field_codec.SlicePolicy(OwnRow)] = field(
+    last_seen: Annotated[dict[str, float], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
-    aliases: typing.Annotated[dict[str, str], field_codec.SlicePolicy(AliasesOf)] = field(
+    aliases: Annotated[dict[str, str], SlicePolicy(AliasesOf)] = field(
         default_factory=dict
     )
-    owners: typing.Annotated[GenerationCounter, field_codec.SlicePolicy(GenerationOf)] = field(
+    owners: Annotated[GenerationCounter, SlicePolicy(GenerationOf)] = field(
         default_factory=GenerationCounter
     )
-    claims: typing.Annotated[
-        GenerationCounter, field_codec.WireName("admissions"), field_codec.SlicePolicy(GenerationOf)
+    claims: Annotated[
+        GenerationCounter, WireName("admissions"), SlicePolicy(GenerationOf)
     ] = field(default_factory=GenerationCounter)
 
     _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
@@ -693,8 +702,17 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     last_seen: Mapping[str, float]
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
-    claimed_generations: Mapping[str, int]
+    _claimed_generations: Mapping[str, int] = field(repr=False)
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
+
+    def claim_generation(self, name: str) -> int:
+        """The allocated input generation follows this registry's alias lineage."""
+        return self._claimed_generations[self.canonical_name(name)]
+
+    @property
+    def retired_names(self) -> tuple[str, ...]:
+        """Deleted declarations keep their generation without exposing its store."""
+        return tuple(name for name in self._claimed_generations if name not in self.threads)
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
@@ -704,7 +722,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             thread
             for thread in self.threads_for(fence.identity.incarnation.require_recorded())
             if self.status(thread.name).active
-            and thread.latest_idle_turn(fence, self.claimed_generations.get(thread.name, 0))
+            and thread.latest_idle_turn(fence, self.claim_generation(thread.name))
         )
 
     @classmethod
@@ -722,9 +740,24 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             last_seen=MappingProxyType(dict(document.last_seen)),
             aliases=MappingProxyType(dict(document.aliases)),
             owner_generations=MappingProxyType(dict(document.owners.generations)),
-            claimed_generations=MappingProxyType(dict(document.claims.generations)),
+            _claimed_generations=MappingProxyType(dict(document.claims.generations)),
             by_lookup=MappingProxyType(indexed),
         )
+
+    def observed_activity(
+        self, agents: AgentActivity, names: Iterable[str],
+    ) -> dict[str, ObservedActivity | DeletedThread]:
+        """Observe retained view names; absent declarations have no execution authority."""
+        selected = {name: self.canonical_name(name) for name in names}
+        captured = agents.all_activity(
+            self.visible_threads(DEFAULT_ROSTER, names=selected), snapshot=self)
+        observed: dict[str, ObservedActivity | DeletedThread] = {}
+        for name, canonical in selected.items():
+            if canonical in captured:
+                observed[name] = captured[canonical]
+            elif canonical not in self.threads:
+                observed[name] = DeletedThread(canonical)
+        return observed
 
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
@@ -745,7 +778,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""
-        return name not in self.threads and name in self.claimed_generations
+        return name in self.retired_names
 
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]
@@ -766,7 +799,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
-        return ClaimedIdentity(self.threads[canonical].incarnation, self.claimed_generations[canonical])
+        return ClaimedIdentity(self.threads[canonical].incarnation, self.claim_generation(canonical))
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)
@@ -790,5 +823,5 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         current.role.require_executable(RelationViolationError("Stopping owner is not an agent"))
         if current.process_identity != expected.process_identity:
             raise RelationViolationError("Stopping owner process changed")
-        if self.claimed_generations[expected.name] != claim_scope:
+        if self.claim_generation(expected.name) != claim_scope:
             raise RelationViolationError("Stopping owner claim_scope changed")

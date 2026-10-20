@@ -7,14 +7,14 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .private_send_rules import (
     GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
@@ -24,6 +24,7 @@ from .private_send_rules import (
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
 from .thread_identity import OwnerIdentity
+from .turn_goal_permission import GoalPermission, OwnerGoalPermission
 
 if TYPE_CHECKING:
     from .goals import Goal
@@ -39,6 +40,10 @@ class RegistryOwner:
     claimed_generation: int
 
     @property
+    def goal_permission(self) -> GoalPermission:
+        return OwnerGoalPermission(self.thread.goal)
+
+    @property
     def turn_lease(self) -> TurnLeaseFence:
         """The authorized owner declaration determines its exact original lease."""
         return self.thread.require_turn_lease()
@@ -48,7 +53,7 @@ class RegistryOwner:
         """Read local executable authority from this single locked snapshot."""
         thread = snapshot.require_active(name)
         thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-        claim_scope = snapshot.claimed_generations[thread.name]
+        claim_scope = snapshot.claim_generation(thread.name)
         thread.turn_record.read().require_current(claim_scope, thread.turn_generation)
         return cls(thread=thread, claimed_generation=claim_scope)
 
@@ -70,6 +75,7 @@ class RegistryOwner:
                 expected=expected, actual=self.thread,
                 expected_claim=claim_scope, claim_scope=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
+                goal_permission=OwnerGoalPermission(expected.goal),
             ).require_valid()
         except ReservationViolationError as error:
             raise RelationViolationError(f"live owner changed before turn claim: {error}") from error
@@ -89,11 +95,11 @@ class RegistryOwner:
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
-        thread = snapshot.threads.get(name)
-        claim_scope = snapshot.claimed_generations.get(name)
-        if thread is None or claim_scope is None:
-            raise StaleFence(reason)
-        owner = cls(thread=thread, claimed_generation=claim_scope)
+        try:
+            thread = snapshot.require(name)
+        except UnregisteredThreadError as error:
+            raise StaleFence(reason) from error
+        owner = cls(thread=thread, claimed_generation=snapshot.claim_generation(name))
         owner.require_snapshot(snapshot, reason)
         return owner
 
@@ -108,6 +114,7 @@ class RegistryOwner:
                 expected_claim=self.claimed_generation,
                 claim_scope=claim_scope,
                 process=ProcessIdentity.capture(os.getpid()),
+                goal_permission=self.goal_permission,
             ).require_valid()
         except ReservationViolationError as error:
             raise StaleFence(f"{reason}: {error}") from error
@@ -123,7 +130,7 @@ class RegistryOwner:
             actual = snapshot.require_active(self.thread.name)
         except RelationViolationError as error:
             raise StaleFence(reason) from error
-        self._require_current(actual, snapshot.claimed_generations.get(self.thread.name), reason, check)
+        self._require_current(actual, snapshot.claim_generation(self.thread.name), reason, check)
         return actual
 
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
@@ -170,10 +177,8 @@ class GoalLaunchOwner(RegistryOwner):
     check_type = RegistryIdentityCheck
 
     def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> Goal:
-        name = snapshot.canonical_name(self.thread.name)
-        canonical = replace(self, thread=replace(self.thread, name=name))
-        canonical.require_snapshot(snapshot, "Goal launch owner changed")
-        current = snapshot.require_active(name)
+        self.require_snapshot(snapshot, "Goal launch owner changed")
+        current = snapshot.require_active(self.thread.name)
         snapshot.status(current.name).require_running()
         return current.goal.require().require_id(goal_id).require_active()
 

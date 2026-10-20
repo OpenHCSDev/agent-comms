@@ -11,6 +11,7 @@ from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger, LedgerDocument
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from test_locked_store import assert_writer_excluded
 
 
 
@@ -48,8 +49,7 @@ def test_document_readers_share_lock_and_exclude_updates(tmp_path, store_type):
     store = store_type(tmp_path / store_type.filename)
     with store.reading() as first:
         assert first == store_type(store.path).read() == store.empty()
-        with pytest.raises(BlockingIOError), _store_lock(store.path, blocking=False):
-            pass
+        assert_writer_excluded(store.path)
     store.update(lambda document: document)
     assert store.read() == store.empty()
 

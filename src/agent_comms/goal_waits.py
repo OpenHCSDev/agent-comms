@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
@@ -20,6 +19,7 @@ from .goal_presentation import (
 )
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
+from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
@@ -114,7 +114,7 @@ class RecordedGoalWait(GoalWait):
         return self.wait_id == wait_id
 
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
-        return self.owner.same_publication_birth(owner)
+        return self.owner == owner
 
     def consume_dependency(self, comms, canonical: str) -> bool:
         return comms.goals.consume_goal_wait(canonical, self.wait_id)
@@ -241,14 +241,14 @@ class GoalInputReview:
 
 @dataclass(frozen=True, slots=True)
 class StoredGoalWaitRow(TypedTable):
-    goal_id: typing.Annotated[str, Column(primary_key=True)]
+    goal_id: Annotated[str, Column(primary_key=True)]
     wait: RecordedGoalWait
 
 
 @dataclass(frozen=True, slots=True)
 class GoalWaitTargetRow(TypedTable):
-    goal_id: typing.Annotated[str, Column(primary_key=True)]
-    position: typing.Annotated[int, Column(primary_key=True)]
+    goal_id: Annotated[str, Column(primary_key=True)]
+    position: Annotated[int, Column(primary_key=True)]
     target_lookup: str
     indexes = (Index(("target_lookup", "goal_id")),)
 
@@ -258,7 +258,7 @@ class GoalWaitTargetRow(TypedTable):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(ThreadOwnedState, TypedStore):
+class GoalWaits(ThreadOwnedState, TypedStore, WireWakeFile):
     path: Path = field()
     filename: ClassVar[str] = "goal_waits.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (StoredGoalWaitRow, GoalWaitTargetRow)

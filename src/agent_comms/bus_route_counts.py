@@ -9,18 +9,16 @@ from __future__ import annotations
 import json
 import sqlite3
 import struct
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NoReturn
+from typing import TYPE_CHECKING, ClassVar, NoReturn, Annotated
 
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
 from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
@@ -82,7 +80,7 @@ class RouteTimeNode(DeclaredFamily, affix="RouteTimeNode"):
             return self.count
         if self.maximum < since:
             return 0
-        return sum(RouteTimeRow.require(db, child).node.count_since(db, since) for child in self.children)
+        return sum(RouteTimeRow.require(db, id=child).node.count_since(db, since) for child in self.children)
 
     def add(self, db, original: RouteTimeRow, leaf: LeafRouteTimeNode):
         different = self.key(self.minimum) ^ self.key(leaf.timestamp)
@@ -148,8 +146,8 @@ class ForkRouteTimeNode(RouteTimeNode):
         ))
 
     def grow(self, db, leaf):
-        left = RouteTimeRow.require(db, self.left)
-        right = RouteTimeRow.require(db, self.right)
+        left = RouteTimeRow.require(db, id=self.left)
+        right = RouteTimeRow.require(db, id=self.right)
         if self.key(leaf.timestamp) & (1 << (self.key_width - self.bit - 1)):
             right, previous = right.node.add(db, right, leaf)
         else:
@@ -159,7 +157,7 @@ class ForkRouteTimeNode(RouteTimeNode):
 
 @dataclass(frozen=True)
 class RouteTimeRow(RouteTable, TypedTable):
-    id: typing.Annotated[int, Column(primary_key=True)]
+    id: Annotated[int, Column(primary_key=True)]
     node: RouteTimeNode
 
     @classmethod
@@ -167,13 +165,6 @@ class RouteTimeRow(RouteTable, TypedTable):
         # SQLite owns the fresh row identity; the declaration owns its encoding.
         cursor = cls.insert_values(db, node=node)
         return cls(cursor.lastrowid, node)
-
-    @classmethod
-    def require(cls, db, identity):
-        node = cls.one(db, id=identity)
-        if node is None:
-            raise RelationViolationError("Route timestamp root has a missing child")
-        return node
 
 
 class RouteSourceRow(TypedRow, ABC):
@@ -201,7 +192,7 @@ class RouteSourceRow(TypedRow, ABC):
 
 @dataclass(frozen=True)
 class RecordedRouteSourceRow(RouteTable, RouteSourceRow, TypedTable, declared_name="route_source"):
-    id: typing.Annotated[int, Column(primary_key=True)]
+    id: Annotated[int, Column(primary_key=True)]
     revision: FileRevision
     tail_digest: str
 
@@ -238,7 +229,7 @@ class UnrecordedRouteSource(RouteSourceRow):
 
 @dataclass(frozen=True)
 class RouteEntryRow(RouteTable, TypedTable):
-    seq: typing.Annotated[int, Column(primary_key=True)]
+    seq: Annotated[int, Column(primary_key=True)]
     target: str
     sender: str
     sender_lookup: str
@@ -277,9 +268,9 @@ class RouteEntryRow(RouteTable, TypedTable):
 
 @dataclass(frozen=True)
 class RouteIdentityRow(RouteTable, TypedTable):
-    target: typing.Annotated[str, Column(primary_key=True)]
-    sender: typing.Annotated[str, Column(primary_key=True)]
-    sender_lookup: typing.Annotated[str, Column(primary_key=True)]
+    target: Annotated[str, Column(primary_key=True)]
+    sender: Annotated[str, Column(primary_key=True)]
+    sender_lookup: Annotated[str, Column(primary_key=True)]
     first_seq: int
     without_rowid: ClassVar = True
     indexes: ClassVar = (Index(("target", "sender", "first_seq", "sender_lookup")),)

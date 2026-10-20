@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import sqlite3
-import typing
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
 from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
 from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
     HistoricalInput,
     InputAttempt,
+    InputDeliveryScope,
     MissingInput,
     ReservedInput,
     StartedInput,
@@ -43,15 +44,15 @@ class DeliveryOverview(ToolResult):
     against the owner."""
 
     inputs: tuple[UnresolvedInput, ...]
-    historical_count: typing.Annotated[int, field_codec.WireName("historicalCount")]
-    dismissed_historical_count: typing.Annotated[
+    historical_count: Annotated[int, field_codec.WireName("historicalCount")]
+    dismissed_historical_count: Annotated[
         int, field_codec.WireName("dismissedHistoricalCount")
     ]
-    historical_inputs: typing.Annotated[
+    historical_inputs: Annotated[
         tuple[HistoricalInput, ...], field_codec.WireName("historicalInputs")
     ]
-    current_scope: typing.Annotated[
-        Literal["owner_queue", "unobserved"], field_codec.WireName("currentScope")
+    current_scope: Annotated[
+        type[InputDeliveryScope], field_codec.WireName("currentScope")
     ]
 
 
@@ -154,13 +155,13 @@ class InputDocument:
         owners: frozenset[str],
         *,
         include_history: bool = False,
-        awaiting_keys: frozenset[str] | None = None,
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         current: list[UnresolvedInput] = []
         historical: list[HistoricalInput] = []
         dismissed = historical_count = 0
         for row in self.unknown(owners):
-            if row.historical_notice(awaiting_keys):
+            if scope.historical_notice(row):
                 dismissed += int(row.notice_dismissed)
                 historical_count += int(not row.notice_dismissed)
                 if include_history:
@@ -168,8 +169,8 @@ class InputDocument:
                         HistoricalInput.notice(row, row.notice_dismissed))
             else:
                 current.append(UnresolvedInput.of(row))
-        return DeliveryOverview(tuple(current), historical_count, dismissed, tuple(historical),
-                                "owner_queue" if awaiting_keys is not None else "unobserved")
+        return DeliveryOverview(
+            tuple(current), historical_count, dismissed, tuple(historical), type(scope))
 
 
 def _unresolved_kinds() -> str:
@@ -183,18 +184,18 @@ def _unresolved_kinds() -> str:
 class InputDispositionRow(TypedTable):
     """One stored input; its lookup columns are generated from the stored row."""
 
-    key: typing.Annotated[str, Column(primary_key=True)]
+    key: Annotated[str, Column(primary_key=True)]
     attempt: StoredInput
-    owner: typing.Annotated[str, Column(generated="json_extract(attempt,'$.owner')")] = field(
+    owner: Annotated[str, Column(generated="json_extract(attempt,'$.owner')")] = field(
         init=False, default=None, compare=False, repr=False
     )
-    turn_id: typing.Annotated[str | None, Column(generated="json_extract(attempt,'$.turn_id')")] = (
+    turn_id: Annotated[str | None, Column(generated="json_extract(attempt,'$.turn_id')")] = (
         field(init=False, default=None, compare=False, repr=False)
     )
-    sequence: typing.Annotated[
+    sequence: Annotated[
         int | None, Column(generated="json_extract(attempt,'$.sequence')")
     ] = field(init=False, default=None, compare=False, repr=False)
-    unresolved: typing.Annotated[
+    unresolved: Annotated[
         bool, Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")
     ] = field(init=False, default=None, compare=False, repr=False)
     checks = ("key = json_extract(attempt,'$.key')",)
@@ -415,16 +416,16 @@ class InputDispositions(TypedStore):
         self,
         owners: frozenset[str],
         *,
-        awaiting_keys: frozenset[str] | None = None,
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         def dismiss(document: InputDocument) -> InputDocument:
             changed = {
                 row.key: replace(row, notice_dismissed=True)
                 for row in document.unknown(owners)
-                if row.historical_notice(awaiting_keys) and not row.notice_dismissed
+                if scope.historical_notice(row) and not row.notice_dismissed
             }
             return replace(document, rows={**document.rows, **changed}) if changed else document
 
         where, parameters = _members("owner", sorted(owners))
         return self._update(f"unresolved = 1 AND {where}", parameters, dismiss).delivery_overview(
-            owners, awaiting_keys=awaiting_keys)
+            owners, scope=scope)

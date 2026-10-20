@@ -19,6 +19,7 @@ from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordination_cohort import _claim_record
+from .coordination_database import CoordinationStore
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
@@ -29,9 +30,9 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .message_bus import MessageBus
-from .publisher import Publisher
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
+from .publisher import Publisher
 from .registry_document import RegistrySnapshot
 from .store_files import ExclusiveLock, LockMode, SharedLock, _store_lock
 from .threads import Thread
@@ -124,7 +125,7 @@ def _selected_claim_boundary(
     mode: LockMode = ExclusiveLock(),
 ) -> Iterator[tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
     """One wire/bus/registry boundary for selected claim acquisition."""
-    if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+    if store.session.path.resolve() != (CoordinationStore.path_in(comms.root)).resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
     bus = comms.bus
     with (

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import typing
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
@@ -11,14 +10,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, TextIO, cast
 
-from agent_comms import field_codec
+from .locked_store import DurableFile, PatternFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    RecordedTimestamp,
+    TimestampText,
+    WireName,
+    WireOmitDefault,
+)
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
 from .pi_payloads import PiMessage, PiPayload
@@ -41,7 +47,7 @@ class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
 
     id: str | None = None
-    parent_id: typing.Annotated[str | None, field_codec.WireName("parentId")] = field(default=None)
+    parent_id: Annotated[str | None, WireName("parentId")] = None
     timestamp: Annotated[RecordedTimestamp, TimestampText]
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
@@ -175,7 +181,8 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
 
 
 @dataclass
-class ImportedSessionWriter:
+class ImportedSessionWriter(DurableFile, PatternFile):
+    filename = "imported_sessions/{session_id}.jsonl"
     stream: TextIO
     parent: NativeEntry
 
@@ -492,10 +499,10 @@ class SessionEntry(NativeEntry):
         return self.parent_id
 
     version: int | None = None
-    cwd: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    parent_session: typing.Annotated[
-        str | None, field_codec.WireName("parentSession"), field_codec.WireOmitDefault(True)
-    ] = field(default=None)
+    cwd: Annotated[str | None, WireOmitDefault()] = None
+    parent_session: Annotated[
+        str | None, WireName("parentSession"), WireOmitDefault()
+    ] = None
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
@@ -582,9 +589,7 @@ class StoredEntry(RecordedEntry):
     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
 
     id: int = field()
-    messages: typing.Annotated[tuple[PiMessage, ...], field_codec.WireName("model")] = field(
-        default=()
-    )
+    messages: Annotated[tuple[PiMessage, ...], WireName("model")] = ()
 
 
 class CustomEntry(NativeEntry):
@@ -597,7 +602,7 @@ class CustomEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class ImportedMetadataEntry(CustomEntry):
-    custom_type: typing.Annotated[Literal["agent-comms-import"], field_codec.WireName("customType")]
+    custom_type: Annotated[Literal["agent-comms-import"], WireName("customType")]
     data: ImportedSessionMetadata
 
     def imported_sources(self):
@@ -616,7 +621,7 @@ class UnknownEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class ModelChangeEntry(NativeEntry):
     provider: str
-    model_id: typing.Annotated[str, field_codec.WireName("modelId")]
+    model_id: Annotated[str, WireName("modelId")]
 
     @property
     def model_choice(self) -> tuple[str, str] | None:
@@ -625,4 +630,4 @@ class ModelChangeEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class ThinkingLevelChangeEntry(NativeEntry):
-    thinking_level: typing.Annotated[type[ThinkingLevel], field_codec.WireName("thinkingLevel")]
+    thinking_level: Annotated[type[ThinkingLevel], WireName("thinkingLevel")]

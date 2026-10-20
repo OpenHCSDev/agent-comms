@@ -73,6 +73,25 @@ def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement
     assert comms.agents.finish_turn(current.turn_lease)
 
 
+def test_native_source_publication_retains_original_claim_across_rename(tmp_path):
+    comms = Comms(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(
+        'owner', frozenset(), str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    original = comms.agents.begin_turn('owner', 'renamed-source')
+    comms.registry.rename('owner', 'renamed')
+    snapshot = comms.registry.snapshot()
+    assert original.require_source_snapshot(snapshot).name == 'renamed'
+    assert RegistryOwner.capture(snapshot, 'owner', 'Original claim lost').claimed_generation == original.claimed_generation
+    selected = comms.registry.attach_native_session(original, str(tmp_path / 'saved.jsonl'))
+    assert selected.thread.name == 'renamed'
+    assert comms.agents.finish_turn(original.turn_lease)
+    comms.registry.register(comms.registry.require('renamed'), new_owner=True)
+    with pytest.raises(StaleFence):
+        original.require_snapshot(comms.registry.snapshot(), 'Replaced owner refused')
+
+
 def test_native_source_publication_retains_captured_configuration(tmp_path):
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='test/old'))

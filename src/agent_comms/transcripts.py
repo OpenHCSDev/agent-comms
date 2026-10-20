@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import logging
-import typing
 from abc import abstractmethod
 from collections.abc import Awaitable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
-from typing import Callable, ClassVar
+from typing import Annotated, Callable, ClassVar
 
-from agent_comms import field_codec
 
 from .agent_backend import RuntimeLocation
 from .bus_publication import CommittedDelivery
@@ -23,10 +21,11 @@ from .coordination_response import _assert_response_schema
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec, projected, ContentExclude, WireName
 from .historical_views import HistorySource
 from .message_bus import MessageBus
 from .message_reference import MessageReference
+from .messages import Message
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
@@ -210,7 +209,7 @@ class PageSource:
     """The retained stores one thread's transcript page is read from."""
 
     thread: Thread
-    runtime: typing.Annotated[RuntimeLocation, field_codec.WireName("session_file")]
+    runtime: Annotated[RuntimeLocation, WireName("session_file")]
     inherited: bool
     root: Path
     log: WireLog
@@ -226,14 +225,14 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
     root: str
     requested_name: str
-    thread: typing.Annotated[ThreadProvenance, field_codec.ContentExclude(True)]
+    thread: Annotated[ThreadProvenance, ContentExclude()]
     runtime: RuntimeLocation
-    records_cut: typing.Annotated[RecordsCut, field_codec.ContentExclude(True)]
+    records_cut: Annotated[RecordsCut, ContentExclude()]
     route_revision: FileRevision | None
-    bus_revision: typing.Annotated[FileRevision | None, field_codec.ContentExclude(True)]
-    coordination_revision: typing.Annotated[FileRevision | None, field_codec.ContentExclude(True)]
+    bus_revision: Annotated[FileRevision | None, ContentExclude()]
+    coordination_revision: Annotated[FileRevision | None, ContentExclude()]
     reply_revision: PublishedReplyRevision
-    read_revision: typing.Annotated[FileRevision | None, field_codec.ContentExclude(True)]
+    read_revision: Annotated[FileRevision | None, ContentExclude()]
     wire_frontier: WireFrontier
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -308,7 +307,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
 @dataclass(frozen=True, slots=True)
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
-    thread: typing.Annotated[Thread, field_codec.ContentExclude(True)]
+    thread: Annotated[Thread, ContentExclude()]
 
     @projected(view="content", name="thread")
     def content_thread(self):
@@ -334,7 +333,7 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
 
 @dataclass(frozen=True, slots=True)
 class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
-    source: typing.Annotated[HistorySource, field_codec.ContentExclude(True)] = field(kw_only=True)
+    source: Annotated[HistorySource, ContentExclude()] = field(kw_only=True)
 
     @property
     def historical_source(self) -> str:
@@ -354,7 +353,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
         if source_runtime is not None and source_runtime != runtime.read_key:
             raise TranscriptChanged()
         root = Path(source.root)
-        log = WireLog(root / "bus.jsonl")
+        log = WireLog(WireLog.path_in(root))
         records = runtime.history_source(root, thread.incarnation)
         return PageSource(thread, runtime, False, root,
                           log, TranscriptRoutes(root), records,
@@ -386,7 +385,7 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root):
-        with CoordinationStore.observed(root / "coordination.sqlite3").observing(cls) as db:
+        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls) as db:
             yield db
 
     @classmethod

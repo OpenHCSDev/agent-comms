@@ -45,16 +45,6 @@ Checked by:
 
 Learned from: P170 (c9c0c04db); Failure 7: October 9 postmortem: 350 commit subjects in five days claimed facts were "derived", "canonical" or "authoritative" while the same constant remained hand-written in three places; commit titles supplied no frame-time proof.
 
-## tactical_command
-
-The commander's own session runs an install, maintenance, connector restart or carry command instead of ordering a unit to.
-
-Checked by:
-
-- check in `agent_comms.commander.send_guard.TacticalCommand.install_refusals`
-
-Learned from: P171 (cba7b09c3)
-
 ## plain_text
 
 A commander order, strike, roast or directive whose words outside cited spans match the declared jargon list in `PlainText`.
@@ -67,11 +57,10 @@ Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commande
 
 ## repeated_strike
 
-A second storage strike with the same actor, owner and reason as a live strike, or a send-back strike on an order already struck since it was sent.
+A send-back strike on an order already struck since it was sent.
 
 Checked by:
 
-- check in `agent_comms.todos.StorageStrikeTodo.repeats`
 - check in `agent_comms.todos.Todo.struck_on_order`
 
 Learned from: P184 (7af14a520)

@@ -69,9 +69,8 @@ def test_send_revision_race_delivers_once_against_newer_registry(tmp_path, monke
 
     def refuse_write_during_decision(registry):
         if writes and len(writes) == 1:
-            with pytest.raises(BlockingIOError):
-                with registry.store.locked(blocking=False):
-                    pass
+            from test_locked_store import assert_writer_excluded
+            assert_writer_excluded(registry.store.path)
             writes.append(None)
         return decide(registry)
 

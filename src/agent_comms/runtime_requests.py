@@ -9,26 +9,25 @@ from __future__ import annotations
 
 import asyncio
 import json
-import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, Annotated
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
-from agent_comms import field_codec
 
 from .command import Command
+from .context_store import ContextManifestReference
+from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, WireValue, WireName
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
-from .private_bus_checkpoint import ContextManifestReference
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import LiveThreadOwnerBinding
 from .tool_result import DeclaredReply
@@ -220,11 +219,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         await ctx.send(OwnerAnnouncement())
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
-        await agent.sessions.transcript.subscribe(
-            ctx.session_id,
-            ctx.name,
-            client=ctx.client,
-        )
+        await agent.sessions.transcript.subscribe(self.thread, client=ctx.client)
         await agent.turns.publish_turn_state(ctx.session_id, client=ctx.client)
         await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
         metadata = await agent.sessions.metadata(ctx.name)
@@ -243,9 +238,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
 class PromptRuntimeRequest(ResultRuntimeRequest):
     prompt: list[dict[str, object]]
     meta: dict[str, object] | None = None
-    controller_token: typing.Annotated[str | None, field_codec.WireName("controllerToken")] = field(
-        default=None
-    )
+    controller_token: Annotated[str | None, WireName("controllerToken")] = None
 
     @classmethod
     def proxy_payload(
@@ -311,7 +304,8 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
         return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
             ctx.name,
             include_history=self.include_history,
-            awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
+            scope=await ctx.server.agent.inputs.delivery_scope(ctx.session_id),
+
         ))
 
 
@@ -319,7 +313,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
         result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
-            ctx.name, awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
+            ctx.name, scope=await ctx.server.agent.inputs.delivery_scope(ctx.session_id)
         ))
         await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
         return result
@@ -475,7 +469,7 @@ class RecordedContextRuntimeRequest(ResultRuntimeRequest):
 
     def read_manifest(self, ctx):
         comms = ctx.server.agent._comms
-        manifest = self.record.read(comms.bus.log, ctx.name, comms.registry)
+        manifest = self.record.read(comms.contexts, ctx.name, comms.registry)
         return ContextManifest.for_request((manifest,), self.turn, self.request_id)
 
     async def manifest(self, ctx):
@@ -523,7 +517,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
 
         segment = await self.selected_segment(ctx)
         labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
-            ctx.server.agent._comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(ctx.server.agent._comms.root),
             segment, self.classifier))
         return AnnotationsReply(labels)
 

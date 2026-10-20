@@ -5,8 +5,7 @@ in `rules/`, and paper 1's correct-maintenance results (the packaged correct-mai
 `review` prints every rule with its file:line and draws three, two always from the paper, to be
 answered with how the current tick obeys or breaks each. Core records each review and answer
 (CommsRuleReviewTool); a stale or unanswered review shows as RULES DUE in rotate and in
-`rules stale`. No commander action is refused for it. The archived originals in `rules-archive/`
-are never read.
+`rules stale`. No commander action is refused for it.
 
   agent-comms-commander rules review [--fork FORK]                 print the rules, draw three
   agent-comms-commander rules answer N "<8+ quoted rule words and file:line or P-number>" [--fork FORK]
@@ -17,7 +16,7 @@ Every fork reviews for itself, and all three of a fork's drawn rules come from p
 import random
 import re
 import sys
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -97,10 +96,10 @@ class ReviewVerb(RulesVerb):
 @dataclass(frozen=True, kw_only=True)
 class AnswerVerb(RulesVerb):
     help = "answer a drawn rule for the acting commander"
-    n: typing.Annotated[
+    n: Annotated[
         int, field_codec.Argument(flags=("n",), options={"help": "the drawn rule number"})
     ]
-    text: typing.Annotated[
+    text: Annotated[
         str,
         field_codec.Argument(
             flags=("text",), options={"help": "how this tick obeys or breaks that rule"}

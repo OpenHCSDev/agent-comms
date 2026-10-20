@@ -5,17 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Annotated
 
-from agent_comms import field_codec
 
 from .delivery_policy import DeliveryPolicy
 from .errors import HumanInitialUnknownError, RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName
 from .messages import Message
 from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
@@ -93,9 +91,9 @@ class CommittedDelivery(MessageWireRecord):
     resolver_version: str
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
-    acknowledgement: typing.Annotated[
-        KeyedResponseAcknowledgement | None, field_codec.WireName("receipt")
-    ] = field(default=None)
+    acknowledgement: Annotated[
+        KeyedResponseAcknowledgement | None, WireName("receipt")
+    ] = None
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""

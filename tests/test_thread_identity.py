@@ -23,6 +23,7 @@ from agent_comms.thread_identity import (
     AgentThreadRole,
     ClaimedIdentity,
     GenerationCounter,
+    NoThreadText,
     RecordedThreadIncarnation,
     ThreadRole,
     TurnIdentity,
@@ -38,6 +39,25 @@ def registry_with_owner(tmp_path):
     return registry
 
 
+def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
+    comms = Comms(tmp_path)
+    for name, title, task in (
+        ("untitled", NoThreadText(), NoThreadText()),
+        ("named", "A title", "An assignment"),
+    ):
+        thread = comms.registry.new_thread(
+            name, frozenset({"team"}), str(tmp_path), title=title, task=task,
+        )
+        comms.registry.declare(thread)
+        encoded = json.dumps(FieldCodec.encode(thread), sort_keys=True, separators=(",", ":"))
+        saved = Comms(tmp_path).registry.require(name)
+        assert json.dumps(FieldCodec.encode(saved), sort_keys=True, separators=(",", ":")) == encoded
+        assert saved.title == title and saved.task == task
+        assert FieldCodec.encode(saved.wake_context(comms.goals))["title"] == FieldCodec.encode(title)
+        assert FieldCodec.encode(saved.wake_context(comms.goals))["original_assignment"] == FieldCodec.encode(task)
+        assert ("PI_TASK" in saved.launch().encode()) == bool(task)
+
+
 def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     registry = registry_with_owner(tmp_path)
     before = registry.snapshot()
@@ -49,7 +69,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     assert generation == identity.generation
     assert leased.turn_identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
-    assert registry.snapshot().claimed_generations == before.claimed_generations
+    assert registry.snapshot().claim_generation('owner') == before.claim_generation('owner')
     assert registry.release_turn(registry.require("owner").turn_lease)[0]
     finished = registry.require("owner")
     assert finished.turn_generation == 1
@@ -70,7 +90,7 @@ def test_owner_replacement_preserves_turn_counter_and_historical_incarnation(tmp
     assert before.threads["owner"].incarnation == after.threads["owner"].incarnation
     assert before.owner_identity("owner") != after.owner_identity("owner")
     assert after.threads["owner"].turn_generation == 1
-    assert after.claimed_generations["owner"] > before.claimed_generations["owner"]
+    assert after.claim_generation("owner") > before.claim_generation("owner")
 
 
 def test_registry_cannot_forge_turn_counter(tmp_path):
@@ -101,7 +121,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
     before = registry.snapshot()
     registry.heartbeat("owner")
     assert registry.snapshot().owner_identity("owner") == before.owner_identity("owner")
-    assert registry.snapshot().claimed_generations == before.claimed_generations
+    assert registry.snapshot().claim_generation('owner') == before.claim_generation('owner')
 
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):

@@ -23,7 +23,7 @@ from .child_process import (
 from .declared_family import DeclaredFamily
 from .field_codec import PathText
 from .launch_runtime import CallingThreadUnavailable, LaunchRuntime, ThreadLaunch
-from .locked_store import LockedStore, RootFile
+from .locked_store import DurableFile, LockedStore
 
 
 class ChildInitiator(DeclaredFamily, affix="ChildInitiator"):
@@ -140,7 +140,7 @@ class RuntimeChildReservation:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeChildrenStore(RootFile, ChildRegistration, LockedStore[RuntimeChildren]):
+class RuntimeChildrenStore(DurableFile, ChildRegistration, LockedStore[RuntimeChildren]):
     """One file at the selected prefix covers children from every bus root."""
 
     filename: ClassVar[str] = "runtime_children.json"

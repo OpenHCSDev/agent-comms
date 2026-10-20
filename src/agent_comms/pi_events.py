@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import dataclasses
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Annotated
 
-from agent_comms import field_codec
 
 from . import agent_events as events
+from .acp_failure import UnrecordedFailureSource
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireName, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -241,9 +239,7 @@ class ExtensionError(UnreadPayload, NativePiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class AgentEnd(NativePiEvent):
-    will_retry: typing.Annotated[bool | None, field_codec.WireName("willRetry")] = field(
-        default=None
-    )
+    will_retry: Annotated[bool | None, WireName("willRetry")] = None
     accepts_prompt = True
 
     @property
@@ -307,17 +303,17 @@ class RetryEnd(PiEvent, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
-    outcome: typing.Annotated[ProviderRetryOutcome, field_codec.WireName("success")]
+    outcome: Annotated[ProviderRetryOutcome, WireName("success")]
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
-        updates = self.outcome.apply(self, session)
-        session.record_retry(self.outcome.result(self.attempt, session.output.redact))
+        updates = session.provider_retry_ended(self)
         for event in updates:
             yield event
 
     def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
-        return (session.output.error("Provider retry attempts were exhausted."),)
+        return (session.output.error(session.output.declared_failure.text,
+                                     source=session.output.native_failure_source),)
 
     def to_wire(self):
         return {
@@ -328,7 +324,7 @@ class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
 
 
 class NativeRetryEnd(AutoRetryEnd):
-    """Close native recovery; the retained assistant reports its final failure."""
+    """The retry outcome owns whether native recovery completes the request."""
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         async for event in super().apply(session):
@@ -349,10 +345,8 @@ class RetryAttemptEvent(NativePiEvent):
     separate from the event that Pi emitted.
     """
 
-    attempt: typing.Annotated[int | None, field_codec.WireName("attempt")] = field(default=None)
-    max_attempts: typing.Annotated[int | None, field_codec.WireName("maxAttempts")] = field(
-        default=None
-    )
+    attempt: int | None = None
+    max_attempts: Annotated[int | None, WireName("maxAttempts")] = None
 
     @property
     @abstractmethod
@@ -409,19 +403,11 @@ class ReasonedCompaction(NativePiEvent, DurablePiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
-    aborted: typing.Annotated[bool | None, field_codec.WireName("aborted")] = field(default=None)
-    reason: typing.Annotated[type[CompactionReason], field_codec.WireName("reason")] = field(
-        default=UnknownCompactionReason
-    )
-    result: typing.Annotated[CompactionData | None, field_codec.WireName("result")] = field(
-        default=None
-    )
-    will_retry: typing.Annotated[bool | None, field_codec.WireName("willRetry")] = field(
-        default=None
-    )
-    error_message: typing.Annotated[str | None, field_codec.WireName("errorMessage")] = field(
-        default=None
-    )
+    aborted: bool | None = None
+    reason: type[CompactionReason] = UnknownCompactionReason
+    result: CompactionData | None = None
+    will_retry: Annotated[bool | None, WireName("willRetry")] = None
+    error_message: Annotated[str | None, WireName("errorMessage")] = None
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
@@ -440,7 +426,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
             will_retry=self.will_retry is True,
         )
         if self.error_message is not None:
-            yield session.output.error(self.error_message)
+            yield session.output.error(self.error_message, source=UnrecordedFailureSource())
         if self.will_retry:
             session.request_retried()
             session.output.final_assistant_stop = False
@@ -456,9 +442,7 @@ class CompactionStart(ReasonedCompaction, starts=phases.CompactionPhase):
     def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return current.compacting()
 
-    reason: typing.Annotated[type[CompactionReason], field_codec.WireName("reason")] = field(
-        default=UnknownCompactionReason
-    )
+    reason: type[CompactionReason] = UnknownCompactionReason
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
@@ -469,15 +453,13 @@ class CompactionStart(ReasonedCompaction, starts=phases.CompactionPhase):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextCommitted(NativePiEvent, NativeInputCommit):
-    request_generation: typing.Annotated[int | None, field_codec.WireName("requestGeneration")] = (
-        field(default=None)
+    request_generation: Annotated[int | None, WireName("requestGeneration")] = (
+        None
     )
-    llm_context_digest: typing.Annotated[str | None, field_codec.WireName("llmContextDigest")] = (
-        field(default=None)
+    llm_context_digest: Annotated[str | None, WireName("llmContextDigest")] = (
+        None
     )
-    committed_at_ms: typing.Annotated[int | None, field_codec.WireName("committedAtMs")] = field(
-        default=None
-    )
+    committed_at_ms: Annotated[int | None, WireName("committedAtMs")] = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -561,12 +543,8 @@ class ExtensionUiRequest(NativePiEvent):
 @dataclass(frozen=True, kw_only=True)
 class SetStatusUiRequest(ExtensionUiRequest):
     method: ClassVar[str] = "setStatus"
-    status_key: typing.Annotated[str | None, field_codec.WireName("statusKey")] = field(
-        default=None
-    )
-    status_text: typing.Annotated[str | None, field_codec.WireName("statusText")] = field(
-        default=None
-    )
+    status_key: Annotated[str | None, WireName("statusKey")] = None
+    status_text: Annotated[str | None, WireName("statusText")] = None
 
     async def apply(self, session):
         if self.status_key == "pi-mcp/live-v1":
@@ -693,9 +671,7 @@ class InputUiRequest(DialogUiRequest):
 @dataclass(frozen=True, kw_only=True)
 class EditorUiRequest(DialogUiRequest):
     method: ClassVar[str] = "editor"
-    default_value: typing.Annotated[str | None, field_codec.WireName("defaultValue")] = field(
-        default=None
-    )
+    default_value: Annotated[str | None, WireName("defaultValue")] = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -705,7 +681,7 @@ class InputCommitted(NativePiEvent, NativeInputLocation):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEnd(NativePiEvent, DurablePiEvent):
-    message: typing.Annotated[PiMessage, field_codec.WireName("message")] = field(
+    message: PiMessage = field(
         default_factory=AbsentMessage
     )
 
@@ -722,7 +698,7 @@ class MessageEnd(NativePiEvent, DurablePiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageStart(NativePiEvent, DurablePiEvent):
-    message: typing.Annotated[PiMessage, field_codec.WireName("message")] = field(
+    message: PiMessage = field(
         default_factory=AbsentMessage
     )
 
@@ -746,15 +722,13 @@ class MessageStart(NativePiEvent, DurablePiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageUpdate(NativePiEvent, DurablePiEvent):
-    assistant_message_event: typing.Annotated[
-        PiDelta | None, field_codec.WireName("assistantMessageEvent")
-    ] = field(default=None)
-    message: typing.Annotated[PiMessage, field_codec.WireName("message")] = field(
+    assistant_message_event: Annotated[
+        PiDelta | None, WireName("assistantMessageEvent")
+    ] = None
+    message: PiMessage = field(
         default_factory=AbsentMessage
     )
-    usage: typing.Annotated[
-        PiUsage, field_codec.WireName("usage"), field_codec.WireOmitDefault()
-    ] = dataclasses.field(default=UnreportedUsage())
+    usage: Annotated[PiUsage, WireOmitDefault()] = UnreportedUsage()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.message.update_context and not session.native.attestation.uncertain:
@@ -784,9 +758,9 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
 class Response(NativePiEvent, DurablePiEvent):
     command: type[PiCommand] = UnknownCommand
     data: PiResponseData = field(default_factory=MissingData)
-    error: typing.Annotated[str | None, field_codec.WireName("error")] = field(default=None)
-    id: typing.Annotated[str | None, field_codec.WireName("id")] = field(default=None)
-    success: typing.Annotated[bool | None, field_codec.WireName("success")] = field(default=None)
+    error: str | None = None
+    id: str | None = None
+    success: bool | None = None
 
     async def deliver_to(self, channel) -> None:
         channel.correlate(self)
@@ -851,10 +825,8 @@ class SummarizationRetryAttemptStart(RetryAttemptEvent, starts=phases.Summarizat
 
 @dataclass(frozen=True, kw_only=True)
 class SummarizationRetryFinished(NativePiEvent, ends=phases.SummarizationRetryPhase):
-    result: typing.Annotated[CompactionData | None, field_codec.WireName("result")] = field(
-        default=None
-    )
-    success: typing.Annotated[bool | None, field_codec.WireName("success")] = field(default=None)
+    result: CompactionData | None = None
+    success: bool | None = None
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
@@ -875,12 +847,10 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPha
 
     accepts_prompt = True
 
-    is_error: typing.Annotated[bool | None, field_codec.WireName("isError")] = field(default=None)
+    is_error: Annotated[bool | None, WireName("isError")] = None
     result: PiToolResult = field(default_factory=MissingToolResult)
-    tool_call_id: typing.Annotated[str | None, field_codec.WireName("toolCallId")] = field(
-        default=None
-    )
-    tool_name: typing.Annotated[str | None, field_codec.WireName("toolName")] = field(default=None)
+    tool_call_id: Annotated[str | None, WireName("toolCallId")] = None
+    tool_name: Annotated[str | None, WireName("toolName")] = None
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         name = self.tool_name or "tool"
@@ -906,11 +876,9 @@ class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunnin
 
     accepts_prompt = True
 
-    args: typing.Annotated[object, field_codec.WireName("args")] = field(default_factory=dict)
-    tool_call_id: typing.Annotated[str | None, field_codec.WireName("toolCallId")] = field(
-        default=None
-    )
-    tool_name: typing.Annotated[str | None, field_codec.WireName("toolName")] = field(default=None)
+    args: object = field(default_factory=dict)
+    tool_call_id: Annotated[str | None, WireName("toolCallId")] = None
+    tool_name: Annotated[str | None, WireName("toolName")] = None
 
     @property
     def tool_id(self):
@@ -931,13 +899,11 @@ class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunnin
 class ToolExecutionUpdate(NativePiEvent, DurablePiEvent):
     accepts_prompt = True
 
-    partial_result: typing.Annotated[PiToolResult, field_codec.WireName("partialResult")] = field(
+    partial_result: Annotated[PiToolResult, WireName("partialResult")] = field(
         default_factory=MissingToolResult
     )
-    tool_call_id: typing.Annotated[str | None, field_codec.WireName("toolCallId")] = field(
-        default=None
-    )
-    tool_name: typing.Annotated[str | None, field_codec.WireName("toolName")] = field(default=None)
+    tool_call_id: Annotated[str | None, WireName("toolCallId")] = None
+    tool_name: Annotated[str | None, WireName("toolName")] = None
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
 

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import typing
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 from uuid import uuid4
 
 from agent_comms import field_codec
@@ -244,7 +243,7 @@ class ActiveGoalAction(
                 replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
             )
             raise ValueError(refusal)
-        elif not generation.lifecycle.allows_resume(thread.turn_record.read().executing):
+        elif not generation.lifecycle.allows_resume(thread.turn_record.executing):
             raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
 
@@ -554,9 +553,7 @@ class OrderGoalAction(ProblemOrderGoalAction):
     """The order's commander gives the problem to this thread."""
 
     expected_revision: int
-    traced: typing.Annotated[FileLine | None, field_codec.WireOmitDefault(True)] = field(
-        default=None
-    )
+    traced: Annotated[FileLine | None, field_codec.WireOmitDefault()] = None
     assigner: ThreadIncarnation
 
     def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:

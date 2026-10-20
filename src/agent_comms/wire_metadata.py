@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
 
-from agent_comms import field_codec
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import Id128Text
+from .field_codec import Id128Text, WireName, WireOmitDefault, WireRequired
+from .locked_store import DurableFile
 
 if TYPE_CHECKING:
     import sqlite3
@@ -77,28 +76,27 @@ class ArchivedAccess(WireAccess):
 
 
 @dataclass
-class WireMetadata:
+class WireMetadata(DurableFile):
+    filename: ClassVar[str] = "bus_meta.json"
     last_seq: int = 0
-    claimed_after_seq: typing.Annotated[
-        int, field_codec.WireName("admission_after_seq"), field_codec.WireRequired(True)
-    ] = field(default=0)
-    access: typing.Annotated[WireAccess, field_codec.WireRequired(True)] = field(
+    claimed_after_seq: Annotated[
+        int, WireName("admission_after_seq"), WireRequired()
+    ] = 0
+    access: Annotated[WireAccess, WireRequired()] = field(
         default_factory=WritableAccess
     )
-    writer_protocol_version: typing.Annotated[
-        Literal[1] | None, field_codec.WireOmitDefault(True)
-    ] = field(default=None)
-    wire_root_id: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(
-        default=None
+    writer_protocol_version: Annotated[
+        Literal[1] | None, WireOmitDefault()
+    ] = None
+    wire_root_id: Annotated[str | None, WireOmitDefault()] = None
+    claim_envelopes_version: Annotated[
+        Literal[1] | None, WireOmitDefault()
+    ] = None
+    checkpoint_version: Annotated[Literal[1] | None, WireOmitDefault()] = (
+        None
     )
-    claim_envelopes_version: typing.Annotated[
-        Literal[1] | None, field_codec.WireOmitDefault(True)
-    ] = field(default=None)
-    checkpoint_version: typing.Annotated[Literal[1] | None, field_codec.WireOmitDefault(True)] = (
-        field(default=None)
-    )
-    checkpoint_seal: typing.Annotated[CheckpointSeal | None, field_codec.WireOmitDefault(True)] = (
-        field(default=None)
+    checkpoint_seal: Annotated[CheckpointSeal | None, WireOmitDefault()] = (
+        None
     )
 
     def __post_init__(self) -> None:

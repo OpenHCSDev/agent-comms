@@ -460,7 +460,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 old, current = before.threads[name], after.threads[name]
                 assert current.incarnation == old.incarnation
                 assert current.process_identity != old.process_identity
-                assert after.claimed_generations[name] > before.claimed_generations[name]
+                assert after.claim_generation(name) > before.claim_generation(name)
                 assert current.session_file == old.session_file
                 assert Path(current.session_file).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"

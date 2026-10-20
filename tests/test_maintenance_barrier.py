@@ -255,7 +255,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
         comms.registry.lease_live_turn_with_claim(
             comms.registry.require("owner"),
             "direct",
-            expected_generation=comms.registry.snapshot().claimed_generations["owner"],
+            expected_generation=comms.registry.snapshot().claim_generation("owner"),
         )
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.owners.start("owner")
@@ -415,31 +415,28 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_actual_native_held_input_resumes_from_existing_observer(native_backend):
-    from agent_comms.backend import TurnSession
-    from native_backend_fixture import wait_for
+async def test_actual_native_new_input_refused_during_maintenance_then_fresh_input_works(native_backend):
+    from agent_comms.acp_failure import NativeTurnError
+    from agent_comms.maintenance_barrier import MaintenanceHeldError
 
     owner = native_backend
     async with owner.open_owner(runtime_enabled=True) as (agent, session_id):
         async with owner.original_input(agent, session_id, "Held original input") as turn:
             gate = agent._comms.owners.maintenance
             hold = gate.begin(MaintenanceOperator.current())
-            sending = asyncio.create_task(turn.run_native())
             try:
-                await wait_for(lambda: sending in TurnSession.active and
-                    not TurnSession.active[sending].inputs.queue.ready.is_set())
-                running = TurnSession.active[sending]
-                assert running.native.proc.alive() and not sending.done()
-                assert not running.inputs.pending and owner.provider.posts == 0
-                gate.clear(hold)
-                await asyncio.wait_for(sending, 20)
-                assert owner.provider.posts == 1
-                assert len(owner.saved_inputs()) == 1
-                assert running.inputs.queue.empty() and not running.inputs.pending
-                assert turn.progress.result.ok
+                with pytest.raises(NativeTurnError) as failure:
+                    await asyncio.wait_for(turn.run_native(), 20)
+                assert isinstance(failure.value.__cause__, MaintenanceHeldError)
+                assert owner.provider.posts == 0 and len(owner.saved_inputs()) == 0
             finally:
-                sending.cancel()
-                await asyncio.gather(sending, return_exceptions=True)
+                gate.clear(hold)
+        # The rejected input is never replayed. A separate new input may start
+        # after maintenance releases the same saved owner.
+        async with owner.original_input(agent, session_id, "Fresh after maintenance") as fresh:
+            await asyncio.wait_for(fresh.run_native(), 20)
+            assert owner.provider.posts == 1 and len(owner.saved_inputs()) == 1
+            assert fresh.progress.result.ok
 
 
 async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: Path) -> None:
@@ -519,6 +516,7 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
     gate = MaintenanceBarrier(tmp_path / 'registry.json')
     hold = gate.begin(MaintenanceOperator.current())
     for argv in (('send', '--from', 'a', '--to', 'b', '--body', 'hi'),
+                 ('user-send', '--to', 'b', '--body', 'hi', '--worktree', '/wt'),
                  ('activity', '--name', 'a', '--state', 'working')):
         code, out = cli(*argv)
         assert code != 0 and 'under maintenance' in out
@@ -529,15 +527,15 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
 
 async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
     from functools import partial
-    from agent_comms.activity import ActivityState
     from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
+    from agent_comms.turn_phase import ModelWaitPhase
     from agent_comms.recorded_time import RecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
-    updates = [StartedItem('turn', 'item', ActivityState.WORKING, 'Replying',
+    updates = [StartedItem('turn', 'item', ModelWaitPhase('Replying'),
                           TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
                AppendDraftItem('turn', 'item', ' once')]
     barrier = MaintenanceBarrier(comms.registry.store.path)

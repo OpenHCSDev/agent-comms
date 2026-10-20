@@ -65,6 +65,6 @@ def test_send_requires_a_declared_run_including_mechanical_orders(commander_scri
         OrderFile.read(json.dumps(data))
     assert script.todos() == ()
     data['order']['run'] = {'kind': 'mechanical'}
-    script.send('worker', '23:59', OrderFile.read(json.dumps(data)), clean=True,
+    script.send('worker', RecordedEventTime.from_clock('23:59'), OrderFile.read(json.dumps(data)), clean=True,
                 new=('P1', data['defect']))
     assert isinstance(script.comms.goals.todos.get('P1').order.run, MechanicalOrderRun)

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
-import typing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms import field_codec
 
@@ -61,7 +60,7 @@ class ForkSessionHelper(PiHelper):
 
 @dataclass(frozen=True, kw_only=True)
 class RuntimeForkRequest(ForkSessionRequest):
-    runtime: typing.Annotated[LaunchRuntime, field_codec.WireExclude(True)]
+    runtime: Annotated[LaunchRuntime, field_codec.WireExclude()]
 
     @property
     def launch_runtime(self) -> LaunchRuntime:

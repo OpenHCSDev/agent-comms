@@ -16,7 +16,9 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-from native_proof_cases import read_proof_rows, write_proof_rows
+from native_proof_cases import (
+    append_input_entry, emitted_context, read_proof_rows, recorded_context, write_proof_rows,
+)
 
 import pytest
 
@@ -181,7 +183,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         if fresh:
             session_file = session_dir / f"{input_id}.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "isolated-session"}) + "\n"
+                json.dumps({"type": "session", "version": 3, "timestamp": "2026-10-01T00:00:00.000Z", "id": f"isolated-session-{input_id}"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None
@@ -194,32 +196,24 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(authorized)
-        if fresh:
-            entries = [{"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "isolated-session"}]
-            proof_rows = []
-        else:
-            entries = [json.loads(line) for line in session_file.read_text().splitlines()]
-            proof_rows = read_proof_rows(session_file)
+        entries = [json.loads(line) for line in session_file.read_text().splitlines()]
+        proof_rows = [] if fresh else read_proof_rows(session_file)
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
         # Real pinned native semantics: the tracked digest covers the
         # pi-input-request-v1 request envelope, not bare prompt bytes.
         digest = digest_override or native_request_digest(prompt)
-        entries.append(
-            {
-                "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
-                "id": entry_id,
-                "message": {"role": "user", "inputId": input_id, "inputDigest": digest},
-            }
-        )
-        session_file.write_text("".join(json.dumps(row) + "\n" for row in entries))
-        session_file.chmod(0o600)
+        session_entry_start = append_input_entry(session_file, {
+            "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
+            "id": entry_id,
+            "message": {"role": "user", "inputId": input_id, "inputDigest": digest},
+        })
         context_digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
                 "schema": 2,
                 "type": "context_committed",
-                "sessionId": "isolated-session",
+                "sessionId": entries[0]["id"],
                 "inputId": input_id,
                 "sessionEntryId": entry_id,
                 "requestGeneration": generation,
@@ -227,24 +221,20 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
                 "committedAtMs": 1_791_964_800_000 + generation,
             }
         )
-        proof_file = Path(str(session_file) + ".input-proof")
         write_proof_rows(session_file, proof_rows)
         reply = json.dumps({"decision": decision}) if _is_triage_request(_) else "42"
-        from agent_comms.native_pi import NativeContextProof, NativeTurnResult
+        from agent_comms.native_pi import NativeTurnResult
 
         observer = _.get("observe_event")
         if observer is not None:
-            from agent_comms.pi_events import PiEvent
-
             from agent_comms.agent_events import PromptAccepted
 
             await observer(PromptAccepted())
-            await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
+            await observer(emitted_context(proof_rows[-1]))
         return NativeTurnResult(
             reply,
-            NativeContextProof(
-                input_id, "isolated-session", entry_id, generation, context_digest,
-                1_791_964_800_000 + generation, session_file,
+            recorded_context(
+                session_file, proof_rows[-1], session_entry_start=session_entry_start,
             ),
         )
 
@@ -334,7 +324,9 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         # prompt bytes sent to Pi (not the bare text hash).
         assert binding.expected_prompt_digest == native_request_digest(calls[0][1])
         session_file = evidence[0].context.session_file
-        assert read_tracked_input_commitment(session_file, evidence[0].input_id) == CommittedInput(
+        assert read_tracked_input_commitment(
+            session_file, evidence[0].input_id, evidence=source_reads.for_source(session_file),
+        ) == CommittedInput(
             binding.expected_prompt_digest
         )
         assert evidence[0].expected_prompt_digest == binding.expected_prompt_digest
@@ -575,7 +567,7 @@ async def test_old_input_id_cannot_directly_seed_new_claim_cursor(tmp_path, monk
     comms.registry.unregister("alpha")
     comms.registry.heartbeat("alpha")
     owner = comms.registry.require("alpha")
-    claimed_generation = comms.registry.snapshot().claimed_generations["alpha"]
+    claimed_generation = comms.registry.snapshot().claim_generation("alpha")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         generation = store.participants.get(lookup).participant_generation
@@ -758,12 +750,12 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         )
         assert evidence == ()
         binding = store.session._connection.execute(
-            f"SELECT n.input_id,n.session_id FROM {NativeRuntimeInput.declared_name} n "
+            f"SELECT n.input_id,n.session_id,n.session_file FROM {NativeRuntimeInput.declared_name} n "
             f"JOIN ({NativeRuntimeInput.source_membership_sql()}) m ON m.input_id=n.input_id "
             "JOIN wake_claims c ON c.assignment_id=m.assignment_id WHERE c.wire_seq=?",
             (initial.message.seq,),
         ).fetchone()
-        assert binding is not None and binding[1] == "isolated-session"
+        assert binding is not None and binding[1] == NativeSessionIdentity.locate(binding[2]).session_id
     # The uncertain, already reserved input remains deferred, not retried.
     assert (
         await SelectedExecution(

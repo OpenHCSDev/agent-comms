@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import math
 import os
 import sqlite3
@@ -17,22 +17,29 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from io import DEFAULT_BUFFER_SIZE
 from pathlib import Path
-from typing import BinaryIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 
 from .audience_manifest import MAX_WIRE_SEQ
-from .child_process import Platform
+from .bus_page_index import BusPageIndex, BusPageRow
+from .bus_projection import (
+    AppendCheckpoint,
+    BusAppendIndex,
+    Checkpoint,
+    CompleteWirePrefix,
+    EmptyWirePrefix,
+    NoCheckpoint,
+    WirePrefix,
+)
 from .bus_publication import (
     CommittedDelivery,
-    has_private_wire_fields,
 )
 from .bus_source_page import AddressedPage
-from .bus_page_index import BusPageIndex, BusPageRow
-from .bus_projection import (AppendCheckpoint, BusAppendIndex, Checkpoint, NoCheckpoint,
-                             WirePrefix, EmptyWirePrefix, CompleteWirePrefix)
+from .child_process import Platform
+from .coordination_errors import StaleRevision
 from .envelope_claim_transitions import (
     ClaimProjection,
 )
@@ -41,21 +48,22 @@ from .errors import (
     RelationViolationError,
     StoredHistoryUnreadable,
 )
-from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
+from .locked_store import DurableFile, RegistryFile, WireWakeFile
+from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
-from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
+from .private_bus_checkpoint import CheckedRead
 from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
-from .private_bus_checkpoint import CheckedRead, RecordedContextManifestSources
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .store_files import (
+    UNBOUNDED_STORE_READ,
     ExclusiveLock,
     LockMode,
     SharedLock,
     StoreLock,
-    StoreLockOwner,
-    StoreLockContention,
     StoreLockAcquisition,
-    UNBOUNDED_STORE_READ,
+    StoreLockContention,
+    StoreLockOwner,
     _atomic_write_text,
     _iter_jsonl_stream,
     _store_lock,
@@ -158,16 +166,7 @@ class WireSnapshot(ObservedPath):
             lines.pop(0)
         for line in reversed(lines):
             if line.endswith(b"\n") and line.strip():
-                yield from reversed(self.messages(json.loads(line)))
-
-    @staticmethod
-    def messages(record: Mapping) -> tuple[Message, ...]:
-        from .errors import StoredHistoryUnreadable
-
-        try:
-            return WireRecord.public_from_wire(record).messages()
-        except MalformedRecord as error:
-            raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
+                yield from reversed(WireRecord.public_from_wire(json.loads(line)).messages())
 
     def messages_for_references(self, references):
         """Resolve exact public identities, including rows without a wake cohort."""
@@ -183,17 +182,6 @@ class WireSnapshot(ObservedPath):
         if any(reference not in messages for reference in references):
             raise RelationViolationError("Notification reference is not its original source")
         return tuple(messages[reference] for reference in references)
-
-    @classmethod
-    def public_page_records(cls, record: Mapping, raw_size: int,
-                            metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
-        """Silent facts consume physical bytes, never message/display budgets."""
-        for message in cls.messages(record):
-            if has_private_wire_fields(record):
-                yield message, len(json.dumps(message.to_wire()).encode()) + 1
-            else:
-                message.require_retained_claim(metadata.claimed_after_seq)
-                yield message, raw_size
 
 
 class AbsentWireSnapshot(WireSnapshot, AbsentPath):
@@ -339,11 +327,8 @@ class OpenedWireSnapshot(WireSnapshot):
         if not 0 <= before_offset <= self.boundary:
             raise RelationViolationError("Indexed read exceeds its opened wire cut")
         for row in rows:
-            (message, size), = self.public_page_records(
-                *row.record(self.stream, max_bytes=before_offset - row.offset),
-                self.metadata,
-            )
-            yield message, size
+            record, size = row.record(self.stream, max_bytes=before_offset - row.offset)
+            yield from record.page_records(size, self.metadata)
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | NoCheckpoint:
         """Validate the captured candidate only when a consumer reads this cut."""
@@ -393,7 +378,8 @@ class OpenedWireSnapshot(WireSnapshot):
         for record, raw_size in _iter_jsonl_stream(
             self.stream, boundary=boundary, label="wire snapshot"
         ):
-            yield from self.public_page_records(record, raw_size, self.metadata)
+            decoded = WireRecord.public_from_wire(record)
+            yield from decoded.page_records(raw_size, self.metadata)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationSourceWindowRequest:
@@ -447,13 +433,16 @@ class SnapshotOpening(ABC):
     def capture(self, log: WireLog, resources: ExitStack): ...
 
 
+@dataclass(frozen=True)
 class CurrentSnapshotOpening(SnapshotOpening):
+    contention: StoreLockContention = field(default_factory=partial(StoreLockContention, math.inf))
+
     def through(self, log: WireLog, lock: WireStoreLock) -> int:
         return 0
 
     @contextmanager
     def capture(self, log: WireLog, resources: ExitStack):
-        with log.locked(mode=SharedLock()) as lock:
+        with log.locked(mode=SharedLock(), contention=self.contention) as lock:
             metadata = (
                 log.private_marker_unlocked()
                 if log.path.exists() or log.metadata_path.exists()
@@ -463,6 +452,10 @@ class CurrentSnapshotOpening(SnapshotOpening):
             opened = log._open_snapshot_unlocked(resources, metadata, through)
             opened = lock.check_snapshot(opened, metadata)
         yield opened
+
+
+# A fresh cut that waits as long as a writer holds the bus.
+FRESH_SNAPSHOT_OPENING = CurrentSnapshotOpening()
 
 
 class SequencedSnapshotOpening(CurrentSnapshotOpening):
@@ -549,7 +542,8 @@ class CheckedWireStoreLock(WireStoreLock):
             yield source
 
 
-class WireLog(StoreLockOwner):
+class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
+    filename = "bus.jsonl"
     lock_type = WireStoreLock
     page_index_type = BusPageIndex
 
@@ -657,18 +651,6 @@ class WireLog(StoreLockOwner):
             request = replace(request, after_seq=originals[-1].message.seq)
             with self.checked_read() as source:
                 _, captured, more = source.addressed_page(self, request, prefix=witness)
-
-    def record_context(self, manifest) -> None:
-        """Append context entries and their manifest after checking which are new."""
-        previous = RecordedContextManifestSources.latest(self, manifest.thread)
-        with self.locked() as lock:
-            marker = self.private_marker_unlocked()
-            for record in lock.checked_read.context_records(manifest, previous):
-                self.append_private_unlocked(marker, record.to_wire())
-
-    def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
-        return RecordedContextManifestSources.for_owner(
-            self, name, registry, cursor=cursor, previous=previous)
 
     @contextmanager
     def retained_sources(self, name: str, registry):
@@ -786,10 +768,13 @@ class WireLog(StoreLockOwner):
     def append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
         """Durably reserve a sequence, append one row, then sync its parent.
 
-        A failed append or bus parent sync leaves the outcome UNKNOWN.
+        A failed append or bus parent sync leaves the outcome UNKNOWN. Every bus write lands
+        here, so maintenance refuses each writer here once, whichever operation it came
+        through; the holder's own children carry its nonce.
         """
         StoreLock.current_release().require_active()
         metadata.access.require_append()
+        MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         WireRecord.require_row_size(encoded, message="Private bus row exceeds the byte limit.")
         record = WireRecord.from_wire(row, metadata.root_id)
@@ -946,7 +931,7 @@ class WireLog(StoreLockOwner):
 
     @property
     def metadata_path(self) -> Path:
-        return self.path.with_name("bus_meta.json")
+        return WireMetadata.path_in(self.path.parent)
 
     def read_metadata_unlocked(self, *, required: bool = False) -> WireMetadata:
         """Read one marker inode under its leaf lock, independently of registry reads.

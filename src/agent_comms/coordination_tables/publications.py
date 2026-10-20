@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import typing
 from dataclasses import dataclass, fields
 from dataclasses import field as dataclass_field
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
-from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_PUBLICATION_PAYLOAD_BYTES,
@@ -17,7 +15,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.typed_table import (
@@ -62,7 +60,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if acknowledgement.message_id != self.expected_message_id:
             raise IntegrityViolationError("acknowledgement envelope does not match frozen intent")
 
-    execution_id: typing.Annotated[
+    execution_id: Annotated[
         str,
         Column(
             primary_key=True,
@@ -71,7 +69,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
              AND instr(execution_id, ':' ) = 0""",
         ),
     ]
-    exact_target: typing.Annotated[
+    exact_target: Annotated[
         str,
         Column(
             primary_key=True,
@@ -80,8 +78,8 @@ class PublicationIntents(CoordinatorTable, TypedTable):
       typeof(exact_target) = 'text' AND length(exact_target) BETWEEN 1 AND 256""",
         ),
     ]
-    message: typing.Annotated[Message, Column(check="json_valid(message)")]
-    publication_key: typing.Annotated[
+    message: Annotated[Message, Column(check="json_valid(message)")]
+    publication_key: Annotated[
         str,
         Column(
             storage=ExactStorage,
@@ -91,7 +89,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     """,
         ),
     ]
-    expected_message_id: typing.Annotated[
+    expected_message_id: Annotated[
         str,
         Column(
             storage=ExactStorage,
@@ -116,7 +114,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
 
-    obligation_intent_required: typing.Annotated[int | None, Column(generated="1")] = (
+    obligation_intent_required: Annotated[int | None, Column(generated="1")] = (
         dataclass_field(init=False, compare=False)
     )
 
@@ -194,7 +192,7 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
-    execution_id: typing.Annotated[
+    execution_id: Annotated[
         str,
         Column(
             primary_key=True,
@@ -206,14 +204,14 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
             ),
         ),
     ]
-    exact_target: typing.Annotated[
+    exact_target: Annotated[
         str,
         Column(
             primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256"
         ),
     ]
-    seq: typing.Annotated[int, Column(unique=True, check="seq > 0")]
-    message_id: typing.Annotated[
+    seq: Annotated[int, Column(unique=True, check="seq > 0")]
+    message_id: Annotated[
         str,
         Column(
             storage=ExactStorage,
@@ -221,9 +219,9 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
             check=("\n      typeof(message_id) = 'text' AND length(message_id) BETWEEN 1 AND 256"),
         ),
     ]
-    received_at_ms: typing.Annotated[int, Column(check="received_at_ms >= 0")]
-    obligation_publication_required: typing.Annotated[
-        int | None, field_codec.WireName("obligation_receipt_required"), Column(record_key=True, generated="1")
+    received_at_ms: Annotated[int, Column(check="received_at_ms >= 0")]
+    obligation_publication_required: Annotated[
+        int | None, WireName("obligation_receipt_required"), Column(record_key=True, generated="1")
     ] = dataclass_field(init=False, compare=False)
 
     @classmethod

@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 import json
-import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
-from agent_comms import field_codec
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireContext, WireOmitDefault
 from .native_tool_call import CodingCall, SelectedToolDenied
 from .recorded_time import EventTime
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
+
+if TYPE_CHECKING:
+    from .pi_payloads import PiToolResult
+    from .turn_goal_permission import TurnGoalPermission
 
 
 class NativeToolDeclaration(ToolDeclaration):
@@ -49,7 +51,7 @@ class NativeToolDeclaration(ToolDeclaration):
 class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     """A decoded tool is the live call; runtime fields are not model arguments."""
 
-    call_id: typing.Annotated[str, field_codec.WireContext(True)]
+    call_id: Annotated[str, WireContext()]
     claim: ClassVar[None] = None
 
     def allowed_claim(self) -> FileClaimPath | None:
@@ -86,6 +88,9 @@ class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=N
     declared_name: str
     arguments: dict[str, object]
 
+    def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
+        result.published_goal(permission)
+
     def reads(self) -> str:
         return json.dumps(self.arguments)
 
@@ -114,7 +119,7 @@ class PathTool:
 class PatternSearchTool:
     acp_kind = "search"
     pattern: str
-    path: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    path: Annotated[str | None, WireOmitDefault()] = None
 
     def reads(self) -> str:
         return self.pattern
@@ -144,8 +149,8 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
     label = "Read"
-    offset: typing.Annotated[float | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    limit: typing.Annotated[float | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    offset: Annotated[float | None, WireOmitDefault()] = None
+    limit: Annotated[float | None, WireOmitDefault()] = None
 
     def _parse_resource(self) -> None:
         return None
@@ -156,7 +161,7 @@ class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
     command: str
-    timeout: typing.Annotated[float | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    timeout: Annotated[float | None, WireOmitDefault()] = None
 
     def reads(self) -> str:
         return self.command

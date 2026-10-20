@@ -17,15 +17,18 @@ from agent_comms.ui_model.observation import (
     ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
+from conftest import await_event_or_task
 
 
 def saved_history(tmp_path):
     comms = wire(tmp_path / "wire")
     session = tmp_path / "saved.jsonl"
-    session.write_text(json.dumps({
-        "type": "message", "id": "saved-answer", "parentId": None,
-        "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]},
-    }) + "\n")
+    timestamp = "2026-10-20T00:00:00.000Z"
+    session.write_text("".join(json.dumps(record) + "\n" for record in (
+        {"type": "session", "version": 3, "id": "saved-session", "timestamp": timestamp},
+        {"type": "message", "id": "saved-answer", "parentId": None, "timestamp": timestamp,
+         "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]}},
+    )))
     comms.registry.declare(comms.registry.new_thread('saved', frozenset(), str(tmp_path), session_file=str(session)))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.install_private_runtime()
@@ -76,12 +79,12 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
             snapshot = await waiting
         assert isinstance(snapshot, TranscriptSnapshotUpdate)
         assert [event.text for event in snapshot.page.events] == ["Saved answer"]
-        assert snapshot.identity.session_file == str(session)
+        assert snapshot.identity.runtime.read_key == str(session)
         assert process.reads == {}
     assert session.read_bytes() == original
 
 
-async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
+async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path, monkeypatch):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
     agent = CommsAgent(comms)
@@ -91,16 +94,20 @@ async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
+    read_started = asyncio.Event()
+    read = ObservationProcess.read
+
+    async def observed_read(process, request):
+        read_started.set()
+        return await read(process, request)
+
+    monkeypatch.setattr(ObservationProcess, 'read', observed_read)
     task = None
     try:
         with held_source(comms):
-            task = asyncio.create_task(agent.sessions.transcript.replay("saved", "saved", client=Client()))
+            task = asyncio.create_task(agent.sessions.transcript.replay("saved", client=Client()))
             async with asyncio.timeout(15):
-                while "reads" not in agent.sessions.transcript.__dict__:
-                    await asyncio.sleep(0.01)
-                process = agent.sessions.transcript.reads
-                while not process.reads:
-                    await asyncio.sleep(0.01)
+                await await_event_or_task(read_started.wait(), task)
             await asyncio.sleep(0.15)
             assert not task.done()
             assert updates == []  # Not an empty-history update or delivery/resend error.
@@ -109,7 +116,7 @@ async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
         snapshot, = (value for value in decode_updates(updates[0].field_meta)
                      if isinstance(value, TranscriptSnapshotUpdate))
         assert [event.text for event in snapshot.page.events] == ["Saved answer"]
-        assert snapshot.identity.session_file == str(session)
+        assert snapshot.identity.runtime.read_key == str(session)
         assert session.read_bytes() == original
     finally:
         if task is not None and not task.done():

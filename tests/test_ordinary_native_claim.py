@@ -95,7 +95,7 @@ async def test_copied_claim_history_receives_one_fresh_dm(native_backend, monkey
                 boundary.bus_lock, boundary.registry, holder,
                 WritableFileClaim(native.project / "claim-only.txt").normalized(native.project),
                 NativeClaim(
-                    owner_claimed_generation=boundary.registry.claimed_generations[holder.name],
+                    owner_claimed_generation=boundary.registry.claim_generation(holder.name),
                     operation_id=secrets.token_hex(16), turn_id="copy-history-turn",
                     input_id="copy-history-input",
                 ), activity=boundary.activity,

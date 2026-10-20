@@ -131,6 +131,11 @@ class StoreLockContention:
 
     remaining: float
 
+    @classmethod
+    def for_blocking(cls, blocking: bool) -> StoreLockContention:
+        """An unbounded wait, or no wait at all."""
+        return cls(math.inf if blocking else 0)
+
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
         while True:
@@ -268,6 +273,14 @@ class StoreOwner(DeclaredFamily):
             dir=path.parent,
         )
         return descriptor, Path(name)
+
+    @staticmethod
+    def snapshot_lock(path: Path) -> Path:
+        return path.with_name(f".{path.name}.snapshot-lock")
+
+    @staticmethod
+    def snapshot_intent(path: Path) -> Path:
+        return path.with_name(f".{path.name}.pending")
 
     @classmethod
     def rollback_file(cls, staged: Path) -> Path:
@@ -467,7 +480,7 @@ def _store_lock(
     contention: StoreLockContention | None = None,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractContextManager[StoreLock]:
-    wait = contention or StoreLockContention(math.inf if blocking else 0)
+    wait = contention or StoreLockContention.for_blocking(blocking)
     return StoreLockAcquisition.current(store_path, mode).locked(
         store_path, read_budget, mode, wait, lock_type, blocking,
     )
@@ -482,7 +495,7 @@ def _async_store_lock(
     contention: StoreLockContention | None = None,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractAsyncContextManager[StoreLock]:
-    wait = contention or StoreLockContention(math.inf if blocking else 0)
+    wait = contention or StoreLockContention.for_blocking(blocking)
     return StoreLockAcquisition.current(store_path, mode).locked_async(
         store_path, read_budget, mode, wait, lock_type, blocking,
     )

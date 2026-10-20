@@ -64,7 +64,7 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
         7,
         2,
     )
-    comms.bus.log.record_context(ContextManifest(
+    comms.contexts.record(ContextManifest(
         owner.incarnation,
         RecordedContextTurn(TurnId(f"turn-{generation}"), TurnIdentity(owner.incarnation, generation)),
         (segment,),
@@ -156,7 +156,7 @@ def acquire_tool_claim(comms: Comms, name: str, resource: Path, operation_id: st
     with NativeBoundary(comms.bus) as boundary:
         owner = boundary.registry.require(name)
         scope = NativeClaim(
-            owner_claimed_generation=boundary.registry.claimed_generations[name],
+            owner_claimed_generation=boundary.registry.claim_generation(name),
             operation_id=operation_id, turn_id=f"turn-{name}", input_id=f"input-{name}",
         )
         return comms.bus.publisher._publish_acquisition_unlocked(

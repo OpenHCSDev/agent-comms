@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
                             ExitedOutcome, SignaledOutcome, TimedOutOutcome)
+from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
@@ -26,7 +27,7 @@ from .field_codec import (
 )
 from .goal_states import ActiveGoal, GoalState
 from .goal_failure_observation import FailedTurnProjection
-from .turn_goal_permission import ContinuationGoalPermission, InactiveGoalPermission, TurnGoalPermission
+from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
@@ -604,7 +605,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R: ...
 
     @abstractmethod
-    def following_permission(self) -> TurnGoalPermission: ...
+    def following_permission(self) -> GoalPermission: ...
 
     @abstractmethod
     def task_scope(self, scope: TaskScope) -> TaskScope: ...
@@ -669,7 +670,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
     @abstractmethod
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> object: ...
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue: ...
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
@@ -738,13 +739,13 @@ class NoGoal(NullMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return False
 
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> None:
-        return None
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
+        return NoWakeGoalContext()
 
     shows_document: ClassVar[bool] = False
     shows_progress: ClassVar[bool] = False
 
-    def following_permission(self) -> TurnGoalPermission:
+    def following_permission(self) -> GoalPermission:
         return InactiveGoalPermission()
 
     def task_scope(self, scope: TaskScope) -> TaskScope:
@@ -845,10 +846,12 @@ class Goal(RecordMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return waits.clear(self.id, wait_id=wait_id)
 
-    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> dict[str, object]:
+    def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
         todos = self.order.todos(goals, owner, self.id)
-        return {"text": self.order.goal_text(self), "status": self.state.declared_name,
-                "progress": self.order.progress(self, todos)}
+        return WakeGoalContext(
+            text=self.order.goal_text(self), state=self.state,
+            progress=self.order.progress(self, todos),
+        )
 
     shows_document: ClassVar[bool] = True
 
@@ -856,7 +859,7 @@ class Goal(RecordMember, GoalDeclaration):
     def shows_progress(self) -> bool:
         return bool(self.progress)
 
-    def following_permission(self) -> TurnGoalPermission:
+    def following_permission(self) -> GoalPermission:
         return ContinuationGoalPermission(self)
 
     def task_scope(self, scope: TaskScope) -> TaskScope:

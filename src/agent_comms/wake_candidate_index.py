@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import sqlite3
 import time
-import typing
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -83,14 +82,14 @@ class CandidateTable:
 
 @dataclass(frozen=True, kw_only=True)
 class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
-    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[3]
     root_id: str
     device: int
     inode: int
-    byte_offset: typing.Annotated[int, Column(check="byte_offset>=0")]
+    byte_offset: Annotated[int, Column(check="byte_offset>=0")]
     tail_digest: str
-    last_seq: typing.Annotated[int, Column(check="last_seq>=0")]
+    last_seq: Annotated[int, Column(check="last_seq>=0")]
 
     @classmethod
     def initial(cls, root_id: str, revision: FileRevision) -> CandidateCheckpoint:
@@ -134,15 +133,15 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
 
 @dataclass(frozen=True)
 class CandidateResponseKey(CandidateTable, TypedTable):
-    publication_key: typing.Annotated[str, Column(primary_key=True)]
+    publication_key: Annotated[str, Column(primary_key=True)]
     without_rowid = True
 
 
 @dataclass(frozen=True)
 class Candidate(CandidateTable, TypedTable):
-    source_seq: typing.Annotated[int, Column(primary_key=True)]
+    source_seq: Annotated[int, Column(primary_key=True)]
     message_id: str
-    recipient_lookup: typing.Annotated[str, Column(primary_key=True)]
+    recipient_lookup: Annotated[str, Column(primary_key=True)]
     sender: str
     target: str
     wake_mode: type[WakePolicy] | None  # None means a delivery-only/no-wake member.
@@ -274,7 +273,7 @@ class WakeCandidateIndex(TypedStore):
     rows = tuple(TypedTable.members_with(CandidateTable))
 
     def __init__(self, log: WireLog):
-        if log.path.name != "bus.jsonl":
+        if log.path.name != log.filename:
             raise ValueError("candidate index requires the canonical wire log")
         self.log = log
 

@@ -1,7 +1,7 @@
 """Coordinator declarations cannot return to an aggregate or acquire a second registry."""
 
 import ast
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,7 +36,7 @@ def test_deleted_coordinator_aggregate_has_no_callers():
 def test_new_declared_table_is_installed_without_schema_roster_edit(tmp_path):
     @dataclass(frozen=True)
     class ProofRow(CoordinatorTable, TypedTable, declared_name="coordinator_extension_probe"):
-        identity: typing.Annotated[str, Column(primary_key=True)]
+        identity: Annotated[str, Column(primary_key=True)]
         value: int
 
     try:

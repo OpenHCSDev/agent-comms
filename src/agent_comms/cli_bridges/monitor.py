@@ -75,11 +75,7 @@ class NoReader(ReaderState):
                 bridge.reader_changed.notify_all()
             async with attachment.window_changed:
                 attachment.window_changed.notify_all()
-            print(
-                "Monitor detached; delivery paused, bridge remains connected.",
-                file=sys.stderr,
-                flush=True,
-            )
+            bridge.log("Monitor detached; delivery paused, bridge remains connected.")
 
 
 @dataclass
@@ -115,7 +111,7 @@ class UnreadyReader(ReaderState):
             async with bridge.reader_changed:
                 bridge.reader = AttachedReader(self.attachment)
                 bridge.reader_changed.notify_all()
-            print("Fresh Monitor probe observed; delivery enabled.", file=sys.stderr, flush=True)
+            bridge.log("Fresh Monitor probe observed; delivery enabled.")
 
 
 @dataclass
@@ -250,11 +246,7 @@ class MonitorService:
                     str(path),
                 )
                 async with server:
-                    print(
-                        f"Session bridge ready for Claude PID {self.owner.pid}.",
-                        file=sys.stderr,
-                        flush=True,
-                    )
+                    self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
                     try:
                         await self.owner.wait_exited()
                     finally:

@@ -1,7 +1,7 @@
 """Native SDK input observations, decoded once by the existing Pi boundary."""
 
-import typing
-from dataclasses import dataclass, field
+from typing import Annotated
+from dataclasses import dataclass
 from functools import partial
 
 from agent_comms import field_codec
@@ -25,9 +25,9 @@ class NativeContextManifestData(PiResponseData):
     strict_fields = True
     counter: str
     segments: tuple[SegmentManifest, ...]
-    request_id: typing.Annotated[
-        str | None, field_codec.WireName("requestId"), field_codec.WireOmitDefault(True)
-    ] = field(default=None)
+    request_id: Annotated[
+        str | None, field_codec.WireName("requestId"), field_codec.WireOmitDefault()
+    ] = None
     values: tuple[MeasuredNativeSegment, ...] = ()
 
     def for_turn(self, thread, turn):
@@ -37,7 +37,7 @@ class NativeContextManifestData(PiResponseData):
         return ContextManifest(thread, turn, tuple(segment.capture_public(self.values)
             for segment in self.segments), self.counter, request_id=self.request_id)
 
-    async def record(self, log, thread, lease) -> ContextManifest:
+    async def record(self, contexts, thread, lease) -> ContextManifest:
         """Publish the original SDK observation under its leased owner turn."""
         from .coordinator import Coordination
         from .thread_identity import TurnId
@@ -46,7 +46,7 @@ class NativeContextManifestData(PiResponseData):
         turn = RecordedContextTurn(TurnId(lease.turn_id), lease.identity)
         manifest = self.for_turn(thread.incarnation, turn)
         await Coordination.run_worker(
-            partial(log.record_context, manifest)
+            partial(contexts.record, manifest)
         )
         return manifest
 

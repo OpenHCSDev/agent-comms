@@ -19,14 +19,13 @@ import secrets
 import sqlite3
 import stat
 import tempfile
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import ExitStack, closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar, Annotated
 from uuid import uuid4
 
 from .coordination_database import CoordinationStore
@@ -54,6 +53,7 @@ from .goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
+from .locked_store import DurableFile, SQLiteFile
 from .ordinary_turn_rules import OrdinaryGoalGrantCheck
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
@@ -111,8 +111,8 @@ class StaleAttemptError(GoalAttemptError):
 
 @dataclass(frozen=True)
 class Generation(GoalLedgerTable, TypedTable):
-    goal_id: typing.Annotated[str, Column(primary_key=True)]
-    number: typing.Annotated[int, Column(check="number>0")]
+    goal_id: Annotated[str, Column(primary_key=True)]
+    number: Annotated[int, Column(check="number>0")]
     lifecycle: GenerationState
     attempt_id: str | None
     ready_digest: str = field(default="", compare=False, repr=False)
@@ -252,22 +252,22 @@ class Reservation:
 
 @dataclass(frozen=True)
 class AttemptRecord(GoalLedgerTable, TypedTable):
-    reservation: typing.Annotated[Reservation, Column(primary_key=True)]
+    reservation: Annotated[Reservation, Column(primary_key=True)]
     phase: GoalAttemptPhase
     progress_witness: str | None
     resolution: str | None
 
-    attempt_id: typing.Annotated[
+    attempt_id: Annotated[
         str | None, Column(unique=True, generated="json_extract(reservation,'$.attempt_id')")
     ] = field(default=None, init=False, compare=False)
-    goal_id: typing.Annotated[
+    goal_id: Annotated[
         str | None,
         Column(
             generated="json_extract(reservation,'$.goal_id')",
             references=(Generation, "goal_id"),
         ),
     ] = field(default=None, init=False, compare=False)
-    generation: typing.Annotated[
+    generation: Annotated[
         int | None, Column(generated="json_extract(reservation,'$.generation')")
     ] = field(default=None, init=False, compare=False)
     unique = (("goal_id", "generation"),)
@@ -405,8 +405,8 @@ class NoAttempt(MissingAttempt):
 
 @dataclass(frozen=True)
 class GoalHumanDecision(GoalLedgerTable, TypedTable):
-    goal_id: typing.Annotated[str, Column(primary_key=True, references=(Generation, "goal_id"))]
-    decision_id: typing.Annotated[str, Column(primary_key=True)]
+    goal_id: Annotated[str, Column(primary_key=True, references=(Generation, "goal_id"))]
+    decision_id: Annotated[str, Column(primary_key=True)]
     generation: int
 
     def claim(self, conn: sqlite3.Connection) -> None:
@@ -418,10 +418,10 @@ class GoalHumanDecision(GoalLedgerTable, TypedTable):
 
 @dataclass(frozen=True)
 class GoalProviderUsage(GoalLedgerTable, TypedTable):
-    attempt_id: typing.Annotated[
+    attempt_id: Annotated[
         str, Column(primary_key=True, references=(AttemptRecord, "attempt_id"))
     ]
-    response_id: typing.Annotated[str, Column(primary_key=True)]
+    response_id: Annotated[str, Column(primary_key=True)]
     # The canonical opaque provider object remains exact; no second native usage codec.
     usage_json: str
 
@@ -434,7 +434,7 @@ class GoalProviderUsage(GoalLedgerTable, TypedTable):
 
 @dataclass(frozen=True)
 class GoalAttemptSchema(GoalLedgerTable, TypedTable):
-    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     ddl_digest: str
 
     @classmethod
@@ -693,7 +693,7 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore:
+class GoalAttemptStore(DurableFile, SQLiteFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a
@@ -705,9 +705,12 @@ class GoalAttemptStore:
     post-COMMIT row whose fsync failed is never authority on its own.
     """
 
+    filename = "goal_attempts.sqlite3"
+    root_directory = "goal-private"
+
     def __init__(self, root: str | Path):
         self.root = Path(root)
-        self.path = self.root / "goal_attempts.sqlite3"
+        self.path = self.path_in(self.root)
         self._require_root()
         if not self.path.is_file():
             raise StorageUncertainError("Goal attempt store is not initialized.")
@@ -729,7 +732,7 @@ class GoalAttemptStore:
             os.name == "posix" and stat.S_IMODE(directory.stat().st_mode) != 0o700
         ):
             raise StorageUncertainError("An existing owner-0700 directory is required.")
-        path = directory / "goal_attempts.sqlite3"
+        path = cls.path_in(directory)
         if path.exists():
             # Existing state never recreates a process-local launch capability.
             return cls(directory)

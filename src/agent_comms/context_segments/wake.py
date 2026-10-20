@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import FieldCodec
@@ -20,11 +21,12 @@ from ..threads import Thread
 from ..turn_context import (
     InstructionFile,
     InstructionSegment,
-    OwnerProvenance,
     NextContextTurn,
+    OwnerProvenance,
     WireProvenance,
 )
 from ..wake_policy import WakePolicy
+from .wake_values import WakeWorkContext
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -36,7 +38,7 @@ class SelectedWakeSegment(InstructionSegment):
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
     sent_outcomes: tuple[SentMessageOutcome, ...]
-    work_context: dict[str, object]
+    work_context: WakeWorkContext
 
     sent_limit = 5
 
@@ -98,7 +100,7 @@ class SelectedWakeSegment(InstructionSegment):
             separators=(",", ":"),
         )
         work_context = json.dumps(
-            self.work_context,
+            FieldCodec.encode(self.work_context),
             ensure_ascii=True,
             separators=(",", ":"),
         )

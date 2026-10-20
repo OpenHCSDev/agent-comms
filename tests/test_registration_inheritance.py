@@ -1,7 +1,7 @@
 """Current registration declarations, incarnation and saved relationship ownership."""
 
-import typing
-from dataclasses import dataclass, field, replace
+from typing import Annotated
+from dataclasses import dataclass, replace
 
 from agent_comms import field_codec
 from agent_comms.comms import wire
@@ -25,7 +25,7 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
 
     @dataclass(frozen=True, slots=True)
     class CountedThread(Thread):
-        count: typing.Annotated[int, field_codec.RegistrationPolicy(InheritUnsetCount)] = field(default=-1)
+        count: Annotated[int, field_codec.RegistrationPolicy(InheritUnsetCount)] = -1
 
     previous = thread_registration.new_thread('owner', frozenset(), '/wt', kind=CountedThread, created_at=42.0, count=9)
     omitted = replace(previous, count=-1)

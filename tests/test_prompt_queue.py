@@ -12,6 +12,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.comms import wire
 from delivery_owner_fixture import canonical_agent
+from conftest import await_event_or_task
 
 
 async def make_agent(tmp_path, monkeypatch):
@@ -46,7 +47,8 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
     monkeypatch.setattr(backend, "stream_agent_events", events)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
     try:
-        await asyncio.wait_for(active.wait(), 3)
+        async with asyncio.timeout(3):
+            await await_event_or_task(active.wait(), turn)
         await agent.prompt(
             "project",
             [{"type": "text", "text": "later"}],
@@ -92,7 +94,8 @@ async def test_cancellation_restores_unprocessed_user_queue(tmp_path, monkeypatc
     monkeypatch.setattr(backend, "stream_agent_events", events)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
     try:
-        await asyncio.wait_for(active.wait(), 3)
+        async with asyncio.timeout(3):
+            await await_event_or_task(active.wait(), turn)
         await agent.prompt(
             "project",
             [{"type": "text", "text": "keep this queued text"}],

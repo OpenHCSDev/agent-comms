@@ -1,20 +1,21 @@
 """Persistent owner for a forked thread; idle turns consume no model process."""
 
-import asyncio
 import argparse
+import asyncio
 import os
 import signal
 import sys
-from functools import partial
-from .coordinator import Coordination
 from contextlib import suppress
+from functools import partial
 
 from .acp import CommsAgent
 from .active_route import ActiveRoute
 from .comms import Comms, wire
-from .native_arguments import NativeArguments
+from .coordination_database import CoordinationStore
+from .coordinator import Coordination
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
+from .native_arguments import NativeArguments
 
 
 async def run() -> None:
@@ -24,7 +25,7 @@ async def run() -> None:
     comms = wire()
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
-    async with Coordination.worker(comms.root / "coordination.sqlite3"):
+    async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         await run_owner(comms)
 
 
@@ -64,7 +65,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
                 owner = snapshot.threads[name]
                 row = agent.inputs.dispositions.lookup(key)
                 if not row.queued_for(
-                    owner.incarnation, snapshot.claimed_generations[name], row.source_text
+                    owner.incarnation, snapshot.claim_generation(name), row.source_text
                 ):
                     raise ValueError("Startup input no longer belongs to this owner claim_scope")
             return row

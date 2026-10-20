@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
-from .backend import TurnSession
+from .backend import InputStartListener, TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
@@ -37,6 +37,7 @@ from .native_pi import (
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_startup import NativeStartup
+from .native_session_reopen import SessionRetention
 from .native_tool_call import NativeToolMode, SelectedToolDenied
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
@@ -374,10 +375,10 @@ class TrackedTurnSession(TurnSession):
     async def retain_or_close(self) -> None:
         """Let the session keep a verified idle child; close any other child."""
         await self.native.finish_input()
-        identity = self.native.attestation.identity
+        retention = SessionRetention.from_optional(self.native.attestation.identity)
         # An input written but never started may still run in the child; it is not idle.
         self.retainable = self.retainable and self.inputs.settled
-        if self.retainable and identity is not None and self.native_session.retain(self.native, identity):
+        if self.retainable and retention.retain(self.native, self.native_session):
             return
         await self.native_session.close()
 
@@ -475,7 +476,7 @@ class TrackedTurnSession(TurnSession):
         self.inputs.queue = inbox
         self.send_boundary = sender
         self.interrupt_boundary = partial(sender, already_bound=True)
-        self.native_start = sender.native_start
+        self.input_start = InputStartListener.from_callback(sender.native_start)
         self.ensure_input_forwarding()
 
     async def accept_user_message(
@@ -547,7 +548,7 @@ class TrackedTurnSession(TurnSession):
         # Pi runs an input it was handed before settling; the turn ends after that run.
         if self.inputs.all_written_started:
             with self.startup.measurements.operation("native_agent_settled"):
-                self.finished = True
+                self.finish_request()
         return ()
 
     async def invalidate_identity(self) -> tuple[AgentEvent, ...]:

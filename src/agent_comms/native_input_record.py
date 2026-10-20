@@ -6,19 +6,29 @@ OwnerGenerations is the existing authority for that identity domain.
 
 from __future__ import annotations
 
-import typing
+import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, TYPE_CHECKING
 
-from agent_comms import field_codec
 
 from .coordination_contracts import validate_execution_id
 from .coordination_errors import IdentityConflict, UnrecordedNativeContext
 from .coordination_tables.participants import OwnerGenerations
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, Id128Text, JsonShapeFamily, JsonShapeMember, MalformedRecord
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    JsonShapeFamily,
+    JsonShapeMember,
+    MalformedRecord,
+    NativeContext,
+    WireName,
+)
 from .typed_table import Column, IntegerStorage, TextStorage
+
+if TYPE_CHECKING:
+    from agent_comms.coordination_tables.executions import ExecutionRecord
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,11 +38,11 @@ class NativeInputCommit:
     input_id: Annotated[
         str,
         Id128Text,
-        field_codec.WireName("inputId"),
+        WireName("inputId"),
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"),
     ]
-    session_id: typing.Annotated[str, field_codec.WireName("sessionId")]
-    session_entry_id: typing.Annotated[str, field_codec.WireName("sessionEntryId")]
+    session_id: Annotated[str, WireName("sessionId")]
+    session_entry_id: Annotated[str, WireName("sessionEntryId")]
 
     @property
     def input_commit(self) -> NativeInputCommit:
@@ -49,8 +59,8 @@ class NativeInputLocation(NativeInputCommit):
         nullable=True,
         storage=IntegerStorage,
     )
-    session_entry_start: typing.Annotated[
-        int, field_codec.WireName("sessionEntryStart"), position_column
+    session_entry_start: Annotated[
+        int, WireName("sessionEntryStart"), position_column
     ] = field(kw_only=True)
 
 
@@ -107,6 +117,10 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         return ()
 
     def matches_execution(self, execution, owner_lookup: str) -> bool:
+        return False
+
+    def retried_in(self, db: sqlite3.Connection) -> bool:
+        """TRIAGE has no attempts, so a later attempt never replaces it."""
         return False
 
     def proves_full_source(self, proof) -> bool:
@@ -232,12 +246,20 @@ class FullNativeExecution(NativeInputExecution):
             and execution.lifecycle.current_attempt_ordinal == self.attempt_ordinal
         )
 
+    def _execution(self, db: sqlite3.Connection) -> ExecutionRecord:
+        from agent_comms.coordination_tables.executions import ExecutionRecord
+
+        return ExecutionRecord.require(db, execution_id=self.execution_id)
+
+    def retried_in(self, db: sqlite3.Connection) -> bool:
+        """A transient provider failure leaves this input behind a later attempt."""
+        return self._execution(db).lifecycle.current_attempt_ordinal != self.attempt_ordinal
+
     def published_replies(self, db, owner_lookup):
-        from .coordination_tables.executions import ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
         from .message_reference import MessageReference
 
-        execution = ExecutionRecord.one(db, execution_id=self.execution_id)
+        execution = self._execution(db)
         if not self.matches_execution(execution, owner_lookup):
             return ()
         obligations = ResponseObligation.select(
@@ -389,14 +411,14 @@ class NativeInputContext:
         if self.context_anchor is None:
             try:
                 for plan in FieldCodec.field_plans(type(self)):
-                    if plan.setting(field_codec.NativeContext, None):
+                    if plan.setting(NativeContext, None):
                         FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, plan.name)))
             except MalformedRecord as error:
                 raise IdentityConflict("Native unrecorded context group is partial") from error
             return UnrecordedNativeInputReference()
         try:
             for plan in FieldCodec.field_plans(type(self)):
-                annotation = plan.setting(field_codec.NativeContext, None)
+                annotation = plan.setting(NativeContext, None)
                 if annotation is not None:
                     FieldCodec.decode(
                         annotation, FieldCodec.encode(getattr(self, plan.name), annotation)

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
-from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -16,7 +15,7 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import projected, SnapshotExclude, WireName
 from agent_comms.obligation_states import ResponseState
 from agent_comms.typed_table import (
     Column,
@@ -33,17 +32,17 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
     def response_record(records, exact_target):
         return next((row for row in records if row.exact_target == exact_target), None)
 
-    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
-    exact_target: typing.Annotated[
+    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
+    exact_target: Annotated[
         str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
     ]
-    lifecycle: typing.Annotated[ResponseState, field_codec.SnapshotExclude(True)]
-    reason_code: typing.Annotated[
+    lifecycle: Annotated[ResponseState, SnapshotExclude()]
+    reason_code: Annotated[
         str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
     ]
-    created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
-    updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
-    revision: typing.Annotated[int, Column(check="revision > 0")]
+    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
+    revision: Annotated[int, Column(check="revision > 0")]
 
     @projected(view="snapshot", name="state")
     def snapshot_state(self):
@@ -70,15 +69,15 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("obligation timestamps are inconsistent")
 
-    state: typing.Annotated[
+    state: Annotated[
         str,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="json_extract(lifecycle, '$.kind')", check="state IN ({response_names})"),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    published_message_id: typing.Annotated[
+    published_message_id: Annotated[
         str | None,
-        field_codec.WireName("receipt_message_id"),
-        field_codec.SnapshotExclude(True),
+        WireName("receipt_message_id"),
+        SnapshotExclude(),
         Column(
             record_key=True,
             generated="json_extract(lifecycle, '$.message_id')",
@@ -90,35 +89,35 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
             ),
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    publication_seq: typing.Annotated[
+    publication_seq: Annotated[
         int | None,
-        field_codec.WireName("receipt_seq"),
-        field_codec.SnapshotExclude(True),
+        WireName("receipt_seq"),
+        SnapshotExclude(),
         Column(
             record_key=True,
             generated="json_extract(lifecycle, '$.seq')",
             check="receipt_seq IS NULL OR receipt_seq > 0",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    success_terminal: typing.Annotated[
+    success_terminal: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN state IN ({successful_response_names}) THEN 1 ELSE 0 END"),
     ] = dataclass_field(init=False, default=None, compare=False)
-    retryable: typing.Annotated[
+    retryable: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN state IN ({retryable_response_names}) THEN 1 ELSE 0 END"),
     ] = dataclass_field(init=False, default=None, compare=False)
-    intent_settled: typing.Annotated[
+    intent_settled: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN state IN ({intent_response_names}) THEN 1 ELSE 0 END"),
     ] = dataclass_field(init=False, default=None, compare=False)
-    publication_settled: typing.Annotated[
+    publication_settled: Annotated[
         int | None,
-        field_codec.WireName("receipt_settled"),
-        field_codec.SnapshotExclude(True),
+        WireName("receipt_settled"),
+        SnapshotExclude(),
         Column(record_key=True, generated="CASE WHEN state = 'published' THEN 1 ELSE 0 END"),
     ] = dataclass_field(init=False, default=None, compare=False)
     checks = (

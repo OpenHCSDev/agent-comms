@@ -3,28 +3,24 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import sys
-import typing
+from typing import Annotated
 from abc import abstractmethod
 from dataclasses import dataclass
 
 from agent_comms import field_codec
-
-from .cli_commands import DeclaredOptions
-from .command import Command
-from .declared_family import DeclaredFamily
-from .native_package import (
+from agent_comms.cli_commands import DeclaredOptions
+from agent_comms.command import Command
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.native_package import (
     install_declared_sources,
-    native_environment,
     package_tree_digest,
-    pinned_package_in,
     share_native_resources,
     verify_native_package,
     write_native_manifest,
 )
-from .storage_rules import StoragePath, StorageRule
+from agent_comms.storage_rules import StoragePath
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -47,7 +43,7 @@ class NativePackageVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
 @dataclass(frozen=True, kw_only=True)
 class VerifyVerb(NativePackageVerb):
     help = "Verify a copied package against the source pin"
-    package: typing.Annotated[
+    package: Annotated[
         StoragePath,
         field_codec.Argument(
             flags=("package",), options={"help": "the pi-coding-agent package directory"}
@@ -61,7 +57,7 @@ class VerifyVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class DigestVerb(NativePackageVerb):
     help = "Print a package tree's digest"
-    package: typing.Annotated[
+    package: Annotated[
         StoragePath,
         field_codec.Argument(
             flags=("package",), options={"help": "the pi-coding-agent package directory"}
@@ -75,7 +71,7 @@ class DigestVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class WriteManifestVerb(NativePackageVerb):
     help = "Write the source pin from a built package"
-    package: typing.Annotated[
+    package: Annotated[
         StoragePath,
         field_codec.Argument(
             flags=("package",), options={"help": "the pi-coding-agent package directory"}
@@ -89,13 +85,13 @@ class WriteManifestVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class ShareResourcesVerb(NativePackageVerb):
     help = "Share a new package's resources with the existing deployments"
-    package: typing.Annotated[
+    package: Annotated[
         StoragePath,
         field_codec.Argument(
             flags=("package",), options={"help": "the new pi-coding-agent package directory"}
         ),
     ]
-    deployments: typing.Annotated[
+    deployments: Annotated[
         StoragePath,
         field_codec.Argument(
             flags=("deployments",), options={"help": "the directory holding the deployments"}
@@ -109,13 +105,13 @@ class ShareResourcesVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class InstallSourcesVerb(NativePackageVerb):
     help = "Install the declared agent-comms sources into a package"
-    package: typing.Annotated[
+    package: Annotated[
         StoragePath,
         field_codec.Argument(
             flags=("package",), options={"help": "the pi-coding-agent package directory"}
         ),
     ]
-    snapshot: typing.Annotated[
+    snapshot: Annotated[
         StoragePath,
         field_codec.Argument(
             flags=("snapshot",), options={"help": "the checkout the sources come from"}
@@ -125,48 +121,6 @@ class InstallSourcesVerb(NativePackageVerb):
     def apply(self, ctx: None = None) -> None:
         verify_native_package(self.package)
         install_declared_sources(self.package, self.snapshot)
-
-
-@dataclass(frozen=True, kw_only=True)
-class EnvironmentVerb(NativePackageVerb):
-    help = "Print this pin's test environment directory"
-    cache: typing.Annotated[
-        StoragePath,
-        field_codec.Argument(
-            flags=("--cache",), options={"help": "the root holding one test environment per pin"}
-        ),
-    ] = dataclasses.field(default=StorageRule.native_cache)
-
-    def apply(self, ctx: None = None) -> None:
-        print(native_environment(self.cache))
-
-
-@dataclass(frozen=True, kw_only=True)
-class PackageVerb(NativePackageVerb):
-    help = "Print where this pin's built package sits under a root laid out as stack/ is"
-    root: typing.Annotated[
-        StoragePath,
-        field_codec.Argument(
-            flags=("root",), options={"help": "a stack directory or test environment"}
-        ),
-    ]
-
-    def apply(self, ctx: None = None) -> None:
-        print(pinned_package_in(self.root))
-
-
-@dataclass(frozen=True, kw_only=True)
-class BuildVerb(NativePackageVerb):
-    help = "Print the directory holding this pin's built package under a root laid out as stack/ is"
-    root: typing.Annotated[
-        StoragePath,
-        field_codec.Argument(
-            flags=("root",), options={"help": "a stack directory or test environment"}
-        ),
-    ]
-
-    def apply(self, ctx: None = None) -> None:
-        print(pinned_package_in(self.root).parents[2])
 
 
 if __name__ == "__main__":

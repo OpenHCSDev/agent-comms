@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import typing
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
-from agent_comms import field_codec
 
 from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, SingleFieldValue
-from .locked_store import LockedStore, RootFile
+from .field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
+from .locked_store import DurableFile, LockedStore
 from .pi_counts import PiCount, UnreportedCount
 from .thread_owned_state import ThreadOwnedState
 
@@ -57,8 +55,8 @@ class AgentRuntimeInfo(RuntimeInfo):
     model: str | None = None
     context_used: PiCount = field(default_factory=UnreportedCount)
     context_size: PiCount = field(default_factory=UnreportedCount)
-    timestamp: typing.Annotated[
-        float, field_codec.WireName("ts"), field_codec.WireRequired(True)
+    timestamp: Annotated[
+        float, WireName("ts"), WireRequired()
     ] = field(kw_only=True)
 
     def __post_init__(self) -> None:
@@ -81,7 +79,7 @@ class RuntimeInfoDocument(SingleFieldValue):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[RuntimeInfoDocument]):
+class RuntimeInfoStore(DurableFile, ThreadOwnedState, LockedStore[RuntimeInfoDocument]):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"

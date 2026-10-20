@@ -8,21 +8,27 @@ from __future__ import annotations
 
 import hashlib
 import math
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
+from typing import TYPE_CHECKING, Callable, ClassVar, Literal, Self, TypeVar, Annotated
 
-from agent_comms import field_codec
 
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireValue
+from .field_codec import (
+    FieldCodec,
+    NullMember,
+    WireValue,
+    boundary_decoder,
+    WireName,
+    WireOmitDefault,
+    WireRequired,
+)
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
@@ -88,7 +94,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         thread = snapshot.threads.get(snapshot.canonical_name(self.name))
-        return thread is not None and thread.incarnation == self.renamed(thread.name)
+        return thread is not None and thread.incarnation == self
 
     def recorded_or(
         self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
@@ -102,9 +108,6 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         return assigned
 
     def selects_lookup(self, lookup: str) -> bool:
-        return False
-
-    def same_publication_birth(self, other: ThreadIncarnation) -> bool:
         return False
 
     def matches_recorded_name(self, name: str, snapshot: RegistryProvenance) -> bool:
@@ -126,8 +129,13 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
 @dataclass(frozen=True)
 class RecordedThreadIncarnation(ThreadIncarnation):
-    """Only a positive recorded birth can select a durable lookup."""
+    """The recorded creation owns identity; names remain registry-resolved routes.
 
+    Equality and hashing use the same birth as ``lookup``. Registry operations
+    still require ``current`` / ``resolved`` to prove the original alias lineage.
+    """
+
+    name: str = field(compare=False)
     created_at: float
 
     @property
@@ -148,9 +156,6 @@ class RecordedThreadIncarnation(ThreadIncarnation):
 
     def selects_lookup(self, lookup: str) -> bool:
         return self.lookup == lookup
-
-    def same_publication_birth(self, other: ThreadIncarnation) -> bool:
-        return self.renamed(other.name) == other
 
     @property
     def birth_description(self) -> str:
@@ -249,6 +254,23 @@ class StallWatcherIncarnation(BirthlessIncarnation):
         return "Core's stall watcher"
 
 
+@dataclass(frozen=True, slots=True)
+class NoThreadText(NullMember):
+    """No title or original assignment was supplied for this thread."""
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+    @classmethod
+    @boundary_decoder
+    def from_input(cls, value: ThreadText | None) -> ThreadText:
+        return cls() if value is None else value
+
+
+ThreadText = str | NoThreadText
+NO_THREAD_TEXT = NoThreadText()
+
+
 @dataclass(frozen=True, kw_only=True)
 class ThreadProvenance:
     """Recorded thread identity, without permission to own a process or start a turn."""
@@ -256,10 +278,10 @@ class ThreadProvenance:
     name: str
     tags: frozenset[str]
     worktree: str
-    created_at: typing.Annotated[float, field_codec.WireRequired(True)]
+    created_at: Annotated[float, WireRequired()]
     session_file: str | None = None
-    title: str | None = None
-    backend: typing.Annotated[type[AgentBackend], field_codec.WireOmitDefault(True)] = field(
+    title: ThreadText = field(default_factory=NoThreadText)
+    backend: Annotated[type[AgentBackend], WireOmitDefault()] = field(
         default_factory=AgentBackend.for_new_threads
     )
 
@@ -271,7 +293,7 @@ class ThreadProvenance:
 
     @property
     def display_title(self) -> str:
-        return self.name if self.title is None else self.title
+        return self.title or self.name
 
     @staticmethod
     def require_name(name: str) -> None:
@@ -346,13 +368,13 @@ class OwnerIdentity:
 
     def owns(self, thread: Thread, generation: int, process: ProcessIdentity) -> bool:
         return (
-            self.incarnation.renamed(thread.name) == thread.incarnation
+            self.incarnation == thread.incarnation
             and self.generation == generation
             and thread.same_local_process(process)
         )
 
     def require_current(self, thread: Thread, generation: int, process: ProcessIdentity) -> None:
-        if self.incarnation.renamed(thread.name) != thread.incarnation:
+        if self.incarnation != thread.incarnation:
             raise RelationViolationError("Thread incarnation changed during owner attachment")
         if self.generation != generation:
             raise RelationViolationError("Owner lease changed during attachment")
@@ -364,7 +386,7 @@ class ClaimedIdentity:
     """A registry-allocated input generation, never an owner lease."""
 
     incarnation: ThreadIncarnation
-    claimed_generation: typing.Annotated[int, field_codec.WireName("admission_generation")]
+    claimed_generation: Annotated[int, WireName("admission_generation")]
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
@@ -387,7 +409,7 @@ class TurnFence:
 
     identity: TurnIdentity
     turn_id: str
-    claimed_generation: typing.Annotated[int, field_codec.WireName("admission_generation")]
+    claimed_generation: Annotated[int, WireName("admission_generation")]
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""

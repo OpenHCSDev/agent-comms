@@ -7,13 +7,13 @@ description: Command a fleet of coding agents over agent-comms like an RTS comma
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why, the board. Mechanical work goes to units by order; a fix small enough that ordering it costs more than writing it, the commander writes, commits and pushes itself. It keeps every unit moving toward an installed fix or deleted slop, and never stops rotating.
 
-All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-comms/commander.json`, written by `agent-comms install` (bus root, commander name, state dir, board, repos, worktree and scratch dirs). Rerun install to change it; never edit the tools for one project.
+All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-comms/commander.json`, written by `agent-comms install` (bus root, commander name, state dir, repos, worktree and scratch dirs). Rerun install to change it; never edit the tools for one project.
 
 ## Start of session, and after every compaction
 
 Read these files themselves, in full, before acting. A summary or memory note of them is a paraphrase that drifts; it never counts as having read them:
 - `src/agent_comms/commander/indictment.md`
-- every file in `src/agent_comms/commander/rules/` (12 rules, one per fact; the skill does not restate them). `rules-archive/` holds the 64 originals for history and is never loaded or read as rules.
+- every file in `src/agent_comms/commander/rules/` (one per fact; the skill does not restate them).
 - the refactor-audit pattern catalog at the pinned submodule, `src/agent_comms/skills/refactor-audit/references/patterns/`: `README.md` and every rung file it lists. Orders, send-backs and hunts cite its IDs, so a commander that has not read it guesses them.
 
 Arm the reply bridge Monitor:
@@ -41,7 +41,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 - **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none. Never soften an order because a unit did well yesterday.
 - **`order send` refuses an order with no blunt label unless `--clean`.** See `rules/blunt-reviews.md`.
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
-- **Every order goes through `order send UNIT HH:MM ORDER.json`.** The file contains `problems` (an array of existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order), and optional `slop` citations. `order problem ORDER.json --to UNIT --due HH:MM --where PATH:LINE` creates a new problem from `defect`; omit `problems` for creation. FieldCodec decodes the file once and lists all malformed or missing fields together. Wording checks read only `defect` and `why_stupid`, never paths, commands, edits or identifiers.
+- **Every order goes through `order send UNIT ORDER.json [--due HH:MM]`.** The file contains `problems` (an array of existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order), and optional `slop` citations. `order problem ORDER.json --to UNIT --where PATH:LINE [--due HH:MM]` creates a new problem from `defect`; omit `problems` for creation. Without `--due`, the deadline uses the median observed seconds per edit across distinct delivered orders, rounded up to a minute with a two-minute minimum. Every send prints the median and sample count; an explicit `--due` also prints the measured comparison. With no delivered orders, only the two-minute minimum applies. FieldCodec decodes the file once and lists all malformed or missing fields together. Wording checks read only `defect` and `why_stupid`, never paths, commands, edits or identifiers.
 
 ```json
 {
@@ -70,7 +70,7 @@ The order declaration supplies its ID and first-call times when omitted. A mecha
 
 ## The board
 
-The configured board file is the only record of fixes; its table is the only state and its git history is the log. One row per fix: priority, fix in plain words, surface (repo, files, PR), owner, target shape in one line, state (`not started | moving | spinning | merged | installed | works in app`), last seen with its artifact. Remove a row once the fix works in the app. A defect with no owner gets one the same tick.
+Core's Todo store is the only record of fixes and their history. `order board` renders its current rows without saving a file. Orders, deadlines, owners, delivery and installed evidence are changed through Core's Todo operations, never a committed board or narrative. A defect with no owner gets one the same tick.
 
 Priority: the user's latest request; crashes, lost or replayed input, wrong messages; things blocking other units; latency in the real app; slop deletion with no visible bug.
 
@@ -112,17 +112,17 @@ Update the board row, move on. One line per unit touched.
 
 ## The public record
 
-- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically.
+- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, records the strike in Core's Todo store and posts to #comms. Send-backs strike automatically.
 - **Work lives on main or on a branch with a linked PR or issue.** Core's standing rules report unlinked work through commander-heartbeat; each branch goes to its owner.
 
 ## Merging
 
 - **One merger, and it is not the commander.** A merge fork judges each PR when it is pushed and runs the batches; the commander orders units. Only the merger merges.
-- **Small batches, back to back.** Two or three passed PRs per batch; the next batch starts the minute the last one lands or fails.
+- **One integration run for every ready branch.** Units push and run only the tests they wrote or touched, never the full suite or the ratchets. The merger merges every ready head onto fresh main, runs the suite and both ratchets once, and installs once. Per-PR full gates are serial waste (owner, 2026-10-20).
 - **A failing PR drops out and the rest land in the same run.** A batch is never abandoned in silence: every landing and every drop is posted to #comms with its time and reason.
 - **Units never merge main into their branches.** The batch merges each head onto fresh main; the merger resolves trivial conflicts itself and sends only a real conflict back.
 - **The PR owns its state.** Ready is out of draft with both ratchets and the proof in the body; sent back is a review requesting changes with the defect at file:line; merged is merged. Read state from the PR, never from a message about it.
-- **The two commanders exchange PRs needed and PRs held every 15 minutes** over the relay; the peer-sync hook enforces it until one shared record replaces it.
+- **The two commanders exchange PRs needed and PRs held every 15 minutes** over the relay until one shared record replaces it.
 
 ## Orders
 

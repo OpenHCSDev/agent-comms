@@ -7,12 +7,10 @@ from __future__ import annotations
 
 import json
 import re
-import typing
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, NoReturn
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, ClassVar, NoReturn, Annotated
 
-from agent_comms import field_codec
 
 if TYPE_CHECKING:
     from acp import RequestError
@@ -23,7 +21,7 @@ if TYPE_CHECKING:
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, WireName, WireOmitDefault
 from .input_attempt import InputAttempt
 
 
@@ -41,6 +39,9 @@ class FailureSource(DeclaredFamily, affix="FailureSource"):
     def for_publication(self, text: str, sensitive: bool) -> FailureSource:
         return self
 
+    def require_native(self) -> NativeMessageFailureSource:
+        raise ValueError("Provider retry ended without its native failure message")
+
 
 @dataclass(frozen=True)
 class UnrecordedFailureSource(FailureSource):
@@ -52,6 +53,9 @@ class UnrecordedFailureSource(FailureSource):
 @dataclass(frozen=True)
 class NativeMessageFailureSource(FailureSource):
     message: AssistantMessage
+
+    def require_native(self) -> NativeMessageFailureSource:
+        return self
 
     @property
     def retained_in_history(self) -> bool:
@@ -99,9 +103,7 @@ class ProviderRetryResult:
 
     success: bool
     attempt: int
-    final_error: typing.Annotated[str | None, field_codec.WireName("finalError")] = field(
-        default=None
-    )
+    final_error: Annotated[str | None, WireName("finalError")] = None
 
     def __post_init__(self) -> None:
         if self.attempt < 0:
@@ -134,9 +136,9 @@ class ACPFailure(DeliveryFailure):
     input_state: type[InputAttempt] | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
     # Public failed-outcome projection of the turn-owned immutable result.
-    retry_result: typing.Annotated[
-        ProviderRetryResult | None, field_codec.WireOmitDefault(True)
-    ] = field(default=None)
+    retry_result: Annotated[
+        ProviderRetryResult | None, WireOmitDefault()
+    ] = None
 
     @property
     def description(self) -> str:

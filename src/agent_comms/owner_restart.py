@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import os
 import stat
-import typing
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
 from agent_comms import field_codec
 
@@ -67,7 +66,7 @@ class RetiredOwnerLaunch:
     """Original stopped registry observation plus acquired launch resources."""
 
     owner: OwnerIdentity
-    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName("admission")]
+    claim_scope: Annotated[ClaimedIdentity, field_codec.WireName("admission")]
     launch: RetainedOwnerLaunch
 
     @classmethod
@@ -305,7 +304,7 @@ class ClaimedOwnerBatch:
             captured = []
             for thread in threads:
                 thread.require_restart_owner(snapshot.status(thread.name))
-                generation = snapshot.claimed_generations[thread.name]
+                generation = snapshot.claim_generation(thread.name)
                 lifecycle.require_restart_idle(thread)
                 captured.append((thread, generation))
             runtime = request.environment(lifecycle)

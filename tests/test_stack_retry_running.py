@@ -41,7 +41,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         # source of a runnable prompt. It carries no fabricated native start.
         owner.inputs.dispositions.record(
             "acp:old-native-unknown", seq=None, owner=session,
-            claim_scope=comms.registry.snapshot().claimed_generations[session],
+            claim_scope=comms.registry.snapshot().claim_generation(session),
             target=session, text="Uncertain old native input must never replay",
         )
         original = stored_inputs(owner.inputs.dispositions.root).lookup("acp:old-native-unknown")
@@ -57,7 +57,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
                     await asyncio.sleep(0.01)
             lease = comms.registry.require(session).require_turn_lease()
             assert owner.turns.owns_turn(session, lease.turn_id)
-            assert owner.inputs.state(session).inbox is not None
+            assert owner.inputs.state(session).turn_open()
             resumed = await proxy.request(
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision,
             )
@@ -87,7 +87,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             finish_goal.set()
             await owner.inputs.state(session).wake_task
             assert not owner.turns.turn_state(session).active.phase.busy
-            assert not any(state.inbox for state in owner.inputs.drained.values())
+            assert not any(state.turn_open() for state in owner.inputs.drained.values())
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
             assert stored_inputs(owner.inputs.dispositions.root).lookup(original.key) == original
             assert all(original.source_text not in json.dumps(request) for request in native.provider.requests)

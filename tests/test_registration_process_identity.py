@@ -81,7 +81,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     comms.registry.register(replace(owner, process_identity=stale))
     after = comms.registry.snapshot()
     assert after.owner_generations[owner.name] > before.owner_generations[owner.name]
-    assert after.claimed_generations[owner.name] > before.claimed_generations[owner.name]
+    assert after.claim_generation(owner.name) > before.claim_generation(owner.name)
     assert comms.registry.require(owner.name).process_identity.runs_here()
     with pytest.raises(RelationViolationError, match="live owner"):
         comms.registry.live_owner_with_claim(owner.name)

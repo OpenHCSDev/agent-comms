@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 
-from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
 )
@@ -24,7 +23,7 @@ from agent_comms.coordination_tables.participants import (
     ParticipantAliases,
     Participants,
 )
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import MalformedRecord, WireName
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +40,7 @@ class ParticipantSnapshot:
     committed: bool
     aliases: tuple[str, ...]
     owner_thread: str
-    participant_generation: typing.Annotated[int, field_codec.WireName("generation")]
+    participant_generation: Annotated[int, WireName("generation")]
     pointer: CurrentExecutions
 
     @property
@@ -176,12 +175,37 @@ class ParticipantStore:
             )
             return Applied(self.get(lookup))
 
+    def rename_owner(
+        self,
+        lookup: str,
+        owner_thread: str,
+        *,
+        expected_generation: int,
+    ) -> Applied[ParticipantSnapshot]:
+        return self._update_owner(
+            lookup, owner_thread,
+            expected_generation=expected_generation, new_generation=expected_generation,
+        )
+
     def advance_generation(
         self,
         lookup: str,
         owner_thread: str,
         *,
         expected_generation: int,
+    ) -> Applied[ParticipantSnapshot]:
+        return self._update_owner(
+            lookup, owner_thread,
+            expected_generation=expected_generation, new_generation=expected_generation + 1,
+        )
+
+    def _update_owner(
+        self,
+        lookup: str,
+        owner_thread: str,
+        *,
+        expected_generation: int,
+        new_generation: int,
     ) -> Applied[ParticipantSnapshot]:
         if not isinstance(owner_thread, str) or not 1 <= len(owner_thread) <= MAX_IDENTIFIER_CHARS:
             raise ValueError("owner thread must be bounded and nonempty")
@@ -196,6 +220,6 @@ class ParticipantStore:
                 where="owner_lookup=? AND generation=?",
                 parameters=(lookup, expected_generation),
                 owner_thread=owner_thread,
-                generation=expected_generation + 1,
+                generation=new_generation,
             )
             return Applied(self.get(lookup))

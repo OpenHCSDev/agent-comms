@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import typing
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
-from agent_comms import field_codec
 from agent_comms.coordination_errors import (
     IdentityConflict,
     IntegrityViolationError,
@@ -16,12 +14,17 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
+from agent_comms.coordination_tables.attempts import (
+    AttemptRecord,
+    NoPreviousAttempt,
+    PreviousAttempt,
+    ReplayAssessments,
+)
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import boundary_decoder, projected, SnapshotName, WireName
 
 if TYPE_CHECKING:
     from .attempt_states import TerminalAttempt
@@ -34,15 +37,15 @@ class RecoverySnapshot:
 
     execution: ExecutionRecord
     attempt: AttemptRecord | None
-    assignments: typing.Annotated[tuple[WakeAssignment, ...], field_codec.WireName("claims")]
-    links: typing.Annotated[
-        tuple[ExecutionAssignmentLink, ...], field_codec.SnapshotName("execution_claims")
+    assignments: Annotated[tuple[WakeAssignment, ...], WireName("claims")]
+    links: Annotated[
+        tuple[ExecutionAssignmentLink, ...], SnapshotName("execution_claims")
     ]
     replay: ReplayAssessments | None
     obligations: tuple[ResponseObligation, ...]
     publication_intents: tuple[PublicationIntents, ...]
-    publication_evidence: typing.Annotated[
-        tuple[PublicationEvidence, ...], field_codec.WireName("publication_receipts")
+    publication_evidence: Annotated[
+        tuple[PublicationEvidence, ...], WireName("publication_receipts")
     ]
     connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
@@ -102,10 +105,13 @@ class RecoverySnapshot:
     def completed_response(self) -> bool:
         return self.execution.lifecycle.completed
 
+    @property
+    @boundary_decoder
+    def previous_attempt(self) -> PreviousAttempt:
+        return self.attempt if self.attempt is not None else NoPreviousAttempt()
+
     def require_attempt(self) -> AttemptRecord:
-        if self.attempt is None:
-            raise StaleFence("execution has no authorized attempt")
-        return self.attempt
+        return self.previous_attempt.require_attempt()
 
     def require_current_attempt(self) -> AttemptRecord:
         if not self.is_current:

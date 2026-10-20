@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import time
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
-from agent_comms import field_codec
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .field_codec import NullMember, RecordMember, SubclassUnion
-from .locked_store import JsonDocument
+from .field_codec import NullMember, RecordMember, SubclassUnion, WireName, WireTransient
+from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
@@ -127,9 +125,9 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     owner_pid: int
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
-    claimed_generation: typing.Annotated[
-        int | None, field_codec.WireName("admission_generation")
-    ] = field(default=None)
+    claimed_generation: Annotated[
+        int | None, WireName("admission_generation")
+    ] = None
     turn_generation: int | None = None
     phase: TurnPhase = field(default_factory=PreparingPhase)
     executing = True
@@ -253,8 +251,8 @@ class TurnRecord(SubclassUnion, affix=""):
     def read(self) -> TurnDeclaration: ...
 
     @property
-    def executing(self) -> bool:
-        return self.read().executing
+    @abstractmethod
+    def executing(self) -> bool: ...
 
     @abstractmethod
     def without_claim(self) -> None: ...
@@ -266,6 +264,8 @@ class TurnRecord(SubclassUnion, affix=""):
 
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
+    executing = False
+
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> NoTurnRecord:
         return self
 
@@ -284,6 +284,10 @@ class NoTurnRecord(NullMember, TurnRecord):
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
 
+    @property
+    def executing(self) -> bool:
+        raise RelationViolationError("Turn reference must be bound by its registry")
+
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         return StoredTurnRecord.for_identity(registry_path, identity)
 
@@ -299,21 +303,25 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_name=None):
+class StoredTurnRecord(DurableFile, PatternFile, JsonDocument[ActiveTurn],
+                       StoredTurnReference, declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
-    identity: typing.Annotated[TurnIdentity, field_codec.WireTransient(True)]
-    registry_path: typing.Annotated[Path, field_codec.WireTransient(True)] = field(
+    identity: Annotated[TurnIdentity, WireTransient()]
+    registry_path: Annotated[Path, WireTransient()] = field(
         repr=False, compare=False
     )
 
     record_type = ActiveTurn
+    executing = True
+    filename = "turns/{lookup}-{generation}.json"
 
     @property
     def path(self) -> Path:  # type: ignore[override]  # Derived from its registry.
         identity = self.identity
-        name = f"{identity.incarnation.require_recorded().lookup}-{identity.generation}.json"
-        return self.registry_path.parent / "turns" / name
+        return self.path_in(self.registry_path.parent,
+                            lookup=identity.incarnation.require_recorded().lookup,
+                            generation=str(identity.generation))
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity)

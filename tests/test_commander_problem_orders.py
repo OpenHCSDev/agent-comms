@@ -519,7 +519,8 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     git('add', '.')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
     body = Path(order_body(repo))
-    due = '23:59'
+    clock = '23:59'
+    due = RecordedEventTime.from_clock(clock)
     script.problem(str(body), 'worker', due, f'{__file__}:1')
     created = comms.goals.todos.get('P1')
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
@@ -548,7 +549,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     (link,) = sent_back.messages[-1:]
     sent = next(m.body for m in comms.views.history_page(CommandTarget.named('worker'), viewer='lead').messages if m.message_id == link.message_id)
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
-    assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
+    assert 'Due' not in sent and clock not in sent  # the deadline stays the commander's fire line
 
     script.hunt(f'{__file__}:1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
     assert [h.sent for h in comms.goals.todos.hunts_for_commander(comms.registry.require('lead').incarnation)] == [sent_back.order.id]
@@ -586,7 +587,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra='', deletes=N
 
 
 def problem(script, body):
-    script.problem(body, 'worker', '23:59', f'{__file__}:1')
+    script.problem(body, 'worker', RecordedEventTime.from_clock('23:59'), f'{__file__}:1')
 
 
 def test_reassignment_validates_trace_at_commander_boundary(commander, commander_script):
@@ -608,11 +609,12 @@ def test_reassignment_validates_trace_at_commander_boundary(commander, commander
     source = repo / 'trace.py'
     source.write_text('first = True\n')
     why = 'The previous worker stopped after its provider rejected every new turn'
+    due = RecordedEventTime.from_clock('23:59')
     with pytest.raises(SystemExit, match='does not exist'):
-        script.send('third', '23:59', document, clean=True, reassign=why, traced='trace.py:2')
+        script.send('third', due, document, clean=True, reassign=why, traced='trace.py:2')
     assert comms.goals.todos.get('P1') == second
     source.write_text('first = True\nsecond = True\n')
-    script.send('third', '23:59', document, clean=True, reassign=why, traced='trace.py:2')
+    script.send('third', due, document, clean=True, reassign=why, traced='trace.py:2')
     transferred = comms.goals.todos.get('P1')
     assert transferred.holder == 'third'
     assert [old.name for old in transferred.assignment.previous_owners] == ['worker', 'second']
@@ -637,7 +639,7 @@ def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
     reviews.write('lead', AnsweredRuleReviewEntry(
         1, 'Keep the current order message with its Todo. P1'))
     command = [str(Path(sys.executable).with_name('agent-comms-commander')),
-               'order', 'send', 'worker', '23:59', str(body)]
+               'order', 'send', 'worker', str(body), '--due', '23:59']
     env = {**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
            'AGENT_COMMS_ROOT': str(comms.root)}
     refused = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
@@ -720,10 +722,11 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     document = json.loads(Path(body).read_text())
     document['problems'] = ['P1']
     numbered = json.dumps(document)
-    script.send('worker', '23:59', commander_order.OrderFile.read(numbered),
+    due = RecordedEventTime.from_clock('23:59')
+    script.send('worker', due, commander_order.OrderFile.read(numbered),
                 replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', commander_order.OrderFile.read(numbered),
+    script.send('worker', due, commander_order.OrderFile.read(numbered),
                 replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
@@ -901,7 +904,6 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and commander_order.struck(current, 'worker') == 0
-    assert 'strike voided on P1' in (tmp_path / 'narrative.md').read_text()
     assert posted[-1][0] == VerdictAudience(('worker', 'lead')) and 'strike voided on P1' in posted[-1][1]
     with pytest.raises(SystemExit, match='no live strike'):
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
@@ -923,8 +925,8 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     withdrawn = comms.goals.todos.get('P1')
     assert script.held_orders() == () and not withdrawn.pending and commander_order.struck(withdrawn, 'worker') == 0
     line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
-    assert (tmp_path / 'board.md').read_text().count(line) == 1
-    assert line in (tmp_path / 'narrative.md').read_text()
+    assert script.board_text().count(line) == 1
+    assert line in posted[0][1]
     assert [recipients for recipients, _ in posted] == [VerdictAudience(('worker', 'lead')), VerdictAudience(('worker',))]
     with pytest.raises(ValueError, match='Only an undelivered order'):
         script.withdraw('P1', 'withdrawing the same order twice records nothing new')
@@ -970,8 +972,7 @@ def test_order_fire_releases_every_open_problem_the_unit_holds(commander, comman
     commander_order.FireVerb(unit='worker', why=FIRED).apply(script)
     assert [(t.assignment, t.released[0].reason.text) for t in map(comms.goals.todos.get, ('P1', 'P2'))] == [(None, FIRED)] * 2
     assert capsys.readouterr().out.splitlines() == [f'{pid}: released from worker: {FIRED}' for pid in ('P1', 'P2')]
-    script.write_board()
-    assert (tmp_path / 'board.md').read_text().count(f'unassigned: released from worker: {FIRED}') == 2
+    assert script.board_text().count(f'unassigned: released from worker: {FIRED}') == 2
 
 
 def test_one_fire_call_releases_both_open_orders_with_its_reason(commander):
@@ -1607,114 +1608,6 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     callers.write_text('def read(v):\n    return int(v is not None)\n')
     CommsOrderDoneTool(problem='P520', order_id=comms.goals.todos.get('P520').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert not comms.goals.todos.get('P520').pending
-
-
-def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, commander_script, monkeypatch, capsys):
-    """worker holds one of lead's problems, so it is reached through orders; the owner, claude-ai
-    and a peer commander hold none and are messaged directly."""
-    script, _ = commander_script
-    import io
-    from agent_comms.commander import send_guard
-    create(commander, 'P1')
-
-    def guarded(*targets):
-        command = 'agent-comms send --from lead ' + ' '.join(f'--to {target}' for target in targets) + ' --body hi'
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
-        send_guard.main([], script)
-        return capsys.readouterr().out
-
-    assert '"deny"' in guarded('worker')
-    assert '"deny"' in guarded('user', 'worker')
-    for target in ('user', 'claude-ai', 'desktop-claude-code'):
-        assert guarded(target) == ''
-
-
-@pytest.mark.parametrize('command, expected', [
-    ('cat show-p758.sh', ()),
-    ('git log -- tools/upgrade_bus.py', ()),
-    ("cat <<'EOF'\npython tools/upgrade_bus.py --to x\nEOF", ()),
-    ('agent-comms-commander order send --body "run agent-comms install"', ()),
-    ('agent-comms-commander order problem file.json --where tools/upgrade_bus.py:289', ()),
-    ('cat rehearse.txt', ()),
-    ('python tools/upgrade_bus.py --to x', ('maintenance',)),
-    ('python -m tools.upgrade_bus --to x', ('maintenance',)),
-    ('timeout 60 agent-comms install', ('install',)),
-    ('sudo env PYTHONPATH=src nice -n 5 python tools/upgrade_bus.py --to x', ('maintenance',)),
-    ('cd x && bash publish_runtime.sh', ('install',)),
-])
-def test_tactical_guard_matches_executed_targets_not_argument_text(tmp_path, command, expected):
-    from agent_comms.commander.send_guard import InstallCommand, MaintenanceCommand
-    from agent_comms.storage_rules import ShellInvocation
-
-    kinds = (InstallCommand, MaintenanceCommand)
-    actual = tuple(kind.work for invocation in ShellInvocation.parse(command, tmp_path)
-                   for kind in kinds if kind.runs(invocation.words))
-    assert actual == expected
-
-
-@pytest.mark.parametrize('command, kind', [
-    ('bash ~/code/toad/relink.sh', 'install'),
-    ('uv tool install --force .', 'install'),
-    ('PYTHONPATH=src python tools/upgrade_bus.py --root ~/.agent-comms', 'maintenance'),
-    ('systemctl --user restart agent-comms-connector.service', 'connector restart'),
-    ('cd repo && python tools/cutover/carry_todo_messages.py --root r', 'carry'),
-])
-def test_tactical_refused_from_the_commander_session_only(commander, commander_script, monkeypatch, capsys,
-                                                          command, kind):
-    """lead's registered process runs in Claude session s1. With no install planned, tactical work
-    run in s1 is refused with the instruction to plan one; once the install is planned for worker,
-    it is refused with the order to send worker, and once it is planned for lead it runs. The same command from another session, and an
-    order whose body names the command, pass. Once lead's process is gone no session can be
-    classified, so every session is refused with the read error."""
-    script, _ = commander_script
-    import io, os, subprocess
-    from dataclasses import replace
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.commander import send_guard
-    from agent_comms.recorded_time import RecordedEventTime
-    from agent_comms.todos import PlannedInstallDeadline
-    comms, _ = commander
-    process = subprocess.Popen(['sleep', '60'], env={**os.environ, 'CLAUDE_CODE_SESSION_ID': 's1'})
-    try:
-        comms.registry.declare(replace(comms.registry.require('lead'),
-                                       process_identity=ProcessIdentity.capture(process.pid)))
-
-        def guarded(command, session):
-            hook = {'session_id': session, 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}}
-            monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(hook)))
-            send_guard.main([], script)
-            return capsys.readouterr().out
-
-        unplanned = json.loads(guarded(command, 's1'))['hookSpecificOutput']['permissionDecisionReason']
-        assert f"{kind.capitalize()} is the installer's work, and no install is planned" in unplanned
-        assert 'agent-comms-commander order install HH:MM UNIT' in unplanned
-        PlannedInstallDeadline(RecordedEventTime(2000.0), 'worker').plan(comms.root)
-        refused = json.loads(guarded(command, 's1'))['hookSpecificOutput']
-        assert refused['permissionDecision'] == 'deny'
-        assert f"{kind.capitalize()} is worker's work, as the planned installer" in refused['permissionDecisionReason']
-        assert 'order send --to worker' in refused['permissionDecisionReason']
-        assert guarded(command, 's2') == ''
-        assert guarded(f'agent-comms-commander order send --to worker --body "run {command}"', 's1') == ''
-        PlannedInstallDeadline(RecordedEventTime(2000.0), 'lead').plan(comms.root)
-        assert guarded(command, 's1') == ''
-    finally:
-        process.kill()
-        process.wait()
-    unclassified = json.loads(guarded(command, 's2'))['hookSpecificOutput']['permissionDecisionReason']
-    assert f'{kind.capitalize()} refused: the guard cannot tell whether this session is lead' in unclassified
-    assert f'/proc/{process.pid}/environ' in unclassified
-
-
-def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_script, monkeypatch, capsys):
-    script, _ = commander_script
-    import io
-    from agent_comms.commander import send_guard
-    create(commander, 'P1')
-    for command in ('agent-comms send --from user --to lead --body "agent-comms send --from lead --to worker"',
-                    'agent-comms send --from user --to lead --body "x; agent-comms send --from lead --to worker"'):
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
-        send_guard.main([], script)
-        assert capsys.readouterr().out == ''
 
 
 def checkout_with_origin(root):

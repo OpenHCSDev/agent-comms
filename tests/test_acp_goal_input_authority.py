@@ -7,9 +7,10 @@ The callbacks, private goal ledger, ACP prompt queue, and transcript replay are 
 import json
 import logging
 from contextlib import nullcontext
+from datetime import UTC, datetime
 
 import pytest
-from acp import RequestError
+from agent_comms.acp_failure import NativeTurnError
 from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as ae
@@ -24,6 +25,7 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
+from agent_comms.goals import NoGoal
 from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
 from agent_comms.owned_send import OwnedSend
 from agent_comms.transcript_events import ContextTranscript
@@ -58,6 +60,7 @@ def persist_user(session, native_id, text):
             json.dumps(
                 {
                     "type": "message",
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "id": native_id[:8],
                     "message": {
                         "role": "user",
@@ -96,7 +99,7 @@ async def replay(agent):
         async def session_update(self, session_id, update):
             updates.append(update)
 
-    await agent.sessions.transcript.replay("project", "project", client=Client())
+    await agent.sessions.transcript.replay("project", client=Client())
     page = next(
         update.page
         for update in decode_updates(updates[0].field_meta)
@@ -178,7 +181,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         assert "Persistent goal" in args[2]
         public_id, command = await queue_followup(agent, kwargs)
         observed["public_id"] = public_id
-        original = agent.inputs.state("project").first_source
+        original = agent.inputs.state('project').require_first_source()
         assert original.notice_keys == ()  # Internal continuation is not a user echo.
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert isinstance(allowed, GrantedSend)
@@ -205,7 +208,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        with nullcontext() if change is None else pytest.raises(RequestError, match="Internal error"):
+        with nullcontext() if change is None else pytest.raises(NativeTurnError):
             await agent.turns.run_agent_turn(
                 "project", "project", "Continue working toward the active goal.", autonomous_goal=True
             )
@@ -221,7 +224,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
             assert current.state.active and current.id == original_goal.id
             assert store.snapshot(current.id).lifecycle == ReadyGeneration()
         elif change == "clear":
-            assert current is None
+            assert isinstance(current, NoGoal)
         else:
             assert current.state.active and current.id == observed["replacement"].id
             assert store.snapshot(current.id).lifecycle == ReadyGeneration()

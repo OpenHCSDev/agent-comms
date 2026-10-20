@@ -10,7 +10,6 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-import typing
 from collections.abc import Generator, Iterable, Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
@@ -21,6 +20,7 @@ from uuid import uuid4
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
 from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .thread_identity import ThreadIncarnation
@@ -128,9 +128,9 @@ class NoItems:
 
 @dataclass(frozen=True)
 class ExternalPageRow(TypedRow):
-    thread: typing.Annotated[str, Column(primary_key=True)]
-    turn_id: typing.Annotated[str, Column(primary_key=True)]
-    item_id: typing.Annotated[str, Column(primary_key=True)]
+    thread: Annotated[str, Column(primary_key=True)]
+    turn_id: Annotated[str, Column(primary_key=True)]
+    item_id: Annotated[str, Column(primary_key=True)]
     seq: int
     earlier: ExternalPage = field(default_factory=NoEarlierPage, kw_only=True)
 
@@ -194,9 +194,9 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
 class ExternalEventRow(TypedTable):
     """Each saved event exists once; SQL derives its query keys from that event."""
 
-    thread: typing.Annotated[str, Column(primary_key=True)]
-    seq: typing.Annotated[int, Column(primary_key=True)]
-    ordinal: typing.Annotated[int, Column(primary_key=True)]
+    thread: Annotated[str, Column(primary_key=True)]
+    seq: Annotated[int, Column(primary_key=True)]
+    ordinal: Annotated[int, Column(primary_key=True)]
     event: TranscriptEvent
     timestamp: Annotated[
         EventTime,
@@ -205,9 +205,9 @@ class ExternalEventRow(TypedTable):
             storage=RealStorage, nullable=True, generated="json_extract({event}, '$.timestamp')"
         ),
     ]
-    kind: typing.Annotated[str, Column(generated="json_extract({event}, '$.kind')")]
-    tool: typing.Annotated[str | None, Column(generated="json_extract({event}, '$.tool.tool')")]
-    call_id: typing.Annotated[
+    kind: Annotated[str, Column(generated="json_extract({event}, '$.kind')")]
+    tool: Annotated[str | None, Column(generated="json_extract({event}, '$.tool.tool')")]
+    call_id: Annotated[
         str | None, Column(generated="json_extract({event}, '$.tool_call_id')")
     ]
 
@@ -248,7 +248,7 @@ class ExternalEventRow(TypedTable):
 class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
     """The assigned transcript's current message, shared by native and CLI writers."""
 
-    thread: typing.Annotated[str, Column(primary_key=True)]
+    thread: Annotated[str, Column(primary_key=True)]
     turn_id: str
     item_id: str
     events: tuple[TranscriptEvent, ...]
@@ -267,7 +267,7 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
             yield DraftPublication()
             return
         from .registration import Registration
-        thread = Registration(root / "registry.json").require(original.owner_thread)
+        thread = Registration(RegistryFile.path_in(root)).require(original.owner_thread)
         original.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
@@ -305,15 +305,12 @@ class ExternalRecord(TranscriptRecord):
     def size(self) -> int:
         return sum(event.text_size for event in self.events)
 
-    def incomplete_tail(self, through: int) -> bool:
-        return False  # Only finished items are records.
-
 
 @dataclass(frozen=True)
 class ExternalCut(RecordsCut, TypedRow):
     """The thread's newest finished item sequence when read."""
 
-    offset: typing.Annotated[int, Column(generated="coalesce(max({seq}), 0)")]
+    offset: Annotated[int, Column(generated="coalesce(max({seq}), 0)")]
 
     def contains(self, current: ExternalCut, through: int) -> bool:
         # Finished items are append-only: later items belong to the next update.

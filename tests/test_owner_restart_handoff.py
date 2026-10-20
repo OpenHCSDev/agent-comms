@@ -89,7 +89,7 @@ def stopped(registry):
     snapshot = RegistrySnapshot(
         threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
         last_seen={thread.name: 1.0}, aliases={},
-        owner_generations={thread.name: 4}, claimed_generations={thread.name: 5},
+        owner_generations={thread.name: 4}, _claimed_generations={thread.name: 5},
         by_lookup={thread.incarnation.lookup: thread},
     )
     return thread, snapshot
@@ -107,7 +107,7 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
         selection.require_current(snapshot)
     changed = (
         replace(snapshot, owner_generations={thread.name: 6}),
-        replace(snapshot, claimed_generations={thread.name: 6}),
+        replace(snapshot, _claimed_generations={thread.name: 6}),
         replace(snapshot, statuses={thread.name: RunningThreadStatus()}),
         replace(snapshot, threads={thread.name: replace(thread, created_at=2.0)}),
         replace(snapshot, threads={thread.name: replace(

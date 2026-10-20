@@ -19,11 +19,10 @@ import hashlib
 import json
 import sqlite3
 import time
-import typing
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Literal, Type
+from typing import Annotated, Literal, Type
 
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
@@ -63,6 +62,7 @@ from agent_comms.typed_table import (
 )
 
 from .field_codec import MalformedRecord
+from .locked_store import RegistryFile
 
 
 class ResponseTable:
@@ -84,23 +84,23 @@ class ResponseSchemaMeta(ResponseTable, TypedTable, PrivateRuntimeSchema):
     def install(cls, store) -> None:
         install_private_response_schema(store)
 
-    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[3]
-    ddl_digest: typing.Annotated[str, Column(check="length(ddl_digest)=64")]
+    ddl_digest: Annotated[str, Column(check="length(ddl_digest)=64")]
 
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, TypedTable):
-    execution_id: typing.Annotated[str, Column(primary_key=True)]
-    exact_target: typing.Annotated[
+    execution_id: Annotated[str, Column(primary_key=True)]
+    exact_target: Annotated[
         str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
     ]
-    wire_root_id: typing.Annotated[
+    wire_root_id: Annotated[
         str, Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
     ]
-    owner_generation: typing.Annotated[int, Column(check="owner_generation>0")]
-    attempt_ordinal: typing.Annotated[int, Column(check="attempt_ordinal>0")]
-    dispatched_at_ms: typing.Annotated[int, Column(check="dispatched_at_ms>=0")]
+    owner_generation: Annotated[int, Column(check="owner_generation>0")]
+    attempt_ordinal: Annotated[int, Column(check="attempt_ordinal>0")]
+    dispatched_at_ms: Annotated[int, Column(check="dispatched_at_ms>=0")]
     without_rowid = True
 
     @classmethod
@@ -308,8 +308,12 @@ class LiveResponseOwner(RegistryOwner):
         return self.thread.incarnation.lookup
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
-        self.require_snapshot(snapshot, "response owner turn stopped or changed before publication")
-        if self.thread.name != fence.owner_thread:
+        # The registry resolves a renamed owner through its alias; the reply's
+        # sender is the current canonical name, which must still be the fenced one.
+        actual = self._snapshot_owner(
+            snapshot, "response owner turn stopped or changed before publication", self.check_type,
+        )
+        if actual.name != fence.owner_thread:
             raise StaleFence("response turn belongs to a different fenced owner")
         self.require_active_turn()
 
@@ -371,9 +375,9 @@ class LiveResponseOwner(RegistryOwner):
 
 def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
     if (
-        store.session.path.name != "coordination.sqlite3"
+        store.session.path.name != store.session.filename
         or Path(bus.log.path.parent).absolute() != Path(store.session.path.parent).absolute()
-        or bus._registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
+        or bus._registry.store.path.absolute() != (RegistryFile.path_in(bus.log.path.parent)).absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
 

@@ -16,21 +16,19 @@ A verdict without a reason is refused; a send-back must cite a real message from
 the commander to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
 """
 
-import dataclasses
 import hashlib
 import json
 import os
 import re
 import sys
 import time
-import typing
+from typing import Annotated
 from abc import abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
-from agent_comms import field_codec
 
 from ..comms import Comms
-from ..field_codec import FieldCodec
+from ..field_codec import FieldCodec, Argument
 from ..todos import (
     AcceptedVerdict,
     BluntText,
@@ -137,9 +135,9 @@ class JudgeVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
     help = "every unit's unjudged edits in full, beside its current orders"
-    thread: typing.Annotated[
-        str, field_codec.Argument(flags=("thread",), options={"nargs": "?"})
-    ] = dataclasses.field(default="")
+    thread: Annotated[
+        str, Argument(flags=("thread",), options={"nargs": "?"})
+    ] = ""
 
     def selects(self, edit: Edit) -> bool:
         return not self.thread or edit.thread == self.thread
@@ -160,17 +158,17 @@ class VerdictVerb(JudgeVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
 
-    ids: typing.Annotated[
+    ids: Annotated[
         tuple[str, ...],
-        field_codec.Argument(flags=("ids",), options={"nargs": "+", "metavar": "ID:CODE"}),
+        Argument(flags=("ids",), options={"nargs": "+", "metavar": "ID:CODE"}),
     ]
-    why: typing.Annotated[str, field_codec.Argument()]
-    msg: typing.Annotated[
-        str, field_codec.Argument(options={"help": "BUSID of my order message to the unit"})
-    ] = dataclasses.field(default="")
-    lines: typing.Annotated[
+    why: str
+    msg: Annotated[
+        str, Argument(options={"help": "BUSID of my order message to the unit"})
+    ] = ""
+    lines: Annotated[
         tuple[str, ...],
-        field_codec.Argument(
+        Argument(
             flags=("--line",),
             options={
                 "action": "append",
@@ -223,22 +221,22 @@ class VerdictVerb(JudgeVerb):
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(VerdictVerb):
     help = "the edit serves the order"
-    serves: typing.Annotated[
-        str, field_codec.Argument(options={"help": "exact words of the order"})
+    serves: Annotated[
+        str, Argument(options={"help": "exact words of the order"})
     ]
-    no_owner: typing.Annotated[
+    no_owner: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--no-owner",), options={"help": "12+ words with because and absolute file:line"}
         ),
-    ] = dataclasses.field(default="")
-    peer: typing.Annotated[
+    ] = ""
+    peer: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--peer",),
             options={"help": "another sender's retained order message to the unit"},
         ),
-    ] = dataclasses.field(default="")
+    ] = ""
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> AcceptedVerdict:
         actor = ctx.incarnation
@@ -262,9 +260,9 @@ class OkVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class SupersededVerb(VerdictVerb):
     help = "the task moved to another unit; these edits are neither ok nor sent back"
-    by: typing.Annotated[
+    by: Annotated[
         str,
-        field_codec.Argument(flags=("--by",), options={"help": "the replacing order's message"}),
+        Argument(flags=("--by",), options={"help": "the replacing order's message"}),
     ]
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
@@ -282,28 +280,31 @@ class SupersededVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
-    msg: typing.Annotated[str, field_codec.Argument(options={"help": "the required order message"})]
-    roast: typing.Annotated[
-        str, field_codec.Argument(options={"help": "blunt, why it is stupid, with because"})
+    # A bare annotation would inherit VerdictVerb's empty message; field() keeps it required.
+    msg: Annotated[
+        str, Argument(options={"help": "the required order message"})
+    ] = field()
+    roast: Annotated[
+        str, Argument(options={"help": "blunt, why it is stupid, with because"})
     ]
-    fix: typing.Annotated[str, field_codec.Argument(options={"help": "owner and replacing shape"})]
-    pattern: typing.Annotated[
+    fix: Annotated[str, Argument(options={"help": "owner and replacing shape"})]
+    pattern: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--slop",), options={"help": "pattern ID from the pinned refactor-audit catalog"}
         ),
     ]
-    fact: typing.Annotated[
-        str, field_codec.Argument(options={"help": "the required fact, 4+ words"})
+    fact: Annotated[
+        str, Argument(options={"help": "the required fact, 4+ words"})
     ]
-    at: typing.Annotated[
-        str, field_codec.Argument(options={"help": "PATH:LINE where it is restated"})
+    at: Annotated[
+        str, Argument(options={"help": "PATH:LINE where it is restated"})
     ]
-    derive: typing.Annotated[
-        str, field_codec.Argument(options={"help": "|".join(Derivation.names())})
+    derive: Annotated[
+        str, Argument(options={"help": "|".join(Derivation.names())})
     ]
-    by: typing.Annotated[
-        str, field_codec.Argument(options={"help": "PATH:LINE of the declaration that owns it"})
+    by: Annotated[
+        str, Argument(options={"help": "PATH:LINE of the declaration that owns it"})
     ]
 
     def slop(self) -> Slop:

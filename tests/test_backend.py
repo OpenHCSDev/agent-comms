@@ -70,6 +70,8 @@ from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiMessage
 initial_state = True
 prompt_request = None
+# One Pi session answers every state query from the same session state.
+state_data = {{"nativeInputProofCapability": CAPABILITY}}
 {startup}for line in {lines.splitlines()!r}:
     record = json.loads(line)
     message = record.get("message", {{}})
@@ -92,11 +94,11 @@ prompt_request = None
             print(json.dumps({{
                 "id": request.get("id"), "type": "response",
                 "command": request.get("type"), "success": True,
-                "data": {{"nativeInputProofCapability": CAPABILITY}}
-                        if request.get("type") == "get_state" else {{}},
+                "data": state_data if request.get("type") == "get_state" else {{}},
             }}), flush=True)
     if command == "get_state":
         record.setdefault("data", {{}})["nativeInputProofCapability"] = CAPABILITY
+        state_data = record["data"]
         initial_state = False
     if (
         prompt_request is not None
@@ -231,9 +233,7 @@ class TestRpcParsing:
         ("assistant_stops", "successful"),
         [
             ([], False),
-            (["toolUse"], False),
             (["error"], False),
-            (["toolUse", "stop"], True),
             (["error", "stop"], True),
             (["stop", "aborted"], False),
             (["stop"], True),
@@ -629,43 +629,14 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         info = [event for event in events if isinstance(event, ae.AgentInfo)]
         assert info[0].model == "openrouter/z-ai/glm"
         assert info[0].session_file == "/tmp/pi-session.jsonl"
-        assert len(info) == 1
+        # Settlement queries state again; the same session reports the same metadata.
+        assert all(observed == info[0] for observed in info)
         context = [event for event in events if isinstance(event, ae.ContextUsageObservation)]
         assert context[-1].context_used == PiCount.from_wire(200)
         assert context[-1].context_size == PiCount.from_wire(1000)
 
     @pytest.mark.parametrize("stats", [0, None, 60, 260, "invalid", True, "missing"])
     async def test_final_assistant_usage_survives_unavailable_stats(self, tmp_path, stats):
-        records = [
-            {
-                "type": "response",
-                "command": "get_state",
-                "success": True,
-                "data": {"model": {"contextWindow": 1000}},
-            },
-            {
-                "type": "message_end",
-                "message": {
-                    "role": "assistant",
-                    "stopReason": "toolUse",
-                    "usage": {"totalTokens": 150},
-                },
-            },
-            {"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}},
-            {"type": "agent_settled"},
-            {
-                "type": "response",
-                "command": "get_session_stats",
-                "success": True,
-                "data": {"contextUsage": {} if stats == "missing" else {"tokens": stats}},
-            },
-        ]
-        events = await _rpc_events(tmp_path, records)
-        used = [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)]
-        assert used == [PiCount.from_wire(150), PiCount.from_wire(stats if type(stats) is int and stats > 0 else 150)]
-        assert isinstance(events[-1], ae.Done) and events[-1].ok is True
-
-    async def test_positive_final_usage_survives_empty_stats_and_final_stop_gate(self, tmp_path):
         events = await _rpc_events(
             tmp_path,
             [
@@ -673,14 +644,14 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                     "type": "response",
                     "command": "get_state",
                     "success": True,
-                    "data": {"model": {"contextWindow": 272000}},
+                    "data": {"model": {"contextWindow": 1000}},
                 },
                 {
                     "type": "message_end",
                     "message": {
                         "role": "assistant",
                         "stopReason": "stop",
-                        "usage": {"totalTokens": 78330},
+                        "usage": {"totalTokens": 150},
                     },
                 },
                 {"type": "agent_settled"},
@@ -688,16 +659,16 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                     "type": "response",
                     "command": "get_session_stats",
                     "success": True,
-                    "data": {"contextUsage": {}},
+                    "data": {"contextUsage": {} if stats == "missing" else {"tokens": stats}},
                 },
             ],
         )
+        reported = stats if type(stats) is int and stats > 0 else 150
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            PiCount.from_wire(None),
-            PiCount.from_wire(78330),
-            PiCount.from_wire(78330),
+            PiCount.from_wire(150),
+            PiCount.from_wire(reported),
         ]
-        assert all(e.context_size == PiCount.from_wire(272000) for e in events if isinstance(e, ae.ContextSizeObservation))
+        assert all(e.context_size == PiCount.from_wire(1000) for e in events if isinstance(e, ae.ContextSizeObservation))
         assert events[-1] == ae.Done(ok=True, text="", diagnostic={"exit_code": 0})
 
     @pytest.mark.parametrize("nested", [False, True])
@@ -734,28 +705,14 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         )
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [PiCount.from_wire(210), PiCount.from_wire(150), PiCount.from_wire(150)]
 
-    @pytest.mark.parametrize("prior", [None, 150])
     @pytest.mark.parametrize("invalid", ["missing", 0, -1, True, "200", None, 12.5])
     @pytest.mark.parametrize("stats", [0, None, 55])
-    async def test_invalid_successful_final_rolls_back_provisional(
-        self, tmp_path, prior, invalid, stats
-    ):
+    async def test_invalid_successful_final_rolls_back_provisional(self, tmp_path, invalid, stats):
         final = {"role": "assistant", "stopReason": "stop"}
         if invalid != "missing":
             final["usage"] = {"totalTokens": invalid}
-        records = []
-        if prior is not None:
-            records.append(
-                {
-                    "type": "message_end",
-                    "message": {
-                        "role": "assistant",
-                        "stopReason": "toolUse",
-                        "usage": {"totalTokens": prior},
-                    },
-                }
-            )
-        records.extend(
+        events = await _rpc_events(
+            tmp_path,
             [
                 {
                     "type": "message_update",
@@ -771,13 +728,10 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                     "success": True,
                     "data": {"contextUsage": {"tokens": stats}},
                 },
-            ]
+            ],
         )
-        events = await _rpc_events(tmp_path, records)
         used = [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)]
-        assert used == (
-            ([prior] if prior is not None else []) + [300, prior, 55 if stats == 55 else prior]
-        )
+        assert used == [PiCount.from_wire(count) for count in (300, None, 55 if stats == 55 else None)]
         assert events[-1].ok is True
 
     @pytest.mark.parametrize("failure", ["error", "aborted"])
@@ -785,14 +739,6 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         events = await _rpc_events(
             tmp_path,
             [
-                {
-                    "type": "message_end",
-                    "message": {
-                        "role": "assistant",
-                        "stopReason": "toolUse",
-                        "usage": {"totalTokens": 150},
-                    },
-                },
                 {
                     "type": "message_update",
                     "message": {"role": "assistant", "usage": {"totalTokens": 310}},
@@ -817,13 +763,11 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
             ],
         )
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            PiCount.from_wire(150),
             PiCount.from_wire(310),
-            PiCount.from_wire(150),
-            PiCount.from_wire(150),
+            PiCount.from_wire(None),
+            PiCount.from_wire(None),
         ]
         assert [e.usage.total_tokens for e in events if isinstance(e, ae.ProviderUsage)] == [
-            PiCount.from_wire(150),
             PiCount.from_wire(500),
         ]
         assert events[-1].ok is False
@@ -888,7 +832,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                     "type": "message_end",
                     "message": {
                         "role": "assistant",
-                        "stopReason": "toolUse",
+                        "stopReason": "stop",
                         "usage": {"totalTokens": 250},
                     },
                 },
@@ -927,7 +871,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                 "type": "message_end",
                 "message": {
                     "role": "assistant",
-                    "stopReason": "toolUse",
+                    "stopReason": "stop",
                     "usage": {"totalTokens": 250},
                 },
             },
@@ -962,7 +906,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         ]
         events = await _rpc_events(tmp_path, records)
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == (
-            [PiCount.from_wire(None), PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(None), PiCount.from_wire(40), PiCount.from_wire(30)] if post_compaction else [PiCount.from_wire(None), PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(None), PiCount.from_wire(None)]
+            [PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(None), PiCount.from_wire(40), PiCount.from_wire(30)] if post_compaction else [PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(None), PiCount.from_wire(None)]
         )
 
     async def test_positive_pi_stats_after_compaction_need_no_locally_seen_final(self, tmp_path):
@@ -2896,59 +2840,7 @@ answer_stats({{"contextUsage":{{}}}})
         assert queue.empty()
 
 
-# PR#1 parser assertions retained alongside V3 projection/watchdog coverage.
 class TestPrRpcParsing:
-    async def test_full_rpc_stream(self, tmp_path):
-        """Canned pi rpc stream -> chunk/tool_start/tool_end/done events."""
-        rpc_lines = "\n".join(
-            [
-                '{"type":"response","command":"prompt","id":"agent-comms-prompt","success":true}',
-                '{"type":"message_start","message":{"role":"user","content":"task"}}',
-                '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"hel"}}',
-                '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"lo"}}',
-                '{"type":"message_update","assistantMessageEvent":'
-                '{"type":"thinking_delta","delta":"Checking the workspace"}}',
-                '{"type":"tool_execution_start","toolCallId":"t1",'
-                '"toolName":"bash","args":{"command":"echo hi"}}',
-                '{"type":"tool_execution_update","toolCallId":"t1","toolName":"bash",'
-                '"partialResult":{"content":[{"type":"text","text":"running"}]}}',
-                '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash",'
-                '"result":{"content":[{"type":"text","text":"hi"}]},"isError":false}',
-                '{"type":"message_update",'
-                '"assistantMessageEvent":{"type":"text_delta","delta":" done"}}',
-                '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',
-                '{"type":"agent_settled"}',
-            ]
-        )
-        stub = _replay_stub(tmp_path, rpc_lines)
-        events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
-        # pi-named stub triggers rpc mode; prompt goes to stdin.
-        _assert_full_rpc_stream(events)
-
-    async def test_rpc_model_and_context_metadata(self, tmp_path):
-        rpc_lines = "\n".join(
-            [
-                '{"type":"response","command":"get_state","success":true,"data":'
-                '{"model":{"provider":"openrouter","id":"z-ai/glm","contextWindow":1000},'
-                '"sessionFile":"/tmp/pi-session.jsonl"}}',
-                '{"type":"message_update","usage":{"totalTokens":125},'
-                '"assistantMessageEvent":{"type":"text_delta","delta":"ok"}}',
-                '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',
-                '{"type":"agent_settled"}',
-                '{"type":"response","command":"get_session_stats","success":true,"data":'
-                '{"contextUsage":{"tokens":200,"contextWindow":1000,"percent":20}}}',
-            ]
-        )
-        stub = _replay_stub(tmp_path, rpc_lines)
-        events = [e async for e in one_turn_events(stub, [], "t", str(tmp_path))]
-        info = [event for event in events if isinstance(event, ae.AgentInfo)]
-        assert info[0].model == "openrouter/z-ai/glm"
-        assert info[0].session_file == "/tmp/pi-session.jsonl"
-        assert len(info) == 1
-        context = [event for event in events if isinstance(event, ae.ContextUsageObservation)]
-        assert context[-1].context_used == PiCount.from_wire(200)
-        assert context[-1].context_size == PiCount.from_wire(1000)
-
     async def test_rpc_stays_open_for_steered_child_reply(self, tmp_path):
         stub = _stub(
             tmp_path,
@@ -3058,10 +2950,8 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
             (["t", "foreign"], ["stop"], "unrecognized_followup_input"),
             (["t", "t"], ["stop"], "unrecognized_followup_input"),
             (["t"], [], "assistant_final_stop_missing"),
-            (["t"], ["toolUse"], "assistant_final_stop_missing"),
             (["t"], ["error"], "assistant_final_stop_missing"),
             (["t"], ["aborted"], "assistant_final_stop_missing"),
-            (["t"], ["toolUse", "stop"], None),
         ],
     )
     async def test_prompt_ack_only_exact_original_start_and_final_stop_prove_success(

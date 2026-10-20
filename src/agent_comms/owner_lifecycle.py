@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 import os
 import shlex
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 from uuid import uuid4
 
 from agent_comms import field_codec
@@ -83,7 +82,7 @@ class TaskLaunchInput(LaunchInput):
 class OwnerRestartSelection:
     identity: OwnerIdentity
     process: ProcessIdentity
-    claimed_generation: typing.Annotated[int, field_codec.WireName("admission_generation")]
+    claimed_generation: Annotated[int, field_codec.WireName("admission_generation")]
     interpreter: str
 
     @classmethod
@@ -99,7 +98,7 @@ class OwnerRestartSelection:
         platform.require(process)
         return cls(
             snapshot.owner_identity(owner.name), process,
-            snapshot.claimed_generations[owner.name], interpreter,
+            snapshot.claim_generation(owner.name), interpreter,
         )
 
     @classmethod
@@ -121,7 +120,7 @@ class OwnerRestartSelection:
             snapshot.require_owner_process(self.identity, self.process)
         except RelationViolationError as error:
             raise OwnerSelectionChangedRefusal() from error
-        if snapshot.claimed_generations[self.name] != self.claimed_generation:
+        if snapshot.claim_generation(self.name) != self.claimed_generation:
             raise OwnerGenerationChangedRefusal()
         return snapshot.require_active(self.name)
 
@@ -166,7 +165,7 @@ class NoRelease(OwnerRelease):
 
 @dataclass(frozen=True)
 class ReleasedOwner(ThreadIncarnationRecord):
-    process_identity: typing.Annotated[ProcessState, Column(storage=JsonStorage, nullable=True)]
+    process_identity: Annotated[ProcessState, Column(storage=JsonStorage, nullable=True)]
 
     def require_process(self) -> ProcessIdentity:
         return self.process_identity.require(f"Thread {self.name!r} has no released process")
@@ -177,7 +176,7 @@ class ReleasedOwner(ThreadIncarnationRecord):
 
 @dataclass(frozen=True)
 class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
-    name: typing.Annotated[str, Column(primary_key=True)]
+    name: Annotated[str, Column(primary_key=True)]
     before: int
     after: int
 
@@ -190,7 +189,7 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
             return False
         if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
             return False
-        return self.after == snapshot.claimed_generations[self.name] and snapshot.status(self.name).stopped
+        return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
 
     def require_native_loss(self, snapshot, source) -> None:
         """A recorded release confirms only its exact dead process and input generation.
@@ -441,7 +440,7 @@ class OwnerLifecycle:
                 else:
                     self.registry.unregister(thread.name)
                 return None
-            return thread, snapshot.claimed_generations[thread.name]
+            return thread, snapshot.claim_generation(thread.name)
 
     def stop(self, *names: str) -> None:
         owners = tuple(owner for name in dict.fromkeys(names)
@@ -545,11 +544,11 @@ class OwnerLifecycle:
         snapshot = self.registry.snapshot()
         owner = snapshot.threads[canonical]
         owner.process_identity.require_release_by(ProcessIdentity.capture(os.getpid()))
-        before = snapshot.claimed_generations[canonical]
+        before = snapshot.claim_generation(canonical)
         self._retire_owner_unlocked(owner, before)
 
     def _retire_owner_unlocked(self, thread: Thread, before: int) -> None:
         """Share retirement only after the caller's distinct identity checks."""
         self.registry.unregister(thread.name)
         after = self.registry.snapshot()
-        self.releases.record(after.threads[thread.name], before, after.claimed_generations[thread.name])
+        self.releases.record(after.threads[thread.name], before, after.claim_generation(thread.name))

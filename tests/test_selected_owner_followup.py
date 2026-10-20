@@ -103,7 +103,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert isinstance(row, StartedInput)
         assert not row.unresolved and row.native_id == sent[1]["inputId"]
         assert not agent.inputs.state("beta").queued
-        assert agent.inputs.state("beta").inbox is None
+        assert not agent.inputs.state('beta').turn_open()
         assert "beta" not in agent.turns.turn_tasks
         assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == before_goal
@@ -145,7 +145,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
 
     monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden)
-    claim_scope = comms.registry.snapshot().claimed_generations["beta"]
+    claim_scope = comms.registry.snapshot().claim_generation("beta")
     old_key = "acp:historical-uncertain"
     agent.inputs.dispositions.record(
         old_key, seq=None, owner="beta", claim_scope=claim_scope, target="beta", text="Do not replay"
@@ -175,7 +175,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
         rows = stored_inputs(agent.inputs.dispositions.root).rows
         assert rows[old_key] == old_row
         assert isinstance(rows[f"acp:{input_id}"], expected_state)
-        assert agent.inputs.state("beta").inbox is None
+        assert not agent.inputs.state('beta').turn_open()
         assert "beta" not in agent.turns.turn_tasks
     finally:
         release.set()
@@ -305,7 +305,7 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
         assert not row.unresolved and row.native_id
         assert len(requests) == 2
         assert "Exactly one fresh owner instruction" in json.dumps(requests[1])
-        assert not any(state.inbox for state in agent.inputs.drained.values()) and not agent.turns.turn_tasks
+        assert not any(state.turn_open() for state in agent.inputs.drained.values()) and not agent.turns.turn_tasks
         assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == parked_goal
         assert comms.goals.goal_wait("beta") == parked_wait
@@ -354,7 +354,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         request = object()
         assert await kwargs["ui_request"](request) is request
         assert kwargs["images"][0].data == "eA=="
-        original_key = agent.inputs.state("beta").first_source.notice_keys[0]
+        original_key = agent.inputs.state('beta').require_first_source().notice_keys[0]
         first_id = original_key.removeprefix("acp:")
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert isinstance(allowed, GrantedSend)

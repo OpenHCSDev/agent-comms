@@ -1,12 +1,10 @@
-
-import typing
+from conftest import transcript_records
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 import pytest
 
-from agent_comms import field_codec
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
     FieldCodec,
@@ -21,6 +19,13 @@ from agent_comms.field_codec import (
     TextRepresentation,
     TimestampText,
     WireValue,
+    FlagDirective,
+    WireAbsentNone,
+    WireContext,
+    WireInline,
+    WireName,
+    WireNonNull,
+    WireTransient,
 )
 from agent_comms.messages import (
     ConversationRole,
@@ -41,8 +46,8 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access():
     @dataclass
     class Record:
         value: str
-        local: typing.Annotated[
-            Opaque, field_codec.WireTransient(True), field_codec.WireName("")
+        local: Annotated[
+            Opaque, WireTransient(), WireName("")
         ] = field(default_factory=Opaque, repr=False, compare=False)
 
         def __getattribute__(self, name):
@@ -63,7 +68,7 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access():
 def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims():
     @dataclass
     class Record:
-        value: typing.Annotated[str, field_codec.WireTransient(True), field_codec.WireContext(True)]
+        value: Annotated[str, WireTransient(), WireContext()]
 
     with pytest.raises(TypeError, match="exactly one declared field plan"):
         FieldCodec.record_fields(Record)
@@ -72,7 +77,7 @@ def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims(
 def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
     from agent_comms.field_codec import DeclaredFieldPlan
 
-    class ProbeDirective(field_codec.FlagDirective):
+    class ProbeDirective(FlagDirective):
         pass
 
     class ProbePlan(DeclaredFieldPlan):
@@ -83,7 +88,7 @@ def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
 
     @dataclass
     class Record:
-        value: typing.Annotated[str, ProbeDirective()]
+        value: Annotated[str, ProbeDirective()]
 
     assert isinstance(FieldCodec.field_plan(Record, "value"), ProbePlan)
     assert FieldCodec.encode(Record("omit")) == {}
@@ -108,8 +113,8 @@ def test_field_plan_refuses_an_unclaimed_representation():
 def test_field_plan_refuses_unrelated_claims_instead_of_ordering_flags():
     @dataclass
     class Record:
-        value: typing.Annotated[
-            str | None, field_codec.WireContext(True), field_codec.WireAbsentNone(True)
+        value: Annotated[
+            str | None, WireContext(), WireAbsentNone()
         ]
 
     with pytest.raises(TypeError, match="exactly one declared field plan"):
@@ -125,7 +130,7 @@ def test_wire_absence_is_none_without_running_the_constructor_factory():
 
     @dataclass
     class Record:
-        id: typing.Annotated[str | None, field_codec.WireAbsentNone(True)] = field(
+        id: Annotated[str | None, WireAbsentNone()] = field(
             default_factory=fresh
         )
 
@@ -434,7 +439,7 @@ class Record:
     choice: Choice
     pair: tuple[str, str]
     aliases: dict[str, list[int]]
-    label: typing.Annotated[str, field_codec.WireName("externalLabel")] = field(default="default")
+    label: Annotated[str, WireName("externalLabel")] = "default"
     optional: float | None = None
     ignored: ClassVar[str] = "not stored"
 
@@ -490,7 +495,7 @@ def test_alias_collision_and_reserved_tag():
     @dataclass
     class Bad:
         first: str
-        second: typing.Annotated[str, field_codec.WireName("first")]
+        second: Annotated[str, WireName("first")]
 
     with pytest.raises(TypeError, match="Conflicting"):
         FieldCodec.encode(Bad("a", "b"))
@@ -649,7 +654,7 @@ def test_request_schema_preserves_nullable_fields_and_owned_nonnull_constraint()
     @dataclass(frozen=True)
     class Request:
         nullable: str | None = None
-        nonnull: typing.Annotated[str | None, field_codec.WireNonNull(True)] = field(default=None)
+        nonnull: Annotated[str | None, WireNonNull(True)] = None
 
     properties = FieldCodec.record_schema(Request)["properties"]
     assert properties["nullable"] == {"anyOf": [{"type": "string"}, {"type": "null"}]}
@@ -666,7 +671,7 @@ def test_family_instance_schema_tracks_decode_members_and_custom_discriminator()
 
     @dataclass(frozen=True)
     class ExplicitScope(Scope):
-        project: typing.Annotated[str, field_codec.WireName("externalProject")]
+        project: Annotated[str, WireName("externalProject")]
 
     @dataclass(frozen=True)
     class Request:
@@ -725,7 +730,8 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
     from agent_comms.transcript_events import ToolStartTranscript
 
     arguments = {"from": "sender", "to": "receiver", "body": "hello"}
-    event = ToolStartTranscript(
+    event = transcript_records.event(
+        ToolStartTranscript,
         position=0,
         tool_call_id="call-1",
         tool_name="comms_send",
@@ -773,7 +779,7 @@ class InlineContainer:
 
 @dataclass(frozen=True)
 class FieldInlineContainer:
-    pair: typing.Annotated[Pair, field_codec.WireInline(True)]
+    pair: Annotated[Pair, WireInline()]
 
 
 @pytest.mark.parametrize(
@@ -802,12 +808,12 @@ class TypeInlineClash:
 @dataclass(frozen=True)
 class FieldInlineClash:
     text: str
-    pair: typing.Annotated[Pair, field_codec.WireInline(True)]
+    pair: Annotated[Pair, WireInline()]
 
 
 @dataclass(frozen=True)
 class FamilyInlineClash:
-    choice: typing.Annotated[Choice, field_codec.WireInline(True)]
+    choice: Annotated[Choice, WireInline()]
     kind: str
 
 

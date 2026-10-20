@@ -20,17 +20,22 @@ if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
     from .turn_digests import TurnBound
 
-from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
-from .declared_family import DeclaredFamily
-from .typed_table import StoreWriter
 from .coordination_errors import StaleRevision, TranscriptChanged
+from .declared_family import DeclaredFamily
+from .field_codec import MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
-from .routing import MessageRoute, TurnRouting
 from .recorded_time import EventTime, UnrecordedEventTime
+from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, TurnDigest, UserTranscript
-
+from .transcript_events import (
+    AssistantTranscript,
+    IncomingTranscript,
+    SentTranscript,
+    TurnDigest,
+    UserTranscript,
+)
+from .typed_table import StoreWriter
 from .wire_log import ConversationSourceWindowRequest, WireLog
 
 
@@ -45,7 +50,7 @@ class AssignedSourceIdentity:
         return self.root, self.recipient.require_recorded().created_at
 
     def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
-        return self.root == other.root and self.recipient.same_publication_birth(other.recipient)
+        return self.root == other.root and self.recipient == other.recipient
 
 
 class WireFrontier(DeclaredFamily, affix="WireFrontier"):
@@ -190,8 +195,6 @@ class TranscriptTraversal(ABC):
             message = next(source_rows, None)
             while record is not None or message is not None:
                 if record is not None and not events:
-                    if self.ascending and record.incomplete_tail(frontier.offset):
-                        break
                     consumed = consumed.at_offset(self.native_position(record))
                     record, events = next(projected, (None, ()))
                     continue
@@ -436,7 +439,7 @@ class AssignedTranscriptSource(TranscriptSource):
         """Open only the recorded wire, without current registry or SQL authority."""
         root = Path(identity.root)
         return identity.recipient.recorded_or(
-            lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
+            lambda recorded: cls(root, recorded, WireLog(WireLog.path_in(root))),
             TranscriptSource,
         )
 

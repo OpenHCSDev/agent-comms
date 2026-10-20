@@ -82,7 +82,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
                 threads={"renamed": renamed},
                 aliases={"project": "renamed"},
                 statuses={"renamed": snapshot.statuses["project"]},
-                claimed_generations={"renamed": claim_scope.claim_scope},
+                _claimed_generations={"renamed": claim_scope.claim_scope},
             ),
         ).require_valid()
         with claim_scope(None, "a" * 32, args[2]) as allowed:
@@ -114,7 +114,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goals import Goal
     from agent_comms.threads import Thread
-    from agent_comms.turn_goal_permission import ContinuationGoalPermission
+    from agent_comms.turn_goal_permission import ContinuationGoalPermission, TurnGoalPermission
     from agent_comms.turn_input_source import (
         CapturedInputDependency,
         DependencyOriginalInput,
@@ -144,7 +144,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     )
     common = dict(
         accepted_id=None,
-        goal_permission=ContinuationGoalPermission(goal),
+        goal_permission=TurnGoalPermission(ContinuationGoalPermission(goal)),
         prompt="Result",
         original_display="Result",
         origins=(message,),

@@ -76,7 +76,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     comms.messaging.initialize_private_initial_protocol()
     agent.on_connect(Client())
     comms.agents.begin_turn("beta", "held-native", "Existing original")
-    agent.inputs.state("beta").inbox = asyncio.Queue()
+    agent.inputs.state('beta').open_inbox()
     origin = capture(comms)
     with comms.bus.log.opened_wire_snapshot() as source:
         before = tuple(source.public_records())
@@ -91,7 +91,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     with comms.bus.log.opened_wire_snapshot() as source:
         assert len(stored_inputs(inputs.root).rows) == 1 and tuple(source.public_records()) == before
     from agent_comms.turn_context import UserFollowupSegment
-    queued = agent.inputs.state('beta').inbox.get_nowait()
+    queued = agent.inputs.state('beta').require_inbox().get_nowait()
     assert queued.input_id.value == command.input_id
     assert queued.content.text == 'User follow-up:\n' + command.user_text
     contribution, = queued.content.contributions

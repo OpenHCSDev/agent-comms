@@ -1,13 +1,14 @@
 import pytest
 
 from agent_comms.native_arguments import SelectedModel
+from agent_comms.native_startup import NativeStartupPolicy
 
 from agent_comms.agent_backend import WhenBusy
 from agent_comms.pi_events import NativeRetryEnd
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
 from agent_comms.tracked_turn import CompletedTrackedTerminal, PendingTrackedTerminal, TrackedTurnSession
 from agent_comms.turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
-from agent_comms.turn_goal_permission import InactiveGoalPermission
+from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure, NativePiUnavailable
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_failure import ModelRequestFailed, RetryableProviderFailure
@@ -18,8 +19,9 @@ from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 def tracked_turn(output, terminal):
     turn = object.__new__(TrackedTurnSession)
     turn.output, turn.terminal = output, terminal
+    turn.finished = False
     turn.usage, turn.explicit_interrupt = UsageAccount(), False
-    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1, NativeStartupPolicy())
     turn.watchdog.launching(lambda: 0.0, None)
     turn.watchdog.tick()
     return turn
@@ -39,6 +41,7 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
     await turn.apply_native_event(event)
 
     assert turn.output.failure is None
+    assert not turn.finished
     assert turn.output.retry_result is None
     assert isinstance(turn.terminal, PendingTrackedTerminal)
 
@@ -62,6 +65,7 @@ async def test_exhausted_native_request_records_required_final_error(previous):
     }
     await turn.apply_native_event(event)
 
+    assert turn.finished
     assert turn.output.declared_failure == ModelRequestFailed("final refusal")
     with pytest.raises(NativePiTerminalFailure, match="final refusal") as caught:
         turn.output.raise_if_failed(None, SelectedModel("configured", "model"))
@@ -82,7 +86,8 @@ def test_failed_native_retry_end_requires_final_error_at_decode():
 
 
 def following(kind):
-    values = dict(keys=(), accepted_id="fresh-following", goal_permission=InactiveGoalPermission())
+    values = dict(keys=(), accepted_id="fresh-following",
+                  goal_permission=TurnGoalPermission(InactiveGoalPermission()))
     return kind(**values, origins=()) if kind is DeliveredFollowingInput else kind(**values)
 
 

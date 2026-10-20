@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 
 from agent_comms.coordination_schema import CoordinatorTable
@@ -15,14 +15,14 @@ from agent_comms.typed_table import (
 
 @dataclass(frozen=True, kw_only=True)
 class Participants(CoordinatorTable, TypedTable):
-    participant_lookup: typing.Annotated[
+    participant_lookup: Annotated[
         str,
         Column(
             primary_key=True,
             check="\n        length(participant_lookup) BETWEEN 1 AND 256\n    ",
         ),
     ]
-    display_name: typing.Annotated[str, Column(check="length(display_name) BETWEEN 1 AND 256")]
+    display_name: Annotated[str, Column(check="length(display_name) BETWEEN 1 AND 256")]
     committed: bool
 
     @classmethod
@@ -55,9 +55,9 @@ END"""
 
 @dataclass(frozen=True, kw_only=True)
 class ParticipantAliases(CoordinatorTable, TypedTable):
-    alias: typing.Annotated[str, Column(primary_key=True, check="length(alias) BETWEEN 1 AND 256")]
+    alias: Annotated[str, Column(primary_key=True, check="length(alias) BETWEEN 1 AND 256")]
     participant_lookup: str
-    renamed_at_ms: typing.Annotated[int, Column(check="renamed_at_ms >= 0")]
+    renamed_at_ms: Annotated[int, Column(check="renamed_at_ms >= 0")]
 
     @classmethod
     def references(cls):
@@ -85,9 +85,9 @@ END"""
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerGenerations(CoordinatorTable, TypedTable):
-    owner_lookup: typing.Annotated[str, Column(primary_key=True)]
-    owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
-    generation: typing.Annotated[int, Column(check="generation > 0")]
+    owner_lookup: Annotated[str, Column(primary_key=True)]
+    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
+    generation: Annotated[int, Column(check="generation > 0")]
 
     @classmethod
     def references(cls):
@@ -106,10 +106,11 @@ END"""
             "owner_generation_monotonic": (
                 """ BEFORE UPDATE ON owner_generations
 WHEN NEW.owner_lookup IS NOT OLD.owner_lookup
- OR NEW.generation != OLD.generation + 1
- OR EXISTS (SELECT 1 FROM attempts WHERE owner_lookup = OLD.owner_lookup
-            AND owner_generation = OLD.generation
-            AND phase NOT IN ({terminal_attempt_names}))
+ OR (NEW.generation != OLD.generation AND (
+     NEW.generation != OLD.generation + 1
+     OR EXISTS (SELECT 1 FROM attempts WHERE owner_lookup = OLD.owner_lookup
+                AND owner_generation = OLD.generation
+                AND phase NOT IN ({terminal_attempt_names}))))
 BEGIN SELECT RAISE(ABORT, 'owner generation cannot advance with active attempts'); END"""
             ),
         }

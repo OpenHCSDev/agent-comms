@@ -235,12 +235,11 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     await value.assert_effect(execution, progress)
     # Public goal synchronization follows observed events and leaves the actual
     # goal snapshot current; no assertion about collaborator call counts.
-    assert execution.session_id in runner.goals.goal_snapshots
-    assert (
+    assert execution.session_id in runner.goals.publications
+    assert isinstance(
         comms.goals.goal_changed(
-            execution.thread_name, runner.goals.goal_snapshots[execution.session_id]
-        )
-        is None
+            execution.thread_name, runner.goals.publication(execution.session_id).snapshot
+        ), ae.GoalUnchanged,
     )
     assert isinstance(comms.goals.goal_wait("waiting"), RecordedGoalWait)
     if not value.successful:
@@ -377,7 +376,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             with pytest.raises(RequestError):
                 await execution.run()
         assert not comms.registry.require(name).active_turn.executing
-        assert owner.inputs.state(session.session_id).inbox is None
+        assert not owner.inputs.state(session.session_id).turn_open()
         if provider_status == 200:
             assert native.provider.posts == (2 if committed_progress else 1)
         inputs = stored_inputs(comms.root).rows

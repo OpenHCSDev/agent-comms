@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass
-from dataclasses import field as dataclass_field
 from enum import StrEnum
 
 from agent_comms import field_codec
@@ -38,11 +37,11 @@ class ACPClientConnectivity(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivity"):
-    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(primary_key=True)]
+    execution_id: Annotated[str, field_codec.SnapshotExclude(), Column(primary_key=True)]
     owner: OwnerConnectivity
     acp_client: ACPClientConnectivity
-    revision: typing.Annotated[int, Column(check="revision>0")]
-    observed_at_ms: typing.Annotated[int, Column(check="observed_at_ms>=0")]
+    revision: Annotated[int, Column(check="revision>0")]
+    observed_at_ms: Annotated[int, Column(check="observed_at_ms>=0")]
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
@@ -84,10 +83,10 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
 class RecoveryAudit(CoordinatorTable, TypedTable):
     # Recovery condition is a stored fact; row identity is the table family tag.
 
-    execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True)]
-    kind: typing.Annotated[type[RecoveryCondition], Column(check="kind IN ({recovery_names})")]
-    reason_code: typing.Annotated[str, Column(check="length(reason_code) BETWEEN 1 AND 64")]
-    sanitized_detail: typing.Annotated[
+    execution_id: Annotated[str, field_codec.SnapshotExclude()]
+    kind: Annotated[type[RecoveryCondition], Column(check="kind IN ({recovery_names})")]
+    reason_code: Annotated[str, Column(check="length(reason_code) BETWEEN 1 AND 64")]
+    sanitized_detail: Annotated[
         str | None,
         Column(
             check=(
@@ -96,12 +95,12 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
             )
         ),
     ]
-    attempt: typing.Annotated[int, Column(check="attempt>0")]
-    elapsed_ms: typing.Annotated[int, Column(check="elapsed_ms>=0")]
-    observed_at_ms: typing.Annotated[int, Column(check="observed_at_ms>=0")]
-    audit_id: typing.Annotated[
-        int | None, Column(primary_key=True, auto_increment=True), field_codec.SnapshotExclude(True)
-    ] = dataclass_field(default=None)
+    attempt: Annotated[int, Column(check="attempt>0")]
+    elapsed_ms: Annotated[int, Column(check="elapsed_ms>=0")]
+    observed_at_ms: Annotated[int, Column(check="observed_at_ms>=0")]
+    audit_id: Annotated[
+        int | None, Column(primary_key=True, auto_increment=True), field_codec.SnapshotExclude()
+    ] = None
     indexes = (Index(("execution_id", "audit_id")),)
 
     @classmethod

@@ -9,12 +9,11 @@ user-message hash and the required execution evidence has been recorded.
 
 from __future__ import annotations
 
-import typing
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -24,7 +23,7 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
-from .locked_store import RootFile
+from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputExecution, NativeInputRecord
@@ -46,14 +45,14 @@ def binding_store_path(store: Coordination) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
+class PromptBinding(DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     filename = "native_prompt_bindings.sqlite3"
 
     @classmethod
     def install(cls, store) -> None:
         install_prompt_binding_schema(store)
 
-    input_id: typing.Annotated[
+    input_id: Annotated[
         str,
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
     ]
@@ -62,10 +61,10 @@ class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchem
     attempt_ordinal: int | None
     owner_lookup: str
     owner_thread: str
-    owner_generation: typing.Annotated[int, Column(check="owner_generation>0")]
+    owner_generation: Annotated[int, Column(check="owner_generation>0")]
     wire_root_id: str
     expected_prompt_digest: str
-    bound_at_ms: typing.Annotated[int, Column(check="bound_at_ms>0")]
+    bound_at_ms: Annotated[int, Column(check="bound_at_ms>0")]
 
     def __post_init__(self):
         # Original durable SQL is validated on acquisition, not at each caller.

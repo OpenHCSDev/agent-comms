@@ -9,7 +9,7 @@ open request that no open order serves.
 
 from __future__ import annotations
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 
 from agent_comms import field_codec
@@ -35,7 +35,7 @@ class RequestVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class RequestAddVerb(RequestVerb, declared_name="add"):
     help = "record an owner request as the commander's Goal; prints its id"
-    text: typing.Annotated[str, field_codec.Argument(flags=("text",))]
+    text: Annotated[str, field_codec.Argument(flags=("text",))]
 
     def run(self, ctx: Commander) -> None:
         goal = ctx.comms.goals.update_goal(ctx.commander,
@@ -46,8 +46,8 @@ class RequestAddVerb(RequestVerb, declared_name="add"):
 @dataclass(frozen=True, kw_only=True)
 class RequestCompleteVerb(RequestVerb, declared_name="complete"):
     help = "close a request; refused while an order serving it is open"
-    id: typing.Annotated[str, field_codec.Argument(flags=("id",))]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    id: Annotated[str, field_codec.Argument(flags=("id",))]
+    why: Annotated[str, field_codec.Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())

@@ -16,8 +16,7 @@ import shlex
 import sys
 
 from agent_comms.comms import Comms
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.storage_rules import StorageRule
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from agent_comms.goal_management import Goals
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
 from native_backend_fixture import native_backend_fixture
@@ -117,10 +116,9 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--native-cache', type=Path, default=StorageRule.native_cache)
     parser.add_argument('--stage', type=Path, required=True)
     parser.add_argument('--extension', type=Path, required=True,
                         help='Approved compiled comms entry from the native deployment manifest')
     args = parser.parse_args()
     asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True),
-                    package=VerifiedNativePackage.from_environment(args.native_cache)))
+                    package=VerifiedNativePackage.acquire(pinned_native_package())))

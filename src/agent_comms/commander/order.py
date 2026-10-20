@@ -17,38 +17,39 @@ from __future__ import annotations
 import argparse
 import asyncio
 import dataclasses
-import os
 import re
 import subprocess
 import sys
 import time
-import typing
 from abc import abstractmethod
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import PrivateAttr
 
-from agent_comms import field_codec
-from agent_comms_hooks import ClaudeHook
-from agent_comms_hooks.watch import PeerSync
-
-from ..change_report import FileLine
+from ..change_report import FileLine, SourceReference
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions
 from ..comms import Comms
 from ..declared_family import DeclaredFamily
-from ..field_codec import FieldCodec, MalformedRecord, boundary_decoder
+from ..field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    boundary_decoder,
+    Argument,
+    FactoryArgumentDefault,
+    Normalize,
+)
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import OrderCheck, ProblemGoalOrder
 from ..message_reference import MessageReference
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, PlanPhase
 from ..progress_claims import MergedClaim, WorkingClaim
-from ..recorded_time import RecordedEventTime
+from ..recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from ..repo import Repo
 from ..standing_rules import HuntDue
 from ..storage_rules import UnitStorage
@@ -61,6 +62,7 @@ from ..todos import (
     DirectiveText,
     FileDeliveryEvidence,
     LocatedProblemFinding,
+    MeasuredDeadline,
     NoDeliveryEvidence,
     OperationDelivery,
     OrderedHunt,
@@ -91,7 +93,6 @@ from ..tools import (
     TodoList,
 )
 from .config import CommanderConfig, CommanderRole
-from .send_guard import CommanderSession
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -253,7 +254,6 @@ class CommanderContext(CommanderConfig):
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
         published = self.comms.messaging.send(self.commander, target,
             audience.addressed(target, body), answers=answers)
-        PeerSync.sent(self, target)
         return published.message.message_id
 
     def call(self, tool):
@@ -300,7 +300,7 @@ class CommanderContext(CommanderConfig):
 
 class Commander(CommanderContext):
     @boundary_decoder
-    def send(self, unit, due, document: OrderFile, clean=False, reassign=None, new=None,
+    def send(self, unit, due: EventTime, document: OrderFile, clean=False, reassign=None, new=None,
              traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
@@ -315,8 +315,6 @@ class Commander(CommanderContext):
             self.comms.registry.storage_rule.require_quota(self.comms.registry.require(unit))
         except SelectedToolDenied as quota:
             problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-        if not re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d', due):
-            problems.append('due: fix: supply HH:MM local time (00:00 through 23:59)')
         group = [new[0]] if new else list(document.problems)
         listed = {t.id: t for t in self.todos()}
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
@@ -394,8 +392,10 @@ class Commander(CommanderContext):
                 with MalformedRecord.refusing(pid):
                     if replacing:
                         listed[pid].require_replacement(replaces)
-                    if pid in listed and listed[pid].assignment:
-                        listed[pid].assignment.require_trace(unit, trace)
+                    if pid in listed:
+                        listed[pid].holder_state.require_trace(
+                            unit, SourceReference.from_optional(trace),
+                        )
             except MalformedRecord as error:
                 problems.append(str(error))
         if replaces and not replacing:
@@ -418,8 +418,10 @@ class Commander(CommanderContext):
         # A miss already struck on the order this replaces is one miss:
         # the send-back records no second strike.
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
+        measured = MeasuredDeadline.read(self.comms.goals.todos)
+        measured_at = measured.deadline(order)
+        due_at = due.continued_from(measured_at.at)
         request = order.request(self.comms.registry.require(self.commander), tuple(group))
-        due_at = RecordedEventTime(time.time()).at_clock(due)
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
@@ -437,6 +439,8 @@ class Commander(CommanderContext):
                 self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
         for other, text in taken.items():
             self.post(VerdictAudience((other,)), text)
+        print(f'{measured.summary}; selected deadline {due_at.clock()}; '
+              f'measured deadline {measured_at.clock()}')
         print(order.id)
         if replacing and not clean and struck_already:
             print(f'{unit} already struck on this order of {group[0]}; '
@@ -491,20 +495,18 @@ class Commander(CommanderContext):
         pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
         self.send(unit, due, document, new=(pid, document.defect),
              disk=disk, finding=LocatedProblemFinding(location), answers=answers)
-        self.write_board()
         print(pid)
 
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
         self.call(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence))
-        self.write_board()
         print(f'{pid} closed')
 
-    def write_board(self):
+    def board_text(self) -> str:
+        """Render the live Todo view without saving a competing board file."""
         lines = ['# Fleet board', '',
-                 "GENERATED by agent-comms-commander order from Core's Todo store. Do not edit by hand:",
-                 '`order problem FILE.json` adds a row, `order send` orders it, `order close` or `order withdraw` removes it.', '',
+                 "Live view of Core's Todo store; no board file is saved.", '',
                  '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
                  '| Strikes | Owner last acted |',
                  '|---|---|---|---|---|---|---|---|---|---|']
@@ -517,20 +519,14 @@ class Commander(CommanderContext):
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         lines += ['', '## Withdrawn orders', '',
                   *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
-        open(self.board, 'w').write('\n'.join(lines) + '\n')
+        return '\n'.join(lines) + '\n'
 
     def on_record(self, line: str, recorded: str, audience: VerdictAudience,
                   answers: tuple[MessageReference, ...] = ()) -> None:
-        """Put one line on the public record: the narrative file, then its audience.
+        """Publish what Core already recorded; no second narrative file.
 
         Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
         """
-        new_file = not os.path.exists(self.narrative)
-        with open(self.narrative, 'a') as f:
-            if new_file:
-                f.write('# What the fleet actually did\n\nEvery failure, in plain words, as it happened. '
-                        'Written by agent-comms-commander order; never edited.\n\n')
-            f.write(f'- {line}\n')
         try:
             self.post(audience, f'On the record: {line}', answers)
         except (SystemExit, ValueError) as failed:
@@ -556,8 +552,7 @@ class Commander(CommanderContext):
 
     def recorded(self, unit: str, todo: Todo, strike: StrikeTodo,
                  answers: tuple[MessageReference, ...] = ()) -> None:
-        """Core records the strike on the task's Todo; it is written to the narrative file and posted
-        to #comms in the same step."""
+        """Core records the strike on the task's Todo, then posts it to #comms."""
         refuse(strike.reason,
             *OUTGOING)  # posted to #comms, so refused before Core records the strike
         if (self.call(CommsChangeProblemTool(problem=todo.id, operation=strike))
@@ -567,7 +562,7 @@ class Commander(CommanderContext):
 
     def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
                answers: tuple[MessageReference, ...] = ()) -> None:
-        """A strike Core recorded on the task's Todo goes to the narrative file and #comms."""
+        """Publish a strike Core already recorded on the task's Todo to #comms."""
         n = struck(todo, unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {todo.id}'
                 f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
@@ -580,7 +575,7 @@ class Commander(CommanderContext):
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
-        unit = todo.assignment.owner
+        unit = todo.held().owner
         if repo and Path(repo).resolve() != Path(todo.order.check.directory).resolve():
             sys.exit('Refused: --repo must name the recorded order check directory.')
         repo = todo.order.check.directory
@@ -635,7 +630,7 @@ class Commander(CommanderContext):
 
     @boundary_decoder
     def unstrike(self, task: str, why: str, at: str | None = None) -> None:
-        """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
+        """A strike recorded in error is voided in Core, then announced to #comms."""
         todo = self.comms.goals.todos.get(task)
         live = [s for s in todo.live_strikes() if at in (None, s.at.clock())]
         if not live:
@@ -661,7 +656,7 @@ class Commander(CommanderContext):
         refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
         moved = RecordedEventTime(time.time()).at_clock(at)
         self.call(CommsChangeProblemTool(problem=pid, operation=AssignTodo(
-            todo.revision, todo.assignment, moved, todo.order, todo.goal)))
+            todo.revision, todo.held(), moved, todo.order, todo.goal)))
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} '
                   f'deadline changed): {why}', 'Deadline',
                   VerdictAudience.of(todo.held().owner, todo.goal))
@@ -685,7 +680,6 @@ class Commander(CommanderContext):
                   VerdictAudience.of(unit, todo.goal))
         self.post(VerdictAudience((unit,)),
              f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
-        self.write_board()
         print(withdrawal)
 
     def fire(self, unit: str, why: str) -> None:
@@ -699,13 +693,13 @@ class Commander(CommanderContext):
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
-    fork: typing.Annotated[
+    fork: Annotated[
         ThreadCaller | NoThreadCaller,
-        field_codec.Normalize(FieldCodec.encode),
-        field_codec.Argument(
+        Normalize(FieldCodec.encode),
+        Argument(
             flags=("--fork",), options={"type": ThreadCaller, "help": "the acting commander's name"}
         ),
-    ] = dataclasses.field(default=NoThreadCaller())
+    ] = NoThreadCaller()
 
     def who(self, ctx: Commander) -> str:
         return self.fork.acting_name(ctx.commander)
@@ -743,34 +737,17 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
         return cls.member_named(args.command).from_arguments(args)
 
 
-class StaleOrderGate(CommanderVerb):
-    """All directive verbs read the configured commander's same retained board."""
-
-    def gate(self, ctx: Commander) -> None:
-        super().gate(ctx)
-        stale = tuple(todo for todo in ctx.held_orders() if todo.overdue(time.time() - 30 * 60))
-        if stale:
-            lines = []
-            for todo in stale:
-                due = time.localtime(todo.deadline.recorded_at("An order deadline"))
-                lines.append(f'{todo.id}: holder {todo.holder}, deadline '
-                             f'{time.strftime("%Y-%m-%d %H:%M", due)}')
-            sys.exit('REFUSED, nothing recorded: orders more than 30 minutes overdue:\n  '
-                     + '\n  '.join(lines)
-                     + '\nMove their deadlines or withdraw them before sending more work.')
-
-
 @dataclass(frozen=True, kw_only=True)
 class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
 
-    answers: typing.Annotated[
+    answers: Annotated[
         tuple[str, ...],
-        field_codec.Argument(
+        Argument(
             flags=("--answers",),
             options={"nargs": "+", "help": "original directive message IDs this action answers"},
         ),
-    ] = dataclasses.field(default=())
+    ] = ()
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
         thread = ctx.comms.registry.require(self.who(ctx))
@@ -800,50 +777,61 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class SendVerb(OrderVerb, DirectiveVerb):
     help = "record the order in Core and send it"
-    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
-    due: typing.Annotated[
-        str, field_codec.Argument(flags=("due",), options={"help": "HH:MM local time"})
+    unit: Annotated[str, Argument(flags=("unit",))]
+    body_file: Annotated[
+        str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
     ]
-    body_file: typing.Annotated[
-        str, field_codec.Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
-    ]
-    clean: typing.Annotated[
+    due: Annotated[
+        EventTime,
+        Normalize(FieldCodec.encode),
+        Argument(
+            flags=("--due",),
+            default=FactoryArgumentDefault(UnrecordedEventTime),
+            options={
+                "type": RecordedEventTime.from_clock,
+                "choices": None,
+                "metavar": "HH:MM",
+                "help": "HH:MM local time; default measured from deliveries",
+            },
+        ),
+    ] = dataclasses.field(default_factory=UnrecordedEventTime)
+    clean: Annotated[
         bool,
-        field_codec.Argument(
+        Argument(
             flags=("--clean",), options={"help": "the unit showed no incompetence"}
         ),
-    ] = dataclasses.field(default=False)
-    reassign: typing.Annotated[
+    ] = False
+    reassign: Annotated[
         str | None,
-        field_codec.Argument(
+        Argument(
             flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
         ),
-    ] = dataclasses.field(default=None)
-    replaces: typing.Annotated[
+    ] = None
+    replaces: Annotated[
         str | None,
-        field_codec.Argument(
+        Argument(
             flags=("--replaces",), options={"help": "the current message this order replaces"}
         ),
-    ] = dataclasses.field(default=None)
-    disk: typing.Annotated[
+    ] = None
+    disk: Annotated[
         bool,
-        field_codec.Argument(
+        Argument(
             flags=("--disk",),
             options={"help": "a cleanup order; never overrides a tool's storage rule"},
         ),
-    ] = dataclasses.field(default=False)
-    traced: typing.Annotated[
+    ] = False
+    traced: Annotated[
         str | None,
-        field_codec.Argument(
+        Argument(
             flags=("--traced",),
             options={
                 "metavar": "PATH:LINE",
                 "help": "the first failing source line, required after two owners",
             },
         ),
-    ] = dataclasses.field(default=None)
+    ] = None
 
     def run(self, ctx: Commander) -> None:
         ctx.send(self.unit, self.due, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
@@ -852,17 +840,17 @@ class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class StrikeVerb(OrderVerb, DirectiveVerb):
     help = "a send-back, a missed deadline or a false claim"
-    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
-    caught: typing.Annotated[
+    unit: Annotated[str, Argument(flags=("unit",))]
+    why: Annotated[str, Argument(flags=("--why",))]
+    caught: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--caught",),
             options={"help": '"WHO at STAGE"; stage is review/install/live/user'},
         ),
-    ] = dataclasses.field(default="review")
+    ] = "review"
 
     def run(self, ctx: Commander) -> None:
         references = set(re.findall(r'\bP\d+\b', self.why))
@@ -875,8 +863,8 @@ class StrikeVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 @dataclass(frozen=True, kw_only=True)
 class FireVerb(OrderVerb):
     help = "take every open problem off a unit; their orders and strikes stay"
-    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    unit: Annotated[str, Argument(flags=("unit",))]
+    why: Annotated[str, Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.fire(self.unit, self.why)
@@ -885,14 +873,14 @@ class FireVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class UnstrikeVerb(OrderVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
-    at: typing.Annotated[
+    pid: Annotated[str, Argument(flags=("pid",))]
+    why: Annotated[str, Argument(flags=("--why",))]
+    at: Annotated[
         str | None,
-        field_codec.Argument(
+        Argument(
             flags=("--at",), options={"help": "HH:MM the strike was recorded; default the newest"}
         ),
-    ] = dataclasses.field(default=None)
+    ] = None
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
@@ -901,11 +889,11 @@ class UnstrikeVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DueVerb(OrderVerb):
     help = "move a held order's deadline; the reason goes on the public record"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    at: typing.Annotated[
-        str, field_codec.Argument(flags=("at",), options={"help": "HH:MM the order is now due"})
+    pid: Annotated[str, Argument(flags=("pid",))]
+    at: Annotated[
+        str, Argument(flags=("at",), options={"help": "HH:MM the order is now due"})
     ]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    why: Annotated[str, Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.due(self.pid, self.at, self.why)
@@ -914,12 +902,12 @@ class DueVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class InstallVerb(OrderVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
-    at: typing.Annotated[
-        str, field_codec.Argument(flags=("at",), options={"help": "HH:MM the install is due"})
+    at: Annotated[
+        str, Argument(flags=("at",), options={"help": "HH:MM the install is due"})
     ]
-    installer: typing.Annotated[
+    installer: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("installer",), options={"help": "the unit that runs the install"}
         ),
     ]
@@ -933,15 +921,15 @@ class InstallVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class WithdrawVerb(OrderVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
-    superseded_by: typing.Annotated[
+    pid: Annotated[str, Argument(flags=("pid",))]
+    why: Annotated[str, Argument(flags=("--why",))]
+    superseded_by: Annotated[
         str | None,
-        field_codec.Argument(
+        Argument(
             flags=("--superseded-by",),
             options={"metavar": "PID", "help": "the problem that already owns this fix"},
         ),
-    ] = dataclasses.field(default=None)
+    ] = None
 
     def run(self, ctx: Commander) -> None:
         ctx.withdraw(self.pid, self.why, self.superseded_by)
@@ -950,36 +938,34 @@ class WithdrawVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
-    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",), options={"metavar": "UNIT"})]
-    message: typing.Annotated[
-        str, field_codec.Argument(flags=("message",), options={"metavar": "ORDER"})
+    unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
+    message: Annotated[
+        str, Argument(flags=("message",), options={"metavar": "ORDER"})
     ]
-    sha: typing.Annotated[
+    sha: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--sha",), options={"help": "the delivered commit in --repo HEAD, or op"}
         ),
     ]
-    screenshot: typing.Annotated[
+    screenshot: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--screenshot",),
             options={
                 "metavar": "PATH",
                 "help": "for an op: the screenshot the working claim stands on",
             },
         ),
-    ] = dataclasses.field(default="")
+    ] = ""
 
-    seen: typing.Annotated[str, field_codec.Argument(flags=("--seen",))] = dataclasses.field(
-        default=""
-    )
-    repo: typing.Annotated[
+    seen: Annotated[str, Argument(flags=("--seen",))] = ""
+    repo: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--repo",), options={"help": "the recorded order check directory"}
         ),
-    ] = dataclasses.field(default="")
+    ] = ""
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.message)
@@ -989,9 +975,9 @@ class DoneVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
     help = "open the problem's PR from this owned source checkout with its immutable order identity"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    title: typing.Annotated[str, field_codec.Argument(flags=("--title",))]
-    body_file: typing.Annotated[str, field_codec.Argument(flags=("--body-file",))]
+    pid: Annotated[str, Argument(flags=("pid",))]
+    title: Annotated[str, Argument(flags=("--title",))]
+    body_file: Annotated[str, Argument(flags=("--body-file",))]
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
@@ -1009,16 +995,16 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb):
     help = "replace an open order's wrong check with one passing on main; keeps deadline, strikes"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    check: typing.Annotated[
+    pid: Annotated[str, Argument(flags=("pid",))]
+    check: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--check",), options={"help": '"<repo> :: <shell command> -> <integer>"'}
         ),
     ]
-    why: typing.Annotated[
+    why: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--why",), options={"help": "what was wrong with the recorded check"}
         ),
     ]
@@ -1030,10 +1016,10 @@ class CheckVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(OrderVerb):
     help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    phase: typing.Annotated[
+    pid: Annotated[str, Argument(flags=("pid",))]
+    phase: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("phase",), options={"help": "one of " + ", ".join(OrderPhase.names())}
         ),
     ]
@@ -1044,13 +1030,13 @@ class ServeVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SayVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class SayVerb(OrderVerb, DirectiveVerb):
     help = "a non-order message; refused if it orders work"
-    units: typing.Annotated[
-        str, field_codec.Argument(flags=("units",), options={"metavar": "UNIT[,UNIT]"})
+    units: Annotated[
+        str, Argument(flags=("units",), options={"metavar": "UNIT[,UNIT]"})
     ]
-    body_file: typing.Annotated[
-        str, field_codec.Argument(flags=("body_file",), options={"metavar": "BODYFILE"})
+    body_file: Annotated[
+        str, Argument(flags=("body_file",), options={"metavar": "BODYFILE"})
     ]
 
     def run(self, ctx: Commander) -> None:
@@ -1058,24 +1044,33 @@ class SayVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
+class ProblemVerb(OrderVerb, DirectiveVerb):
     help = "Core records the problem with its order, or nothing"
-    order: typing.Annotated[
-        str, field_codec.Argument(flags=("order",), options={"metavar": "ORDER.json"})
+    order: Annotated[
+        str, Argument(flags=("order",), options={"metavar": "ORDER.json"})
     ]
-    to: typing.Annotated[str, field_codec.Argument(flags=("--to",))]
-    due: typing.Annotated[
-        str, field_codec.Argument(flags=("--due",), options={"help": "HH:MM local time"})
-    ]
-    where: typing.Annotated[
+    to: Annotated[str, Argument(flags=("--to",))]
+    due: Annotated[
+        EventTime,
+        Normalize(FieldCodec.encode),
+        Argument(
+            flags=("--due",),
+            default=FactoryArgumentDefault(UnrecordedEventTime),
+            options={
+                "type": RecordedEventTime.from_clock,
+                "choices": None,
+                "metavar": "HH:MM",
+                "help": "HH:MM local time; default measured from deliveries",
+            },
+        ),
+    ] = dataclasses.field(default_factory=UnrecordedEventTime)
+    where: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--where",), options={"help": "the actual file:line where this problem occurs"}
         ),
     ]
-    disk: typing.Annotated[bool, field_codec.Argument(flags=("--disk",))] = dataclasses.field(
-        default=False
-    )
+    disk: Annotated[bool, Argument(flags=("--disk",))] = False
 
     def run(self, ctx: Commander) -> None:
         ctx.problem(self.order, self.to, self.due, self.where, self.disk,
@@ -1085,9 +1080,9 @@ class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
 @dataclass(frozen=True, kw_only=True)
 class DropVerb(OrderVerb):
     help = "drop an old order for a live newer one without a strike"
-    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
-    message: typing.Annotated[str, field_codec.Argument(flags=("message",))]
-    by: typing.Annotated[str, field_codec.Argument(flags=("--by",))]
+    unit: Annotated[str, Argument(flags=("unit",))]
+    message: Annotated[str, Argument(flags=("message",))]
+    by: Annotated[str, Argument(flags=("--by",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.drop(ctx.incarnation, self.unit, self.message, self.by)
@@ -1097,9 +1092,9 @@ class DropVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class FoldVerb(OrderVerb):
     help = "join duplicate open problems without losing their text"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    into: typing.Annotated[str, field_codec.Argument(flags=("--into",))]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
+    pid: Annotated[str, Argument(flags=("pid",))]
+    into: Annotated[str, Argument(flags=("--into",))]
+    why: Annotated[str, Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.fold(ctx.incarnation, self.pid, self.into, self.why)
@@ -1109,9 +1104,9 @@ class FoldVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class LinkVerb(OrderVerb):
     help = "attach an unassigned problem to an existing order"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    unit: typing.Annotated[str, field_codec.Argument(flags=("unit",))]
-    message: typing.Annotated[str, field_codec.Argument(flags=("message",))]
+    pid: Annotated[str, Argument(flags=("pid",))]
+    unit: Annotated[str, Argument(flags=("unit",))]
+    message: Annotated[str, Argument(flags=("message",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.link(ctx.incarnation, self.pid, self.unit, self.message)
@@ -1121,14 +1116,14 @@ class LinkVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class CloseVerb(OrderVerb):
     help = "the fix works in the app; Core closes the problem"
-    pid: typing.Annotated[str, field_codec.Argument(flags=("pid",))]
-    works: typing.Annotated[str, field_codec.Argument(flags=("--works",))]
-    artifact: typing.Annotated[
+    pid: Annotated[str, Argument(flags=("pid",))]
+    works: Annotated[str, Argument(flags=("--works",))]
+    artifact: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--artifact",), options={"help": "defaults to the file recorded by done --seen"}
         ),
-    ] = dataclasses.field(default="")
+    ] = ""
 
     def run(self, ctx: Commander) -> None:
         ctx.close(self.pid, self.works, self.artifact)
@@ -1137,20 +1132,20 @@ class CloseVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class HuntVerb(OrderVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
-    where: typing.Annotated[
-        str, field_codec.Argument(flags=("where",), options={"metavar": "FILE:LINE"})
+    where: Annotated[
+        str, Argument(flags=("where",), options={"metavar": "FILE:LINE"})
     ]
-    why: typing.Annotated[str, field_codec.Argument(flags=("--why",))]
-    sent: typing.Annotated[
+    why: Annotated[str, Argument(flags=("--why",))]
+    sent: Annotated[
         str,
-        field_codec.Argument(
+        Argument(
             flags=("--sent",),
             options={
                 "metavar": "ORDER",
                 "help": "the open order the hunt became; omitted means clean",
             },
         ),
-    ] = dataclasses.field(default="")
+    ] = ""
 
     def run(self, ctx: Commander) -> None:
         ctx.hunt(self.where, self.why, self.sent)
@@ -1164,23 +1159,11 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
             print(path)
 
 
-class PeerSyncVerb(OrderVerb, declared_name=PeerSync.verb):
-    """Run the hook against the selected commander's existing context and session owner."""
-
-    help = "inject or block when the selected commander owes its peer a relay"
-
-    def run(self, ctx: Commander) -> None:
-        hook = ClaudeHook.read()
-        if CommanderSession(hook.session_id, ctx).is_commander():
-            PeerSync.report(hook, ctx)
-
-
 class BoardVerb(OrderVerb):
-    help = "show the fleet board generated from Core's Todo store"
+    help = "show Core's current Todo store without saving a board file"
 
     def run(self, ctx: Commander) -> None:
-        ctx.write_board()
-        print(ctx.board.read_text(), end='')
+        print(ctx.board_text(), end='')
 
 
 def main(a, ctx: Commander):

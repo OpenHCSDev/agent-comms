@@ -4,43 +4,55 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from dataclasses import field, dataclass, replace
 from contextlib import aclosing
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from acp.schema import PromptResponse
 
 from .acp_extension import (
-    PromptRequest,
     InputDeliveryChangedUpdate,
-    QueueChangedUpdate,
     LiveQueueScope,
-    QueueScope,
     NoQueueScope,
+    PromptRequest,
+    QueueChangedUpdate,
     QueueProjection,
+    QueueScope,
     encode_updates,
 )
-from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
-from .comms import Comms
-from .coordination_errors import IdentityConflict
-from .drain_failures import (
-    DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures, record_drain_failure,
-)
 from .activity import FailedWakeDiagnostic
+from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
+from .child_process import join_retirement
+from .comms import Comms
 from .coordination_cohort import next_sealed_assignment
+from .coordination_database import CoordinationStore
+from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
-from .child_process import join_retirement
-from .native_input_owner import RegistryOwner
-from .input_attempt import InputAttempt
+from .drain_failures import (
+    DEFERRED_DRAIN_ERRORS,
+    UNAVAILABLE_DRAIN_ERRORS,
+    drain_failures,
+    record_drain_failure,
+)
+from .errors import RelationViolationError, UnregisteredThreadError
+from .goal_attempts import GoalAttemptStore
+from .goal_waits import GoalWaits
+from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
+    InputAttempt,
+    InputDeliveryScope,
+    OwnerQueueInputDeliveryScope,
+)
 from .input_disposition import InputDispositions, InputDocument
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
 from .input_effects import InputEffects
-from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
-from .private_bus_checkpoint import Addressed
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress, MaintenanceStatus
+from .native_input_owner import RegistryOwner
+from .private_bus_checkpoint import Addressed, WritableCheckpoint
 from .private_path import FileRevision
+from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
@@ -50,12 +62,13 @@ from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
-from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
+from .turn_context import TurnContext, UserFollowupSegment
+from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
-from .goal_waits import GoalWaits
-from .errors import RelationViolationError, UnregisteredThreadError
-from .turn_context import TurnContext, UserFollowupSegment
+
+if TYPE_CHECKING:
+    from .turn_phase import TurnPhase
 
 AGENT_PREFIX = "!agent "
 
@@ -88,16 +101,14 @@ class TickRevision:
         return TickRevisionPaths(
             registry=(registry, registry_guard),
             coordination=(
-                root / "coordination.sqlite3",
+                CoordinationStore.path_in(root),
                 root / "coordination.sqlite3-wal",
             ),
             bus=(bus, bus_marker),
-            checkpoint=root / "private_bus_checkpoint.sqlite3",
+            checkpoint=WritableCheckpoint.path_in(root),
             goal_waits=GoalWaits.path_in(root),
-            goal_attempts=(
-                root / "goal-private" / "goal_attempts.sqlite3",
-                root / "goal-private" / "goal_attempts.sqlite3-wal",
-            ),
+            goal_attempts=GoalAttemptStore.files(
+                GoalAttemptStore.path_in(root / GoalAttemptStore.root_directory)),
             auth=auth,
             maintenance=MaintenanceBarrier(registry).witness_paths,
         )
@@ -143,13 +154,40 @@ class TickRevisionPaths:
         )
 
 
+class PrivateObservationState(ABC):
+    """Only a settled private observation can suppress coordination work."""
+
+    settled = False
+
+    @abstractmethod
+    async def coordination_unchanged(
+        self, inputs: InputDrain, session_id: str, entry: RegistryEntry,
+    ) -> bool: ...
+
+
+class NoPrivateObservation(PrivateObservationState):
+    async def coordination_unchanged(
+        self, inputs: InputDrain, session_id: str, entry: RegistryEntry,
+    ) -> bool:
+        return False
+
+
 @dataclass(frozen=True, slots=True)
-class PrivateObservation:
+class PrivateObservation(PrivateObservationState):
     """One drain's observation: its message cut, registry entry and own coordination work."""
 
     wire: tuple
     entry: RegistryEntry
     work: tuple
+    settled = True
+
+    async def coordination_unchanged(
+        self, inputs: InputDrain, session_id: str, entry: RegistryEntry,
+    ) -> bool:
+        observed = await inputs._observe_coordination(
+            session_id, inputs.effects.configured_root_id, self.wire, entry,
+        )
+        return self == observed
 
     async def drain(self, inputs, session_id: str, root_id: str) -> int:
         await DeliveredInput.recover_interrupted(inputs, session_id, root_id)
@@ -230,7 +268,7 @@ class FullTick:
                 await observation.effects.turns.goals.schedule_goal(session_id)
                 current = await Coordination.run_worker(partial(observation.comms.registry.require, thread))
                 if (
-                    current.turn_record.read().executing
+                    current.turn_record.executing
                     or observation.turn_live(session_id)
                 ):
                     return UnsettledTick()
@@ -239,9 +277,11 @@ class FullTick:
                     return SettledTick(
                         self.revision, self.entry, marker.claimed_after_seq, marker.last_seq,
                     )
-                if observation._repeat_observation_ready(session_id, drained):
-                    watcher.notify()
-                elif observation.effects.cursors.delivery(session_id).needs_refresh:
+                state = observation.state(session_id)
+                needs_refresh = observation.effects.cursors.delivery(session_id).needs_refresh
+                if state.self_tick_owed(
+                    drained, needs_refresh, observation.turn_live(session_id),
+                ):
                     watcher.notify()
         except DEFERRED_DRAIN_ERRORS:
             pass
@@ -289,12 +329,18 @@ class SettledTick(TickState):
         return self
 
 
-class InputObservation:
+class InputObservation(ABC):
     """File-driven observation and process-local wake behavior."""
 
     comms: Comms
     sessions: SessionLifecycle
+    effects: InputEffects
+    runtime: RuntimeServer
+    auto_wake: bool
     closing: bool
+
+    @abstractmethod
+    def state(self, session_id: str) -> DrainedSession: ...
 
     def turn_live(self, session_id: str) -> bool:
         return self.state(session_id).turn_open() or session_id in self.effects.turns.turn_tasks
@@ -350,14 +396,6 @@ class InputObservation:
 
         task.add_done_callback(finished)
 
-    def _repeat_observation_ready(self, session_id: str, drained: int) -> bool:
-        state = self.state(session_id)
-        if drained != 0 or not state.repeat_observation:
-            return False
-        if state.pending_turns:
-            return False
-        return not self.turn_live(session_id)
-
     def _indexed_changes_for_owner(
         self, settled: SettledTick, revision: TickRevision, lookup: str,
     ) -> tuple[WireMetadata, bool]:
@@ -395,14 +433,13 @@ class InputObservation:
     def _quiescent(self, session_id: str) -> bool:
         """No process-local work or retry is waiting on the next tick."""
         state = self.state(session_id)
-        if state.repeat_observation:
-            return False
+        turn_live = self.turn_live(session_id)
         return (
             state.settled()
-            and not self.effects.cursors.delivery(session_id).needs_refresh
-            and not state.pending_turns
-            and not self.turn_live(session_id)
-            and not state.wake_pending()
+            and not state.owes_tick(
+                self.effects.cursors.delivery(session_id).needs_refresh,
+            )
+            and not turn_live
         )
 
     async def observe(self, session_id: str) -> None:
@@ -522,7 +559,7 @@ class InputObservation:
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
         return await Coordination.run_read_async(
-            self.comms.root / "coordination.sqlite3",
+            CoordinationStore.path_in(self.comms.root),
             partial(self._private_observation_revision, session_id, root_id, wire, entry),
         )
 
@@ -534,13 +571,105 @@ class InputObservation:
         this entry still stand; only this owner's coordination rows are read.
         """
         async with self.state(session_id).lock:
-            settled = self.state(session_id).idle_revision
-            if settled is None:
-                return False
-            observed = await self._observe_coordination(
-                session_id, self.effects.configured_root_id, settled.wire, entry,
+            return await self.state(session_id).idle_revision.coordination_unchanged(
+                self, session_id, entry,
             )
-            return observed == settled
+
+
+class DrainTurn(ABC):
+    """The drained turn owns its inbox lifetime and captured original together."""
+
+    is_open = False
+    has_source = False
+    @property
+    def keys(self) -> tuple[str, ...]:
+        return ()
+
+    def for_phase(self, phase: TurnPhase) -> DrainTurn:
+        return self if phase.accepts_followup else NoDrainTurn()
+
+    @abstractmethod
+    def opened(self) -> DrainTurn: ...
+
+    def capture(self, source: OriginalTurnInput) -> DrainTurn:
+        raise KeyError("Session has no running turn inbox")
+
+    def matches(self, inbox: TurnInbox) -> bool:
+        return False
+
+    def require_inbox(self) -> TurnInbox:
+        raise KeyError("Session has no running turn inbox")
+
+    def require_source(self) -> OriginalTurnInput:
+        raise KeyError("Session has no started first input")
+
+    @abstractmethod
+    def send(self, item: TurnInboxItem) -> None: ...
+
+    @abstractmethod
+    async def resume(self, maintenance: MaintenanceIngress) -> None: ...
+
+    @abstractmethod
+    async def finish_original(self, inputs: InputDrain) -> None: ...
+
+
+class NoDrainTurn(DrainTurn):
+    async def finish_original(self, inputs: InputDrain) -> None:
+        pass
+
+    def opened(self) -> DrainTurn:
+        return AwaitingDrainTurn(TurnInbox())
+
+    def send(self, item: TurnInboxItem) -> None:
+        pass
+
+    async def resume(self, maintenance: MaintenanceIngress) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class AwaitingDrainTurn(DrainTurn):
+    inbox: TurnInbox
+    is_open = True
+
+    async def finish_original(self, inputs: InputDrain) -> None:
+        pass
+
+    def opened(self) -> DrainTurn:
+        return self
+
+    def capture(self, source: OriginalTurnInput) -> DrainTurn:
+        return StartedDrainTurn(self.inbox, source)
+
+    def matches(self, inbox: TurnInbox) -> bool:
+        return self.inbox is inbox
+
+    def require_inbox(self) -> TurnInbox:
+        return self.inbox
+
+    def send(self, item: TurnInboxItem) -> None:
+        self.inbox.put_nowait(item)
+
+    async def resume(self, maintenance: MaintenanceIngress) -> None:
+        async with maintenance.ingress_async() as status:
+            with status.phase.send_running(None) as outcome:
+                outcome.resume(self.inbox)
+
+
+@dataclass(frozen=True)
+class StartedDrainTurn(AwaitingDrainTurn):
+    source: OriginalTurnInput
+    has_source = True
+
+    @property
+    def keys(self) -> tuple[str, ...]:
+        return self.source.keys
+
+    def require_source(self) -> OriginalTurnInput:
+        return self.source
+
+    async def finish_original(self, inputs: InputDrain) -> None:
+        await Coordination.run_worker(partial(inputs.finish_original_inputs, self.source.keys))
 
 
 @dataclass(eq=False)
@@ -551,32 +680,60 @@ class DrainedSession:
     drain_task: asyncio.Task[None] | None = None
     wake_task: asyncio.Task[None] | None = None
     observation_watcher: WireWatch | None = None
-    inbox: TurnInbox | None = None
+    turn: DrainTurn = field(default_factory=NoDrainTurn)
     queued: dict[str, QueuedInput] = field(default_factory=dict)
     restored: dict[str, QueuedInput] = field(default_factory=dict)
     following: dict[str, AcceptedFollowingInput] = field(default_factory=dict)
-    first_source: OriginalTurnInput | None = None
     queue_revision: int = 0
     pending_turns: list[ScheduledTurn] = field(default_factory=list)
     # Only a completed, quiescent observation can suppress another scan.
     # This revision never authorizes delivery, acceptance or a native send.
-    idle_revision: PrivateObservation | None = None
+    idle_revision: PrivateObservationState = field(default_factory=NoPrivateObservation)
     # A changed read or process-local wake needs a full observation.
     # A completed stable drain consumes this pending work.
     repeat_observation: bool = False
+
+    def owes_tick(self, needs_refresh: bool) -> bool:
+        """Keep work owed until its producer or another observation consumes it.
+
+        The next observation consumes repeat_observation; scheduling consumes
+        pending_turns; cursor refresh consumes needs_refresh; completion of the
+        wake task consumes its pending wake.
+        """
+        return bool(
+            self.repeat_observation
+            or self.pending_turns
+            or needs_refresh
+            or self.wake_pending()
+        )
+
+    def self_tick_owed(self, drained: int, needs_refresh: bool, turn_live: bool) -> bool:
+        """Notify only when this observer can consume the work on its next tick.
+
+        A scheduled turn and a pending wake have their own completion, which
+        wakes the observer; notifying for them now would spin on the same work.
+        A successful push already changed the wire, but cursor refresh still
+        needs its own tick.
+        """
+        if needs_refresh:
+            return True
+        if drained or self.pending_turns or turn_live:
+            return False
+        return self.repeat_observation
 
     def producers(self) -> tuple[asyncio.Task[None], ...]:
         return tuple(task for task in (self.drain_task, self.wake_task) if task is not None)
 
     def retire_producers(self) -> None:
-        self.drain_task = self.wake_task = self.observation_watcher = self.idle_revision = None
+        self.drain_task = self.wake_task = self.observation_watcher = None
+        self.forget_observation()
         self.repeat_observation = False
 
     def turn_open(self) -> bool:
-        return self.inbox is not None
+        return self.turn.is_open
 
     def turn_started(self) -> bool:
-        return self.first_source is not None
+        return self.turn.has_source
 
     def observing(self) -> bool:
         return self.drain_task is not None and not self.drain_task.done()
@@ -584,32 +741,38 @@ class DrainedSession:
     def wake_pending(self) -> bool:
         return self.wake_task is not None and not self.wake_task.done()
 
+    def forget_observation(self) -> None:
+        self.idle_revision = NoPrivateObservation()
+
     def settled(self) -> bool:
-        return self.idle_revision is not None
+        return self.idle_revision.settled
 
     def notify_observer(self) -> None:
         if self.observation_watcher is not None:
             self.observation_watcher.notify()
 
     def open_inbox(self) -> TurnInbox:
-        if self.inbox is None:
-            self.inbox = TurnInbox()
-        return self.inbox
+        self.turn = self.turn.opened()
+        return self.turn.require_inbox()
+
+    def capture_first_source(self, source: OriginalTurnInput) -> None:
+        self.turn = self.turn.capture(source)
+
+    def retire_turn(self, inbox: TurnInbox) -> DrainTurn:
+        if not self.turn.matches(inbox):
+            return NoDrainTurn()
+        previous, self.turn = self.turn, NoDrainTurn()
+        return previous
 
     def to_turn(self, item: TurnInboxItem) -> None:
         """A queue change reaches an open turn; without one the queue keeps it."""
-        if self.inbox is not None:
-            self.inbox.put_nowait(item)
+        self.turn.send(item)
 
     def require_inbox(self) -> TurnInbox:
-        if self.inbox is None:
-            raise KeyError("Session has no running turn inbox")
-        return self.inbox
+        return self.turn.require_inbox()
 
     def require_first_source(self) -> OriginalTurnInput:
-        if self.first_source is None:
-            raise KeyError("Session has no started first input")
-        return self.first_source
+        return self.turn.require_source()
 
 
 class InputDrain(InputObservation):
@@ -732,26 +895,25 @@ class InputDrain(InputObservation):
     def input_keys(self, session_id: str) -> frozenset[str]:
         """Live captured source membership, never rebuilt from durable notices."""
         state = self.state(session_id)
-        original = state.first_source
         following = frozenset(
             key for source in state.following.values()
             for key in source.keys
         )
-        return following.union(original.keys) if original is not None else following
+        return following.union(state.turn.keys)
 
-    async def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
+    async def delivery_scope(self, session_id: str) -> InputDeliveryScope:
         """Derive delivery notices from existing owner queues; never create new authority."""
         entry = (await self._own_entry(session_id)).entry
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
-            return None
+            return UNOBSERVED_DELIVERY_SCOPE
         keys = set(self.input_keys(session_id))
         keys.update(
             self.dispositions.bus_key(turn.origin, owner)
             for turn in self.state(session_id).pending_turns
             if turn.origin is not None
         )
-        return frozenset(keys)
+        return OwnerQueueInputDeliveryScope(frozenset(keys))
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
@@ -767,7 +929,7 @@ class InputDrain(InputObservation):
             state.repeat_observation = False
             await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
-        state.idle_revision = None
+        state.forget_observation()
         result = await before.drain(self, session_id, root_id)
         # Never absorb a message/owner/recovery change during a suspended read,
         # or skip queued independent work after a completed native turn.
@@ -784,11 +946,7 @@ class InputDrain(InputObservation):
     async def drain_owned_inbox(self, session_id: str) -> int:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
-        inbox = self.state(session_id).inbox
-        if inbox is not None:
-            async with self.comms.owners.maintenance.ingress_async() as status:
-                with status.phase.send_running(None) as outcome:
-                    outcome.resume(inbox)
+        await self.state(session_id).turn.resume(self.comms.owners.maintenance)
         private_root = self.effects.configured_root_id
         pushed = await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
@@ -835,7 +993,7 @@ class InputDrain(InputObservation):
         )
 
     def require_inbox(self, session_id: str, inbox: TurnInbox) -> None:
-        if self.state(session_id).inbox is not inbox:
+        if not self.state(session_id).turn.matches(inbox):
             raise InputHandoffRefused("Running turn inbox retired before input placement")
 
     def bind_native_turn(
@@ -896,15 +1054,14 @@ class InputDrain(InputObservation):
     ) -> None:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
         state = self.state(session_id)
-        if state.inbox is inbox:
-            state.inbox = None
-            self.sessions.config.settings_in_use.pop(session_id, None)
+        turn = state.retire_turn(inbox)
+        if not turn.is_open:
+            return
+        self.sessions.config.settings_in_use.pop(session_id, None)
         while not inbox.empty():
             inbox.get_nowait()
         try:
-            original, state.first_source = state.first_source, None
-            if original is not None:
-                await Coordination.run_worker(partial(self.finish_original_inputs, original.keys))
+            await turn.finish_original(self)
         finally:
             # Even after cancellation, wait for the input write before releasing
             # turn resources. Closing permissions and saving accepted queued

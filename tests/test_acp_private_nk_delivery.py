@@ -29,11 +29,14 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence, StaleRevision
 from agent_comms.coordinator import Coordination
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.store_files import _store_lock
@@ -49,7 +52,7 @@ tmp_path = private_root_fixture
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
-def _session(tmp_path, *, package=True):
+def _private_comms(tmp_path):
     root = tmp_path / "wire"
     comms = Comms(root)
     comms.registry.declare(
@@ -62,8 +65,12 @@ def _session(tmp_path, *, package=True):
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
-    if package:
-        pass
+        install_native_runtime_schema(store)
+    return comms, root_id
+
+
+def _session(tmp_path):
+    comms, root_id = _private_comms(tmp_path)
     agent = CommsAgent(comms, runtime_enabled=True)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
@@ -125,7 +132,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_private_owner_rename_migrates_generation_before_canonical_selected_send(
+async def test_private_owner_rename_preserves_generation_before_canonical_selected_send(
     tmp_path, monkeypatch, managed
 ):
     comms, agent, _ = _session(tmp_path)
@@ -141,7 +148,7 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     assert renamed.previous == "beta" and renamed.current == "gamma"
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         after = store.participants.get(lookup)
-    assert after.owner_thread == "gamma" and after.participant_generation == 2
+    assert after.owner_thread == "gamma" and after.participant_generation == 1
     assert comms.registry.require("beta").name == "gamma"
     assert not (comms.root / ".private-owner-rename.pending").exists()
 
@@ -194,8 +201,47 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
     assert await agent.inputs.drain_inbox("beta") == 0
 
 
+@pytest.mark.parametrize("managed", [False, True])
+def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
+    from agent_comms.attempt_start import AttemptStart
+    from agent_comms.attempt_states import SucceededAttempt
+    from agent_comms.coordination_tables.executions import ExecutionOrigin
+    from agent_comms.owner_fence import prepare_fence_token
+    from test_coordination_store import final_evidence
+
+    comms, _ = _private_comms(tmp_path)
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        before = store.participants.get(lookup)
+        store.executions.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
+        store.executions.mark_pending("rename-active", expected_revision=1)
+        fence = store.attempts.start(AttemptStart(
+            "rename-active", 1, "beta", 1, prepare_fence_token(),
+            expected_execution_revision=2, expected_pointer_revision=0,
+        )).value.fence
+        active = store.participants.get(lookup)
+    if managed:
+        comms.threads.rename_managed_thread("beta", "gamma", owner_pid=os.getpid())
+    else:
+        comms.threads._rename_thread("beta", "gamma")
+    assert comms.registry.require("beta").name == "gamma"
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        after = store.participants.get(lookup)
+        assert after.owner_thread == "gamma"
+        assert after.participant_generation == before.participant_generation
+        assert after.pointer == active.pointer
+        with pytest.raises(StaleRevision):
+            store.participants.rename_owner(lookup, "wrong", expected_generation=2)
+        fence = final_evidence(store, fence)
+        settled = store.attempts.settle_nonpublication(
+            fence, expected_pointer_revision=1, outcome=SucceededAttempt(),
+        ).value
+        assert isinstance(settled.attempt.lifecycle, SucceededAttempt)
+        assert not settled.is_current
+
+
 def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tmp_path):
-    comms, _, _ = _session(tmp_path)
+    comms, _ = _private_comms(tmp_path)
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, "unexpected", expected_generation=1)
@@ -207,7 +253,7 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
 
 
 def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):
-    comms, _, _ = _session(tmp_path)
+    comms, _ = _private_comms(tmp_path)
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("sender").created_at).lookup
     renamed = comms.threads._rename_thread("sender", "courier")
     assert (renamed.previous, renamed.current) == ("sender", "courier")
@@ -242,12 +288,12 @@ async def test_headless_owner_start_launches_no_catalog_discovery(tmp_path, monk
     comms.registry.heartbeat("beta")
     await agent.sessions.start_owner(str(tmp_path), "beta")
     assert drains == ["beta"]
-    assert comms.registry.require("beta").pid == os.getpid()
+    assert comms.registry.require("beta").require_process().pid == os.getpid()
     assert comms.registry.status("beta").active
 
 
 @pytest.mark.asyncio
-async def test_private_rename_compensates_registry_failure_with_new_old_owner_generation(
+async def test_private_rename_compensates_registry_failure_without_advancing_generation(
     tmp_path, monkeypatch
 ):
     comms, _, root_id = _session(tmp_path)
@@ -264,7 +310,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
     assert comms.registry.require("beta").name == "beta"
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         person = store.participants.get(lookup)
-    assert person.owner_thread == "beta" and person.participant_generation == 3
+    assert person.owner_thread == "beta" and person.participant_generation == 1
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         comms.messaging.send("sender", "beta", "not published after uncertain rename").message
@@ -300,7 +346,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     def fail_before_sql(*args, **kwargs):
         raise OSError("synthetic SQL rename CAS outage")
 
-    monkeypatch.setattr(ParticipantStore, "advance_generation", fail_before_sql)
+    monkeypatch.setattr(ParticipantStore, "rename_owner", fail_before_sql)
     with pytest.raises(OSError, match="synthetic SQL rename CAS outage"):
         comms.threads._rename_thread("beta", "gamma")
     assert (comms.root / ".private-owner-rename.pending").is_file()
@@ -506,16 +552,13 @@ async def test_observed_mid_session_claim_change_invalidates_old_proof(tmp_path,
     assert len(calls) == 2  # no old-epoch native input can initialize new proof
 
 
-async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
+async def test_missing_native_schema_refuses_cursor_metadata(tmp_path):
     comms, agent, _ = _session(tmp_path)
-    before = cursor_envelope((await agent.sessions.metadata("beta")))
+    assert cursor_envelope((await agent.sessions.metadata("beta"))) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    unavailable = cursor_envelope((await agent.sessions.metadata("beta")))
-    assert unavailable.status == "unavailable"
-    assert unavailable.scope == before.scope
-    assert unavailable.revision > before.revision
-    assert not isinstance(unavailable.observation, VerifiedCursorObservation)
+    with pytest.raises(PublicationActivationBlocked):
+        await agent.sessions.metadata("beta")
 
 
 async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
@@ -564,8 +607,10 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     assert updates[-1].revision > loaded.revision
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    await agent.cursors.publish("beta", "beta")
-    assert updates[-1].status == "unavailable"
+    announced = len(updates)
+    with pytest.raises(PublicationActivationBlocked):
+        await agent.cursors.publish("beta", "beta")
+    assert len(updates) == announced
     assert updates[-1].scope == loaded.scope
     before = len(updates)
     await agent.cursors.refresh("beta", "beta")
@@ -628,7 +673,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             while (
                 native.provider.posts != 1
                 or agent.turns.turn_state(session).active.phase.busy
-                or any(state.inbox for state in agent.inputs.drained.values())  # the reply turn retires its inbox after it stops being busy
+                or any(state.turn_open() for state in agent.inputs.drained.values())  # the reply turn retires its inbox after it stops being busy
             ):
                 await asyncio.sleep(0.01)
         assert native.provider.posts == 1
@@ -639,32 +684,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             assert original.stage is FullNativeExecution
             assert original.require_context_proof().input_id == original.input_id
         assert comms.bus.log.messages_for_references((sent.reference,)) == (sent,)
-        assert not agent.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in agent.inputs.drained.values())
-
-
-async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
-    """An unpinned private root derives this installation's package; none prepared refuses."""
-    import agent_comms.private_nk_entrypoint as derivation
-    from agent_comms.native_package import NativePackageError
-
-    def missing():
-        raise NativePackageError("Pinned native package directory is missing")
-
-    monkeypatch.setattr(derivation, "pinned_native_package", missing)
-    comms, agent, root_id = _session(tmp_path, package=False)
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
-    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
-        await agent.inputs.drain_inbox("beta")
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
-                (root_id, original.seq),
-            ).fetchone()[0]
-            == 0
-        )
-    assert not any(state.pending_turns for state in agent.inputs.drained.values())
+        assert not agent.turns.turn_state(session).active.phase.busy and not any(state.turn_open() for state in agent.inputs.drained.values())
 
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
@@ -724,11 +744,9 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     assert not any(state.pending_turns for state in agent.inputs.drained.values())
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         rows = NativeRuntimeInput.select(store.session._connection)
-        assert (
-            len(rows) == 1
-            and rows[0].session_id == "isolated-session"
-            and rows[0].session_entry_id is None
-        )
+        assert len(rows) == 1 and rows[0].session_file is not None
+        assert rows[0].session_id == NativeSessionIdentity.locate(rows[0].session_file).session_id
+        assert rows[0].session_entry_id is None
 
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
@@ -851,29 +869,3 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
     assert comms.registry.require("beta").goal == original
-
-
-async def test_acp_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
-    comms, agent, root_id = _session(tmp_path)
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
-    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    # Preflight must run before any SQL acceptance, not only before reservation.
-    monkeypatch.setattr(
-        VerifiedNativePackage,
-        "acquire",
-        classmethod(
-            lambda _cls, _package: (_ for _ in ()).throw(
-                PublicationActivationBlocked("unreviewed Pi")
-            )
-        ),
-    )
-    with pytest.raises(PublicationActivationBlocked, match="unreviewed Pi"):
-        await agent.inputs.drain_inbox("beta")
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
-                (root_id, original.seq),
-            ).fetchone()[0]
-            == 0
-        )

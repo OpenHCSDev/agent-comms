@@ -30,7 +30,7 @@ from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
-    OwnerGoalPermission,
+    OwnerGoalPermission, TurnGoalPermission,
 )
 from .turn_input_source import (
     CapturedInputDependency,
@@ -164,7 +164,7 @@ class OwnedTurn:
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
                         sequence=origin.seq,
                         owner=self.thread_name,
-                        claim_scope=snapshot.claimed_generations[self.thread_name],
+                        claim_scope=snapshot.claim_generation(self.thread_name),
                         target=origin.target,
                         source_text=ScheduledTurn.incoming(
                             origin, aliases=snapshot.aliases
@@ -249,7 +249,7 @@ class OwnedTurn:
             source_type = RoutedOriginalInput
         original = source_type(
             accepted_id=self.accepted_input_id,
-            goal_permission=permission,
+            goal_permission=TurnGoalPermission(permission),
             prompt=self.context.render().text,
             original_display=self.original_display,
             origins=self.origins,
@@ -286,7 +286,7 @@ class OwnedTurn:
         )
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
-        self.runner.inputs.state(self.session_id).first_source = self.original
+        self.runner.inputs.state(self.session_id).capture_first_source(self.original)
         self.input_cleanup.pop_all()
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)

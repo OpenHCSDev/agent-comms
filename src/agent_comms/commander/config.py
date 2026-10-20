@@ -36,17 +36,11 @@ class CommanderConfig(CommanderRole, BaseModel):
     commander: str
     root: Path
     state: Path
-    board: Path
-    narrative: Path
     repos: tuple[Repo, ...]
     worktrees: Path
     scratch: Path
     disk: Path
     parked: frozenset[str] = frozenset()
-
-    @property
-    def peer_sync_log(self) -> Path:
-        return self.scratch / "peer-sync.log"
 
     @staticmethod
     def path(home: Path | None = None) -> Path:
@@ -110,6 +104,6 @@ class CommanderConfig(CommanderRole, BaseModel):
         path.unlink(missing_ok=True)
         path.symlink_to(record)
         for directory in (self.state, self.state / 'orders', self.worktrees,
-                          self.scratch, self.board.parent):
+                          self.scratch):
             directory.mkdir(parents=True, exist_ok=True)
         return path

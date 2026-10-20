@@ -8,7 +8,7 @@ import pytest
 import agent_comms.tools as tools
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.agent_event_updates import AcpEventConsumer
-from agent_comms.agent_events import GoalChanged
+from agent_comms.agent_events import GoalChanged, GoalUnchanged
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -103,7 +103,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
             if isinstance(row, GoalChangedUpdate)
         )
         assert update.goal.revision == 2
-        assert comms.goals.goal_changed("worker", event.snapshot) is None
+        assert isinstance(comms.goals.goal_changed("worker", event.snapshot), GoalUnchanged)
     finally:
         GoalAction.__registry__.pop("checkpoint")
 
@@ -169,12 +169,12 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
 def test_goal_changed_compares_goal_snapshots(owner):
     comms, _ = owner
     before = comms.goals.goal_snapshot("worker")
-    assert comms.goals.goal_changed("worker", before) is None
+    assert isinstance(comms.goals.goal_changed("worker", before), GoalUnchanged)
     changed = comms.goals.update_goal("worker", ActiveGoalAction(progress="moved"))
     event = comms.goals.goal_changed("worker", before)
     assert event.snapshot == comms.goals.goal_snapshot("worker")
     assert event.snapshot.goal == changed
-    assert comms.goals.goal_changed("worker", event.snapshot) is None
+    assert isinstance(comms.goals.goal_changed("worker", event.snapshot), GoalUnchanged)
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():

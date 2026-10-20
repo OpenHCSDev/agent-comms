@@ -25,7 +25,7 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
         with NativeBoundary(comms.bus) as boundary:
             owner = boundary.registry.require(name)
             scope = NativeClaim(
-                owner_claimed_generation=boundary.registry.claimed_generations[name],
+                owner_claimed_generation=boundary.registry.claim_generation(name),
                 operation_id=operation, turn_id=f"turn-{name}", input_id=f"input-{name}",
             )
             return comms.bus.publisher._publish_claim_transition_unlocked(

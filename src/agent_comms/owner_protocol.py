@@ -6,7 +6,6 @@ FieldCodec. Each member answers what its reader does with it.
 from __future__ import annotations
 
 import json
-import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self, cast
@@ -15,10 +14,9 @@ from acp import RequestError
 from acp.schema import DeniedOutcome, RequestPermissionResponse
 from pydantic import BaseModel
 
-from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, Token256Text
+from .field_codec import FieldCodec, MalformedRecord, Token256Text, WireName
 from .package_stamp import STAMP
 
 if TYPE_CHECKING:
@@ -83,7 +81,7 @@ class OwnerReady(OwnerLine):
     """The subscription line that completes attachment: session metadata and its controller."""
 
     ready: dict[str, object]
-    controller_token: Annotated[str, ControllerTokenText, field_codec.WireName("controllerToken")]
+    controller_token: Annotated[str, ControllerTokenText, WireName("controllerToken")]
 
     async def attach(self, proxy: RuntimeProxy) -> OwnerReady:
         return self
@@ -94,7 +92,7 @@ class OwnerUpdate(OwnerLine):
     """An ACP session update; its metadata is presented again for the attached session."""
 
     update: dict[str, object]
-    meta: typing.Annotated[dict[str, object], field_codec.WireName("_meta")] = field(
+    meta: Annotated[dict[str, object], WireName("_meta")] = field(
         default_factory=dict
     )
 
@@ -112,7 +110,7 @@ class OwnerPermissionRequest(OwnerLine):
     """A permission dialog for the attached controller, answered by its id."""
 
     id: str
-    tool_call: typing.Annotated[dict[str, object], field_codec.WireName("toolCall")]
+    tool_call: Annotated[dict[str, object], WireName("toolCall")]
     options: list[dict[str, object]]
 
     async def deliver(self, proxy: RuntimeProxy) -> None:
@@ -141,9 +139,7 @@ class OwnerFailure(OwnerLine):
     """A failed request. A JSON-RPC error raises again as itself on the client."""
 
     error: str
-    rpc_error: typing.Annotated[OwnerRpcError | None, field_codec.WireName("rpcError")] = field(
-        default=None
-    )
+    rpc_error: Annotated[OwnerRpcError | None, WireName("rpcError")] = None
 
     @classmethod
     def of(cls, error: Exception) -> Self:

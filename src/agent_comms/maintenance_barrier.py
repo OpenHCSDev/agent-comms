@@ -24,6 +24,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .lifecycle import LifecycleState
+from .locked_store import DurableFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     SharedLock,
@@ -193,7 +194,8 @@ class MaintenanceOperator(ProcessIdentity, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MaintenanceMarker:
+class MaintenanceMarker(DurableFile):
+    filename = ".maintenance-enabled"
     version: Literal[2]
     root: str
     generation: int
@@ -205,6 +207,7 @@ class MaintenanceMarker:
 
 @dataclass(frozen=True, kw_only=True)
 class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
+    filename = ".maintenance-state"
     operator: MaintenanceOperator
     nonce: str
     phase: type[MaintenancePhase]
@@ -275,8 +278,8 @@ class MaintenanceBarrier(MaintenanceIngress):
     def __init__(self, registry_path: Path):
         self.registry_path = Path(registry_path)
         self.wire_path = self.registry_path.parent / "wire"
-        self.marker_path = self.registry_path.parent / ".maintenance-enabled"
-        self.state_path = self.registry_path.parent / ".maintenance-state"
+        self.marker_path = MaintenanceMarker.path_in(self.registry_path.parent)
+        self.state_path = MaintenanceState.path_in(self.registry_path.parent)
 
     @property
     def witness_paths(self) -> tuple[Path, Path]:

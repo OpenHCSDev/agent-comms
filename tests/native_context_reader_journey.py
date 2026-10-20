@@ -1,6 +1,5 @@
 """Original acquired SDK context reader through the installed owner RPC."""
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.storage_rules import StorageRule
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 
 import argparse
 import asyncio
@@ -83,11 +82,11 @@ async def read_original_context(
             assert {segment.declared_name for segment in first.segments} >= {"system_layer", "tool_catalog"}
             selected = Path(first.identity.session_file)
             assert selected == Path(thread.require_saved_session())
-            assert owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry) == ()
+            assert owner._comms.contexts.page(thread.name, owner._comms.registry).resources == ()
             assert fixture.session.read_bytes() == selected_before
             if recorded_readers:
                 from agent_comms.native_turn_context import NativeContextManifestData
-                from agent_comms.turn_context import ContextSourceText
+                from agent_comms.turn_context import ContextSourceText, TranscriptSegment
 
                 observed = NativeContextManifestData.from_wire(sdk_source['recorded_observation'])
                 mixed_observed = NativeContextManifestData.from_wire(sdk_source['mixed_observation'])
@@ -95,22 +94,23 @@ async def read_original_context(
                 # a claim that a model request/onContextReady event happened.
                 leased = owner._comms.agents.begin_turn(thread.name, 'authored-sdk-context-read')
                 try:
-                    await observed.record(owner._comms.bus.log, leased.thread, leased.turn_lease)
-                    await mixed_observed.record(owner._comms.bus.log, leased.thread, leased.turn_lease)
+                    await observed.record(owner._comms.contexts, leased.thread, leased.turn_lease)
+                    await mixed_observed.record(owner._comms.contexts, leased.thread, leased.turn_lease)
                 finally:
                     owner._comms.agents.finish_turn(leased.turn_lease)
-                original, mixed_original = owner._comms.bus.log.context_manifests(
-                    thread.name, owner._comms.registry)
+                page = owner._comms.contexts.page(thread.name, owner._comms.registry)
+                original, mixed_original = (resource.value for resource in page.resources)
                 assert original.require_request_id() == 'authored-sdk-source-request'
                 position = next(i for i, segment in enumerate(original.segments)
-                                if segment.kind == 'transcript' and len(segment.contributors) > 1)
+                                if segment.kind is TranscriptSegment and len(segment.contributors) > 1)
                 group = original.selected_segment(position)
                 child = original.selected_segment(position, (0,))
                 assert group.sha256 != child.sha256
                 source = NativeContextData.from_wire(sdk_source['full'])
                 expected_group = source.segments[position]
                 params = dict(turn=FieldCodec.encode(original.turn),
-                              request_id=original.require_request_id(), segment=position)
+                              request_id=original.require_request_id(), segment=position,
+                              record=FieldCodec.encode(page.reference(original)))
                 root_text = FieldCodec.decode(ContextSourceText,
                     await connection.request('context_recorded_segment', **params))
                 child_text = FieldCodec.decode(ContextSourceText,
@@ -122,14 +122,15 @@ async def read_original_context(
                 assert child_text.text != root_text.text
                 mixed_source = NativeContextData.from_wire(sdk_source['mixed_full'])
                 mixed_position = next(i for i, segment in enumerate(mixed_original.segments)
-                                      if segment.kind == 'transcript' and len(segment.contributors) > 1)
+                                      if segment.kind is TranscriptSegment and len(segment.contributors) > 1)
                 mixed_group = mixed_original.selected_segment(mixed_position)
                 assert len(mixed_group.requested_parts()) == 1
                 assert any(part.public_text_recorded for part in mixed_group.recorded_parts())
                 mixed_text = FieldCodec.decode(ContextSourceText,
                     await connection.request('context_recorded_segment',
                         turn=FieldCodec.encode(mixed_original.turn),
-                        request_id=mixed_original.require_request_id(), segment=mixed_position))
+                        request_id=mixed_original.require_request_id(), segment=mixed_position,
+                        record=FieldCodec.encode(page.reference(mixed_original))))
                 assert mixed_text.text == mixed_source.segments[mixed_position].public_text()
                 assert 'Authored transformed SDK part.' in mixed_text.text
                 assert mixed_text.text != root_text.text
@@ -180,8 +181,7 @@ async def run(root, sdk_source_path=None, *, package: VerifiedNativePackage):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
-    parser.add_argument("--native-cache", type=Path, default=StorageRule.native_cache)
     parser.add_argument("--sdk-source", type=Path, help="Borrow an already completed original SDK capture without rerunning it")
     args = parser.parse_args()
     asyncio.run(run(args.root.resolve(), args.sdk_source,
-                    package=VerifiedNativePackage.from_environment(args.native_cache)))
+                    package=VerifiedNativePackage.acquire(pinned_native_package())))

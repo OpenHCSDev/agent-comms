@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 from .cli_result import CliResult
 from .field_codec import FieldCodec, SingleFieldValue
-from .locked_store import LockedStore, RootFile
+from .locked_store import DurableFile, LockedStore
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -22,7 +22,7 @@ class LedgerDocument(SingleFieldValue, CliResult):
     entries: dict[str, object]
 
 @dataclass(frozen=True, slots=True)
-class SharedLedger(RootFile, ThreadOwnedState, LockedStore[LedgerDocument]):
+class SharedLedger(DurableFile, ThreadOwnedState, LockedStore[LedgerDocument]):
     """One free-form JSON document; no in-memory mirror or closed value family."""
 
     filename: ClassVar[str] = "ledger.json"

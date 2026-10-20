@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import typing
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -12,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms import field_codec
 
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
@@ -29,7 +27,19 @@ from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, projected
+from .field_codec import (
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    projected,
+    Differs,
+    PresenceExclude,
+    WatchPaths,
+    WatchViews,
+    WireExclude,
+    WireInline,
+    WireOmitDefault,
+)
 from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
@@ -92,7 +102,7 @@ if TYPE_CHECKING:
     from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
-    from .registry_provenance import RegistryProvenance
+    from .registry_provenance import DeletedThread, RegistryProvenance
     from .ui_model.observation import ThreadsObserved
 
 
@@ -513,13 +523,13 @@ class BusPresentation:
 class ChannelView(ToolResult):
     """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
 
-    channel: typing.Annotated[Channel, field_codec.WireInline(True)]
+    channel: Annotated[Channel, WireInline()]
     members: tuple[str, ...]
     last_activity: float = 0
     last_user_input: float = 0
     pinned_members: frozenset[str] = frozenset()
-    active_agents: typing.Annotated[int, field_codec.WireExclude(True)] = field(default=0)
-    registered_agents: typing.Annotated[int, field_codec.WireExclude(True)] = field(default=0)
+    active_agents: Annotated[int, WireExclude()] = 0
+    registered_agents: Annotated[int, WireExclude()] = 0
 
     @classmethod
     def roster(cls, snapshot: RegistrySnapshot, channels: Iterable[Channel],
@@ -597,11 +607,11 @@ class UncountedRead(InboxRead):
 class ThreadRecord(CliResult):
     """A thread's wire record; every reader of one thread writes these fields from here."""
 
-    thread: typing.Annotated[Thread, field_codec.WireInline(True)]
+    thread: Annotated[Thread, WireInline()]
     status: Annotated[ThreadStatus, ThreadStatusName]
-    activity: typing.Annotated[ActivityData, field_codec.PresenceExclude(True)]
+    activity: Annotated[ActivityData, PresenceExclude()]
     goal_execution: ThreadGoalExecution
-    pending: typing.Annotated[InboxCount, field_codec.WireOmitDefault(True)] = field(
+    pending: Annotated[InboxCount, WireOmitDefault()] = field(
         default=UncountedInbox(), kw_only=True
     )
 
@@ -640,12 +650,10 @@ class ThreadRecord(CliResult):
 
 @dataclass(frozen=True, slots=True)
 class ThreadView(ThreadRecord):
-    activity: typing.Annotated[ObservedActivity, field_codec.PresenceExclude(True)]
-    runtime: typing.Annotated[RuntimeInfo, field_codec.PresenceExclude(True)]
+    activity: Annotated[ObservedActivity, PresenceExclude()]
+    runtime: Annotated[RuntimeInfo, PresenceExclude()]
     last_seen: float
-    binding: typing.Annotated[ThreadOwnerBinding, field_codec.PresenceExclude(True)] = field(
-        default=UnavailableThreadOwnerBinding()
-    )
+    binding: Annotated[ThreadOwnerBinding, PresenceExclude()] = UnavailableThreadOwnerBinding()
 
     @classmethod
     def roster(
@@ -681,7 +689,7 @@ class ThreadView(ThreadRecord):
         return ordinary
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        if self.thread.turn_record.read().executing:
+        if self.thread.turn_record.executing:
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 
@@ -778,7 +786,7 @@ class CoordinationSnapshot:
 
 
 def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]], *views: type[RevisionView]):
-    return field_codec.WatchPaths(paths), field_codec.WatchViews(views)
+    return WatchPaths(paths), WatchViews(views)
 
 
 class ReadState:
@@ -796,11 +804,41 @@ class NoRevision(ReadState):
     __slots__ = ()
 
 
+# typing evaluates class annotations with the class namespace as globals, so a
+# lambda written inside one cannot see this module; named functions can.
+def bus_route_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return BusRouteCounts.source_paths(views.bus.log.path.parent)
+
+
+def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
+
+
+def goal_wait_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return GoalWaits.source_paths(views.root)
+
+
+def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return (relationships.RelationshipStore.path_in(views.root),)
+
+
+def notification_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return CoordinationStore.source_paths(views.root)
+
+
+def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return ExternalTranscript.source_paths(views.root)
+
+
+def expiry_period_changed(before: int, now: int) -> bool:
+    return before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds
+
+
 @dataclass(frozen=True, slots=True)
 class WireRevision(ReadState):
     """One observation of every Comms store a view derives from, by name."""
 
-    registry: typing.Annotated[
+    registry: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
             lambda views: (views.registry.store.path,),
@@ -809,88 +847,67 @@ class WireRevision(ReadState):
             NotificationsView,
         ),
     ]
-    catalog: typing.Annotated[
+    catalog: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
             lambda views: (views.channels.catalog.path,), *STATUS_SOURCE, RegistrationsView
         ),
     ]
-    bus_log: typing.Annotated[
+    bus_log: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.bus.log.path,), *STATUS_SOURCE, BusSourceView),
     ]
-    bus_routes: typing.Annotated[
+    bus_routes: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(
-            lambda views: BusRouteCounts.source_paths(views.bus.log.path.parent),  # type: ignore[has-type]
-            StoresView,
-            SidebarView,
-        ),
+        *revision_source(bus_route_paths, StoresView, SidebarView),
     ]
-    history: typing.Annotated[
+    history: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.bus.history.path,), *STATUS_SOURCE),
     ]
-    activity: typing.Annotated[
+    activity: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.agents.activity._path,), *STATUS_SOURCE),
     ]
-    runtime_info: typing.Annotated[
+    runtime_info: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.agents.runtime_info.path,), *STATUS_SOURCE),
     ]
-    work_room: typing.Annotated[
+    work_room: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(
-            lambda views: RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root),
-            *STATUS_SOURCE,
-        ),
+        *revision_source(room_ledger_paths, *STATUS_SOURCE),
     ]
-    reads: typing.Annotated[
+    reads: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.bus.reads.path,), *STATUS_SOURCE, NotificationsView),
     ]
-    native_unread: typing.Annotated[
+    native_unread: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
             lambda views: (views.transcript_reads.index_path,), StoresView, SidebarView
         ),
     ]
-    goal_waits: typing.Annotated[
+    goal_waits: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: GoalWaits.source_paths(views.root), *STATUS_SOURCE),
+        *revision_source(goal_wait_paths, *STATUS_SOURCE),
     ]
-    relationships: typing.Annotated[
+    relationships: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(
-            lambda views: (relationships.RelationshipStore.path_in(views.root),), *STATUS_SOURCE
-        ),
+        *revision_source(relationship_paths, *STATUS_SOURCE),
     ]
-    notifications: typing.Annotated[
+    notifications: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(
-            lambda views: CoordinationStore.source_paths(views.root),
-            *STATUS_SOURCE,
-            NotificationsView,
-        ),
+        *revision_source(notification_paths, *STATUS_SOURCE, NotificationsView),
     ]
-    external_transcripts: typing.Annotated[
+    external_transcripts: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(
-            lambda views: ExternalTranscript.source_paths(views.root),
-            StoresView,
-            ExternalTranscriptsView,
-        ),
+        *revision_source(external_transcript_paths, StoresView, ExternalTranscriptsView),
     ]
     # Notifications change once per expiry period, not per tick.
-    expiry_tick: typing.Annotated[
+    expiry_tick: Annotated[
         int,
-        field_codec.WatchViews((NotificationsView,)),
-        field_codec.Differs(
-            lambda before, now: (
-                before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds
-            )
-        ),
+        WatchViews((NotificationsView,)),
+        Differs(expiry_period_changed),
     ]
 
     expiry_seconds: ClassVar[int] = 30
@@ -901,7 +918,7 @@ class WireRevision(ReadState):
             **{
                 plan.name: ()
                 for plan in FieldCodec.field_plans(cls)
-                if field_codec.WatchPaths.single(plan.annotation)
+                if WatchPaths.single(plan.annotation)
             },
             expiry_tick=0,
         )
@@ -912,7 +929,7 @@ class WireRevision(ReadState):
         return {
             plan.name: source.value(views)
             for plan in FieldCodec.field_plans(cls)
-            for source in field_codec.WatchPaths.single(plan.annotation)
+            for source in WatchPaths.single(plan.annotation)
         }
 
     @classmethod
@@ -931,7 +948,7 @@ class WireRevision(ReadState):
                 and not self.changed_since(BusSourceView(), earlier))
 
     def changed_threads(self, previous: ThreadsObserved, comms: Comms,
-                        activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
+                        activity: Mapping[str, ObservedActivity | DeletedThread]) -> frozenset[str]:
         """Attribute changes using the retained observation and existing route rows."""
         earlier = previous.revision
         names = previous.results.keys()
@@ -991,9 +1008,9 @@ class WireRevision(ReadState):
     def changed_before(self, view: RevisionView, later: WireRevision) -> bool:
         """Whether any source feeding `view` differs, by the view's comparison."""
         return any(
-            plan.setting(field_codec.Differs, view.differs)(
+            plan.setting(Differs, view.differs)(
                 getattr(self, plan.name), getattr(later, plan.name)
             )
             for plan in FieldCodec.field_plans(type(self))
-            if isinstance(view, plan.setting(field_codec.WatchViews, ()))
+            if isinstance(view, plan.setting(WatchViews, ()))
         )

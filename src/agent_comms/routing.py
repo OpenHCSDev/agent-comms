@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import typing
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Annotated, TYPE_CHECKING
 
-from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import DMDisplayScope, MessageDisplayScope, ReadCursor
@@ -52,9 +50,9 @@ class MessageRoute:
 class TurnRouting:
     requests: tuple[MessageReference, ...] = ()
     reply: MessageRoute | None = None
-    publications: typing.Annotated[
-        tuple[MessageReference, ...], field_codec.WireOmitDefault(True)
-    ] = field(default=())
+    publications: Annotated[
+        tuple[MessageReference, ...], WireOmitDefault()
+    ] = ()
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)

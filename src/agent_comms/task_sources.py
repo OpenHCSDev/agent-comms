@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
-from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .thread_identity import (
@@ -322,7 +320,7 @@ class ScopedTaskDeclaration(TaskAttachment):
     """The source and its history; each author type decides whether work may start."""
 
     scope: TaskScope
-    change: typing.Annotated[TaskChange, field_codec.WireOmitDefault(True)] = field(
+    change: Annotated[TaskChange, WireOmitDefault()] = field(
         default_factory=OriginalTaskChange
     )
     retains_authored_task = True
@@ -424,7 +422,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     def require_publication(self, sender, registry, original_source):
         author = registry.require(sender)
         author.turn_record.read().require_current(
-            registry.claimed_generations[sender], author.turn_generation,
+            registry.claim_generation(sender), author.turn_generation,
         )
         author.turn_record.read().require_turn(self.source_turn_id)
         self.require_emission(author)

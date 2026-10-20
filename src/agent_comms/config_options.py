@@ -415,10 +415,10 @@ class SessionConfigOptions(ConfigOptions):
         settings = self.stored_settings(thread)
         if self.settings_in_use.get(session_id, settings) == settings:
             return
-        inbox = await self.effects.turns.active_backend_inbox(session_id)
-        if inbox is not None:
+        turn = await self.effects.turns.active_backend_turn(session_id)
+        if turn.is_open:
             self.settings_in_use[session_id] = settings
-            inbox.put_nowait(settings)
+            turn.send(settings)
 
     async def apply_stored_settings(self, session_id: str) -> None:
         """Apply execution state without discovering presentation catalogs."""

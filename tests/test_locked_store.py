@@ -92,6 +92,17 @@ def event():
     return multiprocessing.get_context("spawn").Event()
 
 
+def _writer_refused(path):
+    with pytest.raises(BlockingIOError), _store_lock(path, blocking=False):
+        pytest.fail("writer entered during reader")
+
+
+def assert_writer_excluded(path):
+    """Probe another lock owner, not an illegal upgrade of the caller's read."""
+    with process(_writer_refused, path):
+        pass
+
+
 def test_abstract_parent_and_real_adopter(tmp_path):
     @dataclass(frozen=True, slots=True)
     class AbstractDocument(LockedStore[RuntimeInfoDocument]):

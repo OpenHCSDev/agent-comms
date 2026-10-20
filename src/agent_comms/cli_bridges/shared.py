@@ -4,21 +4,20 @@ from __future__ import annotations
 import argparse
 import asyncio
 import builtins
-import dataclasses
+import io
 import json
 import os
 import signal
 import sys
 import traceback
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar
-
+from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar, TextIO
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -51,6 +50,7 @@ from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
+from ..locked_store import RegistryFile
 from .monitor import (
     MonitorAttachment,
     MonitorPeer,
@@ -82,8 +82,8 @@ class DeclaredOptions:
 @dataclass(frozen=True)
 class Binding(TypedTable):
     root: str
-    bus: typing.Annotated[str, field_codec.WireName("bus_thread")]
-    thread: typing.Annotated[str, field_codec.WireName("session")]
+    bus: Annotated[str, field_codec.WireName("bus_thread")]
+    thread: Annotated[str, field_codec.WireName("session")]
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -185,7 +185,7 @@ class ReceivingMonitor(MonitorEvidence):
                 or any(part.sender != message.sender for part in parts)):
             with bridge.db:
                 replace(delivery, monitor=MismatchedMonitor('Observed parts do not equal the original message')).upsert(bridge.db)
-            print(f'Monitor parts mismatch; message remains pending: {delivery.id}', file=sys.stderr, flush=True)
+            bridge.log(f'Monitor parts mismatch; message remains pending: {delivery.id}')
             return
         await replace(delivery, monitor=record).finish(bridge, DeliveredOutcome)
 
@@ -203,8 +203,8 @@ class ObservedMonitor(MonitorEvidence):
 
 @dataclass(frozen=True)
 class ObservedPart(TypedTable):
-    id: typing.Annotated[str, Column(primary_key=True)]
-    number: typing.Annotated[int, Column(primary_key=True)]
+    id: Annotated[str, Column(primary_key=True)]
+    number: Annotated[int, Column(primary_key=True)]
     sender: str
     body: str
     record_id: str
@@ -232,9 +232,9 @@ class DeliveryRow(TypedTable):
             f'ORDER BY {cls.sequence_sql} DESC LIMIT 1'))
         return latest[0].message.reference if latest else None
 
-    id: typing.Annotated[str, Column(primary_key=True)]
+    id: Annotated[str, Column(primary_key=True)]
     payload: str
-    outcome: typing.Annotated[type[Outcome], Column(index=True)]
+    outcome: Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     @cached_property
@@ -411,28 +411,26 @@ class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
 @dataclass(frozen=True, kw_only=True)
 class Send(Operation):
     help = "Send to a thread (DM), #channel, or #all"
-    sender: typing.Annotated[str, field_codec.Argument(flags=("--from",))] = dataclasses.field(
-        default=""
-    )
-    target: typing.Annotated[str, field_codec.Argument(flags=("--to",))]
-    body: typing.Annotated[str, field_codec.Argument(flags=("--body",))]
-    type: typing.Annotated[
+    sender: Annotated[str, field_codec.Argument(flags=("--from",))] = ""
+    target: Annotated[str, field_codec.Argument(flags=("--to",))]
+    body: Annotated[str, field_codec.Argument(flags=("--body",))]
+    type: Annotated[
         builtins.type[messages.MessageKind],
         field_codec.Editor(ChoiceTargetField),
         field_codec.Argument(
             flags=("--type",), options={"choices": messages.SendableMessageKind.names()}
         ),
-    ] = dataclasses.field(default=messages.InfoKind)
-    role: typing.Annotated[
+    ] = messages.InfoKind
+    role: Annotated[
         builtins.type[messages.SendableRole], field_codec.Argument(flags=("--role",))
-    ] = dataclasses.field(default=messages.ConversationRole)
-    report: typing.Annotated[
+    ] = messages.ConversationRole
+    report: Annotated[
         SendReport,
         field_codec.Argument(
             flags=("--report",),
             options={"help": "Change report fields as a JSON object", "type": FieldCodec.parse},
         ),
-    ] = dataclasses.field(default=MissingReport())
+    ] = MissingReport()
 
     async def execute(self, bridge: CliBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
@@ -467,7 +465,7 @@ class Watch(Inbox):
 
 @dataclass(frozen=True, kw_only=True)
 class Serve(Watch):
-    owner: typing.Annotated[
+    owner: Annotated[
         ProcessIdentity,
         field_codec.Argument(flags=("--owner",), options={"type": FieldCodec.parse}),
     ]
@@ -511,6 +509,27 @@ class IncomingFrame(ABC):
         return (f'Comms in · {self.message.sender} ({origin})\n'
                 f'{self.message.body}\nMessage ID: {self.message.message_id}')
 
+class BridgeLog(io.TextIOBase):
+    """The bridge process's stderr, including tracebacks and partial print writes."""
+
+    def __init__(self, stream: TextIO):
+        self.stream = stream
+        self.at_line_start = True
+
+    def write(self, text: str) -> int:
+        for line in text.splitlines(keepends=True):
+            if self.at_line_start:
+                self.stream.write(datetime.now().astimezone().isoformat(timespec='milliseconds') + ' ')
+            self.stream.write(line)
+            self.at_line_start = line.endswith('\n')
+        return len(text)
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+    def fileno(self) -> int:
+        return self.stream.fileno()
+
 
 class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     """Core delivery and lifetime shared by CLI-specific transports."""
@@ -535,7 +554,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def registered_watch(self, operation: Inbox) -> None:
         from agent_comms.registration import Registration
         registry = await asyncio.to_thread(
-            Registration, Path(self.binding.root) / 'registry.json')
+            Registration, RegistryFile.path_in(Path(self.binding.root)))
         with ExitStack() as endpoint:
             await self.comms.bus.when_open(lambda: endpoint.enter_context(
                 registry.external_process(self.binding.bus, ProcessIdentity.capture(os.getpid()))))
@@ -559,6 +578,10 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return '\n'.join((f'Comms out · {message.sender} → {message.target}',
                           message.body, f'Message ID: {message.message_id}', *result.notices))
 
+    @staticmethod
+    def log(text: str) -> None:
+        print(text, file=sys.stderr, flush=True)
+
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
@@ -575,12 +598,13 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         result = await self.deliver(message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
-        print(f'{result.declared_name}: {message.message_id} from {message.sender}', file=sys.stderr, flush=True)
+        self.log(f'{result.declared_name}: {message.message_id} from {message.sender}')
 
     async def watch(self) -> None:
         await self.prepare_delivery()
-        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
-        await self.comms.bus.when_open(self.watch_child)
+        self.log(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay')
+        while True:
+            await self.comms.bus.when_open(self.watch_child)
 
     async def watch_child(self) -> None:
         """One child stream; the bus owns waiting and its next attempt after a hold."""
@@ -593,6 +617,11 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         try:
             async for item in WatchLine.stream(child):
                 await item.handle(self, child)
+            outcome = await child.wait()
+            if outcome.interrupted:
+                self.log(f'Core watch PID {child.pid} {outcome.summary}; '
+                         'reopening its subscription, retaining delivery attempts.')
+                return
             await raise_child_exit(child, '')
         finally:
             await child.stop()
@@ -612,7 +641,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
                 ).format()
             )
-            print(failure, file=sys.stderr, flush=True)
+            self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
 
@@ -785,10 +814,11 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         print(self.encode(self.sent_text(result)), flush=True)
 
     async def report_failure(self, text: str) -> None:
-        print(text, file=sys.stderr, flush=True)
+        self.log(text)
 
 
 def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptions) -> None:
+    sys.stderr = BridgeLog(sys.stderr)
     os.umask(0o077)
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:

@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-import typing
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 from uuid import uuid4
 
-from agent_comms import field_codec
 
 from .cli_result import CliResult
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireName
 from .harness_install import Harness
 from .transcript_events import TRUNCATED, ImportedInput, ImportedMessage, ImportedRequest
 from .turn_context import CodexRolloutProvenance, ContextSourceText
@@ -44,7 +42,7 @@ class ImportLimits:
 class ImportedSessionMetadata:
     """Original saved import observation; references grant reading, never execution."""
 
-    harness: typing.Annotated[type[Harness], field_codec.WireName("format")]
+    harness: Annotated[type[Harness], WireName("format")]
     source_id: str
     messages_seen: int
     messages_imported: int

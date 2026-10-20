@@ -4,7 +4,7 @@ Full inputs derive membership from existing execution claims. This relation is
 only for triage, before an execution exists. It contains no handling state.
 """
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 
 from .coordination_errors import IdentityConflict
@@ -16,7 +16,7 @@ from .typed_table import Column, TypedTable
 class TriageNativeSources(
     NativeRuntimeTable, TypedTable, declared_name="native_runtime_triage_sources"
 ):
-    input_id: typing.Annotated[
+    input_id: Annotated[
         str, Column(primary_key=True, references=(NativeRuntimeInput, "input_id"))
     ]
     assignment_ids: tuple[str, ...]

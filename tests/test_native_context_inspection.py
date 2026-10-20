@@ -13,8 +13,13 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.cli_commands import ContextCliCommand
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
+from agent_comms.turn_context import (
+    CompactionSummarySegment, CoordinationSegment, InjectionMessageSegment, SystemLayerSegment,
+    ToolCatalogSegment, TranscriptSegment, UserFollowupSegment, UserInputSegment,
+)
 from agent_comms.threads import Thread
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, RuntimeInvocable, SetGoalAction, StandbyGoalAction
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
@@ -165,7 +170,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                         'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
                         'change': FieldCodec.encode(CorrectionTaskChange(private_choice.reference)),
                     })
-                previous = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
+                previous = tuple(ContextCliCommand(thread=thread.name).manifests(owner._comms))
                 image = {'mimeType': 'image/png',
                     'data': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='} if index == 1 else None
                 original = await observer.submit(text, image=image,
@@ -173,11 +178,13 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                 originals.append(original)
                 assert isinstance(original.origin.require_human().goal, PresentGoalCheckpoint)
                 assert not failures, failures
-                manifests = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
+                manifests = tuple(reversed(tuple(
+                    ContextCliCommand(thread=thread.name).manifests(owner._comms))))
                 assert len(manifests) > len(previous)
                 manifest = manifests[-1]
                 assert {segment.kind for segment in manifest.segments} >= {
-                    'system_layer', 'transcript', 'compaction_summary', 'injection_message', 'tool_catalog'}
+                    SystemLayerSegment, TranscriptSegment, CompactionSummarySegment,
+                    InjectionMessageSegment, ToolCatalogSegment}
                 assert all(segment.provenance for segment in manifest.segments)
                 assert manifest.counter == 'pi.estimateTokens'
                 selected = await cli('--turn', str(manifest.turn.occurrence.generation))
@@ -191,7 +198,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(
             # an original goal permit owns this turn. The unchanged CLI preview
             # above covers declared goal contributors; never inject new bytes
             # merely to satisfy this manual-input oracle.
-            assert {part.kind for part in contributors} >= {'coordination', 'user_input', 'user_followup'}
+            assert {part.kind for part in contributors} >= {
+                CoordinationSegment, UserInputSegment, UserFollowupSegment}
             assert all(part.provenance for part in contributors)
             stored = stored_inputs(owner._comms.root)
             terminals = tuple(stored.lookup(original.key) for original in originals)

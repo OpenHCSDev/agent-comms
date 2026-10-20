@@ -2,34 +2,53 @@
 
 from __future__ import annotations
 
-import typing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-from agent_comms import field_codec
-
-from .field_codec import MalformedRecord
+from typing import Annotated, TYPE_CHECKING
+from .field_codec import MalformedRecord, boundary_decoder, WireName
+from abc import ABC, abstractmethod
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
+    from .native_child import PiSessionChild
     from .native_entries import NativeEvidenceRead
+    from .pi_native_backend import PersistentPiSession
 
 
 class NativeReopenError(ValueError):
     """Saved session cannot be safely reloaded; no provider input may start."""
 
 
+class SessionRetention(ABC):
+    """Only an attested saved identity can return a child to its session owner."""
+
+    @classmethod
+    @boundary_decoder
+    def from_optional(cls, identity: NativeSessionIdentity | None) -> SessionRetention:
+        return NoSessionRetention() if identity is None else identity
+
+    @abstractmethod
+    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool: ...
+
+
+class NoSessionRetention(SessionRetention):
+    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+        return False
+
+
 @dataclass(frozen=True)
-class NativeSessionIdentity:
+class NativeSessionIdentity(SessionRetention):
     """SessionManager's observed saved-session identity."""
 
-    session_id: typing.Annotated[str, field_codec.WireName("sessionId")]
-    session_file: typing.Annotated[str, field_codec.WireName("sessionFile")]
+    session_id: Annotated[str, WireName("sessionId")]
+    session_file: Annotated[str, WireName("sessionFile")]
 
     def __post_init__(self):
         if not self.session_id or not Path(self.session_file).is_absolute():
             raise NativeReopenError("Saved native session identity is incomplete")
+
+    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+        return session.retain(child, self)
 
     @property
     def path(self) -> Path:

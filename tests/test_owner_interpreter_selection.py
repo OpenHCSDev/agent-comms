@@ -33,7 +33,7 @@ def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path,
             threads=threads, statuses={name: RunningThreadStatus() for name in threads},
             last_seen={name: 1.0 for name in threads}, aliases={},
             owner_generations={name: 1 for name in threads},
-            claimed_generations={name: 1 for name in threads},
+            _claimed_generations={name: 1 for name in threads},
             by_lookup={thread.incarnation.lookup: thread for thread in threads.values()},
         )
         selections = tuple(OwnerRestartSelection.capture(snapshot, name) for name in threads)

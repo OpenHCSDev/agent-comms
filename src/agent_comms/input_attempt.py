@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
-import typing
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
-from agent_comms import field_codec
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    NullMember,
+    PublicExclude,
+    WireName,
+    WireOmitDefault,
+    WireRequired,
+)
 from .input_origin import (
     InputDelivery,
     InputOrigin,
@@ -156,6 +162,34 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         return UndeliveredInput()
 
 
+class InputDeliveryScope(DeclaredFamily, affix="InputDeliveryScope"):
+    """The queue evidence available to this delivery read, not an input outcome."""
+
+    owner_queue: ClassVar[bool] = False
+
+    @abstractmethod
+    def historical_notice(self, row: StoredInput) -> bool:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class UnobservedInputDeliveryScope(NullMember, InputDeliveryScope, declared_name="unobserved"):
+    def historical_notice(self, row: StoredInput) -> bool:
+        return row.notice_dismissed
+
+
+@dataclass(frozen=True)
+class OwnerQueueInputDeliveryScope(InputDeliveryScope, declared_name="owner_queue"):
+    keys: frozenset[str]
+    owner_queue: ClassVar[bool] = True
+
+    def historical_notice(self, row: StoredInput) -> bool:
+        return row.key not in self.keys
+
+
+UNOBSERVED_DELIVERY_SCOPE = UnobservedInputDeliveryScope()
+
+
 @dataclass(frozen=True)
 class UnresolvedInput:
     """An unresolved input as a reply shows it; its owner, claim and origin stay in the store."""
@@ -163,11 +197,11 @@ class UnresolvedInput:
     sequence: int | None
     target: str
     text: str
-    input_id: typing.Annotated[str, field_codec.WireName("inputId")]
+    input_id: Annotated[str, WireName("inputId")]
     status: str
-    reviewed_for_goals: typing.Annotated[
-        tuple[str, ...], field_codec.WireName("reviewedForGoals"), field_codec.WireOmitDefault(True)
-    ] = field(default=())
+    reviewed_for_goals: Annotated[
+        tuple[str, ...], WireName("reviewedForGoals"), WireOmitDefault()
+    ] = ()
 
     @classmethod
     def of(cls, row: StoredInput) -> UnresolvedInput:
@@ -181,7 +215,7 @@ class UnresolvedInput:
 class HistoricalInput(UnresolvedInput):
     """An earlier notice of an unresolved input, shown with whether the owner dismissed it."""
 
-    notice_dismissed: typing.Annotated[bool, field_codec.WireName("noticeDismissed")] = field(
+    notice_dismissed: Annotated[bool, WireName("noticeDismissed")] = field(
         kw_only=True
     )
 
@@ -211,17 +245,17 @@ class StoredInput(InputAttempt):
     key: str
     sequence: int | None
     owner: str
-    claim_scope: typing.Annotated[int, field_codec.WireName("admission")]
+    claim_scope: Annotated[int, WireName("admission")]
     target: str
     source_text: str
-    origin: typing.Annotated[InputOrigin, field_codec.WireOmitDefault(True)] = field(
+    origin: Annotated[InputOrigin, WireOmitDefault()] = field(
         default_factory=UnattributedInputOrigin, kw_only=True
     )
-    notice_dismissed: typing.Annotated[bool, field_codec.WireOmitDefault(True)] = field(
+    notice_dismissed: Annotated[bool, WireOmitDefault()] = field(
         default=False, kw_only=True
     )
-    goal_reviews: typing.Annotated[
-        dict[str, GoalInputDecision], field_codec.WireOmitDefault(True)
+    goal_reviews: Annotated[
+        dict[str, GoalInputDecision], WireOmitDefault()
     ] = field(default_factory=dict, kw_only=True)
 
     def __post_init__(self) -> None:
@@ -264,11 +298,6 @@ class StoredInput(InputAttempt):
     def bus_sequences_through(self, through: int) -> tuple[int, ...]:
         """Return this input's bus sequence only if it is within the requested limit."""
         return (self.sequence,) if self.sequence is not None and self.sequence <= through else ()
-
-    def historical_notice(self, awaiting_keys: frozenset[str] | None) -> bool:
-        if awaiting_keys is None:
-            return self.notice_dismissed
-        return self.key not in awaiting_keys
 
     def reviewed_for_goal(self, goal_id: str) -> bool:
         return goal_id in self.goal_reviews
@@ -320,13 +349,13 @@ class ReservedInput(RecoverableUnboundInput):
 @dataclass(frozen=True)
 class SentInput(StoredInput):
     has_native_binding = True
-    turn_id: typing.Annotated[str, field_codec.PublicExclude(True), field_codec.WireRequired(True)]
-    native_id: typing.Annotated[
-        str, field_codec.PublicExclude(True), field_codec.WireRequired(True)
+    turn_id: Annotated[str, PublicExclude(), WireRequired()]
+    native_id: Annotated[
+        str, PublicExclude(), WireRequired()
     ]
     # The native session owns the sent text; this row only proves which text it was.
-    sent_digest: typing.Annotated[
-        TextDigest, field_codec.PublicExclude(True), field_codec.WireRequired(True)
+    sent_digest: Annotated[
+        TextDigest, PublicExclude(), WireRequired()
     ]
 
     def __post_init__(self) -> None:

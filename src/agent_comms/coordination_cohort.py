@@ -10,10 +10,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 
-from agent_comms import field_codec
 from agent_comms.assignment_states import AssignmentState, PendingNotification
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.cohort_schema import (
@@ -36,7 +35,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations, Parti
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 
-from .field_codec import MalformedRecord
+from .field_codec import MalformedRecord, WireName
 
 _LOG = logging.getLogger(__name__)
 
@@ -47,9 +46,9 @@ class AcceptedCohort:
     wire_seq: int
     message_id: str
     member_count: int
-    assignment_count: typing.Annotated[int, field_codec.WireName("claim_count")]
+    assignment_count: Annotated[int, WireName("claim_count")]
     accepted_at_ms: int
-    assignments: typing.Annotated[tuple[WakeAssignment, ...], field_codec.WireName("claims")]
+    assignments: Annotated[tuple[WakeAssignment, ...], WireName("claims")]
 
 
 def _assignment_id(root: str, seq: int, lookup: str) -> str:

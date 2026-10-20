@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
 from itertools import chain
@@ -13,28 +14,50 @@ from typing import TYPE_CHECKING
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
-from .goal_actions import (GoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
-                           SentBackOrderGoalAction)
+from .goal_actions import (
+    GoalAction,
+    GoalActionContext,
+    GoalPrecondition,
+    RuntimeInvocable,
+    SentBackOrderGoalAction,
+)
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait, RecordedGoalWait, StandbyReview
+from .goal_waits import (
+    GoalInputReview,
+    GoalWait,
+    GoalWaits,
+    NoGoalWait,
+    RecordedGoalWait,
+    StandbyReview,
+)
 from .native_input_owner import GoalLaunchOwner
 from .registration import Registration
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
-    from .agent_events import GoalChanged
+    from .agent_events import GoalChange
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution, GoalWaitTarget
+    from .registry_document import RegistrySnapshot
+from .goal_presentation import (
+    GoalPublicationSnapshot,
+    GoalSnapshot,
+    GoalWaitTarget,
+    ThreadGoalExecution,
+)
 from .goals import Goal, GoalDeclaration
-from .input_attempt import ReservedInput, UnresolvedInput
+from .input_attempt import (
+    UNOBSERVED_DELIVERY_SCOPE,
+    InputDeliveryScope,
+    ReservedInput,
+    UnresolvedInput,
+)
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
-from .turn_lease import TurnCompletion
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
+from .turn_lease import TurnCompletion
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -81,7 +104,7 @@ class Goals:
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
-            private = self.root / "goal-private"
+            private = self.root / GoalAttemptStore.root_directory
             private.mkdir(mode=0o700, exist_ok=True)
             self.goal_store = GoalAttemptStore.initialize(private)
         return self.goal_store
@@ -121,7 +144,7 @@ class Goals:
         name: str,
         *,
         include_history: bool = False,
-        awaiting_keys: frozenset[str] | None = None,
+        scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
@@ -130,18 +153,18 @@ class Goals:
                 InputDispositions(self.root)
                 .unresolved(aliases)
                 .delivery_overview(
-                    aliases, include_history=include_history, awaiting_keys=awaiting_keys
+                    aliases, include_history=include_history, scope=scope
                 )
             )
 
     def dismiss_historical_inputs(
-        self, name: str, *, awaiting_keys: frozenset[str] | None = None
+        self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
         with _store_lock(self._wire_lock_path):
             aliases = self.registry.entry(name).entry.names
             return InputDispositions(self.root).dismiss_historical(
-                aliases, awaiting_keys=awaiting_keys
+                aliases, scope=scope
             )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> StandbyReview:
@@ -198,7 +221,7 @@ class Goals:
                     key,
                     message.seq,
                     thread.name,
-                    snapshot.claimed_generations[thread.name],
+                    snapshot.claim_generation(thread.name),
                     message.target,
                     message.body,
                 )
@@ -329,16 +352,16 @@ class Goals:
     def goal_execution(self, name: str) -> ThreadGoalExecution:
         return self._goal_snapshot(name).execution
 
-    def goal_changed(self, name: str, previous: GoalSnapshot | None) -> GoalChanged | None:
+    def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
         """Announce a durable change through S1's event vocabulary.
 
         Existing registry/history and wait persistence are the cross-process
         authority. Each observer supplies its last successfully published view.
         """
-        from .agent_events import GoalChanged
+        from .agent_events import GoalChanged, GoalUnchanged
 
         current = self.goal_snapshot(name)
-        return GoalChanged(current) if current != previous else None
+        return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
 
     def goal_snapshot(self, name: str) -> GoalSnapshot:
         """Read current goal and its scheduling projection as one owner snapshot."""
@@ -388,13 +411,26 @@ class Goals:
         *,
         actor: type = RuntimeInvocable,
     ) -> Result:
+        """Return the exact declaration written by this action."""
+        with self._updating_goal(name, action, actor=actor) as goal:
+            return goal
+
+    def update_goal_snapshot[Result: GoalDeclaration](
+        self, name: str, action: GoalAction[Result], *, actor: type,
+    ) -> GoalSnapshot:
+        """Return this publication and its schedule before another owner can change it."""
+        with self._updating_goal(name, action, actor=actor):
+            return self._goal_snapshot(name)
+
+    @contextmanager
+    def _updating_goal[Result: GoalDeclaration](
+        self, name: str, action: GoalAction[Result], *, actor: type,
+    ) -> Iterator[Result]:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
         with _store_lock(self._wire_lock_path):
-            return action.apply(
-                GoalActionContext(self, self.registry.require(name), actor)
-            )
+            yield action.apply(GoalActionContext(self, self.registry.require(name), actor))
 
     def block_goal_after_failed_turn(
         self,

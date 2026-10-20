@@ -3,7 +3,7 @@
 import hashlib
 import os
 import sqlite3
-import typing
+from typing import Annotated
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
@@ -24,8 +24,8 @@ class RouteAnnotationTable:
 
 @dataclass(frozen=True)
 class TranscriptRoute(RouteAnnotationTable, TypedTable):
-    session_file: typing.Annotated[str, Column(primary_key=True)]
-    entry_id: typing.Annotated[str, Column(primary_key=True)]
+    session_file: Annotated[str, Column(primary_key=True)]
+    entry_id: Annotated[str, Column(primary_key=True)]
     routing: TurnRouting
     without_rowid = True
 
@@ -38,7 +38,7 @@ class TranscriptRoute(RouteAnnotationTable, TypedTable):
 class InputDisplay(RouteAnnotationTable, TypedTable):
     """Owner-authored presentation for one native input; None text means internal."""
 
-    native_id: typing.Annotated[str, Column(primary_key=True)]
+    native_id: Annotated[str, Column(primary_key=True)]
     text: str | None
     routing: TurnRouting | None = None
     sent_text_digest: str | None = None
@@ -201,7 +201,7 @@ class TranscriptRoutes(StoreWriter):
         initial = registry.snapshot()
         incarnation = lease.identity.incarnation.resolved(initial)
         thread = RegistryOwner.capture_local(initial, incarnation.name).thread
-        if thread.turn_lease != lease.renamed(incarnation.name):
+        if thread.turn_lease != lease:
             raise RelationViolationError("Native publication has no current original turn")
         path = Path(thread.runtime.path)
         revision = FileRevision.capture(path)
@@ -219,7 +219,7 @@ class TranscriptRoutes(StoreWriter):
         with log.checked_read() as source, registry.store.reading_snapshot() as snapshot:
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
-            if current.turn_lease != lease.renamed(incarnation.name):
+            if current.turn_lease != lease:
                 raise RelationViolationError("Native publication turn lease changed")
             if (
                 current.runtime.read_key != thread.runtime.read_key

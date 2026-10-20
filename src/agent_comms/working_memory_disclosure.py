@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import re
-import typing
+from typing import Annotated
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from agent_comms import field_codec
 
@@ -49,9 +49,7 @@ class DisclosureState:
     segment_kind: type[ContextSegment]
     source: str
     neighbor: str
-    owner_rules: typing.Annotated[tuple[str, ...], field_codec.WireOmitDefault(True)] = field(
-        default=()
-    )
+    owner_rules: Annotated[tuple[str, ...], field_codec.WireOmitDefault()] = ()
 
     @classmethod
     def capture(cls, segment: ContextSegment, span: ContextSpan, question: type[SpanQuestion],

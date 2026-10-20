@@ -9,12 +9,11 @@ import asyncio
 import os
 import threading
 import time
-import typing
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar
 from uuid import uuid4
 
 from .activity import ActivityState
@@ -87,18 +86,18 @@ class HoldingRoomPhase(RoomPhase):
 
 @dataclass(frozen=True)
 class WorkPeak(TypedTable):
-    work: typing.Annotated[type[RoomWork], Column(primary_key=True)]
-    need: typing.Annotated[RoomNeed, Column(storage=JsonStorage)]
+    work: Annotated[type[RoomWork], Column(primary_key=True)]
+    need: Annotated[RoomNeed, Column(storage=JsonStorage)]
 
 
 @dataclass(frozen=True)
 class RoomClaim(TypedTable):
-    ticket: typing.Annotated[str, Column(primary_key=True)]
+    ticket: Annotated[str, Column(primary_key=True)]
     root: str
-    unit: typing.Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
-    process: typing.Annotated[ProcessIdentity, Column(storage=JsonStorage)]
-    work: typing.Annotated[tuple[type[RoomWork], ...], Column(storage=JsonStorage)]
-    phase: typing.Annotated[RoomPhase, Column(storage=JsonStorage)]
+    unit: Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
+    process: Annotated[ProcessIdentity, Column(storage=JsonStorage)]
+    work: Annotated[tuple[type[RoomWork], ...], Column(storage=JsonStorage)]
+    phase: Annotated[RoomPhase, Column(storage=JsonStorage)]
     at: float
 
 

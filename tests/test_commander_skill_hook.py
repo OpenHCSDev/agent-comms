@@ -31,8 +31,6 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
                 commander="fresh-commander",
                 root=bus,
                 state=tmp_path / "state",
-                board=tmp_path / "board.md",
-                narrative=tmp_path / "narrative.md",
                 repos=(),
                 worktrees=tmp_path / "worktrees",
                 scratch=tmp_path / "scratch",
@@ -102,6 +100,8 @@ def test_reread_is_due_every_hundred_thousand_context_tokens(tmp_path, monkeypat
     assert hook(skill, "SessionStart", usage(250_000))
     assert not hook(reread, "PostToolUse", usage(250_000), usage(349_999))
     assert hook(reread, "PostToolUse", usage(350_000))
+    # Compaction: the context shrinks below the mark, which was set before compaction.
+    assert hook(reread, "PostToolUse", usage(317_202))
     assert hook(skill, "SessionStart", usage(20_000))
     assert not hook(reread, "PostToolUse", usage(119_999))
     assert hook(reread, "PostToolUse", json.dumps({"type": "user", "message": {}}), usage(120_000))

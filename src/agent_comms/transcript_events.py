@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import json
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 from urllib.parse import quote
 
 from pydantic import JsonValue
 
-from agent_comms import field_codec
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireBind, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
 from .recorded_time import EventTime
@@ -368,11 +366,11 @@ class ToolStartTranscript(ToolTranscript):
             self.tool_call_id, EventTime.capture(self.timestamp), thread, problem)
 
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
-    tool: typing.Annotated[
+    tool: Annotated[
         tool_declaration.ToolDeclaration | None,
-        field_codec.WireOmitDefault(True),
-        field_codec.WireBind({"call_id": "tool_call_id"}),
-    ] = field(default=None)
+        WireOmitDefault(),
+        WireBind({"call_id": "tool_call_id"}),
+    ] = None
 
     @property
     def title(self) -> str:
@@ -419,9 +417,9 @@ class ToolEndTranscript(ToolTranscript):
 
     text: str = ""
     ok: bool = True
-    diff: typing.Annotated[ToolDiff | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    sent_message: typing.Annotated[SentTranscript | None, field_codec.WireOmitDefault(True)] = (
-        field(default=None)
+    diff: Annotated[ToolDiff | None, WireOmitDefault()] = None
+    sent_message: Annotated[SentTranscript | None, WireOmitDefault()] = (
+        None
     )
 
 

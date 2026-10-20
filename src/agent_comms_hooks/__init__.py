@@ -2,10 +2,9 @@
 
 Claude Code runs a hook on every prompt or tool call it is registered for, and
 importing agent_comms takes a second, so a hook's import path is the standard
-library only. Each program declares the events it answers and, when it reads
-one tool's input, that tool; the command that runs it is derived from the
-installed console scripts. Install writes Claude Code's settings from these
-declarations.
+library only. Each program declares the events it answers; the command that
+runs it is derived from the installed console scripts. Install writes Claude
+Code's settings from these declarations.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from importlib import import_module
 from importlib.metadata import entry_points
-from pathlib import Path
 from typing import ClassVar, Self, get_type_hints
 
 
@@ -50,15 +48,10 @@ class ClaudeHook(HookRecord):
 
     session_id: str
     hook_event_name: str
-    events: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def read(cls) -> Self:
-        hook = cls.decode(json.load(sys.stdin))
-        for kind in cls.__subclasses__():
-            if hook.hook_event_name in kind.events:
-                return kind(**{field.name: getattr(hook, field.name) for field in fields(hook)})
-        return hook
+        return cls.decode(json.load(sys.stdin))
 
     def warn(self, reason: str) -> None:
         print(
@@ -72,65 +65,12 @@ class ClaudeHook(HookRecord):
             )
         )
 
-    def deny(self, reason: str) -> None:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": self.hook_event_name,
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-        )
-
 
 @dataclass(frozen=True)
 class ClaudeTranscriptHook(ClaudeHook):
     """A hook that reads the session's transcript, which Claude Code names on every event."""
 
     transcript_path: str
-
-
-@dataclass(frozen=True)
-class ClaudeWorkspaceHook(ClaudeHook):
-    """A filesystem-aware hook resolves paths against the caller's actual directory."""
-
-    cwd: str
-
-    def resolve_path(self, value: str) -> Path:
-        path = Path(value).expanduser()
-        return (path if path.is_absolute() else Path(self.cwd) / path).resolve()
-
-
-class ClaudeStopHook(ClaudeHook):
-    """A Stop warning asks Claude Code to continue the turn, rather than end it."""
-
-    events = ("Stop",)
-
-    def warn(self, reason: str) -> None:
-        print(json.dumps({"decision": "block", "reason": reason}))
-
-
-@dataclass(frozen=True)
-class ToolInput(HookRecord):
-    """The input of one tool, as Claude Code passes it to a hook on that tool."""
-
-    tool: ClassVar[str]
-
-
-@dataclass(frozen=True)
-class BashInput(ToolInput):
-    tool = "Bash"
-    command: str
-
-
-@dataclass(frozen=True)
-class ClaudeBashHook(ClaudeWorkspaceHook):
-    """A hook on a Bash tool call, carrying the command line Claude is about to run."""
-
-    tool_input: BashInput
 
 
 class ClaudeHookProgram(ABC):
@@ -169,13 +109,3 @@ class ClaudeHookProgram(ABC):
     def entry(cls) -> dict[str, object]:
         """This program's entry in a Claude Code hook event's list."""
         return {"hooks": [{"type": "command", "command": cls.command()}]}
-
-
-class ClaudeToolHookProgram(ClaudeHookProgram):
-    """A program that reads one tool's input, so Claude Code runs it for that tool only."""
-
-    reads: ClassVar[type[ToolInput]]
-
-    @classmethod
-    def entry(cls) -> dict[str, object]:
-        return {"matcher": cls.reads.tool, **super().entry()}

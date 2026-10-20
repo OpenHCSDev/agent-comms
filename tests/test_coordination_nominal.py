@@ -116,7 +116,9 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
     from agent_comms.durable_turn import DurableTurn
     from agent_comms.owner_fence import prepare_fence_token
     from agent_comms.pi_events import PiEvent
+    from agent_comms.native_pi import NativeContextRecord
     from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
+    from native_proof_cases import emitted_context
 
     selected = []
     original_selection = DurableTurn.handlers_for
@@ -148,14 +150,17 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
                 expected_pointer_revision=pending.pointer_revision,
             )
         ).value
+        input_id = "a" * 32
         progress = DurableTurn(
-            store.attempts, started.fence, started.snapshot.pointer_revision, "input"
+            store.attempts, started.fence, started.snapshot.pointer_revision, input_id
         )
         from agent_comms.agent_events import PromptAccepted
 
         samples = [
             (PromptAccepted(), "prompt_accepted"),
-            (PiEvent.from_wire({"type": "context_committed", "inputId": "input"}), "model_running"),
+            (emitted_context(FieldCodec.encode(NativeContextRecord(
+                input_id, "isolated-session", "entry", 1, "0" * 64, 1,
+            ))), "model_running"),
         ]
         for event, expected in samples:
             await progress.dispatch(event)

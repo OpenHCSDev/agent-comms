@@ -16,6 +16,7 @@ from .native_input_record import NativeInputReference
 from .thread_identity import GenerationCounter
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .registry_document import RegistrySnapshot
+from .private_send_rules import RunningTurnRegistryCheck
 
 if TYPE_CHECKING:
     from .proven_source_coverage import ProvenSourceCoverage
@@ -23,6 +24,9 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CursorOwner(RegistryOwner):
+    """Record this started input; deciding whether tools may run belongs to its turn."""
+
+    check_type = RunningTurnRegistryCheck
     wire_root_id: str
     generation: int
 

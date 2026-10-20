@@ -19,7 +19,7 @@ from .acp_failure import NativeTurnOutcome
 from .thread_identity import ClaimedIdentity
 from .comms import Comms
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_request_progress
+from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .mro_dispatch import MroDispatch, handles
@@ -106,7 +106,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
-        manifest = await event.context.record(self.comms.bus.log, self.thread, self.turn_lease)
+        manifest = await event.context.record(self.comms.contexts, self.thread, self.turn_lease)
         self.runtime.agent.annotations.observe(self.session_id, manifest, event.context.values)
 
     @property
@@ -307,13 +307,21 @@ class TurnProgress(events.AgentEventConsumer):
                     )
                 )
             )
+            diagnostic = record_terminal_failure(
+                self.comms.root,
+                turn_id=self.turn_lease.turn_id,
+                thread=self.thread_name,
+                event=vars(terminal),
+                sequences=(),
+            )
             results = []
             for target in notice_targets:
                 prefix = "Request failed" if target in self.reply_targets else "Delivery failed"
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
-                    f"{prefix}: {terminal.text}",
+                    f"{prefix}: {terminal.text} "
+                    f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
                     AlertKind,
                     role=NoticeRole(),
                 ))

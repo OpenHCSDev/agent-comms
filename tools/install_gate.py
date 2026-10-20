@@ -25,7 +25,6 @@ import tarfile
 import tempfile
 import time
 import tomllib
-import typing
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager
@@ -99,7 +98,7 @@ class ExternalRecord(RecordMember):
 @dataclass(frozen=True)
 class WheelFiles(ExternalRecord):
     packages: tuple[str, ...]
-    force_include: typing.Annotated[dict[str, str], field_codec.WireName("force-include")] = field(
+    force_include: Annotated[dict[str, str], field_codec.WireName("force-include")] = field(
         default_factory=dict
     )
 
@@ -362,7 +361,7 @@ class SnapshotCopy(SnapshotHome):
 @dataclass(frozen=True)
 class RouteDocument:
     version: int
-    selection: typing.Annotated[ActiveRoute, field_codec.WireInline(True)]
+    selection: Annotated[ActiveRoute, field_codec.WireInline()]
 
     def require_current(self) -> None:
         if self.version != ActiveRoute.version:
@@ -921,14 +920,14 @@ class GateReport:
 
 @dataclass(frozen=True)
 class RepositoryAnswer(ExternalRecord):
-    name: typing.Annotated[str, field_codec.WireName("nameWithOwner")]
+    name: Annotated[str, field_codec.WireName("nameWithOwner")]
 
 
 @dataclass(frozen=True)
 class PullRequestAnswer(ExternalRecord):
-    head: typing.Annotated[str, field_codec.WireName("headRefOid")]
-    base: typing.Annotated[str, field_codec.WireName("baseRefOid")]
-    cross_repository: typing.Annotated[bool, field_codec.WireName("isCrossRepository")]
+    head: Annotated[str, field_codec.WireName("headRefOid")]
+    base: Annotated[str, field_codec.WireName("baseRefOid")]
+    cross_repository: Annotated[bool, field_codec.WireName("isCrossRepository")]
 
     def require_local(self) -> None:
         if self.cross_repository:

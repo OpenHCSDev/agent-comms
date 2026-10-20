@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal
 
 from .bus_activity_index import ChannelActivity
 from .bus_projection import AppendCheckpoint, BusAppendIndex, NoCheckpoint
+from .locked_store import PatternFile
 from .messages import Message
 from .read_basis import ChannelDisplayScope
 
@@ -63,12 +64,13 @@ class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
         opened.remember_append_checkpoint(index, projected)
         return projected
 
-class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
+class BusDisplayIndex(PatternFile, BusAppendIndex[DisplayCheckpoint]):
     record_type = DisplayCheckpoint
+    filename = f"bus_display_{DisplayCheckpoint.schema}_{{digest}}.json"
 
     def __init__(self, bus_path: Path, viewer: str):
         digest = hashlib.sha256(viewer.encode()).hexdigest()
-        path = bus_path.with_name(f"bus_display_{self.record_type.schema}_{digest}.json")
+        path = self.path_in(bus_path.parent, digest=digest)
         super().__init__(bus_path, path)
 
     def snapshot(self, opened: WireSnapshot, scopes: tuple[ChannelDisplayScope, ...]) -> DisplaySnapshot:

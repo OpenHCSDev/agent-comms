@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import typing
+from typing import Annotated
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
 
-from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -20,7 +19,7 @@ from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.execution_states import ExecutionState
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
@@ -50,10 +49,10 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
                 "selected owner has an unresolved execution; new claims remain pending"
             )
 
-    owner_lookup: typing.Annotated[str, Column(primary_key=True)]
-    execution_id: typing.Annotated[str | None, Column()]
-    attempt_ordinal: typing.Annotated[int | None, Column()]
-    pointer_revision: typing.Annotated[int, Column(check="pointer_revision >= 0")]
+    owner_lookup: Annotated[str, Column(primary_key=True)]
+    execution_id: Annotated[str | None, Column()]
+    attempt_ordinal: Annotated[int | None, Column()]
+    pointer_revision: Annotated[int, Column(check="pointer_revision >= 0")]
 
     def __post_init__(self) -> None:
         require_nonempty(self.owner_lookup, "owner_lookup")
@@ -67,7 +66,7 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
-    required_active: typing.Annotated[
+    required_active: Annotated[
         str | None, Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END")
     ] = dataclass_field(init=False, default=None, compare=False)
 
@@ -133,7 +132,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             )
         )
 
-    execution_id: typing.Annotated[
+    execution_id: Annotated[
         str,
         Column(
             primary_key=True,
@@ -146,16 +145,16 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         ),
     ]
     origin: ExecutionOrigin
-    lifecycle: typing.Annotated[ExecutionState, field_codec.SnapshotExclude(True)]
-    owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
+    lifecycle: Annotated[ExecutionState, SnapshotExclude()]
+    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_lookup: str
-    revision: typing.Annotated[int, Column(check="revision > 0")]
-    max_attempts: typing.Annotated[int, Column(check="max_attempts > 0")]
-    reason_code: typing.Annotated[
+    revision: Annotated[int, Column(check="revision > 0")]
+    max_attempts: Annotated[int, Column(check="max_attempts > 0")]
+    reason_code: Annotated[
         str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
     ]
-    created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
-    updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
+    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
     @projected(view="snapshot", name="status")
     def snapshot_status(self):
@@ -181,17 +180,17 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
 
-    status: typing.Annotated[
+    status: Annotated[
         str,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.kind')",
             check="status IN\n      ({execution_names})",
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    current_attempt_ordinal: typing.Annotated[
+    current_attempt_ordinal: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.ordinal')",
             check=(
@@ -202,9 +201,9 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             ),
         ),
     ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    required_attempt_kind: typing.Annotated[
+    required_attempt_kind: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated=(
                 "CASE\n"
@@ -214,29 +213,29 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             )
         ),
     ] = dataclass_field(init=False, default=None, compare=False)
-    active_execution_id: typing.Annotated[
+    active_execution_id: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN status = 'active' THEN execution_id END"),
     ] = dataclass_field(init=False, default=None, compare=False)
-    active_attempt_ordinal: typing.Annotated[
+    active_attempt_ordinal: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END"),
     ] = dataclass_field(init=False, default=None, compare=False)
-    wire_execution_id: typing.Annotated[
+    wire_execution_id: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN origin = 'wire' THEN execution_id END"),
     ] = dataclass_field(init=False, default=None, compare=False)
-    wire_claim_ordinal: typing.Annotated[
+    wire_claim_ordinal: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(generated="CASE WHEN origin = 'wire' THEN 0 END"),
     ] = dataclass_field(init=False, default=None, compare=False)
-    claim_status_kind: typing.Annotated[
+    claim_status_kind: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated=(
                 "CASE\n"
@@ -246,9 +245,9 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             )
         ),
     ] = dataclass_field(init=False, default=None, compare=False)
-    deferred_replay_id: typing.Annotated[
+    deferred_replay_id: Annotated[
         str | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated=(
                 "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
@@ -257,9 +256,9 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             )
         ),
     ] = dataclass_field(init=False, default=None, compare=False)
-    deferred_replay_required: typing.Annotated[
+    deferred_replay_required: Annotated[
         int | None,
-        field_codec.SnapshotExclude(True),
+        SnapshotExclude(),
         Column(
             generated=(
                 "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"

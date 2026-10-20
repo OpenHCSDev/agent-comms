@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import typing
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import Event, RLock
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
+from .locked_store import RuntimeFile, SQLiteFile
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileRevision
@@ -45,7 +45,7 @@ class ReplyIndexTable:
 class ReplyIndex(ReplyIndexTable, TypedTable):
     revision: FileRevision | None = None
     records: int = 0
-    source: typing.Annotated[str, Column(primary_key=True, check="source<>''")] = field(default="")
+    source: Annotated[str, Column(primary_key=True, check="source<>''")] = ""
     start: int = 0
     limit: ClassVar[int] = 32
 
@@ -117,8 +117,8 @@ class ReplyRead:
 
 @dataclass(frozen=True)
 class TranscriptReply(ReplyIndexTable, TypedTable):
-    source: typing.Annotated[str, Column(primary_key=True)]
-    end: typing.Annotated[int, Column(primary_key=True)]
+    source: Annotated[str, Column(primary_key=True)]
+    end: Annotated[int, Column(primary_key=True)]
     without_rowid = True
 
     @classmethod
@@ -396,12 +396,14 @@ class TranscriptReadKeys:
         })
 
 
-class TranscriptReadState(ThreadOwnedState):
+class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
     """Index only replies after read marks, capped from the newest records.
 
     One disposable suffix index owns reply offsets and scan coverage. No worker
     finishes an irrelevant prefix; source replacement discards its projection.
     """
+
+    filename = f"transcript_reply_index.v{_INDEX_VERSION}.sqlite3"
 
     def __init__(self, path: Path):
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
@@ -411,7 +413,7 @@ class TranscriptReadState(ThreadOwnedState):
         self._source_resources = ExitStack()
         self.path = ReadLedger.path_in(path.parent)
         self.reads = ReadLedger(self.path)
-        self.index_path = path.with_name(f"transcript_reply_index.v{_INDEX_VERSION}.sqlite3")
+        self.index_path = self.path_in(path.parent)
         self._connection: sqlite3.Connection | None = None
         self._database_inode: int | None = None
         self._lock = RLock()

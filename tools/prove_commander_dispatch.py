@@ -13,7 +13,6 @@ import shlex
 import subprocess
 import sys
 import time
-import typing
 from abc import abstractmethod
 from contextlib import aclosing
 from dataclasses import dataclass
@@ -118,9 +117,9 @@ class ProofCommand(DeclaredFamily, DeclaredOptions, affix="ProofCommand"):
 @dataclass(frozen=True, kw_only=True)
 class CheckProofCommand(ProofCommand):
     help = "check the actual native reply"
-    commander: typing.Annotated[str, field_codec.Argument(flags=("--commander",))]
-    unit: typing.Annotated[str, field_codec.Argument(flags=("--unit",))]
-    token: typing.Annotated[str, field_codec.Argument(flags=("--token",))]
+    commander: Annotated[str, field_codec.Argument(flags=("--commander",))]
+    unit: Annotated[str, field_codec.Argument(flags=("--unit",))]
+    token: Annotated[str, field_codec.Argument(flags=("--token",))]
 
     def apply(self, project: Path) -> int:
         print(int(Reply.read(Comms(self.root), self.commander, self.unit, self.token).arrived))
@@ -168,8 +167,6 @@ class RunProofCommand(ProofCommand):
             root=root,
             cli=Path(sys.executable).with_name("agent-comms"),
             state=root.parent / "state",
-            board=root.parent / "board.md",
-            narrative=root.parent / "narrative.md",
             repos=(),
             worktrees=comms.registry.storage_rule.checkout_base,
             scratch=root.parent,

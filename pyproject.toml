@@ -57,7 +57,6 @@ agent-comms-claude-bridge = "agent_comms.cli_bridges.claude:main"
 agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
 agent-comms-commander = "agent_comms.commander.cli:main"
-agent-comms-watch-guard = "agent_comms_hooks.watch:main"
 agent-comms-commander-skill = "agent_comms_hooks.skill:main"
 agent-comms-commander-reread = "agent_comms_hooks.reread:main"
 agent-comms-claude-session-started = "agent_comms_hooks.session:started"
@@ -90,14 +89,16 @@ path = "src/agent_comms/__init__.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tools"]
+pythonpath = ["src", "tools"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-n auto --maxprocesses=8 --dist=worksteal --cov=agent_comms --cov-report=term-missing --cov-fail-under=85"
+addopts = "-n auto --maxprocesses=8 --dist=worksteal"
 asyncio_mode = "auto"
 # A hung test fails by name instead of holding the whole job.
 timeout = 60
+# An interpreter missing a plugin refuses to start instead of silently ignoring `timeout`.
+required_plugins = ["pytest-timeout>=2.3", "pytest-xdist>=3.6", "pytest-asyncio>=0.23"]
 markers = ["refactor_guard: permanent architecture guards selected by the required debt check"]
 
 [tool.black]

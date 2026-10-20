@@ -11,18 +11,16 @@ import re
 import shutil
 import sqlite3
 import sys
-import typing
 from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Annotated
 
-from agent_comms import field_codec
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
@@ -173,21 +171,21 @@ def main() -> int:
 class NativeContextRecord(NativeInputCommit):
     """Native context facts extend the original committed input declaration."""
 
-    request_generation: typing.Annotated[
+    request_generation: Annotated[
         int,
-        field_codec.WireName("requestGeneration"),
+        WireName("requestGeneration"),
         Column(primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"),
     ]
-    llm_context_digest: typing.Annotated[
+    llm_context_digest: Annotated[
         str,
-        field_codec.WireName("llmContextDigest"),
+        WireName("llmContextDigest"),
         Column(check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"),
     ]
     # The native writer stamps the moment this context was committed for a
     # model request: the time the input was shown to the model.
-    committed_at_ms: typing.Annotated[
+    committed_at_ms: Annotated[
         int,
-        field_codec.WireName("committedAtMs"),
+        WireName("committedAtMs"),
         Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
     ]
 

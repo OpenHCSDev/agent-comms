@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 import time
-import typing
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
-from agent_comms import field_codec
 
 from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, CatalogExclude
 from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
 from .messages import MembershipChange
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
@@ -395,7 +393,7 @@ class ViewPredicate:
 class SavedView(ToolResult):
     """A named non-routable projection over authoritative channels or activity."""
 
-    name: typing.Annotated[str, field_codec.CatalogExclude(True)]
+    name: Annotated[str, CatalogExclude()]
     kind: ViewKind
     predicate: ViewPredicate
     created_at: float = field(default_factory=time.time)

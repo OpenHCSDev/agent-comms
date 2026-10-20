@@ -3,7 +3,7 @@
 import os
 
 import pytest
-from acp import RequestError
+from agent_comms.acp_failure import NativeTurnError
 
 import agent_comms.agent_events as ae
 from delivery_owner_fixture import canonical_agent
@@ -89,7 +89,7 @@ async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        with pytest.raises(RequestError, match="Internal error"):
+        with pytest.raises(NativeTurnError, match="Native turn ended without a result"):
             await agent.turns.run_agent_turn("project", "project", "Read files")
         assert comms.agents.activity_of("project", snapshot=comms.registry.snapshot()).state is ActivityState.IDLE
     finally:

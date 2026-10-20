@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-import typing
+from typing import Annotated
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
@@ -141,7 +141,7 @@ class DurableRetryEnd(RetryEnd, DurablePiEvent):
 
 @dataclass(frozen=True)
 class TaskFailed(DurablePiEvent):
-    task_id: typing.Annotated[int, field_codec.WireName("taskId")]
+    task_id: Annotated[int, field_codec.WireName("taskId")]
     message: str
 
     def convert(self):
@@ -157,9 +157,9 @@ class Open(HostQuery):
     path: str
     cwd: str
     provider: str | None
-    model_id: typing.Annotated[str | None, field_codec.WireName("modelId")]
-    thinking_level: typing.Annotated[ThinkingLevelField, field_codec.WireName("thinkingLevel")]
-    auth_path: typing.Annotated[str, field_codec.WireName("authPath")]
+    model_id: Annotated[str | None, field_codec.WireName("modelId")]
+    thinking_level: Annotated[ThinkingLevelField, field_codec.WireName("thinkingLevel")]
+    auth_path: Annotated[str, field_codec.WireName("authPath")]
     response_payload = RecoveryData
 
 
@@ -194,12 +194,12 @@ class Settle(HostQuery):
 class Entries(HostQuery):
     limit: int
     cursor: dict[str, JsonValue] | None = None
-    min_entry_id: typing.Annotated[
-        int | None, field_codec.WireName("minEntryId"), field_codec.WireOmitDefault(True)
-    ] = field(default=None)
-    max_entry_id: typing.Annotated[
-        int | None, field_codec.WireName("maxEntryId"), field_codec.WireOmitDefault(True)
-    ] = field(default=None)
+    min_entry_id: Annotated[
+        int | None, field_codec.WireName("minEntryId"), field_codec.WireOmitDefault()
+    ] = None
+    max_entry_id: Annotated[
+        int | None, field_codec.WireName("maxEntryId"), field_codec.WireOmitDefault()
+    ] = None
     order: str = "descending"
     response_payload = HistoryData
 

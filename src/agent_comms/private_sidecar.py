@@ -20,16 +20,18 @@ import os
 import secrets
 import sqlite3
 import stat
-import typing
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 
+from .private_path import ObservedPath
+from .store_files import StoreOwner
 from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
 
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
@@ -125,7 +127,7 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
             ancestors.append((current, _identity(os.fstat(fd))))
         directory = _PinnedDirectory(path.parent, fd, tuple(ancestors))
         directory.check()
-        lock_name = f".{path.name}.snapshot-lock"
+        lock_name = StoreOwner.snapshot_lock(path).name
         lock = os.open(
             lock_name,
             os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
@@ -139,7 +141,11 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))
-        if directory.stat(f".{path.name}.pending") is not None:
+        intent = ObservedPath.observe(partial(
+            os.stat, StoreOwner.snapshot_intent(path).name,
+            dir_fd=directory.fd, follow_symlinks=False,
+        ))
+        if not intent.is_absent():
             raise SidecarCommitUnknown("Private sidecar has an unresolved commit intent; no retry.")
         yield directory
         directory.unchanged(lock_name, os.fstat(lock))
@@ -190,7 +196,7 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 @dataclass(frozen=True)
 class SnapshotMeta(TypedTable):
-    singleton: typing.Annotated[Literal[1], Column(primary_key=True)]
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     ddl_digest: str
 
     @classmethod
@@ -263,7 +269,7 @@ def _publish(
     if not 100 <= len(raw) <= _MAX_SIDECAR_BYTES:
         raise IdentityConflict("Private sidecar snapshot exceeds its bounded capacity.")
     directory.unchanged(name, expected)
-    intent = f".{name}.pending"
+    intent = StoreOwner.snapshot_intent(Path(name)).name
     staging = f".{name}.{secrets.token_hex(16)}.staging"
     # An intent is never auto-repaired. Failure/crash after this point requires
     # explicit diagnosis, never replay of a reserved input or a guessed rollback.

@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Self
 from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
     Field,
     JsonValue,
+    ModelWrapValidatorHandler,
     TypeAdapter,
     field_validator,
     model_validator,
@@ -263,24 +264,34 @@ class TimedRecord(TimestampedWire):
     uuid: str
 
 
+class ClaudeUserHeader(WireHeader):
+    """Claude's sparse user header; Pydantic owns which fields were supplied."""
+
+    prompt_id: str = Field(default='', alias='promptId')
+    origin: KindHeader = Field(default_factory=lambda: KindHeader(kind=''))
+    is_compact_summary: bool = Field(default=False, alias='isCompactSummary')
+    is_meta: bool = Field(default=False, alias='isMeta')
+
+    def record_type(self) -> str:
+        if self.origin.type == TaskNotification.wire_tag:
+            return TaskUserRecord.wire_tag
+        if 'prompt_id' not in self.model_fields_set:
+            return LocalCommandOutput.wire_tag
+        if self.is_compact_summary:
+            return CompactSummary.wire_tag
+        if self.is_meta and 'origin' not in self.model_fields_set:
+            return HarnessNote.wire_tag
+        return UserRecord.wire_tag
+
+
 class ClaudeHeader(WireHeader):
-    @model_validator(mode='before')
+    @model_validator(mode='wrap')
     @classmethod
-    def local_command(cls, value: dict) -> dict:
-        # Local slash commands (/login, /cost) are written as user records
-        # without a prompt; they never reach the model. Decode that shape here.
-        # Harness notes (reminders, skill text) are meta records with no sender;
-        # a compaction summary is a user record flagged as one.
-        if value.get('type') == 'user':
-            if value.get('origin', {}).get('kind') == TaskNotification.wire_tag:
-                return {'type': TaskUserRecord.wire_tag}
-            if 'promptId' not in value:
-                return {'type': LocalCommandOutput.wire_tag}
-            if value.get('isCompactSummary'):
-                return {'type': CompactSummary.wire_tag}
-            if value.get('isMeta') and 'origin' not in value:
-                return {'type': HarnessNote.wire_tag}
-        return value
+    def local_command(cls, value: object, handler: ModelWrapValidatorHandler[Self]) -> Self:
+        header = handler(value)
+        if header.type == UserRecord.wire_tag:
+            header.type = ClaudeUserHeader.model_validate(value).record_type()
+        return header
 
 
 class ClaudeRecord(TaggedWire, ABC):
