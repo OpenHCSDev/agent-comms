@@ -69,7 +69,7 @@ class TurnWait(DeclaredFamily, affix="Wait"):
         )
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.finished = True
+        session.finish_request()
         return
         yield  # an expiry without events is still this event stream
 

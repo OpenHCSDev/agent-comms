@@ -158,9 +158,6 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     def recovery_events(self, session): ...
 
     @abstractmethod
-    def ends_request(self) -> bool: ...
-
-    @abstractmethod
     def finish_request(self, session) -> None: ...
 
     @abstractmethod
@@ -169,9 +166,6 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
 
 @dataclass(frozen=True)
 class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
-    def ends_request(self) -> bool:
-        return False
-
     def result(self, attempt: int, redact):
         from .acp_failure import ProviderRetryResult
 
@@ -194,9 +188,6 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
 @dataclass(frozen=True)
 class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
     final_error: str = field(metadata={"wire_name": "finalError"})
-
-    def ends_request(self) -> bool:
-        return True
 
     def __post_init__(self) -> None:
         if not self.final_error.strip():
@@ -230,6 +221,7 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         from .turn_failure import ModelRequestFailed
 
         session.output.record_failure(ModelRequestFailed(self.final_error))
+        session.finish_request()
 
     def retry_wire(self) -> dict[str, object]:
         return {"success": False, "finalError": self.final_error}

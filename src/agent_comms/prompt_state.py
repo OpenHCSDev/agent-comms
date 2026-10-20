@@ -75,7 +75,7 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
 
     def refuse(self, inputs, session):
         session.output.record_failure(failures.InputMissing("Original input was cleared before send."))
-        session.finished = True
+        session.finish_request()
         session.rejected_signal.set()
 
     def raise_native_failure(self, error, attestation) -> Never:

@@ -588,8 +588,6 @@ class TurnSession(NativeSession):
     def provider_retry_ended(self, event: pi.AutoRetryEnd) -> tuple[events.AgentEvent, ...]:
         updates = event.outcome.apply(event, self)
         self.record_retry(event.outcome.result(event.attempt, self.output.redact))
-        if event.outcome.ends_request():
-            self.finish_request()
         return updates
 
     def __init__(self, launch, make_command: Callable[..., commands.Prompt], *,

@@ -51,7 +51,7 @@ class ExtensionUiSession:
     async def fail(self, reason: str, session: TurnSession) -> None:
         session.output.record_failure(ExtensionUiFailed(reason))
         await session.native.shutdown()
-        session.finished = True
+        session.finish_request()
 
     async def answer(self, request: DialogUiRequest, session: TurnSession) -> None:
         choice = await self.choose(request, session)
