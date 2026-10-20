@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Collection, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,8 +37,8 @@ class InputForwarder(ABC):
     @abstractmethod
     async def finish(self) -> None: ...
 
-    def raise_failure(self) -> None:
-        pass
+    @abstractmethod
+    async def finish_if_done(self, native: PiChild, completed: Collection[object]) -> bool: ...
 
 
 class NoInputForwarder(InputForwarder):
@@ -51,6 +51,9 @@ class NoInputForwarder(InputForwarder):
 
     async def finish(self) -> None:
         pass
+
+    async def finish_if_done(self, native: PiChild, completed: Collection[object]) -> bool:
+        return False
 
 
 @dataclass(frozen=True)
@@ -68,9 +71,13 @@ class RunningInputForwarder(InputForwarder):
         self.task.cancel()
         await asyncio.gather(self.task, return_exceptions=True)
 
-    def raise_failure(self) -> None:
+    async def finish_if_done(self, native: PiChild, completed: Collection[object]) -> bool:
+        if self.task not in completed:
+            return False
+        await native.shutdown()
         if not self.task.cancelled():
             self.task.result()
+        return True
 
 
 @dataclass

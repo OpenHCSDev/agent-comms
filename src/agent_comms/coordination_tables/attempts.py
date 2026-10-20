@@ -63,11 +63,14 @@ class PreviousAttempt(ABC):
     @abstractmethod
     def require_retry(self, snapshot: RecoverySnapshot) -> None: ...
 
-    def require_newer_owner(self, generation: int) -> None:
-        pass
+    @abstractmethod
+    def require_newer_owner(self, generation: int) -> None: ...
 
 
 class NoPreviousAttempt(PreviousAttempt):
+    def require_newer_owner(self, generation: int) -> None:
+        pass
+
     def require(self) -> AttemptRecord:
         raise StaleFence("execution has no authorized attempt")
 

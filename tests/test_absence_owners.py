@@ -76,6 +76,7 @@ async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
         await asyncio.Event().wait()
     absent = NoInputForwarder()
     assert absent.tasks == ()
+    assert not await absent.finish_if_done(None, ())
     await absent.finish()
     running = absent.start(forward)
     assert running.start(forward) is running

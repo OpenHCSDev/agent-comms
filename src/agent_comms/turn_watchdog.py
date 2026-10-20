@@ -296,9 +296,7 @@ class ProgressWatchdog:
                 done = {task for task in observed if task.done()}
             if not done:
                 raise wait.expired(session)
-            if done.intersection(forwarding.tasks):
-                await session.native.shutdown()
-                forwarding.raise_failure()
+            if await forwarding.finish_if_done(session.native, done):
                 return b""
             if read_task in done:
                 return read_task.result()

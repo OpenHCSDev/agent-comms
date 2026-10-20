@@ -1949,8 +1949,8 @@ class TodoHolder(ABC):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return proposed
 
-    def require_trace(self, owner: str, traced: FileLine | None) -> None:
-        pass
+    @abstractmethod
+    def require_trace(self, owner: str, traced: FileLine | None) -> None: ...
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         return proposed
@@ -1962,6 +1962,9 @@ class TodoHolder(ABC):
 class NoTodoHolder(TodoHolder):
     def previous_assignment(self) -> Assignment:
         raise TodoError("Problem has no previous holder.")
+
+    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+        pass
 
 
 @dataclass(frozen=True, slots=True)
