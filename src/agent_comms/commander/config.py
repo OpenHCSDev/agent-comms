@@ -96,18 +96,6 @@ class CommanderConfig(CommanderRole, BaseModel):
         return next((repo.checkout for repo in self.repos
                      if repo.github.named(name)), Path(name)).resolve()
 
-    def source_repository(self, source: Path) -> Repo:
-        """Select declared checkout membership, never search files under guessed roots."""
-        if not source.is_absolute():
-            raise ValueError(f"Source {source} needs an absolute path in a configured repository")
-        source = source.resolve()
-        selected = tuple(repo for repo in self.repos
-                         if source.is_relative_to(repo.checkout.resolve()))
-        if len(selected) != 1:
-            raise ValueError(f"Source {source} must belong to exactly one configured repository")
-        (repo,) = selected
-        return repo
-
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
         self.require_commander(Comms(self.root).registry.require(self.commander))

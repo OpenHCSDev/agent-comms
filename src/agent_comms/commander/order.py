@@ -607,11 +607,11 @@ class Commander(CommanderContext):
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
         ref = FileLine.from_wire(where)
-        checkout = self.source_repository(Path(ref.file)).checkout
-        ref.require_exists(checkout)
+        directory = Path.cwd()
+        ref.require_exists(directory)
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
-        ref = FileLine(str((checkout / ref.file).resolve()), ref.line)
+        ref = FileLine(str((directory / ref.file).resolve()), ref.line)
         at = RecordedEventTime(time.time())
         self.comms.goals.todos.record_hunt(self.incarnation,
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
