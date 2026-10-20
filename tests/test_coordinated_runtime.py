@@ -167,7 +167,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         if fresh:
             session_file = session_dir / f"{input_id}.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "id": f"isolated-session-{input_id}", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
+                json.dumps({"type": "session", "version": 3, "id": f"isolated-session-{input_id}", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None

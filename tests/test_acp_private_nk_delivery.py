@@ -513,16 +513,13 @@ async def test_observed_mid_session_claim_change_invalidates_old_proof(tmp_path,
     assert len(calls) == 2  # no old-epoch native input can initialize new proof
 
 
-async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
+async def test_missing_native_schema_refuses_cursor_metadata(tmp_path):
     comms, agent, _ = _session(tmp_path)
-    before = cursor_envelope((await agent.sessions.metadata("beta")))
+    assert cursor_envelope((await agent.sessions.metadata("beta"))) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    unavailable = cursor_envelope((await agent.sessions.metadata("beta")))
-    assert unavailable.status == "unavailable"
-    assert unavailable.scope == before.scope
-    assert unavailable.revision > before.revision
-    assert not isinstance(unavailable.observation, VerifiedCursorObservation)
+    with pytest.raises(PublicationActivationBlocked, match="native runtime schema is not installed"):
+        await agent.sessions.metadata("beta")
 
 
 async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
@@ -571,8 +568,10 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     assert updates[-1].revision > loaded.revision
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    await agent.cursors.publish("beta", "beta")
-    assert updates[-1].status == "unavailable"
+    announced = len(updates)
+    with pytest.raises(PublicationActivationBlocked, match="native runtime schema is not installed"):
+        await agent.cursors.publish("beta", "beta")
+    assert len(updates) == announced
     assert updates[-1].scope == loaded.scope
     before = len(updates)
     await agent.cursors.refresh("beta", "beta")
@@ -649,20 +648,20 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         assert not agent.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in agent.inputs.drained.values())
 
 
-async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
-    """An unpinned private root derives this installation's package; none prepared refuses."""
+async def test_acp_private_without_prepared_package_refuses_owner_construction(tmp_path, monkeypatch):
+    """An unpinned private root cannot construct an owner from a missing package."""
     import agent_comms.private_nk_entrypoint as derivation
     from agent_comms.native_package import NativePackageError
 
     def missing():
         raise NativePackageError("Pinned native package directory is missing")
 
-    comms, agent, root_id = _session(tmp_path)
-    monkeypatch.setattr(derivation, "pinned_native_package", missing)
+    comms, root_id = _private_comms(tmp_path)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
+    monkeypatch.setattr(derivation, "pinned_native_package", missing)
     with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
-        await agent.inputs.drain_inbox("beta")
+        CommsAgent(comms, runtime_enabled=True)
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -671,7 +670,6 @@ async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, m
             ).fetchone()[0]
             == 0
         )
-    assert not any(state.pending_turns for state in agent.inputs.drained.values())
 
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
