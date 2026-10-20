@@ -279,17 +279,11 @@ class Stack:
             ) from subprocess.CalledProcessError(child.returncode, child.args, stderr=error)
 
     def call_step(self, step: Step, root: Path, revisions: Revisions,
-                  expression: str) -> str:
+                  method: str, **arguments: bool) -> str:
         """Run the declaration in its family's source with this stack's interpreter."""
         tree = revisions.tree(step.family.source_revision(step))
-        worker = (
-            "import importlib,json,sys; from pathlib import Path; from dataclasses import asdict; "
-            "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
-            "root=Path(sys.argv[3]); "
-            f"print(json.dumps({expression}))"
-        )
-        output = run(self.python, "-c", worker, f"cutover.{step.name}", step.declaration,
-                     root, cwd=tree,
+        output = run(self.python, "-m", "cutover.step_worker", f"cutover.{step.name}",
+                     step.declaration, method, root, json.dumps(arguments), cwd=tree,
                      env=self.environment(tree / "src", tree / "tools"))
         return output.strip().splitlines()[-1]
 
@@ -299,7 +293,7 @@ class Stack:
             path for step in pending for path in FieldCodec.decode(
                 tuple[Annotated[Path, PathText], ...], FieldCodec.parse(self.call_step(
                     step, root, revisions,
-                    f"[str(path) for path in step.{Carry.backup_files.__name__}(root)]")))
+                    Carry.backup_files.__name__)))
         }))
 
     def running_owners(self, root: Path) -> list[str]:
@@ -347,6 +341,10 @@ class Revisions:
             self.trees[revision] = path
         path = self.trees[revision]
         self.prepare(path)
+        # A historical regular cutover package cannot discover a worker from a
+        # second PYTHONPATH entry. Stage this transport helper, not new Core.
+        worker = Path(__file__).resolve().parent / "cutover" / "step_worker.py"
+        shutil.copy2(worker, path / "tools" / "cutover" / worker.name)
         return path
 
     def close(self) -> None:
@@ -363,7 +361,7 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
         return TodoColumnCarry.carry_step(
             root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
     operation = Carry.before_stop.__name__ if "--before-stop" in flags else Carry.carry.__name__
-    output = stack.call_step(step, root, revisions, f"asdict(step.{operation}(root,apply=True))")
+    output = stack.call_step(step, root, revisions, operation, apply=True)
     return FieldCodec.decode(Carried, FieldCodec.parse(output))
 
 

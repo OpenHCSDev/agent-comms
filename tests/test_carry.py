@@ -1005,6 +1005,7 @@ def test_practice_copy_includes_pending_step_stores(comms, tmp_path, monkeypatch
     checkout.mkdir()
     repo = Repository(checkout)
     shutil.copy2(REPO / STEPS / "backup.py", checkout / STEPS / "backup.py")
+    shutil.copy2(REPO / STEPS / "step_worker.py", checkout / STEPS / "step_worker.py")
     (checkout / "src").symlink_to(REPO / "src", target_is_directory=True)
     current = repo.commit({})
     target = repo.commit({"carry_store": (
