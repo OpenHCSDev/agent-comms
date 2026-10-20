@@ -193,6 +193,20 @@ class SourceCoverage:
         ) as source:
             return source.witness
 
+    def recorded_witness(self, state: CursorState) -> PrefixWitness:
+        """The stored prefix is proved; reading it does not prove later sources."""
+        with self.bus.log.checked_read(blocking=False, contention=self.contention) as source:
+            witness: PrefixWitness = source.witness
+            self.start(state, source.marker.claimed_after_seq, witness)
+            return witness
+
+    def start(self, state: CursorState, floor: int, witness: PrefixWitness) -> int:
+        if witness.root_id != self.wire_root_id:
+            raise IdentityConflict("current source claim_scope root changed")
+        if not floor <= state.covered_seq <= witness.through_seq:
+            raise IdentityConflict("current source coverage regressed or exceeds the bus")
+        return state.covered_seq
+
     def read(
         self, *, limit: int = 100, after_seq: int = 0, partial: bool = False,
         source_reads: NativeEvidenceScope,
@@ -318,12 +332,8 @@ class SourceCoverage:
             with self.bus.log.checked_read(
                 blocking=False, contention=self.contention
             ) as source:
-                marker = source.marker
-                if marker.root_id != self.wire_root_id:
-                    raise IdentityConflict("current source claim_scope root changed")
-                floor = marker.claimed_after_seq
                 witness = source.witness
-                covered = state.start(floor, witness)
+                covered = self.start(state, source.marker.claimed_after_seq, witness)
             inputs, no_wake = [], []
             for _ in range(self.page_budget):
                 page = self.read(after_seq=covered, partial=True, source_reads=source_reads)
