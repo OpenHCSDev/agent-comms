@@ -8,12 +8,10 @@ import json
 from pathlib import Path
 
 import pytest
-from acp import RequestError
 
 import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
-from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, RequestFailure
-from agent_comms.field_codec import FieldCodec
+from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, NativeTurnError
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
 
@@ -90,7 +88,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
                             if provider.posts == 2 else "insufficient_quota"
                         )
                 provider.response_gate = AfterRequestHeaders()
-            with pytest.raises(RequestError) as caught:
+            with pytest.raises(NativeTurnError) as caught:
                 await agent.turns.run_agent_turn("project", "project", "New input receiving a refusal",
                                                 original_owner_input=True)
             failures = [item for update in attempted for item in decode_updates(update.field_meta)
@@ -106,7 +104,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
                 assert "insufficient_quota" in failure.failure.retry_result.final_error
             else:
                 assert failure.failure.retry_result is None
-            request_failure = FieldCodec.decode(RequestFailure, caught.value.data["agentCommsFailure"])
+            request_failure = caught.value.request
             assert request_failure.notification_published is (not notification_fails)
             assert request_failure.failure == failure.failure
             assert not any(isinstance(item, InputFailedUpdate) for update in updates

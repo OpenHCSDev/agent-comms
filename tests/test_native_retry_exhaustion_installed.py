@@ -4,16 +4,14 @@ import json
 from pathlib import Path
 
 import pytest
-from acp import RequestError
 
 import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import (
     NativeMessageFailureSource,
     ProviderQuotaFailure,
-    RequestFailure,
+    NativeTurnError,
 )
-from agent_comms.field_codec import FieldCodec
 from delivery_owner_fixture import canonical_agent
 
 RATE_LIMIT = "Too many requests for this provider"
@@ -87,7 +85,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     try:
         async with asyncio.timeout(90):
             await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
-            with pytest.raises(RequestError) as caught:
+            with pytest.raises(NativeTurnError) as caught:
                 await agent.turns.run_agent_turn(
                     "project", "project", "One isolated request that remains rate limited",
                     original_owner_input=True,
@@ -105,7 +103,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
         assert RATE_LIMIT in report.failure.action
         assert report.failure.next_step.startswith("Wait for the provider limit")
         assert isinstance(report.source, NativeMessageFailureSource)
-        request = FieldCodec.decode(RequestFailure, caught.value.data["agentCommsFailure"])
+        request = caught.value.request
         assert request.notification_published and request.failure == report.failure
         assert provider.posts == 4
         assert not any(getattr(getattr(update, "content", None), "text", None)
