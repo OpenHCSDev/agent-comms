@@ -9,8 +9,8 @@ from typing import ClassVar
 
 from .comms import Comms
 from .standing_rules import StandingRule
-from .thread_identity import ThreadIncarnation
 from .thread_execution import ExternalThreadExecution
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
 
 
@@ -48,12 +48,20 @@ class CommanderHeartbeat:
     sender: ClassVar[str] = "commander-heartbeat"
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
+    @classmethod
+    def register(cls, comms: Comms) -> None:
+        """The service speaks as itself before any connector request or worker pass."""
+        if cls.sender not in comms.registry:
+            comms.registry.declare(
+                comms.registry.new_thread(
+                    cls.sender, frozenset(), str(comms.root), execution=ExternalThreadExecution
+                )
+            )
+
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         """Borrow the bus only in run_worker; stopped/replaced commanders retire their review."""
         with opened_wire() as comms:
-            if self.sender not in comms.registry:
-                comms.registry.declare(comms.registry.new_thread(
-                    self.sender, frozenset(), str(comms.root), execution=ExternalThreadExecution))
+            self.register(comms)
             commanders = tuple(
                 thread
                 for thread in comms.registry.all_threads().values()
@@ -71,6 +79,7 @@ class CommanderHeartbeat:
                 if thread.incarnation not in self.reviews:
                     # A restart observes the live rules as its baseline, not another alert.
                     self.reviews[thread.incarnation] = CommanderReview(
-                        frozenset(StandingRule.broken(comms, thread.name)))
+                        frozenset(StandingRule.broken(comms, thread.name))
+                    )
                 else:
                     self.reviews[thread.incarnation].wake(comms, self.sender, thread)

@@ -287,7 +287,8 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
     ).json()
     in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=CALLER)
     assert called["result"]["structuredContent"] == in_process
-    assert [thread["name"] for thread in in_process["threads"]] == ["claude-ai", "worker"]
+    assert [thread["name"] for thread in in_process["threads"]] == [
+        "claude-ai", "commander-heartbeat", "worker"]
 
 
 @pytest.mark.parametrize("phases", [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
