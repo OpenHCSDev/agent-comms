@@ -22,8 +22,11 @@ import subprocess
 import sys
 import time
 from abc import abstractmethod
+from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Self
 
 from pydantic import PrivateAttr
 
@@ -214,6 +217,18 @@ class CommanderContext(CommanderConfig):
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
+
+    @boundary_decoder
+    def model_copy(self, *, update: Mapping[str, object] | None = None,
+                   deep: bool = False) -> Self:
+        """Normalize Pydantic's optional updates; copy values, never live resources."""
+        values = {name: getattr(self, name) for name in type(self).model_fields}
+        if deep:
+            values = deepcopy(values)
+        changes = update or {}
+        values.update(changes)
+        return type(self).model_construct(
+            _fields_set=self.model_fields_set.union(changes), **values)
 
     @property
     def comms(self) -> Comms:
