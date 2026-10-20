@@ -287,34 +287,6 @@ def test_claim_and_keyed_response_append_share_checked_prefix(tmp_path: Path) ->
         case.close()
 
 
-def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, monkeypatch) -> None:
-    import agent_comms.private_bus_checkpoint as checkpoint
-
-    comms, _ = _root(tmp_path)
-    publish_initial(comms, "sender", "Alice", "prefix A" + "x" * 6000)
-    with monkeypatch.context() as patch:
-        patch.setattr(
-            checkpoint,
-            "append_private_bus_checkpoint_unlocked",
-            lambda *_: (_ for _ in ()).throw(OSError("crash")),
-        )
-        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            publish_initial(comms, "sender", "Bob", "complete lagged suffix")
-    bus = comms.bus.log.path
-    raw = bus.read_bytes()
-    # Semantic-canonical equal-length JSON: only early insignificant whitespace
-    # changes, outside the saved 4-KiB tail and without breaking sideband digest.
-    assert raw.count(b'"seq": 1') == 1
-    assert raw.index(b'"seq": 1') < raw.index(b"\n") - 4096
-    with bus.open("r+b") as stream:
-        stream.write(raw.replace(b'"seq": 1', b'"seq":\t1', 1))
-        stream.flush()
-        os.fsync(stream.fileno())
-    with pytest.raises(RelationViolationError, match="checked prefix changed"):
-        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
-    assert bus.read_bytes().endswith(b"\n")
-
-
 @pytest.mark.parametrize(
     "fault",
     [

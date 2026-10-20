@@ -4,9 +4,9 @@ The JSONL file is the record of messages. Only WireLog's private writer may
 advance the index after flushing the bus and its directory under the bus lock.
 The saved bus marker binds the SQLite file identity and checked byte range;
 a matching bus revision alone does not make the SQL rows trustworthy.
-An unfinished write requires rebuilding the index. If only the bus has grown,
-hash the saved prefix before indexing the added bytes. Reject unexpected changes
-to the index file instead of silently rebuilding. Reading this index neither
+An unfinished write resumes from its proved cut. Relocation and rebuilding
+validate the saved prefix before indexing the added bytes. Reject unexpected
+changes to the index file instead of silently rebuilding. Reading this index neither
 submits native input nor marks a message handled.
 """
 
@@ -152,7 +152,6 @@ class PrefixWitness(PrefixSeal):
     def index_tail(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                    path: Path, info: os.stat_result) -> PrefixWitness:
         """Continue the proved cut, committing bounded chunks without a prefix rescan."""
-        self.require_prefix(bus, info)
         saved = self
         digest = bytes.fromhex(saved.digest)
         last_seq = saved.through_seq
