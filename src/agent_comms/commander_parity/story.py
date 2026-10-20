@@ -49,7 +49,7 @@ class StoryCase(LifecycleCase):
                 owner=run.worker,
                 order=CreateProblemGoalAction(
                     problem="P2",
-                    order=replace(document.order, at=saved.order.at),
+                    order=replace(document.order, at=saved.order.checked().at),
                     request=run.commander.comms.registry.require(run.commander.commander)
                     .goal.require()
                     .id,
