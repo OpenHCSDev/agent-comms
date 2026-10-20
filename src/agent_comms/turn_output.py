@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import turn_failure as failures
-from .acp_failure import FailureSource, NativeMessageFailureSource, UnrecordedFailureSource, ProviderRetryResult
+from .acp_failure import (
+    FailureSource,
+    NativeMessageFailureSource,
+    ProviderRetryResult,
+    UnrecordedFailureSource,
+)
 from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
@@ -21,7 +26,8 @@ class TurnOutput:
     sensitive: bool = False
     failure: failures.TurnFailure | None = None
     error_message: str | None = None
-    _failed_message_source: NativeMessageFailureSource | None = field(default=None, init=False, repr=False)
+    _failed_message_source: FailureSource = field(
+        default_factory=UnrecordedFailureSource, init=False, repr=False)
     final_assistant_stop: bool = False
     diagnostic: dict[str, int] = field(default_factory=dict)
     preflight_failure: str | None = None
@@ -46,7 +52,7 @@ class TurnOutput:
         self.text_parts.clear()
 
     def interrupted(self) -> None:
-        self._failed_message_source = None
+        self._failed_message_source = UnrecordedFailureSource()
         self.discard_text()
         self.error_message = None
         self.final_assistant_stop = False
@@ -56,9 +62,7 @@ class TurnOutput:
 
     @property
     def native_failure_source(self) -> NativeMessageFailureSource:
-        if self._failed_message_source is None:
-            raise ValueError("Provider retry ended without its native failure message")
-        return self._failed_message_source
+        return self._failed_message_source.require_native()
 
     def record_failure(self, failure: failures.TurnFailure) -> None:
         if failure.supersedes(self.failure):
@@ -66,7 +70,7 @@ class TurnOutput:
 
     def request_retried(self) -> None:
         """Pi re-sends the refused request; that refusal no longer decides the turn."""
-        self._failed_message_source = None
+        self._failed_message_source = UnrecordedFailureSource()
         if self.failure is not None and self.failure.ends_with_request_retry:
             self.failure = None
         self.error_message = None
@@ -135,9 +139,7 @@ class TurnOutput:
         # Completion reports an outcome. Only this output owner can tell whether
         # its failure already produced an Error or first arose during settlement.
         if not terminal.ok and self.error_message is None:
-            source = self._failed_message_source
-            yield self.error(terminal.text, source=(
-                UnrecordedFailureSource() if source is None else source))
+            yield self.error(terminal.text, source=self._failed_message_source)
         yield terminal
 
     def settle(self, session: TurnSession, transport_ok: bool) -> None:
