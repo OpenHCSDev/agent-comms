@@ -19,6 +19,7 @@ from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
+    CommsCommanderLoadTool, CommsSendRefusalsTool, CommsHistoryTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsFleetStoryTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
     CommsOrderStoryTool,
@@ -86,6 +87,8 @@ def scenario(comms: Comms, project, monkeypatch):
         commander="lead", repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Fix P1"))}, lead
     yield CommsTodoListTool, {"thread": "lead"}, lead
     yield CommsUnjudgedTool, {"thread": "lead"}, lead
+    yield CommsCommanderLoadTool, {"thread": "lead"}, lead
+    yield CommsSendRefusalsTool, {}, lead
     yield CommsCorrectWordingTool, {"unit": "worker", "message_id": "m1",
                                     "text": "The canonical ownership changed"}, lead
     todo = comms.goals.todos.get("P1")
@@ -134,6 +137,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsCollaborationTool, {"action": "add", "peer": "worker", "note": "Pairing"}, lead
     yield CommsCollaborationsTool, {"thread": "lead"}, lead
     yield CommsSendTool, {"from": "lead", "to": "worker", "body": "Hello @worker"}, lead
+    yield CommsHistoryTool, {"peer": "worker", "participant": "lead"}, lead
     yield CommsDecisionTool, {"to": "#team", "chosen": "Typed records", "rejected": ["Dicts"]}, author
     yield CommsConstraintTool, {"to": "#team", "text": "Never replay inputs"}, author
     yield CommsSubtaskTool, {"to": "#team", "text": "Type the replies", "completed": False}, author
