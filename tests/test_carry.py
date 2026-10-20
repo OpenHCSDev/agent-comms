@@ -33,11 +33,13 @@ from agent_comms.read_basis import (
 from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
+from agent_comms.repository_name import RepositoryName
 from agent_comms.registry_store import RegistryNeedsConversion, RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
+from cutover.carry_registry_version import RegistryVersion
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
@@ -209,7 +211,7 @@ def test_a_carry_module_outside_the_chain_is_refused(tmp_path):
     repo = Repository(tmp_path)
     repo.commit({"carry_a": step_source(),
                  "carry_script": "def carry(root):\n    pass\n"})
-    with pytest.raises(ValueError, match="carry_script holds no Carry step"):
+    with pytest.raises(ValueError, match="holds no Carry step"):
         CarryChain.at(tmp_path, "HEAD")
 
 
@@ -356,7 +358,7 @@ def todos_before_order_runs(root: Path, scratch: Path) -> None:
     """A todo store as the live bus held it: its order declares no run (before P511), and it
     lacks the verdicts, corrections and messages columns; releases are already carried."""
     lead = thread("lead", scratch, 1)
-    todo = TodoStore(scratch).create("one", "OpenHCSDev/agent-comms", "Repair the thread list",
+    todo = TodoStore(scratch).create("one", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Repair the thread list",
         creator=lead, owner=lead, generation="one", deadline=RecordedEventTime(1000),
         order=order(scratch), goal=GoalRef("lead", 1.0, "goal-1"))
     with closing(sqlite3.connect(TodoStore.path_in(root))) as db:
@@ -466,19 +468,21 @@ def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_pat
     with pytest.raises(RegistryNeedsConversion):
         RegistryStore.at(root).read()
     chain = CarryChain.at(REPO, "HEAD").steps
-    for step in chain[:-1]:
+    selected = next(step for step in chain if step.name == RegistryVersion.name())
+    for step in chain:
+        if step == selected:
+            break
         CarryLedger(root).record(step.name)
-    assert chain[-1].name == "carry_registry_version"
 
     before = bus_files(root)
-    dry = [run_step("carry_registry_version", root)]
+    dry = [run_step(selected.name, root)]
     carried(root, before, dry, RehearsalFiles.declared(dry))
-    applied = run_step("carry_registry_version", root, "--apply")
+    applied = run_step(selected.name, root, "--apply")
     changed = [applied]
     result = carried(root, before, changed, RehearsalFiles.declared(changed))
     assert result.identical == len(before) - 3 and result.rewritten == 3
     assert result.restore_bytes > 0
-    assert run_step("carry_registry_version", root, "--apply")["changed"] == 0
+    assert run_step(selected.name, root, "--apply")["changed"] == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.goal.to_wire() is None
 
