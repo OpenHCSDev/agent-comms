@@ -568,14 +568,19 @@ class PresentCheckout(ProgressCheckout):
         return CheckedCommit.git(str(self.path), *args)
 
     @cached_property
-    def origin_refs(self) -> tuple[str, ...]:
+    def git_refs(self) -> tuple[str, ...]:
         return tuple(self.git("for-each-ref", "--format=%(refname)",
-                              "refs/remotes/origin/").splitlines())
+                              "refs/heads/", "refs/remotes/origin/").splitlines())
+
+    @property
+    def origin_refs(self) -> tuple[str, ...]:
+        return tuple(ref for ref in self.git_refs if ref.startswith("refs/remotes/origin/"))
 
     def references(self, storage: StorageRule, owner: str) -> tuple[str, ...]:
-        local = tuple(f"refs/heads/{branch}" for branch, paths in WorkBranches(self.path).worktrees().items()
-                      if any(storage.owns_checkout(owner, Path(path).resolve()) for path in paths))
-        return (*local, *self.origin_refs)
+        owned = {f"refs/heads/{branch}"
+                 for branch, paths in WorkBranches(self.path).worktrees().items()
+                 if any(storage.owns_checkout(owner, Path(path).resolve()) for path in paths)}
+        return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
@@ -665,7 +670,7 @@ class ProgressSource:
 
 
 class MeasuredProgressSource(ProgressSource):
-    """The board's distance view runs the Check; the stall watcher only reads activity."""
+    """The board reads recorded distances; the stall watcher only reads activity."""
 
     def readings(self) -> DistanceReadings:
         return self.checkout.readings(self)
