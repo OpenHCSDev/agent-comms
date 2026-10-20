@@ -7,7 +7,6 @@ import argparse
 import ast
 import enum
 import importlib
-import importlib.util
 import io
 import json
 import os
@@ -255,7 +254,6 @@ class ChangedSource:
     path: str
     source: bytes
     lines: frozenset[int]
-    present_paths: frozenset[str] = frozenset()
 
     @cached_property
     def tree(self) -> ast.Module:
@@ -277,24 +275,16 @@ class ChangedSource:
                 start = int(span[0])
                 count = int(span[1]) if len(span) == 2 else 1
                 lines.update(range(start, start + count))
-        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines),
-                   frozenset(production_paths(repo, head)))
+        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
 
 
-class CleanChangedLines(Measure):
+class CleanChangedLines(OccurrenceMeasure):
     """No occurrence may be written, even when another occurrence is deleted."""
 
     @staticmethod
     def site_lines(node: ast.AST) -> range:
         return range(node.lineno, node.end_lineno + 1)
 
-    @classmethod
-    @abstractmethod
-    def changed_sites(cls, source: ChangedSource) -> list[int]:
-        """The changed sites this declaration refuses."""
-
-
-class CleanOccurrences(CleanChangedLines, OccurrenceMeasure):
     @classmethod
     def changed_sites(cls, source: ChangedSource) -> list[int]:
         """The first changed line of each occurrence written on a changed line."""
@@ -306,7 +296,7 @@ class CleanOccurrences(CleanChangedLines, OccurrenceMeasure):
         return sites
 
 
-class FrozenFieldWrite(CleanOccurrences, PerFileOccurrenceMeasure):
+class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         match node:
@@ -315,7 +305,7 @@ class FrozenFieldWrite(CleanOccurrences, PerFileOccurrenceMeasure):
         return 0
 
 
-class BannedVocabulary(CleanOccurrences, PerFileOccurrenceMeasure):
+class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
     words: typing.ClassVar[tuple[str, ...]] = ("admission", "admit", "custody", "receipt")
 
     @classmethod
@@ -440,7 +430,7 @@ class NoneSpelling(MroDispatch):
                 self.found += self.absent(value)
 
 
-class NoneAbsence(CleanOccurrences, PerFileOccurrenceMeasure):
+class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
     """Absence spelled as None: ``is None`` tests, annotations that allow None, ``default=None``.
 
     Absence belongs to a declared null member that answers for itself. A decoder that
@@ -693,72 +683,6 @@ class StringIdentity(Measure):
         return PerFileMeasure.align(cls.counts(repo, base, touched), cls.counts(repo, head, touched))
 
 
-@dataclass(frozen=True)
-class RuntimeEngineImports(CleanChangedLines, MroDispatch):
-    """Imports of declared engine modules by modules outside that engine family."""
-
-    paths: frozenset[str]
-
-    @cached_property
-    def packages(self) -> set[Path]:
-        return {Path(path).parent for path in self.paths
-                if Path(path).name == DeclaredSpellings.package_marker}
-
-    def module_name(self, path: str) -> str:
-        module = Path(path).with_suffix("")
-        return DeclaredSpellings.dotted_name(module, self.packages) or module.name
-
-    @staticmethod
-    def engine_name(module: str) -> bool:
-        return module.rsplit(".", 1)[-1].startswith(("pi_", "native_"))
-
-    @cached_property
-    def engines(self) -> frozenset[str]:
-        return frozenset(name for path in self.paths
-                         if self.engine_name(name := self.module_name(path)))
-
-    @handles(ast.Import)
-    def imported(self, node: ast.Import, package: str) -> bool:
-        return any(alias.name in self.engines for alias in node.names)
-
-    @handles(ast.ImportFrom)
-    def imported_from(self, node: ast.ImportFrom, package: str) -> bool:
-        module = node.module or ""
-        if node.level:
-            module = importlib.util.resolve_name("." * node.level + module, package)
-        return module in self.engines or any(
-            f"{module}.{alias.name}" in self.engines for alias in node.names)
-
-    def sites(self, tree: ast.AST, filename: str) -> Iterator[ast.stmt]:
-        module = self.module_name(filename)
-        if self.engine_name(module):
-            return
-        package = (module if Path(filename).name == DeclaredSpellings.package_marker
-                   else module.rpartition(".")[0])
-        for node in ast.walk(tree):
-            if isinstance(node, ast.stmt) and any(
-                    handler(node, package) for handler in self.handlers_for(node)):
-                yield node
-
-    @classmethod
-    def counts(cls, repo: Path, ref: str, root: str) -> dict[str, int]:
-        imports = cls(frozenset(production_paths(repo, ref)))
-        return {f"{cls.__name__}:{path}": len(tuple(imports.sites(ast.parse(source, path), path)))
-                for path, source in GitMeasure.sources(repo, ref, python_paths(repo, ref, root))}
-
-    @classmethod
-    def compare(
-        cls, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[dict[str, int], dict[str, int]]:
-        return PerFileMeasure.align(cls.counts(repo, base, root), cls.counts(repo, head, root))
-
-    @classmethod
-    def changed_sites(cls, source: ChangedSource) -> list[int]:
-        imports = cls(source.present_paths)
-        return [node.lineno for node in imports.sites(source.tree, source.path)
-                if source.lines.intersection(cls.site_lines(node))]
-
-
 class ForeignFieldSpellings(PerFileOccurrenceMeasure):
     """Literal identifier-spelling rosters used as loop inputs."""
 
@@ -814,7 +738,7 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
                    and any(cls.returns_default(statement) for statement in node.body))
 
 
-class BroadSwallow(CleanOccurrences, BroadExceptDefault):
+class BroadSwallow(CleanChangedLines, BroadExceptDefault):
     """A broad handler without a raise hides the failure, whatever it returns."""
 
     broad_names = frozenset({

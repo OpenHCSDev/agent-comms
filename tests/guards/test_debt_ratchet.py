@@ -56,9 +56,6 @@ class Repository:
             [sys.executable, str(Path(__file__).resolve().parents[2] / "tools/debt_ratchet.py"),
              "--root", self.root, "--base", base, "--head", head],
             cwd=self.path,
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(
-                str(Path(path).resolve()) for path in os.environ["PYTHONPATH"].split(os.pathsep)
-            )},
             capture_output=True,
             text=True,
             timeout=120,  # Each comparison type-checks both revisions.
@@ -153,43 +150,6 @@ def test_clean_growth_passes_but_type_and_string_dispatch_fail(repo: Repository)
     status, report = repo.compare(grown, dispatch)
     assert status == 1
     assert report["delta"][f"StringDispatch:{repo.root}/new.py"] == 1
-
-
-def test_runtime_engine_imports_report_existing_and_new_callers(repo: Repository) -> None:
-    base = repo.commit({"__init__.py": "", "pi_engine.py": "value = 1\n",
-                        "caller.py": "from .pi_engine import value\n",
-                        "native_bridge.py": "from .pi_engine import value\n"})
-    head = repo.commit({"new.py": "from . import pi_engine\n\nvalue = pi_engine.value\n"})
-    status, report = repo.compare(base, head)
-    measure = f"RuntimeEngineImports:{repo.root}"
-    assert status == 1
-    assert report["base"][f"{measure}/caller.py"] == 1
-    assert report["head"][f"{measure}/caller.py"] == 1
-    assert report["head"][f"{measure}/native_bridge.py"] == 0
-    assert report["delta"][f"{measure}/new.py"] == 1
-    assert report["introduced_lines"][f"{measure}/new.py"] == [1]
-
-
-def test_runtime_engine_imports_resolve_declarations_and_count_statements() -> None:
-    from tools.debt_ratchet import RuntimeEngineImports
-
-    imports = RuntimeEngineImports(frozenset({
-        "src/pkg/__init__.py", "src/pkg/pi_engine.py", "src/pkg/native_worker.py",
-        "src/pkg/sub/__init__.py", "src/pkg/sub/caller.py",
-    }))
-    tree = ast.parse('''import pkg.pi_engine as engine, pkg.native_worker
-from ..pi_engine import value
-from .. import native_worker as worker
-from external.pi_engine import value
-from ..native_absent import value
-text = "import pkg.pi_engine"
-def nested():
-    from .. import pi_engine
-''')
-    assert [node.lineno for node in imports.sites(tree, "src/pkg/sub/caller.py")] == [1, 2, 3, 8]
-    assert list(imports.sites(tree, "src/pkg/native_worker.py")) == []
-    initializer = ast.parse("from . import pi_engine\n")
-    assert [node.lineno for node in imports.sites(initializer, "src/pkg/__init__.py")] == [1]
 
 
 def test_added_type_check_fails(repo: Repository) -> None:
