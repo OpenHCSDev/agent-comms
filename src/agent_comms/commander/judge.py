@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass
 
 from ..comms import Comms
 from ..change_report import FileLine
-from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, Derivation, SupersededVerdict
+from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, ToolCallVerdict, SendBackVerdict, StrikeReason, Todo, Slop, Derivation, SupersededVerdict
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec, option
 from ..tool_caller import ThreadCaller
@@ -147,7 +147,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
     @abstractmethod
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> OrderVerdict: ...
+    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> ToolCallVerdict: ...
 
     @abstractmethod
     def check_edits(self, edits: list[Edit]) -> None: ...
