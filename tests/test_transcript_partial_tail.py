@@ -1,0 +1,42 @@
+"""A line still being appended is not history yet, so a newer read never stalls on it."""
+
+import json
+
+from agent_comms.comms import wire
+from agent_comms.coordinator import Coordination
+
+
+def line(record):
+    return json.dumps(record) + "\n"
+
+
+def answer(identity, text):
+    return {"type": "message", "id": identity, "parentId": None, "timestamp": "2026-10-20T00:00:00.000Z",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}
+
+
+def test_newer_read_moves_past_a_line_still_being_appended(tmp_path):
+    comms = wire(tmp_path / "wire")
+    session = tmp_path / "saved.jsonl"
+    session.write_text(line({"type": "session", "version": 3, "id": "saved-session",
+                             "timestamp": "2026-10-20T00:00:00.000Z"}) + line(answer("first", "First answer")))
+    comms.registry.declare(comms.registry.new_thread("saved", frozenset(), str(tmp_path), session_file=str(session)))
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        store.install_private_runtime()
+    complete = session.stat().st_size
+    pending = line(answer("second", "Second answer " + "x" * 200_000))
+    with session.open("a") as stream:
+        stream.write(pending[: len(pending) // 2])
+
+    newest = comms.transcripts.capture_page_read("saved").read()
+    assert newest.after.offset == complete
+    through = newest.after
+    stalled = comms.transcripts.capture_page_read("saved", after=through, through=through).read()
+    assert (stalled.after, stalled.has_newer) == (through, False)
+
+    with session.open("a") as stream:
+        stream.write(pending[len(pending) // 2:])
+    grown = comms.transcripts.capture_page_read("saved").read().after
+    newer = comms.transcripts.capture_page_read("saved", after=through, through=grown).read()
+    assert newer.after == grown
+    assert [event.text.startswith("Second answer") for event in newer.events] == [True]
