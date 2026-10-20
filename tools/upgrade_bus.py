@@ -27,6 +27,7 @@ is sent and no input is replayed: owners start by the normal start path.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -38,12 +39,18 @@ import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+import publish_runtime
+from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
+from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
+from cutover.runtime_resolution import RuntimeResolution
+from install_gate import PracticeCopy, prepare_runtime_home
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.comms import Comms
@@ -51,17 +58,14 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, Id128Text
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
-import publish_runtime
-from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
-from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
-from cutover.runtime_resolution import RuntimeResolution
-from install_gate import PracticeCopy, prepare_runtime_home
 
 REPO = Path(__file__).resolve().parents[1]
+HOME = Path.home()
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
@@ -88,14 +92,15 @@ def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, 
 
 @dataclass(frozen=True)
 class Stack:
-    """One checkout's stack environment: the Python and CLI an installation runs."""
+    """One built installation and the source checkout containing its install tools."""
 
     checkout: Path
-    home: Path = Path.home()
+    home: Path = HOME
+    runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
 
     @property
     def python(self) -> Path:
-        return self.checkout / "stack/.venv/bin/python"
+        return self.runtime.interpreter
 
     @property
     def lock(self) -> Path:
@@ -110,23 +115,55 @@ class Stack:
         if not os.access(self.uv, os.X_OK):
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
 
-    def relock(self) -> None:
-        """OpenHCSDev packages track their mains; the lock only records this resolution."""
-        run(self.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
-            cwd=self.checkout)
-        self.sync()
-        self.imports()
-
-    def sync(self) -> None:
-        run(self.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
-            cwd=self.checkout)
+    @classmethod
+    def build(cls, checkout: Path, home: Path = HOME) -> Stack:
+        """Resolve current mains once, then build or reuse their immutable installation."""
+        source = cls(checkout, home)
+        source.require_uv()
+        run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
+            cwd=checkout)
+        core = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+        resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
+        prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
+        built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"))
+        if prefix.exists():
+            if not RuntimeResolution.at(prefix).matches(source.lock, built.python, core):
+                raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
+            return built
+        prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        prefix.mkdir(mode=0o700)
+        try:
+            run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
+                "--no-editable", cwd=checkout,
+                env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
+            run(checkout / "stack/bin/prepare-pi-native", "--python", built.python,
+                cwd=checkout, env=built.environment(checkout / "src"))
+            native = Path(run(built.python, "-c",
+                "from agent_comms.native_package import pinned_location; print(pinned_location())",
+                cwd=checkout, env=built.environment(checkout / "src")).strip())
+            package = Path(run(built.python, "-c",
+                "import agent_comms; from pathlib import Path; "
+                "print(Path(agent_comms.__file__).parent)",
+                cwd=checkout, env=built.environment()).strip())
+            destination = package / "_native" / native.relative_to(checkout / "stack")
+            destination.parents[2].mkdir(mode=0o700, parents=True)
+            shutil.copytree(native, destination)
+            RuntimeResolution.capture(built.python, core).save(prefix)
+            built.imports()
+            built.prepare_native()
+        except BaseException:
+            shutil.rmtree(prefix)
+            raise
+        return built
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
 
     def prepare_native(self) -> None:
-        run(self.checkout / "stack/bin/prepare-pi-native", cwd=self.checkout,
-            env=self.environment())
+        run(self.python, "-c", "from agent_comms.native_package import "
+            "VerifiedNativePackage,pinned_native_package; "
+            "VerifiedNativePackage.acquire(pinned_native_package())",
+            cwd=self.checkout, env=self.environment())
 
     def select_route(self, root: Path) -> None:
         """Validate and publish through this stack's prepared native package."""
@@ -147,9 +184,14 @@ publish_active_route(ActiveRoute(root, marker.root_id))
         )
 
     def environment(self, *paths: Path) -> dict:
-        """``paths`` first; then this checkout's ``src``. ``home`` holds the route its clients read."""
-        return {**os.environ, "HOME": str(self.home),
-                "PYTHONPATH": os.pathsep.join(map(str, (*paths, self.checkout / "src")))}
+        """Use the artifact's packages; only historical carry helpers select explicit source."""
+        environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
+        if paths:
+            imports = SpecifiedImportPath(os.pathsep.join(map(str, paths)))
+            configuration: RestartEnvironment = replace(
+                RestartEnvironment.inherit(environment), pythonpath=imports)
+            return configuration.apply_runtime(environment)
+        return environment
 
     def cli(self, root: Path, *arguments: str) -> dict:
         """One JSON CLI result for this bus alone, never the route's, waiting while the
@@ -307,8 +349,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
     with tempfile.TemporaryDirectory(prefix="upgrade-bus.") as scratch:
         revisions = Revisions(checkout, Path(scratch))
         try:
-            staged = Stack(revisions.tree(target))
-            staged.relock()
+            staged = Stack.build(revisions.tree(target))
             install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
                                  installer, spill_dir)
             report = {"from": current, "to": target, "pending": [step.name for step in pending],
@@ -340,7 +381,7 @@ class Install(ABC):
     def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
            installed: Stack, staged: Stack, revisions: Revisions, installer: str,
            spill_dir: Path) -> Install:
-        unchanged = current == target and RuntimeResolution.installed().matches(
+        unchanged = not pending and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged.python, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         return member(checkout, root, current, target, pending, installed, staged, revisions,
@@ -380,14 +421,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
          spill_dir: Path) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    before_stop(root, pending, staged, revisions)
-    running = [thread["name"] for thread in staged.cli(root, "threads")["threads"]
+    running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
                if thread["role"] == "agent" and thread["status"] == "running"]
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
-        staged.owners(root, "stop", running)
+        installed.owners(root, "stop", running)
         with transcripts_held(root):
             backup = Backup.take(root, ROUTE, (root,),
                 spill_dir / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
@@ -397,25 +437,37 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
               f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
-    shutil.copy2(RuntimeResolution.record_path(), backup.path / "build.json")
     try:
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Revisions.prepare(checkout)
-        installed.relock()
-        installed.prepare_native()
-        passed = carry_and_read(root, backup.files(), pending, staged, installed, revisions, [])
-        installed.publish()
+        staged.prepare_native()
+        stopping = before_stop(root, pending, staged, revisions)
+        passed = carry_and_read(root, backup.files(), pending, staged, staged, revisions, stopping)
+        staged.publish()
         maintenance.clear(held)
-        services = HostService.restart_running(installed.python)
+        services = HostService.restart_running(staged.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
+        try:
+            staged.owners(root, "start", running)
+        except BaseException:
+            staged.owners(root, "stop", running)
+            raise
     except BaseException as error:
         state = maintenance.read()
-        state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
-        print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
-              f"maintenance held, checkout and bus preserved; backup: {backup.path}",
+        recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
+        os.environ[HOLDER_NONCE] = recovery.nonce
+        if not backup.original():
+            backup.restore()
+        restored = maintenance.read()
+        restored_hold = restored.phase.hold_for(maintenance, restored, MaintenanceOperator.current())
+        os.environ[HOLDER_NONCE] = restored_hold.nonce
+        installed.publish()
+        maintenance.clear(restored_hold)
+        installed.owners(root, "start", running)
+        print(f"upgrade-bus: restored after failure ({type(error).__name__}: {error}); "
+              f"original runtime selected and {running} restarted; backup: {backup.path}",
               file=sys.stderr)
         raise
-    installed.owners(root, "start", running)
     return {"stopped_and_started": running, **passed, "services": services,
             "backup": str(backup.path)}
 

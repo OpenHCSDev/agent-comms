@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -14,6 +16,11 @@ from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, RootModel, TypeAdapter
 
 from agent_comms.launch_runtime import InstalledBuildManifest, LaunchRuntime
+
+
+class RuntimePackage(StrEnum):
+    CORE = "agent-comms"
+    TOAD = "batrachian-toad"
 
 
 @dataclass(frozen=True)
@@ -38,6 +45,9 @@ class CommitRecord(BaseModel):
 class SourceRecord(BaseModel):
     url: str
 
+    def revision(self) -> str:
+        raise ValueError("The installed package does not record a Git revision")
+
 
 class ArchiveRecord(SourceRecord):
     def pin(self, version: str) -> PackagePin:
@@ -47,12 +57,18 @@ class ArchiveRecord(SourceRecord):
 class GitRecord(SourceRecord):
     vcs_info: CommitRecord
 
+    def revision(self) -> str:
+        return self.vcs_info.commit_id
+
     def pin(self, version: str) -> PackagePin:
         return GitPin(version, self.vcs_info.commit_id)
 
 
 class RegistryRecord(RootModel[None]):
     """null is the build record's declared registry-package representation."""
+
+    def revision(self) -> str:
+        raise ValueError("A registry package does not record a Git revision")
 
     def pin(self, version: str) -> PackagePin:
         return PackagePin(version)
@@ -143,8 +159,43 @@ class RuntimeResolution(InstalledBuildManifest):
         return LaunchRuntime.current_pointer() / "build.json"
 
     @classmethod
+    def at(cls, prefix: Path) -> RuntimeResolution:
+        return cls.model_validate_json((prefix / cls.record_path().name).read_bytes())
+
+    @classmethod
     def installed(cls) -> RuntimeResolution:
-        return cls.model_validate_json(cls.record_path().read_bytes())
+        return cls.at(LaunchRuntime.installed().prefix)
+
+    @classmethod
+    def capture(cls, python: Path, core: str) -> RuntimeResolution:
+        environment = LaunchRuntime(python).environment(os.environ)
+        program = """import importlib.metadata as m,json,sys
+from pathlib import Path
+import agent_comms
+from agent_comms.package_stamp import STAMP
+from packaging.utils import canonicalize_name
+if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
+    raise ValueError('Core is editable, not a built runtime package')
+if STAMP.commit() != sys.argv[1]:
+    raise ValueError('The wheel stamp does not name the selected source')
+print(json.dumps({canonicalize_name(d.metadata['Name']): {
+    'version':d.version,
+    'source':json.loads(source) if (source := d.read_text('direct_url.json')) else None
+} for d in m.distributions()}))
+"""
+        packages = TypeAdapter(dict[str, PackageRecord]).validate_json(
+            subprocess.check_output([python, "-c", program, core], env=environment)
+        )
+        return cls(
+            core_commit=core,
+            toad_commit=packages[RuntimePackage.TOAD].source.revision(),
+            packages=packages,
+        )
+
+    def save(self, prefix: Path) -> None:
+        path = prefix / self.record_path().name
+        path.write_text(self.model_dump_json(indent=2) + "\n")
+        path.chmod(0o600)
 
     def pins(self) -> dict[str, PackagePin]:
         result: dict[str, PackagePin] = {
@@ -152,8 +203,8 @@ class RuntimeResolution(InstalledBuildManifest):
         }
         # Wheel URLs locate build output, not the source revisions recorded by this owner.
         for name, commit in (
-            ("agent-comms", self.core_commit),
-            ("batrachian-toad", self.toad_commit),
+            (RuntimePackage.CORE, self.core_commit),
+            (RuntimePackage.TOAD, self.toad_commit),
         ):
             result[name] = GitPin(self.packages[name].version, commit)
         return result

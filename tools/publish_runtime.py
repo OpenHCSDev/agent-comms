@@ -26,6 +26,11 @@ from io import StringIO
 from pathlib import Path
 from typing import Annotated
 
+from cutover.backup import StoreBackup
+from cutover.carry import PendingConversion, PreparedCarries
+from cutover.runtime_resolution import RuntimeResolution
+
+import agent_comms
 from agent_comms.active_route import (
     acquire_exclusive_route_lock,
     active_route_path,
@@ -38,14 +43,11 @@ from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.owner_cutover import MaintainedOwnerCutover
-from agent_comms.owner_lifecycle import OwnerRestartSelection, OwnerRestartResult
+from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.threads import Thread
 from agent_comms.store_files import _atomic_write_text, _store_lock
-
-from cutover.backup import StoreBackup
-from cutover.carry import PendingConversion, PreparedCarries
+from agent_comms.threads import Thread
 
 
 class PublicationIntent(SubclassUnion, affix=''):
@@ -104,6 +106,9 @@ class RuntimePublication:
     @classmethod
     def installed(cls) -> RuntimePublication:
         binary = Path(sys.executable).parent.resolve(strict=True)
+        if not Path(agent_comms.__file__).resolve().is_relative_to(binary.parent):
+            raise ValueError("Editable Core cannot publish a runtime; build the selected source")
+        RuntimeResolution.at(binary.parent)
         links = {
             Path.home() / '.local/bin' / entry.name: binary / entry.name
             for package in ('agent-comms', 'batrachian-toad')
@@ -207,8 +212,7 @@ class RuntimePublication:
             os.close(descriptor)
 
     def published_target(self, current: Path, target: Path) -> Path:
-        """A link into the runtime follows ``current``; one into an editable source tree
-        (a checkout stack's skills) names that tree, which no runtime switch moves."""
+        """Runtime-owned links follow current; user-owned paths remain where declared."""
         if target.is_relative_to(self.runtime):
             return current / target.relative_to(self.runtime)
         return target
@@ -217,6 +221,7 @@ class RuntimePublication:
         """Refresh the declared installation, including an already-current runtime."""
         current = LaunchRuntime.current_pointer()
         selected = self.runtime.resolve(strict=True)
+        RuntimeResolution.at(selected)
         for link, target in self.links.items():
             replace_link(link, self.published_target(current, target))
         replace_link(current, selected)
