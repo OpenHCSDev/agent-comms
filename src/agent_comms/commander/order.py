@@ -477,12 +477,16 @@ class Commander(CommanderContext):
                  '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
                  '| Strikes | Owner last acted |',
                  '|---|---|---|---|---|---|---|---|---|---|']
-        listed, read = self.todos(), self.progress()
+        self.todos()  # Reconcile installed merges before reading the board snapshot.
+        snapshot: TodoList = self.call(CommsTodoListTool())
+        listed, read = snapshot.todos, snapshot.progress
         activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
         for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
             lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
                          f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
                          f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
+        lines += ['', '## Closed orders: predicted against actual', '',
+                  *(f'- {todo.id}: {read[todo.id].line}' for todo in snapshot.closed)]
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         lines += ['', '## Withdrawn orders', '',
                   *(f'- {line}' for t in history for line in t.order.withdrawals(t))]

@@ -644,7 +644,7 @@ class PendingConversion(PreparedCarries):
 
 
 class TodoColumnCarry(TodoRows):
-    """Todo rows gain one declared record column, empty; every other column stays as it was."""
+    """Todo rows gain one declared record column at its default; other columns stay as saved."""
 
     column: ClassVar[str]
 
@@ -694,7 +694,8 @@ class TodoColumnCarry(TodoRows):
             raise ValueError(f"Unexpected todo columns: {actual!r}")
         selected = ", ".join(f'? AS "{item.wire_name}"' if item in added else f'"{item.wire_name}"'
                              for item in fields)
-        empty = tuple(item.encode(()) for item in added)
+        empty = tuple(item.encode(FieldCodec.field_plan(Todo, item.name).default())
+                      for item in added)
         # Rows decode only once every step before the last has carried them; this one
         # adds columns, so it counts rows without reading them as today's Todo.
         count = int(db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0])

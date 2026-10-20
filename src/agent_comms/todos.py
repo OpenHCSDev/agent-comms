@@ -471,6 +471,13 @@ class DistanceTrend(DeclaredFamily, affix="Trend"):
     @abstractmethod
     def projection(self) -> str: ...
 
+    @property
+    def prediction(self) -> str:
+        return f"unavailable{self.projection}"
+
+    def error(self, actual: float) -> str:
+        return ""
+
 
 @dataclass(frozen=True)
 class MovingTrend(DistanceTrend):
@@ -480,6 +487,13 @@ class MovingTrend(DistanceTrend):
     @property
     def projection(self) -> str:
         return f"; distance {self.distance}, projected done {RecordedEventTime(self.done).clock()}"
+
+    @property
+    def prediction(self) -> str:
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.done))
+
+    def error(self, actual: float) -> str:
+        return f"; actual minus predicted {actual - self.done:+.0f}s"
 
 
 @dataclass(frozen=True)
@@ -511,6 +525,50 @@ class UnreadTrend(DistanceTrend):
     @property
     def projection(self) -> str:
         return ""
+
+
+@dataclass(frozen=True)
+class FinishPrediction(DeclaredFamily, affix="FinishPrediction"):
+    """The order's unreviewed, reviewed, or closed forecast, retained on its Todo."""
+
+    @property
+    def line(self) -> str:
+        return ""
+
+    def error(self, actual: float) -> str:
+        return ""
+
+    def closed(self, actual: float) -> FinishPrediction:
+        return FinishedPrediction(self, actual)
+
+
+@dataclass(frozen=True)
+class ReviewedPrediction(FinishPrediction):
+    at: float
+    trend: DistanceTrend
+
+    @property
+    def line(self) -> str:
+        return (f"; predicted finish {self.trend.prediction}"
+                f" (reviewed {RecordedEventTime(self.at).clock()})")
+
+    def error(self, actual: float) -> str:
+        return self.trend.error(actual)
+
+
+@dataclass(frozen=True)
+class FinishedPrediction(FinishPrediction):
+    forecast: FinishPrediction
+    actual: float
+
+    @property
+    def line(self) -> str:
+        forecast = self.forecast.line or "; predicted finish not reviewed"
+        actual = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.actual))
+        return f"{forecast}; actual finish {actual}{self.forecast.error(self.actual)}"
+
+    def closed(self, actual: float) -> FinishPrediction:
+        return self
 
 
 @dataclass(frozen=True)
@@ -635,12 +693,16 @@ class MeasuredProgressSource(ProgressSource):
 class OrderProgress(DeclaredFamily, affix="Progress"):
     """Where an order's work stands, derived on each read from its unit's checkout and PRs.
 
-    Never stored: the checkout and GitHub are its owners."""
+    Never stored: the checkout and GitHub are its owners. The finish view is the
+    prediction already recorded on the Todo, not a new estimate on every read."""
+
+    finish: FinishPrediction = field(default_factory=FinishPrediction, kw_only=True, compare=False)
 
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
         """The first found member by its declared precedence; with none found, no commit yet."""
-        return cls.from_source(MeasuredProgressSource.of(todo, storage, pulls))
+        return replace(cls.from_source(MeasuredProgressSource.of(todo, storage, pulls)),
+                       finish=todo.predicted_finish)
 
     @classmethod
     def from_source(cls, source: ProgressSource) -> OrderProgress:
@@ -657,7 +719,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     @property
     def line(self) -> str:
-        return self.state + self.distance_readings().trend.projection
+        return self.state + self.distance_readings().trend.projection + self.finish.line
+
+    def forecast(self, at: float) -> FinishPrediction:
+        return ReviewedPrediction(at, self.distance_readings().trend)
 
     def distance_readings(self) -> DistanceReadings:
         """The order's distance readings; progress that read no commit has none."""
@@ -681,6 +746,13 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
         """Linked merges this progress incorrectly reports as no commit."""
         return ()
+
+
+@dataclass(frozen=True)
+class ClosedProgress(OrderProgress):
+    @property
+    def state(self) -> str:
+        return "closed"
 
 
 @dataclass(frozen=True)
@@ -1864,6 +1936,10 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         return tuple(member.declared_name for member in cls.members_with(cls) if member.open)
 
     @classmethod
+    def progress(cls, current: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
+        return OrderProgress.read(current, storage, pulls)
+
+    @classmethod
     def require_open(cls, current: Todo) -> None:
         pass
 
@@ -1903,6 +1979,10 @@ class DoneTodoState(TodoState):
     open: ClassVar[bool] = False
 
     @classmethod
+    def progress(cls, current: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
+        return ClosedProgress(finish=current.predicted_finish)
+
+    @classmethod
     def require_open(cls, current: Todo) -> None:
         raise TodoError(f"{current.id} is done; a strike or hunt is recorded on an open problem.")
 
@@ -1923,6 +2003,7 @@ class DoneTodoState(TodoState):
     def closed(cls, current: Todo, order: ProblemOrder) -> Todo:
         order.require_close()
         return replace(current, state=cls, order=order, assignment=None,
+                       predicted_finish=current.predicted_finish.closed(time.time()),
                        revision=current.revision + 1)
 
 
@@ -2378,6 +2459,7 @@ class Todo(TypedTable):
     verdicts: tuple[OrderVerdict, ...] = ()
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
+    predicted_finish: FinishPrediction = field(default_factory=FinishPrediction)
 
     unrequested_goal: ClassVar[GoalReference] = NoGoalReference()
 
@@ -2678,6 +2760,38 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def review_predictions(self, commander: ThreadIncarnation, storage: StorageRule,
+                           at: float) -> tuple[Todo, ...]:
+        """Read progress outside the write transaction; save only the still-current order.
+
+        Counts that are missing or not falling remain explicit unknown forecasts. A
+        deadline or commit cadence is not evidence of remaining work.
+        """
+        held = self.held_for_commander(commander)
+        pulls = PullRequests(held)
+        observed = tuple((todo, OrderProgress.read(todo, storage, pulls).forecast(at))
+                         for todo in held)
+        saved = []
+        if observed:
+            with self.writing() as db:
+                for todo, prediction in observed:
+                    current = self._current(db, todo.id)
+                    if current == todo:
+                        result = replace(current, predicted_finish=prediction,
+                                         revision=current.revision + 1)
+                        result.upsert(db)
+                        saved.append(result)
+        return tuple(saved)
+
+    def recent_closed_for_commander(self, commander: ThreadIncarnation,
+                                    limit: int = 50) -> tuple[Todo, ...]:
+        """The bounded outcome tail shown beside the open fleet, never all history."""
+        with self.snapshot() as db:
+            return tuple(Todo.read(db.execute(
+                "SELECT * FROM todo WHERE creator=? AND creator_created=? AND state=? "
+                "ORDER BY rowid DESC LIMIT ?",
+                (commander.name, commander.wire_birth, DoneTodoState.declared_name, limit))))
 
     def stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
         """Observe active held orders without changing owners, strikes or releases."""

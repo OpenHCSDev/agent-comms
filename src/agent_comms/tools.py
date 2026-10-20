@@ -168,6 +168,7 @@ class TodoChanged(ToolResult):
 class TodoList(ToolResult):
     todos: tuple[Todo, ...]
     progress: dict[str, OrderProgress] = field(default_factory=dict)
+    closed: tuple[Todo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -824,9 +825,11 @@ class CommsTodoListTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
+        closed = comms.goals.todos.recent_closed_for_commander(actor)
         pulls, storage = PullRequests(listed), comms.registry.storage_rule
-        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
-                                 for todo in listed if todo.holder})
+        return TodoList(listed, {todo.id: todo.state.progress(todo, storage, pulls)
+                                 for todo in (*listed, *closed) if todo.holder or not todo.state.open},
+                        closed)
 
 
 @dataclass(frozen=True, kw_only=True)
