@@ -7,6 +7,7 @@ fresh store, and readers accept exactly the declared columns and field types.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -268,11 +269,27 @@ class Index:
     unique: bool = False
     where: str | None = None
 
-    def sql(self, owner: type[TypedTable], name: str, *, if_not_exists: bool = False) -> str:
+    def name(self, owner: type[TypedTable]) -> str:
+        """Stable declared identity, including predicates of otherwise identical partial indexes.
+
+        SQLite has no small identifier limit; 255 ASCII characters keeps names usable
+        by surrounding SQL tools. Only oversized identities need a digest suffix.
+        """
+        columns = "_".join(item.wire_name for item in owner._fields_named(self.columns))
+        identity = f"{owner.declared_name}_{'unique_' if self.unique else ''}{columns}"
+        if self.where:
+            identity += "_where_" + owner._sql(self.where).encode().hex()
+        suffix = "_idx"
+        if len(identity + suffix) > 255:
+            suffix = f"_{hashlib.sha256(identity.encode()).hexdigest()[:12]}_idx"
+            identity = identity[:255 - len(suffix)]
+        return identity + suffix
+
+    def sql(self, owner: type[TypedTable], *, if_not_exists: bool = False) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (
             f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
-            f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
+            f"{existence}{_identifier(self.name(owner))} ON {_identifier(owner.declared_name)} "
             f"({owner._column_list(self.columns)})"
             + (f" WHERE {owner._sql(self.where)}" if self.where else "")
         )
@@ -571,14 +588,17 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             cls.declared_name: f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
+        statements.update(cls.index_schema_objects(if_not_exists=if_not_exists))
+        statements.update(cls.triggers(if_not_exists=if_not_exists))
+        return statements
+
+    @classmethod
+    def index_schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._fields() if item.column.index
         )
-        for ordinal, index in enumerate(indexes):
-            index_name = f"{cls.declared_name}_{ordinal}_idx"
-            statements[index_name] = index.sql(cls, index_name, if_not_exists=if_not_exists)
-        statements.update(cls.triggers(if_not_exists=if_not_exists))
-        return statements
+        return {index.name(cls): index.sql(cls, if_not_exists=if_not_exists)
+                for index in indexes}
 
     @classmethod
     def trigger_bodies(cls) -> dict[str, str]:
@@ -804,6 +824,26 @@ class TypedStore(RootFile, StoreWriter):
     @property
     def path(self) -> Path:
         return self.path_in(self.root)
+
+    @classmethod
+    def declarations(cls) -> tuple[type[TypedStore], ...]:
+        """Acquire declared row modules once, then derive their physical store owners.
+
+        This explicit installation discovery is not part of ordinary snapshot reads.
+        """
+        TypedTable.__registry__.values()
+        declared: dict[str, type[TypedStore]] = {}
+        pending = [cls]
+        while pending:
+            family = pending.pop()
+            pending.extend(family.__subclasses__())
+            if "filename" in vars(family) and "rows" in vars(family):
+                declared[family.filename] = family
+        return tuple(declared[name] for name in sorted(declared))
+
+    @classmethod
+    def declared_indexes(cls) -> dict[str, str]:
+        return {name: sql for row in cls.rows for name, sql in row.index_schema_objects().items()}
 
     @classmethod
     def declared_schema(cls) -> dict[str, str]:
