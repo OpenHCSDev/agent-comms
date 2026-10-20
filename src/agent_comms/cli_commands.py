@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -23,7 +24,13 @@ from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
 
-from .active_route import ActiveRoute, CommsRoute, LocalRoute, read_active_route, replace_unreadable_active_route
+from .active_route import (
+    ActiveRoute,
+    CommsRoute,
+    RouteFile,
+    active_route_path,
+    replace_unreadable_active_route,
+)
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
@@ -46,7 +53,7 @@ from .config_options import (
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
-from .errors import UnregisteredThreadError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -57,7 +64,7 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .field_codec import FieldCodec, FieldPlan, MalformedRecord, PathText, WireForm, option
+from .field_codec import FieldCodec, FieldPlan, PathText, WireForm, option
 from agent_comms.launch_root import LaunchRoot
 from .harness_install import Harness
 from .history_result import HistoryPageResult
@@ -892,8 +899,6 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .errors import RelationViolationError
-
         thread = ctx.registry.require(self.name)
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
@@ -1274,13 +1279,7 @@ class InstallCliCommand(CliCommand):
     def published_launch(cls) -> LaunchRoot:
         """Install runs where no route selects a bus yet: the published bus while its route
         still selects it, otherwise the default root, where install creates one."""
-        try:
-            route = read_active_route()
-        except MalformedRecord:
-            route = None
-        if route is not None and route.selects_its_root():
-            return LaunchRoot.from_path(route.root)
-        return LaunchRoot.from_path(LocalRoute.default().root)
+        return LaunchRoot.from_path(RouteFile.read(active_route_path()).launch_root())
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """The bus may be unreadable by this runtime, or absent, until the target's own
@@ -1348,8 +1347,6 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     name: str = option("--name")
 
     def apply(self, ctx: Comms) -> CliResult:
-        import subprocess
-
         worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
         # Git requires an absolute ceiling. Stop before entering the declared

@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import signal
 import sys
-from dataclasses import asdict
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import UpgradeRefused
@@ -25,7 +24,7 @@ def main() -> None:
     request = FieldCodec.decode(InstallRun, FieldCodec.parse(sys.stdin.read()))
     try:
         with LaunchRoot.from_path(request.root).selected():
-            print(json.dumps(request.run(), indent=2, default=asdict))
+            print(json.dumps(FieldCodec.encode(request.run()), indent=2))
     except UpgradeRefused as error:
         raise SystemExit(error.output)
 

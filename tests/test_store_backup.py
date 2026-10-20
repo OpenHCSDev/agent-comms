@@ -28,7 +28,7 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
     store = root / 'transcripts.sqlite3'
     route = tmp_path / 'route.json'
     route.write_text('original route')
-    ledger = root / CarryLedger.name
+    ledger = root / CarryLedger.filename
     with sqlite3.connect(store) as writer:
         writer.execute('PRAGMA journal_mode=WAL')
         writer.execute('CREATE TABLE events (body TEXT)')

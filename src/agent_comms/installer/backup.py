@@ -86,6 +86,14 @@ def bus_files(root: Path) -> dict[str, SavedFile]:
 
 
 @dataclass(frozen=True)
+class BackupReport:
+    """Where a live install kept the files it may restore, and their size."""
+
+    backup: str
+    bytes: int
+
+
+@dataclass(frozen=True)
 class RestoreSpace:
     bytes: int
     free: int
@@ -187,10 +195,9 @@ class StoreBackup(ResourceBackup[str]):
     """Snapshot declared databases through SQLite; restore only the selected files."""
     contents: ClassVar[type] = str
 
-    def report(self) -> dict[str, object]:
-        return {"backup": str(self.path),
-                "backup_bytes": sum(path.stat().st_size for path in self.path.rglob('*')
-                                    if path.is_file())}
+    def report(self) -> BackupReport:
+        return BackupReport(self.description, sum(path.stat().st_size for path in self.path.rglob('*')
+                                                  if path.is_file()))
 
     @property
     def description(self) -> str:
@@ -323,8 +330,8 @@ class NoBackup(StoreBackup):
     def restore(self) -> None:
         pass
 
-    def report(self) -> dict[str, object]:
-        return {"backup": None, "backup_bytes": 0}
+    def report(self) -> BackupReport:
+        return BackupReport(self.description, 0)
 
     @property
     def description(self) -> str:

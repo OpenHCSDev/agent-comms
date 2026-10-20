@@ -15,10 +15,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, TextIO
 
-from agent_comms.cli_commands import InstallCliCommand
+import agent_comms.installer
+from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.upgrade import TargetTree, run, upgrade
+from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
 from agent_comms.storage_rules import StorageRule
 
 
@@ -43,14 +44,14 @@ class InstallRun:
     def launch(self, output: TextIO) -> int:
         """The install outlives its caller: a new session, its output in files beside the bus.
         Retiring the caller's process group must not cut an install short."""
-        tree = TargetTree(self.command.checkout, self.scratch, self.target).path
+        tree = TargetTree(self.command.checkout, self.scratch, self.target)
         logs = self.root.parent / f".{self.root.name}.installer-{Id128Text.mint()}"
         logs.mkdir(mode=0o700)
         result, errors = logs / "result.json", logs / "stderr.log"
         with result.open("xb") as stdout, errors.open("xb") as stderr:
             process = subprocess.Popen(
-                [sys.executable, "-m", "agent_comms.installer"], cwd=tree,
-                env={**os.environ, "PYTHONPATH": os.pathsep.join((str(tree / "src"), str(tree / "tools")))},
+                [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
+                env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
                 stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
             )
         print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
@@ -63,12 +64,12 @@ class InstallRun:
             output.write(result.read_text())
         return process.returncode
 
-    def run(self) -> dict:
-        """Upgrade, then register the harnesses on the bus the target now reads."""
+    def run(self) -> Upgrade:
         command = self.command
-        report = upgrade(command.checkout, self.root, self.target, command.installer,
-                         command.rehearse, command.retire, command.spill_dir, self.scratch)
-        if command.rehearse:
-            return report
+        return upgrade(command.checkout, self.root, self.target, command.installer,
+                       command.rehearse, command.retire, command.spill_dir, self.scratch,
+                       self.harnesses)
+
+    def harnesses(self) -> InstallResult:
         with client_wire(self.root) as comms:
-            return {**report, "install": FieldCodec.encode(command.apply(comms))}
+            return self.command.apply(comms)

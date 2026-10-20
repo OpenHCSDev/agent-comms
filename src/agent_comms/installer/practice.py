@@ -14,6 +14,9 @@ from pathlib import Path
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.locked_store import RegistryFile
+from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import SharedLock
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage_rules import StorageRule
 from agent_comms.wire_log import WireLog
@@ -60,7 +63,8 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     """Copy the bus as files, so no runtime's code reads it to build the copy: the outgoing
     runtime's bugs cannot block the install of their fix, and the target cannot read a
     format its carries have not run on yet. SQLite stores copy through SQLite's backup, the
-    log under its own lock, every other saved file byte for byte. The maintenance witnesses
+    log under its own lock, the registry and its guard together under the registry's read
+    lock, every other saved file byte for byte. The maintenance witnesses
     stay behind: the rehearsal holds its copy itself. Stored paths keep naming the live bus,
     and every step writes only inside the root it is given."""
     floor = StorageRule.load(root).floor_gib * 2**30
@@ -71,14 +75,20 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     witnesses = {str(path.relative_to(root))
                  for path in MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths}
     log = WireLog(WireLog.path_in(root))
+    registry = RegistryStore.at(root)
     saved = bus_files(root)
     databases = {name for name in saved if CoordinationStore.is_database(root / name)}
     into.mkdir(mode=0o700)
-    with log.locked():
-        for path in (log.path, log.metadata_path):
-            if path.exists():
-                shutil.copy2(path, into / path.name)
-    for name in saved.keys() - witnesses - {log.path.name, log.metadata_path.name}:
+    locked_copies = ((log.locked(), (log.path, log.metadata_path)),
+                     (registry.locked(mode=SharedLock()),
+                      (registry.path, PrivateRegistryGuard.path_in(root))))
+    for lock, paths in locked_copies:
+        with lock:
+            for path in paths:
+                if path.exists():
+                    shutil.copy2(path, into / path.name)
+    copied = {path.name for _, paths in locked_copies for path in paths}
+    for name in saved.keys() - witnesses - copied:
         source, copy = root / name, into / name
         copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if name in databases:

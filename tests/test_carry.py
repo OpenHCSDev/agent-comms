@@ -13,7 +13,7 @@ import pytest
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.installer.carry import (
-    STEPS, CarryChain, CarryLedger,
+    STEPS, Carried, CarryChain, CarryLedger,
 )
 from agent_comms.installer.backup import (
     StoreBackup, UpgradeRefused, bus_files, transcripts_held,
@@ -21,6 +21,7 @@ from agent_comms.installer.backup import (
 from agent_comms.installer.upgrade import (
     RehearsalFiles,
     Stack,
+    StepRun,
     carried,
 )
 from tools.debt_ratchet import UncarriedRecordFormat, git
@@ -127,7 +128,7 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         opened.execute("BEGIN IMMEDIATE")
         opened.execute("ROLLBACK")
         assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
-        steps = [{"rewritten": []}]
+        steps = (StepRun("carry_nothing", Carried(0)),)
         assert carried(tmp_path, before, steps, RehearsalFiles.declared(steps)) == (
             RehearsalFiles(1, 0, (), 0))
         opened.execute("UPDATE todo SET id = 2")

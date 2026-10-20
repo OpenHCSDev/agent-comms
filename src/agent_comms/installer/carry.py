@@ -7,7 +7,7 @@ idempotent: data it already carried reports no change. Pending steps run in the 
 the main line added them. A finished step is retired by deleting its file once every
 bus has run it; a ledger keeps the names of the steps it ran, deleted or not.
 
-Each bus records the steps applied to it in ``carries.json``. Only this family
+Each bus records the steps applied to it in its ``CarryLedger``. Only this family
 reads or writes that file; nothing else in ``src/`` depends on it.
 """
 from __future__ import annotations
@@ -24,7 +24,8 @@ from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms.field_codec import PathText
+from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.locked_store import DurableFile
 
 STEPS = Path("tools/cutover")
 
@@ -37,10 +38,6 @@ class Carried:
     detail: dict[str, int | bool] = field(default_factory=dict)
     rewritten: tuple[str, ...] = ()
     """Files under the bus root this run wrote; every other file stays byte-identical."""
-
-    def report(self, name: str, applied: bool) -> dict[str, object]:
-        return {"carry": name, "changed": self.changed, "applied": applied,
-                "rewritten": self.rewritten, **self.detail}
 
 
 class Carry(ABC):
@@ -109,21 +106,28 @@ class CarryChain:
 
 
 @dataclass(frozen=True)
-class CarryLedger:
+class LedgerRecord:
+    """What the ledger file holds."""
+
+    applied: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CarryLedger(DurableFile):
     """The steps applied to one bus, oldest first."""
 
     root: Path
 
-    name: ClassVar[str] = "carries.json"
+    filename = "carries.json"
 
     @property
     def path(self) -> Path:
-        return self.root / self.name
+        return self.path_in(self.root)
 
     def applied(self) -> tuple[str, ...]:
         if not self.path.exists():
             return ()
-        return tuple(json.loads(self.path.read_text())["applied"])
+        return FieldCodec.decode(LedgerRecord, FieldCodec.parse(self.path.read_text())).applied
 
     def apply(self, name: str, operation: Callable[[], Carried]) -> Carried:
         """The caller holds the wire lock across conversion and recording."""
@@ -131,7 +135,7 @@ class CarryLedger:
             return Carried(0)
         result = operation()
         self.record(name)
-        return replace(result, rewritten=(*result.rewritten, self.name))
+        return replace(result, rewritten=(*result.rewritten, self.filename))
 
     def record(self, name: str) -> None:
         """Called with the bus's wire lock held."""
@@ -145,7 +149,7 @@ class CarryLedger:
         self.write(tuple(step.name() for step in chain.steps))
 
     def write(self, applied: tuple[str, ...]) -> None:
-        payload = json.dumps({"applied": list(applied)}, indent=2) + "\n"
+        payload = json.dumps(FieldCodec.encode(LedgerRecord(applied)), indent=2) + "\n"
         descriptor, stage = tempfile.mkstemp(dir=self.root, prefix=".carries.", suffix=".json")
         try:
             os.fchmod(descriptor, 0o600)

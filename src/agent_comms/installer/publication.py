@@ -32,8 +32,7 @@ class RuntimePublication:
         links = {
             Path.home() / '.local/bin' / entry.name: binary / entry.name
             for package in ('agent-comms', 'batrachian-toad')
-            for entry in distribution(package).entry_points
-            if entry.group == 'console_scripts'
+            for entry in distribution(package).entry_points.select(group='console_scripts')
         }
         links |= Harness.published_links(Path.home())
         for link, target in links.items():

@@ -68,6 +68,12 @@ class Measure(DeclaredFamily, affix="Measure"):
         """The environment of a tool run in a revision extracted to the tree."""
         return dict(os.environ)
 
+    @staticmethod
+    def source_paths(root: str, tree: Path) -> tuple[str, ...]:
+        """Where a revision extracted to the tree imports from: the measured root's directory,
+        then its ``src`` (``agent-comms install`` runs tools with it), never the installed one."""
+        return tuple(dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src")))
+
     @classmethod
     @abstractmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
@@ -389,11 +395,9 @@ class TypeErrors(CheckedRevision):
 
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
-        """Module names start at the source directory, as they do when the package is installed.
-        Tools import the same revision's ``src`` (``agent-comms install`` runs it first), never the
-        installed one."""
-        paths = dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src"))
-        return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
+        """Module names start at the source directory, as they do when the package is installed."""
+        return {**os.environ, "MYPYPATH": os.pathsep.join(
+            (*Measure.source_paths(root, tree), str(AUDIT_SCRIPTS)))}
 
 
 @dataclass(frozen=True)
@@ -1575,9 +1579,14 @@ class UncarriedRecordFormat(ChangeMeasure):
     """
 
     probe: typing.ClassVar[str] = (
-        "import sys; sys.path[:0] = sys.argv[1:3]; "
-        "import stored_formats; stored_formats.main(sys.argv[3:])"
+        "import importlib.util, os, sys; sys.path[:0] = sys.argv[2].split(os.pathsep); "
+        "spec = importlib.util.spec_from_file_location('stored_formats', sys.argv[1]); "
+        "module = sys.modules[spec.name] = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        "module.main(sys.argv[3:])"
     )
+    """This ratchet's reader, loaded by file, over only the revision's own source: a tools
+    directory on the path would resolve the revision's bare imports into this one's tree."""
 
     @staticmethod
     def declares_version(source: bytes) -> bool:
@@ -1608,10 +1617,12 @@ class UncarriedRecordFormat(ChangeMeasure):
             # Extracted source is stamped with its commit the way a build stamps it.
             for stamp in Path(scratch).rglob("package_stamp.py"):
                 WheelStamp(revision(repo, ref)).write(stamp)
+            tree = Path(scratch)
+            paths = dict.fromkeys((str(tree / package), *cls.source_paths(root, tree)))
             result = subprocess.run([sys.executable, "-c", cls.probe,
-                                     str(Path(scratch) / package), str(Path(__file__).resolve().parent),
-                                     *modules], cwd=scratch,
-                                    env=cls.environment(root, Path(scratch)),
+                                     str(Path(__file__).resolve().with_name("stored_formats.py")),
+                                     os.pathsep.join(paths), *modules], cwd=scratch,
+                                    env=cls.environment(root, tree),
                                     capture_output=True, text=True, check=True, timeout=300)
         return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
