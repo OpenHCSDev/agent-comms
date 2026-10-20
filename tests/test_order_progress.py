@@ -115,7 +115,7 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
         replace(todo, order=broken).upsert(db)
     create(commander, 'P2', deadline=1)
     commit(unit)
-    broken.check.at(git(unit, 'rev-parse', 'HEAD'), str(unit))
+    broken.check.at(git(unit, 'rev-parse', 'HEAD'), str(unit), unit.parent)
 
     progress = read((comms.goals.todos.get('P1'), unit))
     assert progress.line.endswith("; check prints no integer: printf 'no count here'")
@@ -213,7 +213,7 @@ def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
     source = ProgressSource.of(todo, StorageRule(checkout_base=unit.parent), Listed())
     assert not source.readings().readings
     assert not marker.exists()
-    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
+    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit), unit.parent)
     assert marker.read_text() == 'x'
     assert len(source.readings().readings) == 1
     assert source.readings().readings[0].distance == CountPrinted(todo.order.checked().untouched(()))
