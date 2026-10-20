@@ -89,7 +89,6 @@ from ..tools import (
     CommsTodoListTool,
     TodoList,
 )
-from . import capacity
 from .config import CommanderConfig, CommanderRole
 from .send_guard import CommanderSession
 
@@ -765,7 +764,7 @@ class Commander(CommanderContext):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
+    fork: str | None = option("--fork", default=None, help="a forked commander's name")
 
     def who(self, ctx: Commander) -> str:
         return self.fork or ctx.commander
@@ -776,8 +775,6 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
 
     def gate(self, ctx: Commander) -> None:
         self.require_commander(ctx.comms.registry.require(self.who(ctx)))
-        if self.fork:
-            capacity.beat(ctx.state / 'forks', self.fork)
 
     @abstractmethod
     def run(self, ctx: Commander) -> None: ...

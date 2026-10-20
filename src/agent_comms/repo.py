@@ -28,14 +28,15 @@ class Repo(BaseModel):
             result.check_returncode()
         return result.returncode == 0
 
+    @staticmethod
+    def git(checkout: Path, *args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(checkout), *args], capture_output=True, text=True,
+            check=True, timeout=30).stdout
+
     @classmethod
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote."""
-        url = subprocess.run(
-            ["git", "-C", str(checkout), "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+        url = cls.git(checkout, "remote", "get-url", "origin").strip()
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
         return cls(checkout=checkout.resolve(), github="/".join(github))
