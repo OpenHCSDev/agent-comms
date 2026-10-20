@@ -133,8 +133,7 @@ class RuntimePublication:
             raise ValueError('Publication requires the selected active root')
         comms = wire(route)
         barrier = comms.owners.maintenance
-        operator = MaintenanceOperator('runtime-publication:' + hashlib.sha256(
-            os.fsencode(self.runtime.resolve())).hexdigest())
+        operator = MaintenanceOperator.current()
         intent_path = root / 'runtime-publication.json'
         with _store_lock(root / 'runtime-publication'):
             previous = StoppedOwnerInstallation.current_pointer().resolve(strict=True)

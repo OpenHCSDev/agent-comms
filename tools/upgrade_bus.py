@@ -49,7 +49,7 @@ from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, trans
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, Id128Text
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
@@ -261,7 +261,7 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         stack.prepare_native()
         # Hold the copy before reading it, exactly as the live run holds the bus.
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copy / "registry.json").begin(
-            MaintenanceOperator("upgrade-bus")).nonce
+            MaintenanceOperator.current()).nonce
         with transcripts_held(copy):
             before = bus_files(copy)
         stopping = before_stop(copy, pending, stack, revisions)
@@ -366,15 +366,15 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
          installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
-               if thread["role"] == "agent" and thread["status"] == "running"]
     before_stop(root, pending, staged, revisions)
+    running = [thread["name"] for thread in staged.cli(root, "threads")["threads"]
+               if thread["role"] == "agent" and thread["status"] == "running"]
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
-    held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
+    held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     lock = installed.lock
     try:
-        installed.owners(root, "stop", running)
+        staged.owners(root, "stop", running)
         with transcripts_held(root):
             backup = Backup.take(root, ROUTE, (root,),
                 root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
@@ -396,7 +396,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
     except BaseException as error:
         state = maintenance.read()
-        state.phase.hold_for(maintenance, state, MaintenanceOperator("upgrade-bus"))
+        state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
         print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
               f"maintenance held, checkout and bus preserved; backup: {backup.path}",
               file=sys.stderr)
@@ -404,6 +404,31 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     installed.owners(root, "start", running)
     return {"stopped_and_started": running, **passed, "services": services,
             "backup": str(backup.path)}
+
+
+def detached_live(command: tuple[str, ...], root: Path) -> int:
+    """The live installer is a new session, not the monitor's owned child group.
+
+    Its output descriptors belong to files, not a caller that may disappear.
+    Deliberately do not borrow a turn-owned child lifetime or use Popen's cleanup
+    context: retiring the observer must not terminate this independent install.
+    """
+    logs = root.parent / f".{root.name}.installer-{Id128Text.mint()}"
+    logs.mkdir(mode=0o700)
+    output, errors = logs / "result.json", logs / "stderr.log"
+    with output.open("xb") as stdout, errors.open("xb") as stderr:
+        process = subprocess.Popen(
+            command, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
+            start_new_session=True,
+        )
+    print(f"upgrade-bus: detached installer pid={process.pid}; diagnostics {errors}",
+          file=sys.stderr, flush=True)
+    code = process.wait()
+    if code:
+        print(f"upgrade-bus: detached installer failed ({code}); see {errors}", file=sys.stderr)
+    else:
+        print(output.read_text(), end="")
+    return code
 
 
 def stopped(signum: int, frame: object) -> None:
@@ -423,6 +448,10 @@ def main() -> None:
                         help="The unit running this install; the plan names it")
     parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
     args = parser.parse_args()
+    if not args.rehearse and os.getsid(0) != os.getpid():
+        raise SystemExit(detached_live(
+            (sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]), args.root,
+        ))
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, stopped)
     try:
