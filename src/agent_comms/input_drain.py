@@ -239,9 +239,13 @@ class FullTick:
                     return SettledTick(
                         self.revision, self.entry, marker.claimed_after_seq, marker.last_seq,
                     )
-                if observation._repeat_observation_ready(session_id, drained):
-                    watcher.notify()
-                elif observation.effects.cursors.delivery(session_id).needs_refresh:
+                state = observation.state(session_id)
+                needs_refresh = observation.effects.cursors.delivery(session_id).needs_refresh
+                # A successful push already changed the observed wire. Refresh
+                # still needs a tick even when messages were pushed.
+                if state.owes_tick(
+                    turn_live=False, needs_refresh=needs_refresh,
+                ) and (drained == 0 or needs_refresh):
                     watcher.notify()
         except DEFERRED_DRAIN_ERRORS:
             pass
@@ -350,14 +354,6 @@ class InputObservation:
 
         task.add_done_callback(finished)
 
-    def _repeat_observation_ready(self, session_id: str, drained: int) -> bool:
-        state = self.state(session_id)
-        if drained != 0 or not state.repeat_observation:
-            return False
-        if state.pending_turns:
-            return False
-        return not self.turn_live(session_id)
-
     def _indexed_changes_for_owner(
         self, settled: SettledTick, revision: TickRevision, lookup: str,
     ) -> tuple[WireMetadata, bool]:
@@ -395,14 +391,14 @@ class InputObservation:
     def _quiescent(self, session_id: str) -> bool:
         """No process-local work or retry is waiting on the next tick."""
         state = self.state(session_id)
-        if state.repeat_observation:
-            return False
+        turn_live = self.turn_live(session_id)
         return (
             state.settled()
-            and not self.effects.cursors.delivery(session_id).needs_refresh
-            and not state.pending_turns
-            and not self.turn_live(session_id)
-            and not state.wake_pending()
+            and not state.owes_tick(
+                turn_live=turn_live,
+                needs_refresh=self.effects.cursors.delivery(session_id).needs_refresh,
+            )
+            and not turn_live
         )
 
     async def observe(self, session_id: str) -> None:
@@ -564,6 +560,21 @@ class DrainedSession:
     # A changed read or process-local wake needs a full observation.
     # A completed stable drain consumes this pending work.
     repeat_observation: bool = False
+
+    def owes_tick(self, turn_live: bool, needs_refresh: bool) -> bool:
+        """Keep work owed until another tick observes it.
+
+        The next observation consumes repeat_observation; scheduling consumes
+        pending_turns; cursor refresh consumes needs_refresh; completion of the
+        wake task consumes its pending wake. A live turn defers the tick rather
+        than erasing any of these reasons.
+        """
+        return bool(
+            self.repeat_observation
+            or self.pending_turns
+            or needs_refresh
+            or self.wake_pending()
+        )
 
     def producers(self) -> tuple[asyncio.Task[None], ...]:
         return tuple(task for task in (self.drain_task, self.wake_task) if task is not None)
