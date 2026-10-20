@@ -84,12 +84,12 @@ def test_oversized_append_preserves_marker_and_sequence(tmp_path):
 
 READERS = {
     'snapshot rows': lambda log, metadata: log.opened_wire_snapshot(opening=CurrentSnapshotOpening()),
-    'public records': lambda log, metadata: log.opened_wire_snapshot(opening=CurrentSnapshotOpening()),
+    'full history': lambda log, metadata: log.full_history_snapshot(),
     'verified records': lambda log, metadata: log.locked(),
 }
 READS = {
     'snapshot rows': lambda source, log, metadata: list(source.rows()),
-    'public records': lambda source, log, metadata: list(source.public_records()),
+    'full history': lambda source, log, metadata: list(source[1]),
     'verified records': lambda source, log, metadata: list(log.verified_records_unlocked(metadata)),
 }
 
@@ -107,8 +107,8 @@ def test_every_row_reader_refuses_a_bad_physical_row(tmp_path, reader, bad):
     path.chmod(0o600)
     log = WireLog(path)
     log.write_metadata_unlocked(metadata)
-    with READERS[reader](log, metadata) as source:
-        with pytest.raises(RelationViolationError):
+    with pytest.raises(RelationViolationError):
+        with READERS[reader](log, metadata) as source:
             READS[reader](source, log, metadata)
 
 
