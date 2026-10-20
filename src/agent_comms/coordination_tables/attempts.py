@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from dataclasses import field as dataclass_field
 from enum import IntFlag
-from typing import TYPE_CHECKING, Final, Annotated
+from typing import TYPE_CHECKING, Final, Annotated, ClassVar
 
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_contracts import (
@@ -30,6 +29,7 @@ from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
+    Generated,
     TypedTable,
 )
 
@@ -189,49 +189,45 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
         ):
             raise ValueError("attempt progress time is inconsistent")
 
-    phase: Annotated[
+    phase: ClassVar[Generated] = Generated(
         str,
-        SnapshotExclude(),
         Column(generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    lease_expires_at_ms: Annotated[
-        int | None,
-        SnapshotExclude(),
+    )
+    lease_expires_at_ms: ClassVar[Generated] = Generated(
+        int,
         Column(
             generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
             check="lease_expires_at_ms >= 0",
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    backend_done: Annotated[
+    )
+    backend_done: ClassVar[Generated] = Generated(
         bool,
-        SnapshotExclude(),
         Column(
             generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
             check="backend_done IN (0,1)",
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    process_dead: Annotated[
+    )
+    process_dead: ClassVar[Generated] = Generated(
         bool,
-        SnapshotExclude(),
         Column(
             generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
             check="process_dead IN (0,1)",
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    phase_kind: Annotated[
-        str | None,
-        SnapshotExclude(),
+    )
+    phase_kind: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated=(
                 "CASE\n       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE 'active' END"
-            )
+            ),
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    active_required_status: Annotated[
-        str | None,
-        SnapshotExclude(),
-        Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END"),
-    ] = dataclass_field(init=False, default=None, compare=False)
+    )
+    active_required_status: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END", nullable=True),
+    )
     checks = (
         (
             "last_progress_at_ms IS NULL OR\n"
@@ -436,16 +432,17 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if self.facts != ReplayFact.NONE and self.replay_safe:
             raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
 
-    retry_authorized: Annotated[
-        int | None,
+    retry_authorized: ClassVar[Generated] = Generated(
+        int,
         Column(
             generated=(
                 "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
                 "e = 0\n"
                 "              THEN 1 ELSE 0 END"
-            )
+            ),
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, default=None, compare=False)
+    )
 
     checks = ("facts = 0 OR replay_safe = 0",)
 

@@ -57,7 +57,7 @@ from .locked_store import DurableFile, SQLiteFile
 from .ordinary_turn_rules import OrdinaryGoalGrantCheck
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
-from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Generated, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -257,19 +257,22 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     progress_witness: str | None
     resolution: str | None
 
-    attempt_id: Annotated[
-        str | None, Column(unique=True, generated="json_extract(reservation,'$.attempt_id')")
-    ] = field(default=None, init=False, compare=False)
-    goal_id: Annotated[
-        str | None,
+    attempt_id: ClassVar[Generated] = Generated(
+        str,
+        Column(unique=True, generated="json_extract(reservation,'$.attempt_id')", nullable=True),
+    )
+    goal_id: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated="json_extract(reservation,'$.goal_id')",
             references=(Generation, "goal_id"),
+            nullable=True,
         ),
-    ] = field(default=None, init=False, compare=False)
-    generation: Annotated[
-        int | None, Column(generated="json_extract(reservation,'$.generation')")
-    ] = field(default=None, init=False, compare=False)
+    )
+    generation: ClassVar[Generated] = Generated(
+        int,
+        Column(generated="json_extract(reservation,'$.generation')", nullable=True),
+    )
     unique = (("goal_id", "generation"),)
     checks = (f"json_extract(phase,'$.kind') IN {GoalAttemptPhase.sql_choices()}",)
 

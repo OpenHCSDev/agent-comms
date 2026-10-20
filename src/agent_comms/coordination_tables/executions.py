@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, ClassVar
 from dataclasses import dataclass
-from dataclasses import field as dataclass_field
 from enum import StrEnum
 
 from agent_comms.coordination_contracts import (
@@ -23,6 +22,7 @@ from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
+    Generated,
     Index,
     TypedTable,
 )
@@ -66,9 +66,10 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
-    required_active: Annotated[
-        str | None, Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END")
-    ] = dataclass_field(init=False, default=None, compare=False)
+    required_active: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END", nullable=True),
+    )
 
     checks = ("(execution_id IS NULL) = (attempt_ordinal IS NULL)",)
 
@@ -180,17 +181,15 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
 
-    status: Annotated[
+    status: ClassVar[Generated] = Generated(
         str,
-        SnapshotExclude(),
         Column(
             generated="json_extract(lifecycle, '$.kind')",
             check="status IN\n      ({execution_names})",
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    current_attempt_ordinal: Annotated[
-        int | None,
-        SnapshotExclude(),
+    )
+    current_attempt_ordinal: ClassVar[Generated] = Generated(
+        int,
         Column(
             generated="json_extract(lifecycle, '$.ordinal')",
             check=(
@@ -199,74 +198,74 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                 "al BETWEEN 1 AND max_attempts\n"
                 "    "
             ),
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    required_attempt_kind: Annotated[
-        str | None,
-        SnapshotExclude(),
+    )
+    required_attempt_kind: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated=(
                 "CASE\n"
                 "        WHEN status = 'active' THEN 'active'\n"
                 "        WHEN status = 'completed' THEN 'succeeded'\n"
                 "    END"
-            )
+            ),
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    active_execution_id: Annotated[
-        str | None,
-        SnapshotExclude(),
-        Column(generated="CASE WHEN status = 'active' THEN execution_id END"),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    active_attempt_ordinal: Annotated[
-        int | None,
-        SnapshotExclude(),
-        Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END"),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    wire_execution_id: Annotated[
-        str | None,
-        SnapshotExclude(),
-        Column(generated="CASE WHEN origin = 'wire' THEN execution_id END"),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    wire_claim_ordinal: Annotated[
-        int | None,
-        SnapshotExclude(),
-        Column(generated="CASE WHEN origin = 'wire' THEN 0 END"),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    claim_status_kind: Annotated[
-        str | None,
-        SnapshotExclude(),
+    )
+    active_execution_id: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="CASE WHEN status = 'active' THEN execution_id END", nullable=True),
+    )
+    active_attempt_ordinal: ClassVar[Generated] = Generated(
+        int,
+        Column(
+            generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END",
+            nullable=True,
+        ),
+    )
+    wire_execution_id: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="CASE WHEN origin = 'wire' THEN execution_id END", nullable=True),
+    )
+    wire_claim_ordinal: ClassVar[Generated] = Generated(
+        int,
+        Column(generated="CASE WHEN origin = 'wire' THEN 0 END", nullable=True),
+    )
+    claim_status_kind: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated=(
                 "CASE\n"
                 "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
                 "'\n"
                 "        ELSE status END"
-            )
+            ),
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    deferred_replay_id: Annotated[
-        str | None,
-        SnapshotExclude(),
+    )
+    deferred_replay_id: ClassVar[Generated] = Generated(
+        str,
         Column(
             generated=(
                 "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                 " NULL\n"
                 "              THEN execution_id END"
-            )
+            ),
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, default=None, compare=False)
-    deferred_replay_required: Annotated[
-        int | None,
-        SnapshotExclude(),
+    )
+    deferred_replay_required: ClassVar[Generated] = Generated(
+        int,
         Column(
             generated=(
                 "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                 " NULL\n"
                 "              THEN 1 END"
-            )
+            ),
+            nullable=True,
         ),
-    ] = dataclass_field(init=False, default=None, compare=False)
+    )
     checks = (
         (
             "(status IN ({unstarted_execution_names}) AND current_attempt_ord"

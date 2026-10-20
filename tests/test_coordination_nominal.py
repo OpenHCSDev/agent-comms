@@ -171,7 +171,8 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
             with store.session.writing() as db:
                 assignment.insert(db)
             assert store.assignments.get("assignment") == assignment
-            assert store.assignments.get("assignment").wake_mode == "full"
+            with store.session.read():
+                assert WakeAssignment.count(store.session._connection, wake_mode="full") == 1
             settled = store.assignments.transition_preengagement(
                 "assignment",
                 FailedAssignment,
