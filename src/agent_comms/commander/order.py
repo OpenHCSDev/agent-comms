@@ -25,6 +25,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
+from agent_comms_hooks.watch import PeerSync
+
 from ..change_report import FileLine
 from ..comms import Comms
 from ..child_process import BoundedRun
@@ -162,8 +164,10 @@ class CommanderContext(CommanderConfig):
 
     def post(self, audience: VerdictAudience, body: str) -> str:
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-        return self.call(CommsSendTool(sender=self.commander, target=target, body=body,
-                                  audience=audience.threads)).id
+        published = self.call(CommsSendTool(sender=self.commander, target=target, body=body,
+                                          audience=audience.threads))
+        PeerSync.sent(self, target)
+        return published.id
 
     def call(self, tool):
         return ThreadCaller(self.commander).invoke(tool, self.comms)

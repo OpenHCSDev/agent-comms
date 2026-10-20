@@ -14,9 +14,15 @@ import shlex
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from os import fstat
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
+
+if TYPE_CHECKING:
+    from agent_comms.commander.config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -101,6 +107,74 @@ class WatchGuard(ClaudeHookProgram):
     @classmethod
     def command(cls) -> str:
         return cls.console_script(f"{main.__module__}:{main.__name__}")
+
+
+class PeerSync(ClaudeHookProgram):
+    """Removed in the same PR that lands P216's shared order and handoff record."""
+
+    events = ("UserPromptSubmit", "PostToolUse", "Stop")
+    commanders = frozenset({"claude-code", "desktop-commander"})
+    interval = timedelta(minutes=15)
+    warning = "Peer sync overdue: send the other commander your PRs needed, PRs held and any state disagreement over the relay now."
+
+    @classmethod
+    def command(cls) -> str:
+        return cls.console_script(f"{cls.__module__}:{cls.__name__}.main")
+
+    @classmethod
+    def sent(cls, config: CommanderConfig, target: str) -> None:
+        """Record only a completed relay to this commander's counterpart."""
+        if config.commander not in cls.commanders or target not in cls.commanders - {
+            config.commander
+        }:
+            return
+        path = config.peer_sync_log
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as log:
+            fcntl.flock(log, fcntl.LOCK_EX)
+            log.write(f"{datetime.now().astimezone():%H:%M} {target}\n")
+            log.flush()
+
+    @classmethod
+    def overdue(cls, config: CommanderConfig) -> bool:
+        """The append's filesystem clock supplies its date; HH:MM alone cannot."""
+        try:
+            with config.peer_sync_log.open() as log:
+                fcntl.flock(log, fcntl.LOCK_SH)
+                lines = log.readlines()
+                written = datetime.fromtimestamp(fstat(log.fileno()).st_mtime).astimezone()
+        except FileNotFoundError:
+            return True
+        peers = cls.commanders - {config.commander}
+        if not lines or lines[-1].split() != [written.strftime("%H:%M"), *sorted(peers)]:
+            return True
+        elapsed = datetime.now().astimezone() - written
+        return elapsed < timedelta() or elapsed >= cls.interval
+
+    @classmethod
+    def main(cls) -> None:
+        from agent_comms.commander.config import Commander, CommanderConfig
+        from agent_comms.commander.send_guard import CommanderSession
+
+        hook = ClaudeHook.read()
+        config = CommanderConfig.installed()
+        if not CommanderSession(hook.session_id, Commander.of(config)).is_commander():
+            return
+        if not cls.overdue(config):
+            return
+        if hook.hook_event_name == "Stop":
+            print(json.dumps({"decision": "block", "reason": cls.warning}))
+        else:
+            print(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": hook.hook_event_name,
+                            "additionalContext": cls.warning,
+                        }
+                    }
+                )
+            )
 
 
 def main() -> None:
