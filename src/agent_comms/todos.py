@@ -37,6 +37,7 @@ from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
+from .external_transcript import ExternalTranscript
 from .field_codec import (
     FieldCodec,
     GitCommitText,
@@ -47,6 +48,7 @@ from .field_codec import (
     WireValue,
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
+from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
@@ -91,6 +93,8 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
     evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
                                       metadata={"wire_omit_default": True})
+    proof_build: BuildIdentity = field(default_factory=UnrecordedBuildIdentity,
+                                       metadata={"wire_omit_default": True})
 
     @property
     def work(self) -> str:
@@ -115,14 +119,15 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
         check = order.check
         for each in (check, *order.deletes.checks):
             await self.require_source(each)
-            each.result.require(await self.checked(each))
-        return replace(self, at=await self.delivery_time(check))
+            each.result.require(await self.checked(each, registry.storage_rule.checkout_base))
+        return replace(self, at=await self.delivery_time(check),
+                       proof_build=await asyncio.to_thread(self.proof_build.recorded))
 
     @abstractmethod
     async def require_source(self, check): ...
 
     @abstractmethod
-    async def checked(self, check: OrderCheck) -> ChildResult: ...
+    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult: ...
 
     @abstractmethod
     async def delivery_time(self, check): ...
@@ -169,8 +174,8 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
 
-    async def checked(self, check: OrderCheck) -> ChildResult:
-        return await asyncio.to_thread(check.at, self.commit, check.directory)
+    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
+        return await asyncio.to_thread(check.at, self.commit, check.directory, checkout_base)
 
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
@@ -207,7 +212,8 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         verified = await super().verified(todo, registry)
         merge = await self.merge_state(todo, registry)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
-                                     at=verified.at, evidence=self.evidence, merge=merge)
+                                     at=verified.at, evidence=self.evidence, merge=merge,
+                                     proof_build=verified.proof_build)
 
     async def merge_state(self, todo: Todo, registry: Registration) -> DeliveryMerge:
         """Observe integration, not merely publication, at the time of completion.
@@ -301,7 +307,7 @@ class OperationDelivery(OrderDelivery):
     async def require_source(self, check):
         pass
 
-    async def checked(self, check: OrderCheck) -> ChildResult:
+    async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
         return await check.run()
 
     async def delivery_time(self, check):
@@ -1484,6 +1490,9 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
+    def require_installation(self) -> None:
+        raise ValueError("Check the delivered order before recording installation.")
+
     def require_withdrawal(self) -> None:
         raise ValueError("Only an undelivered order can be withdrawn.")
 
@@ -1800,6 +1809,9 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
+
+    def require_installation(self) -> None:
+        self.delivery.proof_build.require_installed()
 
     def installed(self, works, artifact):
         self.run.require_closing(works)
@@ -2619,6 +2631,12 @@ class InstallTodo(CloseOrderTodo):
     works: str
     artifact: str
 
+    def prepare(self, goals: Goals, current: Todo) -> InstallTodo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.order.require_installation()
+        return self
+
     def closed(self, current: Todo) -> ProblemOrder:
         if not Path(self.artifact).is_file():
             raise ValueError("Retain the installed application artifact before closing.")
@@ -2901,6 +2919,16 @@ class TodoStore(TypedStore):
             raise TodoStoreUnwritable(
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
+
+    @contextmanager
+    def writer_connection(
+        self, *, check_same_thread: bool = True
+    ) -> Iterator[sqlite3.Connection]:
+        with (
+            MaintenanceBarrier(self.root / "registry.json").allow_input(),
+            super().writer_connection(check_same_thread=check_same_thread) as connection,
+        ):
+            yield connection
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)

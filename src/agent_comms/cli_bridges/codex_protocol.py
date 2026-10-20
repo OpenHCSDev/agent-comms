@@ -742,7 +742,7 @@ class ItemEntry(WireModel):
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
         event_time = self.started_at.continued_from(self.completedAtMs / 1000)
-        return self.item.completed(self.turnId, self.item.events(event_time.transcript_timestamp()))
+        return self.item.completed(self.turnId, self.item.events(event_time.recorded_at('A Codex item')))
 
 
 class ItemsPage(WireModel):

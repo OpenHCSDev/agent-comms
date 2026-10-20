@@ -331,12 +331,13 @@ class OrderCheck:
         return tuple(checked.result for checked in CheckedCommit.stored(repository, sha)
                      if checked.command == self.command)[:1]
 
-    def at(self, revision: str, repository: str) -> ChildResult:
+    def at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
         """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
         sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
         for recorded in self.recorded(sha, repository):
             return recorded
-        with tempfile.TemporaryDirectory(prefix="order-check-") as scratch:
+        checkout_base.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")
             CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)
             try:

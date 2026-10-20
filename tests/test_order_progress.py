@@ -139,7 +139,7 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
         replace(todo, order=broken).upsert(db)
     create(commander, 'P2', deadline=1)
     commit(unit)
-    broken.check.at(git(unit, 'rev-parse', 'HEAD'), str(unit))
+    broken.check.at(git(unit, 'rev-parse', 'HEAD'), str(unit), unit.parent)
 
     progress = read((comms.goals.todos.get('P1'), unit))
     assert progress.line.endswith("; check prints no integer: printf 'no count here'")
@@ -275,7 +275,7 @@ def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
     source = MeasuredProgressSource.of(todo, StorageRule(checkout_base=unit.parent), Listed())
     assert not source.readings().readings
     assert not marker.exists()
-    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
+    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit), unit.parent)
     assert marker.read_text() == 'x'
     assert len(source.readings().readings) == 1
     assert source.readings().readings[0].distance == CountPrinted(todo.order.checked().untouched(()))
@@ -313,8 +313,8 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
         script.due('P1', '23:59', 'too short')
     script.due('P1', '23:59', 'the owner widened the order to the rotation line too')
     moved = comms.goals.todos.get('P1')
-    assert commander_order.hhmm(moved.deadline) == '23:59' and moved.revision == before.revision + 1
-    assert 'P1 order order-P1 due ' in (tmp_path / 'narrative.md').read_text()
+    assert moved.deadline.clock() == '23:59:00' and moved.revision == before.revision + 1
+    assert 'P1 order order-P1 deadline changed): ' in (tmp_path / 'narrative.md').read_text()
 
 
 class HeldSource:
