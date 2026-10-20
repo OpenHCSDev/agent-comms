@@ -110,6 +110,13 @@ def test_tool_start_is_one_draft_row_then_one_completed_row(tmp_path):
         assert row.events == call.finished('done', True, 'call', 2.0)
 
 
+def test_empty_tool_collection_has_activity_but_no_blank_row(tmp_path):
+    output = _output(tmp_path)
+    phase = ToolRunningPhase('Editing files')
+    output.publish_batch([StartedItem('t', 'empty', phase, ToolDraft(RecordedEventTime(1.0), ()))])
+    assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
+
+
 def test_non_text_items_never_acquire_invented_text(tmp_path):
     output = _output(tmp_path)
     output.publish_batch([StartedItem('t', 'tool', ToolRunningPhase('Run'), DraftAccumulator(RecordedEventTime(1.0)))])

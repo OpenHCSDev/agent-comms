@@ -91,6 +91,9 @@ class ToolDraft(PresentableDraft):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.prefix
 
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return super().snapshot(turn_id, item_id) if self.prefix else ()
+
 
 @dataclass
 class TextDraft(PresentableDraft):
