@@ -2278,7 +2278,7 @@ class MissedFirstCallStrike(ObjectiveStrike):
         if now <= due:
             return ()
         thread = goals.registry.require(todo.held().owner)
-        if thread.execution.tool_call_between(goals, thread, order.at.recorded_at("An order"), due):
+        if thread.execution.tool_call_between(goals.root, thread, order.at.recorded_at("An order"), due):
             return ()
         return (cls.make(todo, now,
             f"made no first tool call before its first-call deadline; "

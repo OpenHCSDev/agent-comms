@@ -85,7 +85,7 @@ def test_execution_activity_drives_first_call_alarm_and_core_strike(
                     {'type': 'toolCall', 'id': 'not-assistant', 'name': 'bash', 'arguments': {}}]}}) + '\n')
             stream.write('{"type":"message"')  # In-flight tail is not a saved tool call.
     assert context.last_activity('worker') == RecordedEventTime(250)
-    assert not execution.tool_call_between(comms, worker, 151, 220)
+    assert not execution.tool_call_between(comms.root, worker, 151, 220)
     assert not MissedFirstCallStrike.observe(comms.goals, todo, 301, None)
     assert context.first_calls((todo,), {'worker': context.last_activity('worker')}) == []
     comms.goals.todos.advance_objective_failures(comms.goals)

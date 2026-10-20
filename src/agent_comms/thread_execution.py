@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from contextlib import closing
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .declared_family import DeclaredFamily
 from .child_process import ProcessState
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_status import NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
-    from .threads import Thread
+    from .comms import Comms
     from .registry_document import RegistrySnapshot
-    from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
+    from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .threads import Thread
 
 
 class ThreadCommandAvailability:
@@ -68,12 +70,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
     @classmethod
     @abstractmethod
-    def last_tool_call(cls, comms, thread: Thread) -> EventTime:
+    def last_tool_call(cls, comms: Comms, thread: Thread) -> EventTime:
         """The newest original tool-call time in this execution's saved history."""
 
     @classmethod
     @abstractmethod
-    def tool_call_between(cls, comms, thread: Thread, since: float, through: float) -> bool:
+    def tool_call_between(cls, root: Path, thread: Thread, since: float, through: float) -> bool:
         """Whether an original tool call met an order's first-call deadline."""
 
     @classmethod
@@ -126,7 +128,7 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
 class NativeThreadExecution(ThreadExecution):
     @classmethod
-    def _tool_call_times(cls, thread: Thread):
+    def _tool_call_times(cls, thread: Thread) -> Generator[float]:
         from .native_transcript import NativeTranscript
 
         if not thread.session_file:
@@ -134,18 +136,21 @@ class NativeThreadExecution(ThreadExecution):
         try:
             with closing(NativeTranscript(Path(thread.session_file)).tail()) as entries:
                 for entry in entries:
-                    if any(message.assistant and message.tool_calls for message in entry.messages):
+                    if any(message.assistant and message.tool_calls
+                           for message in entry.messages):
                         yield entry.timestamp.at.timestamp()
         except FileNotFoundError:
             return
 
     @classmethod
-    def last_tool_call(cls, comms, thread: Thread) -> EventTime:
+    def last_tool_call(cls, comms: Comms, thread: Thread) -> EventTime:
         with closing(cls._tool_call_times(thread)) as times:
-            return next((RecordedEventTime(timestamp) for timestamp in times), UnrecordedEventTime())
+            return next(
+                (RecordedEventTime(timestamp) for timestamp in times), UnrecordedEventTime(),
+            )
 
     @classmethod
-    def tool_call_between(cls, comms, thread: Thread, since: float, through: float) -> bool:
+    def tool_call_between(cls, root: Path, thread: Thread, since: float, through: float) -> bool:
         with closing(cls._tool_call_times(thread)) as times:
             return any(since <= timestamp <= through for timestamp in times)
 
@@ -195,16 +200,16 @@ class NativeThreadExecution(ThreadExecution):
 
 class ExternalThreadExecution(ThreadExecution):
     @classmethod
-    def last_tool_call(cls, comms, thread: Thread) -> EventTime:
+    def last_tool_call(cls, comms: Comms, thread: Thread) -> EventTime:
         from .external_transcript import ExternalTranscript
 
         return ExternalTranscript(comms.root, thread.incarnation).last_tool_call()
 
     @classmethod
-    def tool_call_between(cls, comms, thread: Thread, since: float, through: float) -> bool:
+    def tool_call_between(cls, root: Path, thread: Thread, since: float, through: float) -> bool:
         from .external_transcript import ExternalTranscript
 
-        return ExternalTranscript(comms.root, thread.incarnation).tool_call_between(since, through)
+        return ExternalTranscript(root, thread.incarnation).tool_call_between(since, through)
 
     @classmethod
     def require_external(cls) -> None:
