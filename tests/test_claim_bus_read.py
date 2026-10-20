@@ -32,10 +32,11 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.messages import ClaimNoticeKind
+from agent_comms.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope
 from agent_comms.selected_source_batch import SelectedSource
@@ -146,6 +147,30 @@ def settle_failed(store):
         store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), None, boundary)
 
 
+def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:
+    with comms.bus.log.full_history_snapshot() as (_, messages):
+        return tuple(message for message in messages if isinstance(message, ClaimMessage))
+
+
+def acquire_tool_claim(comms: Comms, name: str, resource: Path, operation_id: str = "e" * 32):
+    with NativeBoundary(comms.bus) as boundary:
+        owner = boundary.registry.require(name)
+        scope = NativeClaim(
+            owner_claimed_generation=boundary.registry.claimed_generations[name],
+            operation_id=operation_id, turn_id=f"turn-{name}", input_id=f"input-{name}",
+        )
+        return comms.bus.publisher._publish_acquisition_unlocked(
+            boundary.bus_lock, boundary.registry, owner,
+            ExistingFileClaim(resource).normalized(Path(owner.worktree)), scope,
+            activity=boundary.activity,
+        )
+
+
+def release_tool_claim(comms: Comms, claim) -> None:
+    with NativeBoundary(comms.bus) as boundary:
+        comms.bus.publisher.release_resources(boundary, (claim,), "Finished test tool operation")
+
+
 def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     with selected_turn() as (comms, store, claim_scope, resource):
         log = comms.bus.log
@@ -168,9 +193,11 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
-        claims = [m for m in comms.bus.log.read_page(
+        claims = claim_originals(comms)
+        displayed = tuple(message for message in comms.bus.log.read_page(
             MessagePageRequest(AllChannelDisplayScope("#any")),
-        ).messages if m.claim_transition is not None]
+        ).messages if isinstance(message, ClaimMessage))
+        assert displayed == claims
         assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
         ]
@@ -198,8 +225,7 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
             comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
         )
         assert dict(comms.bus.log.claim_projection()) == {str(resource): claimed}
-        comms.messaging.send("Alice", "sender", "Explicit release",
-                                     releases=(str(resource),)).message
+        release_tool_claim(comms, claimed)
         with pytest.raises(IdentityConflict, match="already consumed"):
             publish_selected_resource_claim(
                 comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
