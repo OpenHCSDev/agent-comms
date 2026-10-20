@@ -25,7 +25,7 @@ def test_stale_gate_covers_its_verb_family_but_allows_board_repairs(
     todo = create(commander, 'P244', deadline=time.time() - 1900)
     body = str(tmp_path / 'must-not-be-read')
     blocked = (
-        ['send', 'worker', '23:59', body], ['say', 'worker', body],
+        ['send', 'worker', body, '--due', '23:59'], ['say', 'worker', body],
         ['problem', body, '--to', 'worker', '--due', '23:59', '--where', f'{__file__}:1'],
         ['strike', 'worker', '--why', 'P244 missed its deadline'],
     )

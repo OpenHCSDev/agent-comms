@@ -7,9 +7,12 @@ import pytest
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 
 DOCUMENTED = [
-    ("order", "send worker 23:59 order.txt --clean --reassign 'missed two deadlines' --fork f1",
+    ("order", "send worker order.txt --due 23:59 --clean --reassign 'missed two deadlines' --fork f1",
      {"unit": "worker", "due": "23:59", "body_file": "order.txt", "clean": True,
       "reassign": "missed two deadlines", "fork": ThreadCaller("f1")}),
+    ("order", "send worker order.txt", {"unit": "worker", "body_file": "order.txt", "due": None}),
+    ("order", "problem order.json --to worker --where file.py:1",
+     {"to": "worker", "order": "order.json", "where": "file.py:1", "due": None}),
     ("order", "strike worker --why 'P1 late' --caught 'lead at install'",
      {"unit": "worker", "why": "P1 late", "caught": "lead at install", "fork": NoThreadCaller()}),
     ("order", "strike worker --why 'P1 late'",

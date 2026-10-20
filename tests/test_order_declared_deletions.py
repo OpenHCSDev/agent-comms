@@ -59,7 +59,7 @@ def test_order_send_cli_refuses_declared_module_imported_by_toad(
     body.write_text(json.dumps(document))
     before = comms.goals.todos.get('P1')
     command = [str(Path(sys.executable).with_name('agent-comms-commander')),
-               '--root', str(comms.root), 'order', 'send', 'worker', '23:59', str(body),
+               '--root', str(comms.root), 'order', 'send', 'worker', str(body), '--due', '23:59',
                '--replaces', before.messages[-1].message_id]
     result = subprocess.run(command, capture_output=True, text=True, timeout=30,
                             env={**os.environ, 'AGENT_COMMS_ROOT': str(comms.root),

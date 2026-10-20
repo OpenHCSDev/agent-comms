@@ -58,6 +58,7 @@ from ..todos import (
     DirectiveText,
     FileDeliveryEvidence,
     LocatedProblemFinding,
+    MeasuredDeadline,
     NoDeliveryEvidence,
     OperationDelivery,
     OrderedHunt,
@@ -302,7 +303,7 @@ class Commander(CommanderContext):
             self.comms.registry.storage_rule.require_quota(self.comms.registry.require(unit))
         except SelectedToolDenied as quota:
             problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-        if not re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d', due):
+        if due is not None and not re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d', due):
             problems.append('due: fix: supply HH:MM local time (00:00 through 23:59)')
         group = [new[0]] if new else list(document.problems)
         listed = {t.id: t for t in self.todos()}
@@ -405,8 +406,10 @@ class Commander(CommanderContext):
         # A miss already struck on the order this replaces is one miss:
         # the send-back records no second strike.
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
+        measured = MeasuredDeadline.read(self.comms.goals.todos)
+        measured_at = measured.deadline(order)
+        due_at = RecordedEventTime(time.time()).at_clock(due) if due is not None else measured_at
         request = order.request(self.comms.registry.require(self.commander), tuple(group))
-        due_at = RecordedEventTime(time.time()).at_clock(due)
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
@@ -424,6 +427,8 @@ class Commander(CommanderContext):
                 self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
         for other, text in taken.items():
             self.post(VerdictAudience((other,)), text)
+        print(f'{measured.summary}; measured deadline {measured_at.clock()}'
+              + (f'; explicit deadline {due_at.clock()}' if due is not None else ''))
         print(order.id)
         if replacing and not clean and struck_already:
             print(f'{unit} already struck on this order of {group[0]}; '
@@ -777,8 +782,8 @@ class OrderVerb(CommanderVerb):
 class SendVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "record the order in Core and send it"
     unit: str = option("unit")
-    due: str = option("due", help="HH:MM local time")
     body_file: str = option("body_file", metavar="ORDER.json")
+    due: str | None = option("--due", default=None, help="HH:MM local time; default measured from deliveries")
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
     replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
@@ -939,7 +944,7 @@ class ProblemVerb(OrderVerb, DirectiveVerb, StaleOrderGate):
     help = "Core records the problem with its order, or nothing"
     order: str = option("order", metavar="ORDER.json")
     to: str = option("--to")
-    due: str = option("--due", help="HH:MM local time")
+    due: str | None = option("--due", default=None, help="HH:MM local time; default measured from deliveries")
     where: str = option("--where", help="the actual file:line where this problem occurs")
     disk: bool = option("--disk", default=False)
 

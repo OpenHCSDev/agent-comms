@@ -33,7 +33,7 @@ def test_json_problem_and_send_report_all_fields_then_record_the_correction(comm
     broken['order']['report'] = []
     broken['order']['run']['text'] = False
     path.write_text(json.dumps(broken))
-    args = ('send', 'worker', '23:59', str(path), '--clean',
+    args = ('send', 'worker', str(path), '--due', '23:59', '--clean',
             '--replaces', before.messages[-1].message_id)
     refused = run(*args)
     assert refused.returncode != 0

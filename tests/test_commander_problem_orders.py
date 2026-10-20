@@ -637,7 +637,7 @@ def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
     reviews.write('lead', AnsweredRuleReviewEntry(
         1, 'Keep the current order message with its Todo. P1'))
     command = [str(Path(sys.executable).with_name('agent-comms-commander')),
-               'order', 'send', 'worker', '23:59', str(body)]
+               'order', 'send', 'worker', str(body), '--due', '23:59']
     env = {**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
            'AGENT_COMMS_ROOT': str(comms.root)}
     refused = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
