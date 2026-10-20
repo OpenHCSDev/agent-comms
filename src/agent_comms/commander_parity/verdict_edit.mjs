@@ -16,6 +16,7 @@ session.appendMessage({
   stopReason: "toolUse", timestamp: Date.now(),
 });
 const result = await createEditTool(process.cwd()).execute(callId, args);
+if ((await readFile(path, "utf8")) !== replacement) throw new Error("Native edit did not apply its request");
 session.appendMessage({ role: "toolResult", toolCallId: callId, toolName: "edit",
   content: result.content, details: result.details, isError: false, timestamp: Date.now() });
 console.log(JSON.stringify({ callId, changed: (await readFile(path, "utf8")) === replacement }));
