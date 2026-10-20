@@ -1,6 +1,5 @@
 """Original acquired SDK context reader through the installed owner RPC."""
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.storage_rules import StorageRule
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 
 import argparse
 import asyncio
@@ -180,8 +179,7 @@ async def run(root, sdk_source_path=None, *, package: VerifiedNativePackage):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
-    parser.add_argument("--native-cache", type=Path, default=StorageRule.native_cache)
     parser.add_argument("--sdk-source", type=Path, help="Borrow an already completed original SDK capture without rerunning it")
     args = parser.parse_args()
     asyncio.run(run(args.root.resolve(), args.sdk_source,
-                    package=VerifiedNativePackage.from_environment(args.native_cache)))
+                    package=VerifiedNativePackage.acquire(pinned_native_package())))

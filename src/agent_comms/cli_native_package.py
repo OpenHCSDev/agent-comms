@@ -8,20 +8,18 @@ import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .cli_commands import DeclaredOptions
-from .command import Command
-from .declared_family import DeclaredFamily
-from .field_codec import option
-from .native_package import (
+from agent_comms.cli_commands import DeclaredOptions
+from agent_comms.command import Command
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import option
+from agent_comms.native_package import (
     install_declared_sources,
-    native_environment,
     package_tree_digest,
-    pinned_package_in,
     share_native_resources,
     verify_native_package,
     write_native_manifest,
 )
-from .storage_rules import StoragePath, StorageRule
+from agent_comms.storage_rules import StoragePath
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -87,37 +85,6 @@ class InstallSourcesVerb(NativePackageVerb):
     def apply(self, ctx: None = None) -> None:
         verify_native_package(self.package)
         install_declared_sources(self.package, self.snapshot)
-
-
-@dataclass(frozen=True, kw_only=True)
-class EnvironmentVerb(NativePackageVerb):
-    help = "Print this pin's test environment directory"
-    cache: StoragePath = option(
-        "--cache",
-        default=StorageRule.native_cache,
-        help="the root holding one test environment per pin",
-    )
-
-    def apply(self, ctx: None = None) -> None:
-        print(native_environment(self.cache))
-
-
-@dataclass(frozen=True, kw_only=True)
-class PackageVerb(NativePackageVerb):
-    help = "Print where this pin's built package sits under a root laid out as stack/ is"
-    root: StoragePath = option("root", help="a stack directory or test environment")
-
-    def apply(self, ctx: None = None) -> None:
-        print(pinned_package_in(self.root))
-
-
-@dataclass(frozen=True, kw_only=True)
-class BuildVerb(NativePackageVerb):
-    help = "Print the directory holding this pin's built package under a root laid out as stack/ is"
-    root: StoragePath = option("root", help="a stack directory or test environment")
-
-    def apply(self, ctx: None = None) -> None:
-        print(pinned_package_in(self.root).parents[2])
 
 
 if __name__ == "__main__":

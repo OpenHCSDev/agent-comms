@@ -1,16 +1,19 @@
 """Shared fixtures: an isolated Comms wire per test."""
-from agent_comms.native_package import pinned_native_package
+from agent_comms.native_package import pinned_location, pinned_native_package
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 import asyncio
 import os
+import subprocess
+import sys
 import tempfile
 from collections.abc import Awaitable
 from contextlib import AsyncExitStack
 from pathlib import Path
 
 import pytest
+from xdist import is_xdist_worker
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
@@ -101,11 +104,16 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
             origin=AgentOrigin(),
         )
 
-def pytest_addoption(parser):
-    from agent_comms.storage_rules import StorageRule
+def pytest_sessionstart(session):
+    """The controller derives this checkout's pinned native package before any worker runs.
 
-    parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
-                     help="Root of the native test environments stack/bin/pi-native-test-env builds")
+    prepare-pi-native keys its build by the pin and reuses a verified one, so an
+    unchanged pin costs nothing and a changed pin rebuilds without anyone remembering.
+    """
+    if is_xdist_worker(session) or pinned_location().is_dir():
+        return
+    root = Path(__file__).resolve().parents[1]
+    subprocess.run([str(root / "stack/bin/prepare-pi-native"), "--python", sys.executable], check=True)
 
 
 @pytest.fixture
@@ -135,19 +143,11 @@ def cursor_delivery(source_reads):
 
 
 @pytest.fixture(scope="session")
-def native_runtime_package(pytestconfig):
-    """The artifact of this checkout's own pin from its test environment; the pins must agree."""
-    from agent_comms import native_package
+def native_runtime_package():
+    """The artifact of this checkout's own pin, never the installed package's."""
+    from agent_comms.native_package import VerifiedNativePackage
 
-    return native_package.VerifiedNativePackage.from_environment(pytestconfig.getoption("native_cache"))
-
-
-@pytest.fixture(autouse=True)
-def _native_runtime_resources_are_explicit(monkeypatch, native_runtime_package):
-    """Source tests use the same reviewed native resource as their installed interpreter."""
-    from agent_comms import native_package
-
-    monkeypatch.setattr(native_package, "MANIFEST", native_runtime_package.path.parents[3] / "pi-native.sha256")
+    return VerifiedNativePackage.acquire(pinned_native_package())
 
 
 @pytest.fixture(autouse=True)
@@ -405,7 +405,7 @@ def wired(comms: Comms) -> Comms:
 
 
 @pytest.fixture
-def selected_model(monkeypatch, tmp_path, native_runtime_package):
+def selected_model(monkeypatch, tmp_path):
     """Declare a source-test runtime; native validation and package checks stay real.
 
     Its CLI helpers must consume this Core, not an older installed console script.
@@ -429,8 +429,6 @@ def selected_model(monkeypatch, tmp_path, native_runtime_package):
         entrypoint = runtime.interpreter.with_name(name)
         entrypoint.write_text(
             f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {source!r})\n"
-            "from pathlib import Path\nimport agent_comms.native_package as native_package\n"
-            f"native_package.MANIFEST = Path({str(native_runtime_package.path.parents[3] / 'pi-native.sha256')!r})\n"
             f"from {module} import main\nraise SystemExit(main())\n"
         )
         entrypoint.chmod(0o700)

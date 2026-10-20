@@ -44,8 +44,6 @@ class NativeBuildInputs:
                 digest.update(line.encode())
         return digest.hexdigest()
 
-    def require_pinned(self, manifest: Path) -> str:
-        source = self.digest(manifest)
-        if INPUTS_PREFIX + source not in manifest.read_text().splitlines():
+    def require_pinned(self, manifest: Path) -> None:
+        if INPUTS_PREFIX + self.digest(manifest) not in manifest.read_text().splitlines():
             raise ValueError("Native build inputs changed; rebuild with --update-pins")
-        return hashlib.sha256(source.encode() + manifest.read_bytes()).hexdigest()[:16]

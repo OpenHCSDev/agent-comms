@@ -1,6 +1,5 @@
 """Run the existing continuous context case without source/conftest substitutes."""
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
-from agent_comms.storage_rules import StorageRule
 
 import argparse
 import asyncio
@@ -514,7 +513,6 @@ def complete_history_controls(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
-    parser.add_argument("--native-cache", type=Path, default=StorageRule.native_cache)
     parser.add_argument("--test-support-site", type=Path)
     parser.add_argument("--toad-driver-dir", type=Path)
     parser.add_argument('--configured-source-root', type=Path)
@@ -547,4 +545,4 @@ if __name__ == "__main__":
     else:
         asyncio.run(run_configured(options) if options.configured_source_root
                     else run(options.root, receiving_only=options.receiving_only,
-                             package=VerifiedNativePackage.from_environment(options.native_cache)))
+                             package=VerifiedNativePackage.acquire(pinned_native_package())))
