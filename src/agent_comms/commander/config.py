@@ -9,7 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 from ..comms import Comms
 from ..errors import RelationViolationError
@@ -61,9 +61,15 @@ class CommanderConfig(CommanderRole, BaseModel):
     def packaged_skill() -> Path:
         return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
 
+    @field_validator('root')
     @classmethod
-    def read(cls, path: Path | str) -> Self:
-        return cls.model_validate_json(Path(path).read_text())
+    def selected_root(cls, root: Path, info: ValidationInfo) -> Path:
+        """Select the root before a context's post-init can open any stores."""
+        return info.context if isinstance(info.context, Path) else root
+
+    @classmethod
+    def read(cls, path: Path | str, *, root: Path | None = None) -> Self:
+        return cls.model_validate_json(Path(path).read_text(), context=root)
 
     @staticmethod
     def root_path(root: Path) -> Path:
@@ -72,7 +78,7 @@ class CommanderConfig(CommanderRole, BaseModel):
     @classmethod
     def read_root(cls, root: Path | str) -> Self:
         root = Path(root).resolve()
-        return cls.read(cls.root_path(root)).model_copy(update={'root': root})
+        return cls.read(cls.root_path(root), root=root)
 
     @classmethod
     def packaged_rules_files(cls) -> tuple[Path, ...]:

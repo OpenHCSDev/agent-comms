@@ -22,8 +22,10 @@ import subprocess
 import sys
 import time
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Self
 
 from pydantic import PrivateAttr
 
@@ -227,6 +229,13 @@ class CommanderContext(CommanderConfig):
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
+
+    def model_copy(self, *, update: Mapping[str, object] | None = None,
+                   deep: bool = False) -> Self:
+        """A copied context owns a new binding after Pydantic applies its updates."""
+        copied = super().model_copy(update=update, deep=deep)
+        copied.model_post_init(None)
+        return copied
 
     @property
     def comms(self) -> Comms:
