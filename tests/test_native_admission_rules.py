@@ -14,6 +14,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.turn_goal_permission import OwnerGoalPermission
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinator import Coordination
 from agent_comms.goals import Goal
@@ -64,6 +65,7 @@ async def test_durable_private_claim_names_each_changed_authority(tmp_path, monk
             claim_scope=generation,
             expected_claim=generation,
             process=ProcessIdentity.capture(os.getpid()),
+            goal_permission=OwnerGoalPermission(current.goal),
         )
         selected_claim, = stage.assignments
         claim = rules.NativeClaimCheck(captured=selected_claim, current=selected_claim)

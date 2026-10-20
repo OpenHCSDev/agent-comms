@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
+from .goals import GoalDeclaration
 from .native_file_artifact import NativeFileArtifact
 from .turn_failure import ProviderTransportFailed
 from .native_session_reopen import NativeSessionIdentity
@@ -34,6 +35,7 @@ from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
+    from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
 
@@ -1132,6 +1134,9 @@ class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
     @abstractmethod
     def text(self, limit=4000): ...
 
+    def published_goal(self, permission: TurnGoalPermission) -> None:
+        pass
+
     def edit_diff(self, ok):
         return None
 
@@ -1160,6 +1165,9 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
 
     def sent_message(self, ok):
         return self.details.sent_message() if ok else None
+
+    def published_goal(self, permission: TurnGoalPermission) -> None:
+        self.details.published_goal(permission)
 
 
 @dataclass(frozen=True)
@@ -1214,6 +1222,9 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
     def sent_message(self):
         return None
 
+    def published_goal(self, permission: TurnGoalPermission) -> None:
+        pass
+
     def storage_refusals(self) -> tuple[StorageDenialToolDetails, ...]:
         return ()
 
@@ -1243,6 +1254,16 @@ class PublishedMessageToolDetails(NativeToolDetails):
 
     def sent_message(self):
         return self.message
+
+
+@dataclass(frozen=True)
+class PublishedGoalToolDetails(NativeToolDetails):
+    """The declaration actually returned by a self-relative goal-writing tool."""
+
+    goal: GoalDeclaration
+
+    def published_goal(self, permission: TurnGoalPermission) -> None:
+        permission.published(self.goal)
 
 
 class NoToolDetails(NativeToolDetails):

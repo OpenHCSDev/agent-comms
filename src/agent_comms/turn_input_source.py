@@ -141,7 +141,7 @@ class OriginalTurnInput(TurnInputSource):
         return self.dependency.consume(comms, canonical, wait)
 
     def dependency_current(self, wait: GoalWait) -> bool:
-        return self.dependency.current(wait)
+        return self.goal_permission.dependency_current(self.dependency, wait)
 
 
 class DirectInput(TurnInputSource):
@@ -169,7 +169,7 @@ class RoutedInput(TurnInputSource):
         return wait.allows_routed_input()
 
     def allows_goal_input(self, goal: GoalDeclaration) -> bool:
-        return not self.keys or InactiveGoalPermission().allows(goal)
+        return not self.keys or self.goal_permission.allows_routed(goal)
 
 
 class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
@@ -183,7 +183,7 @@ class SelectedOriginalInput(RoutedOriginalInput):
     def answering(cls, prompt: str) -> SelectedOriginalInput:
         return cls(
             accepted_id=None,
-            goal_permission=InactiveGoalPermission(),
+            goal_permission=TurnGoalPermission(InactiveGoalPermission()),
             prompt=prompt,
             original_display=None,
             origins=(),
