@@ -38,7 +38,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert send.type is InfoKind
     for tier in ServiceTier:
         configured = parse(["configure", "--name", "a", "--service-tier", tier.value])
-        assert configured.service_tier is tier
+        assert configured.service_tier.tier is tier
     with pytest.raises(ValueError) as refused:
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     assert "fast" in str(refused.value)
