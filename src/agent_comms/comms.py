@@ -12,6 +12,7 @@ from .bus_route_counts import CompletingRouteCounts, OpenedRouteCounts
 from .catalog_store import ChannelCatalog
 from .channel_management import ChannelManagement
 from .collaboration_ledger import CollaborationLedger
+from .context_store import ContextStore
 from .goal_management import Goals
 from .history_views import HistoryViews
 from .locked_store import RegistryFile
@@ -47,6 +48,7 @@ class Comms:
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger.at(self.root, self.registry)
+        self.contexts = ContextStore(self.root)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus, self.goals, self.messaging)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)

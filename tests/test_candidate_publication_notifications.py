@@ -165,23 +165,20 @@ def test_selected_claim_and_terminal_release_notify_after_their_boundaries(tmp_p
         assert (release.resource, release.generation) == (claim.resource, claim.generation)
 
 
-def test_observations_advance_bytes_without_allocating_sequences(tmp_path, notifications):
-    comms, store, index, root_id = _root(tmp_path, recipients=1)
+def test_context_recording_changes_no_message_bytes_or_candidate_work(tmp_path, notifications):
+    comms, store, index, _root_id = _root(tmp_path, recipients=1)
     try:
         calls, finished = notifications(comms)
+        original = comms.bus.log.path.read_bytes()
+        assert not index.path.exists()
         record_context(comms, "member000", 1)
-        first_bytes = comms.bus.log.path.stat().st_size
-        assert calls == [first_bytes]
-        assert finished.wait(5)
-        checkpoint = index._verified_checkpoint(root_id)
-        assert checkpoint.last_seq == 0 and checkpoint.byte_offset == first_bytes
-        finished.clear()
         record_context(comms, "member000", 2)
-        final_bytes = comms.bus.log.path.stat().st_size
-        assert calls == [first_bytes, final_bytes] and final_bytes > first_bytes
-        assert finished.wait(5)
-        checkpoint = index._verified_checkpoint(root_id)
-        assert checkpoint.last_seq == 0 and checkpoint.byte_offset == final_bytes
+        assert comms.bus.log.path.read_bytes() == original
+        assert comms.bus.log.latest_sequence() == 0
+        assert calls == [] and not finished.is_set()
+        assert not index.path.exists()
+        page = comms.contexts.page('member000', comms.registry)
+        assert [resource.value.turn.occurrence.generation for resource in page.resources] == [1, 2]
     finally:
         store.close()
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+from contextlib import nullcontext
 from dataclasses import replace
 
 import pytest
@@ -52,11 +53,9 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
     path.chmod(0o600)
     log = WireLog(path)
     log.write_metadata_unlocked(metadata)
-    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-        if extra or not newline:
-            with pytest.raises(RelationViolationError):
-                WakeCandidateIndex._replay_prefix(source, 0, 0, max_rows=1, max_bytes=1)
-        else:
+    # Opening may reject the physical row while preparing its page index.
+    with pytest.raises(RelationViolationError) if extra or not newline else nullcontext():
+        with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             # A legal first row must advance even with a one-byte work quantum.
             batch = WakeCandidateIndex._replay_prefix(source, 0, 0, max_rows=1, max_bytes=1)
             assert batch.next_offset == len(raw)
@@ -142,24 +141,14 @@ def test_rows_leave_the_stream_at_the_last_yielded_row(tmp_path, reader, expecte
 def test_unknown_segment_only_blocks_its_own_thread(tmp_path, other):
     from conftest import publish_initial
     from agent_comms.errors import StoredHistoryUnreadable
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.private_bus_checkpoint import RecordedContextManifestSources
-    from agent_comms.turn_context import RecordedContextManifest
-    from agent_comms.wire_record import AuthoredObservationWireRecord, RecordedContextManifestWireObservation
     from test_private_bus_checkpoint import _root
-    from test_turn_context_wire import manifest
+    from test_turn_context_wire import corrupt_context_kind, manifest
 
     comms, _ = _root(tmp_path)
     message = publish_initial(comms, 'sender', '#team', '@Alice original question')
-    recorded, _ = RecordedContextManifest.capture(manifest(comms.registry.require('Alice')))
-    row = AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)).to_wire()
-    row['observation']['manifest']['segments'][0]['manifest']['kind'] = 'unavailable_future_segment'
-    with comms.bus.log.locked():
-        metadata = comms.bus.log.read_metadata_unlocked(required=True)
-        comms.bus.log.append_private_unlocked(metadata, row)
+    comms.contexts.record(manifest(comms.registry.require('Alice')))
+    corrupt_context_kind(comms, 'Alice', 'unavailable_future_segment')
     assert read_history(comms) == [message]
-    RecordedContextManifestSources.for_owner(comms.bus.log, other, comms.registry)
-    decoded = WireRecord.public_from_wire(row)
-    assert FieldCodec.encode(decoded) == row
-    with pytest.raises(StoredHistoryUnreadable, match='context sequence.*unavailable_future_segment'):
-        RecordedContextManifestSources.for_owner(comms.bus.log, 'Alice', comms.registry)
+    assert comms.contexts.page(other, comms.registry).resources == ()
+    with pytest.raises(StoredHistoryUnreadable):
+        comms.contexts.page('Alice', comms.registry)

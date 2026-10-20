@@ -52,9 +52,9 @@ from .field_codec import FieldCodec, MalformedRecord
 from .locked_store import DurableFile, RegistryFile, WireWakeFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
-from .private_bus_checkpoint import CheckedRead, RecordedContextManifestSources
-from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
+from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
+from .private_bus_checkpoint import CheckedRead
 from .store_files import (
     UNBOUNDED_STORE_READ,
     ExclusiveLock,
@@ -651,18 +651,6 @@ class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
             request = replace(request, after_seq=originals[-1].message.seq)
             with self.checked_read() as source:
                 _, captured, more = source.addressed_page(self, request, prefix=witness)
-
-    def record_context(self, manifest) -> None:
-        """Append context entries and their manifest after checking which are new."""
-        previous = RecordedContextManifestSources.latest(self, manifest.thread)
-        with self.locked() as lock:
-            marker = self.private_marker_unlocked()
-            for record in lock.checked_read.context_records(manifest, previous):
-                self.append_private_unlocked(marker, record.to_wire())
-
-    def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
-        return RecordedContextManifestSources.for_owner(
-            self, name, registry, cursor=cursor, previous=previous)
 
     @contextmanager
     def retained_sources(self, name: str, registry):
