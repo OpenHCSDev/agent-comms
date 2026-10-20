@@ -14,7 +14,7 @@ import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.pi_native_backend import PersistentPiSession
+from pi_session_turn import backend_events, native_backend
 from compaction_loopback import LoopbackProvider
 
 CODEX_RETRYABLE = (
@@ -74,14 +74,13 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
     arguments = ["--provider", "retry-offline", "--model", "fixture", "--thinking", "off",
                  "--no-extensions", "--no-skills", "--no-context-files"]
-    session = PersistentPiSession()
+    session = native_backend(launcher, arguments, tmp_path)
     saved = None
 
     async def turn(text):
-        return [event async for event in backend.stream_agent_events(
-            launcher, arguments, text, str(tmp_path), root=Path(str(tmp_path)), session_file=saved,
-            persistent_session=session, model_wait=ModelWait(240),
-         session_directory=Path(str(tmp_path)))]
+        return [event async for event in backend_events(
+            session, text, str(tmp_path), session_file=saved,
+            model_wait=ModelWait(240))]
 
     try:
         async with asyncio.timeout(240):

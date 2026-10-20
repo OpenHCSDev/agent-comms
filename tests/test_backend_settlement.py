@@ -10,7 +10,7 @@ import agent_comms.agent_events as ae
 import agent_comms.backend as backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.pi_counts import PiCount
-from agent_comms.pi_native_backend import PersistentPiSession
+from pi_session_turn import backend_events, native_backend
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
 
@@ -75,24 +75,19 @@ for line in sys.stdin:
     stub.chmod(0o755)
     queue = asyncio.Queue()
     finish_event = asyncio.Event()
-    persistent = PersistentPiSession()
+    persistent = native_backend(str(stub), [], tmp_path)
     starts = []
     events = []
     injected = False
 
     async def collect():
         nonlocal injected
-        async for event in backend.stream_agent_events(
-            str(stub),
-            [],
-            "first",
-            str(tmp_path),
-            root=Path(str(tmp_path)), session_file=str(session),
+        async for event in backend_events(
+            persistent, "first", str(tmp_path), session_file=str(session),
             steering_queue=queue,
             finish_event=finish_event,
-            persistent_session=persistent,
             native_start=lambda public_id, native_id, text: starts.append(text) or True,
-         session_directory=Path(str(tmp_path))):
+        ):
             events.append(event)
             inject = (
                 isinstance(event, ae.ContextUsageObservation) and event.context_used == PiCount.from_wire(2)

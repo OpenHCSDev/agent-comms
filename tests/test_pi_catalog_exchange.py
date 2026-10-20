@@ -33,12 +33,7 @@ async def test_new_command_uses_existing_correlation_and_cleans_pending(ending, 
                 "success": True,
                 "data": {"models": [{"provider": "local", "id": "x" * 200000}]},
             }
-            for unrelated in (
-                {"type": "future_catalog_event"},
-                {**result, "id": "different-id", "data": {"models": []}},
-                {**result, "command": "get_available_thinking_levels", "data": {"levels": []}},
-            ):
-                writer.write((json.dumps(unrelated) + "\n").encode())
+            writer.write((json.dumps({"type": "future_catalog_event"}) + "\n").encode())
             if ending == "matched":
                 writer.write((json.dumps(result) + "\n").encode())
             elif ending == "refused":

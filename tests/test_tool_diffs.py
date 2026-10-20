@@ -89,7 +89,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         "'pi-native-input-v1-live-only'}})\n"
         "mode = json.loads(sys.stdin.readline())\n"
         "assert mode['type'] == 'set_steering_mode' and mode['mode'] == 'all'\n"
-        "send({'type': 'response', 'command': mode['type'], 'success': True})\n"
+        "send({'type': 'response', 'id': mode['id'], 'command': mode['type'], 'success': True})\n"
         "prompt = json.loads(sys.stdin.readline())\n"
         "assert prompt['type'] == 'prompt'\n"
         "send({'type': 'response', 'command': 'prompt', 'id': prompt['id'], 'success': True})\n"
@@ -98,9 +98,11 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         f"for payload in {payloads!r}: send(payload)\n"
         "state = json.loads(sys.stdin.readline())\n"
         "assert state['type'] == 'get_state'\n"
+        "send({'type': 'response', 'command': state['type'], 'id': state['id'], "
+        "'success': True, 'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}})\n"
         "stats = json.loads(sys.stdin.readline())\n"
         "assert stats['type'] == 'get_session_stats'\n"
-        "send({'type': 'response', 'command': 'get_session_stats', 'success': True, "
+        "send({'type': 'response', 'id': stats['id'], 'command': stats['type'], 'success': True, "
         "'data': {'contextUsage': {'tokens': 33}}})\n"
     )
     stub.chmod(0o755)

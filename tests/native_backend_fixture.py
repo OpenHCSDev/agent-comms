@@ -25,6 +25,7 @@ from agent_comms.storage_rules import StorageRule
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
+from pi_session_turn import backend_events, native_backend
 
 
 async def wait_for(predicate):
@@ -38,7 +39,7 @@ class NativeBackendFixture:
         self.root, self.project, self.session, self.provider = root, project, session, provider
         self.config = config
         self.package = package
-        self.persistent = PersistentPiSession()
+        self.persistent = native_backend("pi", self.native_arguments(), root)
         self.starts = []
         self.children = []
         self.observed = []
@@ -153,19 +154,13 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         queue = queue if queue is not None else TurnInbox()
         result = []
         async with asyncio.timeout(25):
-            async for event in backend.stream_agent_events(
-                "pi",
-                self.native_arguments(),
-                text,
-                str(self.project),
-                root=self.root, session_file=str(self.session),
-                persistent_session=self.persistent,
-                package=self.package,
-                tool_mode=NoSelectedTools(),
+            async for event in backend_events(
+                self.persistent, text, str(self.project),
+                session_file=str(self.session),
                 steering_queue=queue,
                 native_start=self.started,
                 **options,
-             session_directory=self.root):
+            ):
                 result.append(event)
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):

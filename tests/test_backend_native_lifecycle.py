@@ -88,7 +88,7 @@ async def test_actual_native_parked_followup_settles_without_stats_spin(native_b
 
     async def counted_request(self, session):
         if not self.requested:
-            stats.append((session.task, inbox.ready.is_set()))
+            stats.append((session.command.message, inbox.ready.is_set()))
         await request(self, session)
 
     monkeypatch.setattr(StatsRequest, "request", counted_request)
