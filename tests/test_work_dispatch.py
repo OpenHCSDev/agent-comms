@@ -4,15 +4,17 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import DoneTodoState, OperationDelivery, ProblemOrder, StrikeReason
 from agent_comms.phase_tasks import UnspecifiedPhaseTask
-from agent_comms.work_dispatch import CheckedPhaseTask, WorkDispatch
+from agent_comms.work_dispatch import CheckedPhaseTask, ReusedWorkDispatch, WorkDispatch
 
 from test_commander_problem_orders import create, order
+from test_standing_rules import working
 
 
 def test_phase_task_accepts_only_its_full_problem_with_installed_evidence(commander):
@@ -68,6 +70,26 @@ def test_invalid_request_refuses_dispatch_before_allocating_anything(commander):
     assert comms.registry.all_threads() == before
 
 
+def test_one_rule_pairs_idle_units_before_allocating_unowned_fallbacks(commander):
+    comms, _ = commander
+    create(commander, "P1")
+    create(commander, "P2")
+    comms.goals.fire("worker", StrikeReason("Release both orders for reassignment."), "lead")
+    spare = comms.registry.declare(comms.registry.new_thread(
+        "spare", frozenset({"comms"}), str(comms.root), created_at=3.0))
+    working(comms, spare.name, spare.created_at)
+    rules = UnownedWheelSpin.violations(comms, "lead")
+    assert {rule.todo.id for rule in rules} == {"P1", "P2"}
+    assert len({rule.unit for rule in rules}) == 2
+    reused = [rule for rule in rules if isinstance(rule.dispatch, ReusedWorkDispatch)]
+    fresh = [rule for rule in rules if type(rule.dispatch) is WorkDispatch]
+    assert len(reused) == len(fresh) == 1
+    assert reused[0].unit == spare.name
+    assert not fresh[0].todo.holder
+    # Selection must not allocate or launch either destination.
+    assert set(comms.registry.all_threads()) == {"lead", "worker", "spare"}
+
+
 def test_released_order_preserves_the_two_owner_trace_requirement(commander):
     comms, _ = commander
     lead, worker = (comms.registry.require(name) for name in ("lead", "worker"))
@@ -80,7 +102,7 @@ def test_released_order_preserves_the_two_owner_trace_requirement(commander):
     comms.goals.todos.fire(worker.name, lead.incarnation, reason)
     released = comms.goals.todos.get(todo.id)
     assigned = comms.goals.todos.assign(
-        todo.id, expected_revision=released.revision, owner=second, parent=lead,
+        todo.id, expected_revision=released.revision, owner=second, assigner=lead.incarnation,
         generation="second-generation", goal=todo.goal,
         deadline=todo.deadline, order=todo.order.reissued(200),
     )
@@ -89,7 +111,7 @@ def test_released_order_preserves_the_two_owner_trace_requirement(commander):
     released = comms.goals.todos.get(todo.id)
     with pytest.raises(ValueError, match="pass --traced"):
         comms.goals.todos.assign(
-            todo.id, expected_revision=released.revision, owner=third, parent=lead,
+            todo.id, expected_revision=released.revision, owner=third, assigner=lead.incarnation,
             generation="third-generation", goal=todo.goal,
             deadline=todo.deadline, order=todo.order.reissued(300),
         )

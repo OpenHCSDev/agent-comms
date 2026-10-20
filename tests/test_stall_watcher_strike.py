@@ -109,8 +109,9 @@ def test_blocked_held_orders_are_not_struck_or_released(commander, commander_scr
     comms = Comms(copied)
     standing.UnownedWheelSpin.after_stall(comms)
     with pytest.raises(TodoConflict):
-        standing.UnownedWheelSpin(blocked, 'spare').assign(
-            comms, 'lead', comms.registry.require('spare'), StallWatcherIncarnation.watcher())
+        action = standing.WheelSpin.order_for(blocked, 'lead', StallWatcherIncarnation.watcher())
+        dispatch = standing.ReusedWorkDispatch(action, blocked.revision, comms.registry.require('spare'))
+        standing.UnownedWheelSpin(blocked, dispatch).enforce(comms, 'lead')
     assert comms.goals.todos.get('P1') == blocked == original.goals.todos.get('P1')
 
 

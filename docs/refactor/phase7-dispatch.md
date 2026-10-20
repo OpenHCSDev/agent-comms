@@ -1,7 +1,7 @@
 # Phase 7: dispatch checked, ready work
 
-Owner: pi-cn-phase7. Integration base: origin/main `6a0f5e931`.
-Shared task capability repair: pi-plan-claims #1928, checkpoint `1220a914f`.
+Owner: pi-cn-phase7. Rebased onto main `65f58db93` under the direct conflict instruction.
+P270's merged-order and installed-proof integration belongs to pi-connector (#2036).
 
 ## Implemented ownership
 
@@ -11,12 +11,19 @@ existing `PendingProblemOrder`, including its source, check, edits and brief.
 Production full-phase task briefs are still separate work; the dispatch proof
 is not their completion.
 
-`PlanIdle.enforce` calls that task. `UnownedWork` replaces the old
-`UnownedWheelSpin` path, so checked released work does not require an already
-idle unit. Both use `WorkDispatch`: storage preflight, isolated checkout,
-stopped native declaration, canonical goal/order publication, then existing
-`OwnerLifecycle.start`. Publication precedes execution. Failed or uncertain
-startup state remains retained, never automatically replayed or adopted.
+`PlanIdle.enforce` calls that task. The existing `UnownedWheelSpin` is the sole
+owner selecting unowned rows: pair eligible idle units first, then allocate a
+fresh destination only for the remaining unowned rows. Its stall watcher still
+uses idle pairing only, so no spare leaves the old holder and strikes untouched.
+`UnownedWork` and `WorkDispatch.reissue` are deleted.
+
+`WorkDispatch.publish` owns assignment publication for both destination lifetimes.
+Fresh dispatch preflights storage, allocates its checkout and stopped native
+registration, publishes, then calls `OwnerLifecycle.start`. `ReusedWorkDispatch`
+publishes to an existing unit without allocating or starting another process.
+The existing `WheelSpin` base builds the reissued action and runs both rule kinds;
+the watcher retains its own assigner identity and revision-checked strike/release.
+Failed or uncertain startup remains retained, never replayed or adopted.
 
 The task's exact problem identity and accepted installed order determine its
 completion. Other closed subtasks, withdrawn orders and merely delivered
@@ -34,10 +41,16 @@ that limitation was not treated as a successful NRA scan.
   `StandingRule.broken/enforce`; no second rotation entrypoint was added.
 - `PlanPhase` and `PlanIdle` consume the dependency-light `PhaseTask` owner.
 - `CheckedPhaseTask` stays with dispatch; no compatibility re-export exists.
-- `UnownedWheelSpin` has no remaining declaration or consumer.
-- `UnownedWork` belongs to the existing commander rule discovery package.
-  Importing dispatch in generic `standing_rules` instead created the real
-  storage/rule/thread import cycle; moving the one member removed that cycle.
+- `UnownedWheelSpin.watch/after_stall` remain the connector's entrypoints.
+  `tests/test_stall_watcher_strike.py` remains a consumer, including refusal,
+  blocked orders, no spare and root-release behavior.
+- Only `UnownedWheelSpin.violations` selects unowned rows. There is no second
+  rule or generic standing-rule import of dispatch; that import would recreate
+  the storage/rule/thread cycle.
+- The current source census is `P256-stall-owner-before.txt`: both retained and
+  main implementations, tests, tools and Toad were parsed through `Package.load`.
+  The first Toad path was absent; the corrected owned Toad checkout was appended.
+  Dynamic receiver resolution is not a behavioral proof.
 - `ProblemOrder` owns refusal of unsupported reissue operations.
 - `Registration` and `OwnerLifecycle` retain identity and process ownership;
   no launch codec, second task store or copied fork history was introduced.
@@ -66,15 +79,12 @@ the read-only reply check also returned 1. This establishes source dispatch
 through the configured native process, not candidate installation or full
 production-phase completion. No new provider input is needed to retain it.
 
-## Source-line allocation
+## Source checks
 
-Both roots' structural findings were repaired before allocating feature lines.
-Against the integration base the new dispatch/task implementation adds 238 and
-removes 37 production lines (net 201). Its real native proof adds 287 tool lines.
-The batch therefore declares `Src-Budget: 488`, the exact combined new-feature
-allocation, through the ratchet's existing commit-trailer mechanism. Neither
-the checker, baseline, thresholds nor structural findings are changed. This is
-the same allocation mechanism used by the installed install-gate feature.
+Source growth alone is not a defect under the owner's corrected ruling. No new
+budget-only or formatting-only commit is used for this reconciliation. Both
+production roots still need their structural checks; the checker and baselines
+are not modified here.
 
 ## Retained evidence and limits
 

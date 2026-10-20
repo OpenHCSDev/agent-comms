@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
@@ -22,27 +23,8 @@ from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, Todo
 from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
-from ..work_dispatch import WorkDispatch
+from ..work_dispatch import ReusedWorkDispatch, WorkDispatch
 from .config import CommanderConfig
-
-
-@dataclass(frozen=True)
-class UnownedWork(UndatedStandingRule):
-    """An unowned checked row starts a unit, even when the idle fleet is empty."""
-
-    todo: Todo
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWork, ...]:
-        return tuple(cls(todo) for todo in comms.goals.todos.for_commander(
-            comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
-
-    def enforce(self, comms: Comms, commander: str) -> None:
-        WorkDispatch.reissue(comms, comms.registry.require(commander), self.todo)
-
-    def line(self) -> str:
-        return (f"UNOWNED WORK: {self.todo.id} has a checked order and no unit"
-                " -> Core starts its unit in an isolated checkout")
 
 
 @dataclass(frozen=True)
@@ -103,16 +85,22 @@ class WheelSpin(StandingRule, declared_name=None):
                        and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
-    def assign(self, comms: Comms, commander: str, unit: Thread,
-               assigner: ThreadIncarnation) -> None:
-        """The order sent again to ``unit`` through its Goal, with the order's own text."""
-        todo = self.todo
-        order = todo.order.reissued(time.time())
-        comms.goals.update_goal(unit.name, OrderGoalAction(
-            problem=todo.id, expected_revision=todo.revision, order=order,
-            request=todo.goal.request(), deadline=todo.deadline, commander=commander,
-            assigner=assigner, traced=todo.order.owner))
-        comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(todo)}")
+    @staticmethod
+    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> OrderGoalAction:
+        return OrderGoalAction(
+            problem=todo.id, expected_revision=todo.revision,
+            order=todo.order.reissued(time.time()), request=todo.goal.request(),
+            deadline=todo.deadline, commander=commander, assigner=assigner,
+            traced=todo.order.owner)
+
+    @abstractmethod
+    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]: ...
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        for dispatch in self.dispatches(comms, commander):
+            unit = dispatch.start(comms)
+            comms.messaging.send(commander, unit.name,
+                f"{self.line()}\n{dispatch.action.order.instructions(self.todo)}")
 
 
 @dataclass(frozen=True)
@@ -141,33 +129,44 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 " to done did not fall across two readings -> Core strikes it and gives the order"
                 " to an idle unit")
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
         for unit in self.idle(comms, commander)[:1]:
-            self.assign(comms, commander, unit, StallWatcherIncarnation.watcher())
+            yield ReusedWorkDispatch(self.order_for(
+                self.todo, commander, StallWatcherIncarnation.watcher()), self.todo.revision, unit)
 
 
 @dataclass(frozen=True)
 class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     """A unit holds no next order while the board has unowned rows."""
 
-    unit: str
+    dispatch: WorkDispatch
+
+    @property
+    def unit(self) -> str:
+        return self.dispatch.name
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.paired(comms, commander, (todo for todo in
-            comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
-            if not todo.holder))
+        actor = comms.registry.require(commander).incarnation
+        rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
+                     if todo.pending and not todo.holder)
+        paired = cls.paired(comms, commander, rows, actor)
+        assigned = {rule.todo.id for rule in paired}
+        return paired + tuple(cls(todo, WorkDispatch(
+            cls.order_for(todo, commander, actor), todo.revision))
+            for todo in rows if todo.id not in assigned)
 
     @classmethod
-    def paired(cls, comms: Comms, commander: str,
-               todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
+    def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo],
+               assigner: ThreadIncarnation) -> tuple[UnownedWheelSpin, ...]:
         """Each pending row with the first idle unit not struck on it."""
         idle, found = cls.idle(comms, commander), []
         for todo in (todo for todo in todos if todo.pending):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
-                    found.append(cls(todo, unit.name))
+                    found.append(cls(todo, ReusedWorkDispatch(
+                        cls.order_for(todo, commander, assigner), todo.revision, unit)))
                     break
         return tuple(found)
 
@@ -175,9 +174,8 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
                 f" -> Core gives it to {self.unit}")
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        self.assign(comms, commander, comms.registry.require(self.unit),
-                    comms.registry.require(commander).incarnation)
+    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
+        return (self.dispatch,)
 
     @classmethod
     def after_stall(cls, comms: Comms) -> None:
@@ -185,9 +183,8 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         stalled = comms.goals.todos.stalled(comms.registry.storage_rule)
         for commander in {todo.creator_identity.name for todo in stalled}:
             mine = (todo for todo in stalled if todo.creator_identity.name == commander)
-            for rule in cls.paired(comms, commander, mine):
-                rule.assign(comms, commander, comms.registry.require(rule.unit),
-                            StallWatcherIncarnation.watcher())
+            for rule in cls.paired(comms, commander, mine, StallWatcherIncarnation.watcher()):
+                rule.enforce(comms, commander)
 
     @classmethod
     def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:

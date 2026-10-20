@@ -242,11 +242,12 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     taken = StrikeReason("The unit was taken off P2 so the test leaves it unowned.")
     comms.goals.fire("worker", taken, "lead")
     assert comms.goals.todos.get("P2").holder is None
-    [unowned] = module.UnownedWork.violations(comms, "lead")
+    [unowned] = module.UnownedWheelSpin.violations(comms, "lead")
     assert unowned.todo.id == "P2"
+    assert type(unowned.dispatch) is module.WorkDispatch
     assert unowned.line() == (
-        "UNOWNED WORK: P2 has a checked order and no unit"
-        " -> Core starts its unit in an isolated checkout")
+        f"WHEEL SPIN: {unowned.unit} holds no order while P2 is unowned"
+        f" -> Core gives it to {unowned.unit}")
     # Actual unit launch/first reply is a separate native application proof.
     assert comms.goals.todos.get("P2").holder is None
 
