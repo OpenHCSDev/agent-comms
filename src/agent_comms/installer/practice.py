@@ -95,6 +95,7 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
             with (closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as original,
                   closing(sqlite3.connect(copy)) as copied):
                 original.backup(copied)
+            shutil.copymode(source, copy)  # SQLite creates the copy under the umask
         elif name.removesuffix("-wal") not in databases:
             shutil.copy2(source, copy)
     yield into, PracticeMeasurement.of(into, time.monotonic() - started, floor)
