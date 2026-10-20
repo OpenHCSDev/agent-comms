@@ -35,12 +35,12 @@ def comms(comms):
 
 
 def lines(path, records, tail=""):
-    # Codex records have their own timestamp; shared Claude/OpenCode fixtures retain their shape.
-    codex_types = {"session_meta", "turn_context", "compacted", "response_item", "event_msg"}
-    path.write_text("".join(json.dumps(
-        {"timestamp": "2026-10-18T00:00:00Z", **record} if record.get("type") in codex_types else record,
-        ensure_ascii=False) + "\n" for record in records) + tail)
+    path.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records) + tail)
     return path
+
+
+def codex_lines(path, records, tail=""):
+    return lines(path, ({"timestamp": "2026-10-18T00:00:00Z", **record} for record in records), tail)
 
 
 def read(harness, source, limits=ImportLimits(), session_id=None):
@@ -220,7 +220,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
         {"type": "message", "role": "developer", "content": [
             {"type": "input_text", "text": "Historical developer λ.\n"}]},
     ]
-    source = lines(tmp_path / "historical.jsonl", [
+    source = codex_lines(tmp_path / "historical.jsonl", [
         codex_meta("original", tmp_path),
         {"type": "compacted", "payload": {"message": "Original summary",
          "replacement_history": instructions + [
@@ -287,7 +287,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
 
 
 def test_codex_instructions_come_from_the_selected_history_and_the_request_from_before_it(tmp_path):
-    source = lines(tmp_path / "selected.jsonl", [
+    source = codex_lines(tmp_path / "selected.jsonl", [
         codex_meta("original", tmp_path),
         codex_message("user", "Prior question"),
         {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": "Old cut only"}},
@@ -311,7 +311,7 @@ def test_codex_items_codex_does_not_declare_are_foreign():
 
 
 def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
-    source = lines(tmp_path / "rollout-2026-10-16T15-00-00-codex-id.jsonl", [
+    source = codex_lines(tmp_path / "rollout-2026-10-16T15-00-00-codex-id.jsonl", [
         codex_meta("codex-id", tmp_path), codex_message("user", "Continue editing the paper")])
     original = source.read_bytes()
     acknowledgement = comms.threads.import_thread(
@@ -336,7 +336,7 @@ def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(t
         {"type": "response_item", "payload": {"type": "function_call", "name": "exec", "arguments": "{}"}},
         {"type": "response_item", "payload": {"type": "function_call_output", "output": "x" * 400}},
     ]
-    source = lines(tmp_path / "rollout.jsonl", records, tail='{"partial"')
+    source = codex_lines(tmp_path / "rollout.jsonl", records, tail='{"partial"')
     snapshot = read(CodexHarness, source, ImportLimits(4, 300, 100))
     assert len(snapshot.messages) <= 4 and sum(len(m.body) for m in snapshot.messages) <= 300
     assert snapshot.truncated_messages == 1
@@ -425,7 +425,7 @@ def test_codex_reads_latest_checkpoint_without_replaying_huge_prefix(tmp_path, m
 
 
 def test_codex_fixed_boundary_ignores_concurrent_append(tmp_path, monkeypatch):
-    source = lines(tmp_path / "active-rollout.jsonl", [codex_meta("active", tmp_path), codex_message("user", "At boundary")])
+    source = codex_lines(tmp_path / "active-rollout.jsonl", [codex_meta("active", tmp_path), codex_message("user", "At boundary")])
 
     def append():
         with source.open("ab") as writer:
@@ -441,7 +441,7 @@ def test_codex_without_checkpoint_keeps_chronological_bounded_suffix(tmp_path):
     records = [codex_meta("plain", tmp_path)]
     for index in range(3):
         records += [codex_message("user", f"Request {index}"), codex_message("assistant", f"Answer {index}")]
-    source = lines(tmp_path / "uncompacted-rollout.jsonl", records, tail='{"partial"')
+    source = codex_lines(tmp_path / "uncompacted-rollout.jsonl", records, tail='{"partial"')
     snapshot = read(CodexHarness, source, ImportLimits(2, 1_000, 100))
     assert bodies(snapshot) == ["Request 2", "Answer 2"]
     assert snapshot.messages_seen == 6
@@ -450,7 +450,7 @@ def test_codex_without_checkpoint_keeps_chronological_bounded_suffix(tmp_path):
 
 
 def test_bounded_suffix_is_one_contiguous_newest_run(tmp_path):
-    source = lines(tmp_path / "budgeted-rollout.jsonl", [codex_meta("budget", tmp_path)] + [
+    source = codex_lines(tmp_path / "budgeted-rollout.jsonl", [codex_meta("budget", tmp_path)] + [
         codex_message("assistant", body) for body in ("o" * 10, "m" * 80, "n" * 60)])
     snapshot = read(CodexHarness, source, ImportLimits(10, 100, 100))
     assert bodies(snapshot) == ["n" * 60]
@@ -462,7 +462,7 @@ def test_codex_selects_only_latest_of_several_compactions(tmp_path):
         return {"type": "compacted", "payload": {"message": summary, "replacement_history": [
             record["payload"] for record in items]}}
 
-    source = lines(tmp_path / "several-compactions.jsonl", [
+    source = codex_lines(tmp_path / "several-compactions.jsonl", [
         codex_meta("compactions", tmp_path),
         codex_message("user", "Obsolete request"),
         compacted("Obsolete summary", codex_message("user", "Old checkpoint")),
@@ -480,7 +480,7 @@ def test_codex_selects_only_latest_of_several_compactions(tmp_path):
 
 def test_codex_compaction_record_may_span_several_reverse_blocks(tmp_path):
     large_state = "x" * 150_000
-    source = lines(tmp_path / "large-compaction-record.jsonl", [
+    source = codex_lines(tmp_path / "large-compaction-record.jsonl", [
         codex_meta("large-record", tmp_path),
         {"type": "compacted", "payload": {"message": "Large checkpoint", "replacement_history": [
             codex_message("assistant", large_state)["payload"],
@@ -492,7 +492,7 @@ def test_codex_compaction_record_may_span_several_reverse_blocks(tmp_path):
 
 
 def test_latest_request_is_not_duplicated_when_retained(tmp_path):
-    source = lines(tmp_path / "rollout.jsonl", [codex_meta("dedupe", tmp_path),
+    source = codex_lines(tmp_path / "rollout.jsonl", [codex_meta("dedupe", tmp_path),
                                                 codex_message("user", "Continue exactly once")])
     assert read(CodexHarness, source).pi_session(tmp_path).count("Continue exactly once") == 1
 
