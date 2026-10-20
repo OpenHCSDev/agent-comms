@@ -924,7 +924,7 @@ class DueVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallVerb(RuledVerb):
+class InstallVerb(OrderVerb, RuledVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
     at: str = option("at", help="HH:MM the install is due")
     installer: str = option("installer", help="the unit that runs the install")
