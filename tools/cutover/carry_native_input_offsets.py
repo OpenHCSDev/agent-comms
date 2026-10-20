@@ -16,6 +16,7 @@ from agent_comms.coordinated_runtime_schema import (
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.native_entries import NativeEvidenceRead
+from agent_comms.native_input_record import NativeInputLocation
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeSchemaMeta
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.typed_table import TypedTable
@@ -74,8 +75,9 @@ class NativeInputOffsets(Carry):
             old = {name: actual[name] for name in declared}
             if _digest(old) != digest:
                 raise ValueError("Native offset carry refuses a changed original runtime schema")
+            position = NativeInputLocation.position_field()
             columns = ",".join(
-                "? AS session_entry_start" if name == "session_entry_start" else f'"{wire}"'
+                f'? AS "{position.name}"' if name == position.name else f'"{wire}"'
                 for name, wire in NativeRuntimeInput.column_projection().items()
             )
             rows = list(

@@ -146,7 +146,9 @@ def read_historical_native_inputs(
             for source in sources:
                 row = NativeRuntimeInput.one(db, input_id=source.input_id)
                 if not row:
-                    raise IdentityConflict("historical native input disappeared inside its snapshot")
+                    raise IdentityConflict(
+                        "historical native input disappeared inside its snapshot"
+                    )
                 rows.append((source, row))
         if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
             raise IdentityConflict("historical source has ambiguous native input evidence")

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .native_pi import NativeContextProof
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
@@ -260,7 +261,9 @@ class NativeTranscript(TranscriptSource):
         return tuple(identity for record in self.forward(after, through)
                      if (identity := record.annotation_id) is not None)
 
-    def require_publication_context(self, user, *, session_entry_start: int):
+    def require_publication_context(
+        self, user: NativeEntry, *, session_entry_start: int,
+    ) -> NativeContextProof:
         """Corroborate the existing native producer's context, without replay.
 
         Native inputDigest identifies a request envelope, not plain text. The

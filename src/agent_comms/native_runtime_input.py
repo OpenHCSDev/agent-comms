@@ -7,7 +7,7 @@ permission to send and live-context ownership. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
 
@@ -121,13 +121,15 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     def require_context_proof(self) -> NativeContextProof:
         """Recover the original committed acknowledgement, never manufacture it from a path."""
-        from .native_pi import NativeContextProof
+        from .native_pi import NativeContextRecord
 
         self.reference.require_recorded()
-        values = {item.name: FieldCodec.encode(getattr(self, item.name))
-                  for item, _wire in FieldCodec.record_fields(NativeContextProof)}
-        values['session_file'] = self.require_session_identity().path
-        return FieldCodec.construct(NativeContextProof, values)
+        values = {item.name: getattr(self, item.name)
+                  for item, _wire in FieldCodec.record_fields(NativeContextRecord)}
+        return FieldCodec.construct(NativeContextRecord, values).at(
+            self.require_session_identity().path,
+            session_entry_start=self.session_entry_start.offset,
+        )
 
     @property
     def execution(self) -> NativeInputExecution:
@@ -238,11 +240,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_entry_start: NativeInputPosition = field(
         default_factory=UnrecordedNativePosition,
         metadata={
-            "sql": replace(
-                next(item for item in fields(NativeInputLocation)
-                     if item.name == "session_entry_start").metadata["sql"],
-                nullable=True, storage=IntegerStorage,
-            ),
+            "sql": NativeInputLocation.pending_column(),
             "native_context": RecordedNativePosition,
         },
     )

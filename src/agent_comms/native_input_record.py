@@ -7,7 +7,7 @@ OwnerGenerations is the existing authority for that identity domain.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, fields
+from dataclasses import Field, dataclass, field, fields, replace
 from typing import Annotated, ClassVar, Literal
 
 from .coordination_contracts import validate_execution_id
@@ -15,7 +15,7 @@ from .coordination_errors import IdentityConflict
 from .coordination_tables.participants import OwnerGenerations
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, JsonShapeFamily, JsonShapeMember, MalformedRecord
-from .typed_table import Column, TextStorage
+from .typed_table import Column, IntegerStorage, TextStorage
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +44,24 @@ class NativeInputLocation(NativeInputCommit):
         "wire_name": "sessionEntryStart", "sql": Column(check="session_entry_start>0"),
     })
 
+    @classmethod
+    def position_field(cls) -> Field[object]:
+        """The placement declaration supplies its name and storage constraints."""
+        position, = (item for item in fields(cls) if item.name in cls.__annotations__)
+        return position
+
+    @classmethod
+    def pending_column(cls) -> Column:
+        position = cls.position_field()
+        return replace(position.metadata["sql"], nullable=True, storage=IntegerStorage)
+
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
     """Decode the original SQL placement once: uncommitted NULL or a byte offset."""
+
+    @property
+    def offset(self) -> int:
+        raise IdentityConflict("Native input has no committed byte placement")
 
 
 @dataclass(frozen=True)
@@ -57,6 +72,10 @@ class UnrecordedNativePosition(NativeInputPosition, JsonShapeMember):
 @dataclass(frozen=True)
 class RecordedNativePosition(NativeInputPosition, JsonShapeMember):
     value: int
+
+    @property
+    def offset(self) -> int:
+        return self.value
 
 
 class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
