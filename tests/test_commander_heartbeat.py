@@ -1,5 +1,6 @@
 """Heartbeat acceptance uses the actual rule family, worker, publication and inbox."""
 
+import asyncio
 import json
 import os
 from contextlib import contextmanager, nullcontext
@@ -19,6 +20,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from test_commander_problem_orders import create
+from test_order_progress import checkout, commit, git
 
 
 @pytest.fixture(autouse=True)
@@ -304,6 +306,61 @@ async def test_heartbeat_uses_its_registered_sender_and_groups_unowned_rows(comm
         grouped = [line for line in messages[-1].body.splitlines() if "unowned rows" in line]
         assert grouped == ["RULE 4 unowned rows wait for a new unit: P0, P1, P2, P3"]
         assert not comms.registry.require("lead").goal.require().order.directives
+
+
+async def test_heartbeat_closes_merged_order_and_survives_maintenance(
+        commander, checkout, tmp_path, monkeypatch, caplog):
+    from agent_comms.connector import Connector
+    from agent_comms.connector_store import ConnectorStore
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
+    from agent_comms.todos import DoneTodoState, MergedProblemOrder, MergedPullRequest, PullRequests
+
+    comms, _ = commander
+    connector_sender(comms)
+    todo, unit = checkout
+    todo = replace(todo, order=replace(todo.order,
+        check=replace(todo.order.check, directory=str(unit))))
+    with comms.goals.todos.writing() as db:
+        todo.upsert(db)
+    commit(unit)
+    git(unit, 'switch', '-q', 'main')
+    git(unit, 'merge', '-q', '--ff-only', 'fix/p1')
+    sha = git(unit, 'rev-parse', 'HEAD')
+    merge = MergedPullRequest(1, 'fix/p1', sha, merge=sha, merged_at=500,
+                              updated_at=500, orders=(todo.order.id,))
+    monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order:
+                        (merge,) if state == 'merged' else ())
+    connector = Connector(ConnectorStore.at(tmp_path / 'auth'), 'http://127.0.0.1', comms.root)
+    heartbeat = CommanderHeartbeat()
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    pauses = []
+
+    async def between(seconds):
+        assert seconds == 60
+        pauses.append(seconds)
+        if len(pauses) == 1:
+            assert comms.goals.todos.get(todo.id) == todo and not heartbeat.reviews
+            barrier.advance(held, ReadyPhase)
+        else:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, 'sleep', between)
+    with external_commander(comms, 'lead'):
+        held = barrier.begin(MaintenanceOperator.current())
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await Coordination.watch_worker(lambda: heartbeat.watch_pass(connector.opened_wire))
+            closed = comms.goals.todos.get(todo.id)
+            assert closed.state is DoneTodoState and closed.assignment is None
+            assert isinstance(closed.order, MergedProblemOrder) and closed.order.sha == sha
+            assert closed.revision == todo.revision + 1
+            await Coordination.run_worker(lambda: heartbeat.watch_pass(connector.opened_wire))
+            assert comms.goals.todos.get(todo.id) == closed
+        finally:
+            if barrier.read().phase is not ReadyPhase:
+                barrier.clear(held)
+    assert pauses == [60, 60]
+    assert 'MaintenanceHeldError' in caplog.text
 
 
 def test_changing_measurements_do_not_reannounce_a_rule(commander):

@@ -16,12 +16,11 @@ Read these files themselves, in full, before acting. A summary or memory note of
 - every file in `src/agent_comms/commander/rules/` (12 rules, one per fact; the skill does not restate them). `rules-archive/` holds the 64 originals for history and is never loaded or read as rules.
 - the refactor-audit pattern catalog at the pinned submodule, `src/agent_comms/skills/refactor-audit/references/patterns/`: `README.md` and every rung file it lists. Orders, send-backs and hunts cite its IDs, so a commander that has not read it guesses them.
 
-Arm the reply bridge Monitor. The merge-closure loop is silent:
+Arm the reply bridge Monitor:
 - `agent-comms-claude-bridge watch` (messages to the commander; see the `comms` skill for the first binding)
-- `agent-comms-commander order overdue` closes merged orders and prints nothing. Order alarms arrive as commander-heartbeat messages, without a Monitor.
 - `agent-comms-commander tool-watch` (every unit tool call, per-turn digests, hard-rule violations)
 
-Core's connector service owns commander rotation. A live registered thread holding owner requests on its Goal receives one inbox wake when its standing-rule violations change, with the next unit to review. Unchanged violations stay silent; no rotation Monitor is needed. A stopped commander receives no heartbeat.
+Core's connector service closes merged orders and owns commander rotation. A live registered thread holding owner requests on its Goal receives one inbox wake when its standing-rule violations change, with the next unit to review. Unchanged violations stay silent; no rotation Monitor is needed. A stopped commander receives no heartbeat.
 
 Then `agent-comms-commander rules review` and answer each drawn rule.
 

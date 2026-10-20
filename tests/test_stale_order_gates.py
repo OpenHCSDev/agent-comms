@@ -11,7 +11,6 @@ import pytest
 from agent_comms.commander.order import OrderFile, OrderVerb, StaleOrderGate
 from agent_comms.plan_phases import PlanPhase, RecordPlanePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
 from agent_comms.todos import (
     AssignTodo, CheckedProblemOrder, CommitDelivery, OperationDelivery, WithdrawTodo,
 )
@@ -146,13 +145,10 @@ def test_observer_closes_only_delivered_commits_present_in_fetched_main(
     CommsOrderDoneTool(problem='P1', order_id=todo.order.id, delivery=delivery,
                       claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P1').state.open
-    repo = Repo(checkout=root, github=todo.repo)
     actor = comms.registry.require('lead').incarnation
-    comms.goals.todos.reconcile_merges(actor, (repo,),
-                                    comms.registry.storage_rule)
+    comms.goals.todos.reconcile_merges(actor, comms.registry.storage_rule)
     observed = comms.goals.todos.get('P1')
     assert observed.state.open is not commit_delivery
     assert observed.order.serves is RecordPlanePhase
-    comms.goals.todos.reconcile_merges(actor, (repo,),
-                                    comms.registry.storage_rule)
+    comms.goals.todos.reconcile_merges(actor, comms.registry.storage_rule)
     assert comms.goals.todos.get('P1') == observed

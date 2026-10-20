@@ -3,7 +3,6 @@ from agent_comms.repository_name import RepositoryName
 from dataclasses import fields, replace
 import json
 import subprocess
-import time
 
 import pytest
 
@@ -22,7 +21,7 @@ from test_order_progress import checkout, commit, order_alarms, git
 @pytest.mark.parametrize('delivered', (False, True))
 @pytest.mark.parametrize('legacy_depth', (0, 1, 2))
 def test_installed_merge_closes_pending_or_delivered_order_once(
-        commander, commander_script, checkout, tmp_path, monkeypatch, capsys,
+        commander, commander_script, checkout, tmp_path, monkeypatch,
         delivered, legacy_depth):
     comms, caller = commander
     script, _ = commander_script
@@ -34,6 +33,10 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
         todo = comms.goals.todos.get(todo.id)
     CommsOrderServeTool(problem=todo.id, serves=RecordPlanePhase).apply(comms, caller)
     todo = comms.goals.todos.get(todo.id)
+    todo = replace(todo, order=replace(todo.order,
+        check=replace(todo.order.check, directory=str(tmp_path / 'installed'))))
+    with comms.goals.todos.writing() as db:
+        todo.upsert(db)
     original = todo.order
     commit(unit)
     git(unit, 'switch', '-q', 'main')
@@ -56,7 +59,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
 
     # The object being available locally is not installation: HEAD must contain it.
     assert not repo.contains(sha)
-    comms.goals.todos.reconcile_merges(actor, (repo,), comms.registry.storage_rule)
+    comms.goals.todos.reconcile_merges(actor, comms.registry.storage_rule)
     assert script.held_orders() == (todo,)
     assert comms.goals.todos.get(todo.id) == todo
     if not delivered:
@@ -64,7 +67,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
 
     git(installed, 'checkout', '-q', '-B', 'main', sha)
     assert repo.contains(sha)
-    comms.goals.todos.reconcile_merges(actor, (repo,), comms.registry.storage_rule)
+    comms.goals.todos.reconcile_merges(actor, comms.registry.storage_rule)
     assert script.held_orders() == ()
     closed = comms.goals.todos.get(todo.id)
     assert closed.state is DoneTodoState and closed.assignment is None
@@ -100,7 +103,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
 
     with monkeypatch.context() as repeat:
         repeat.setattr(subprocess, 'run', no_child)
-        comms.goals.todos.reconcile_merges(actor, (repo,), comms.registry.storage_rule)
+        comms.goals.todos.reconcile_merges(actor, comms.registry.storage_rule)
         assert script.held_orders() == ()
         assert comms.goals.todos.get(todo.id) == closed
     script.write_board()
@@ -108,19 +111,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     assert order_alarms(script) == []
     assert comms.goals.todos.get(todo.id) == closed
 
-    class TickComplete(Exception):
-        pass
-
-    def next_tick(seconds):
-        raise TickComplete
-
-    monkeypatch.setattr(time, 'sleep', next_tick)
-    with pytest.raises(TickComplete):
-        script.overdue()
-    assert capsys.readouterr().out == ''
-
-
-def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
+def test_order_reads_stay_unchanged_during_install_until_reconciliation(
         commander, commander_script, checkout, tmp_path, monkeypatch, capsys):
     import sys
     from agent_comms.commander.cli import main
@@ -136,6 +127,10 @@ def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
     git(unit, 'switch', '-q', 'main')
     git(unit, 'merge', '-q', '--ff-only', 'fix/p1')
     sha = git(unit, 'rev-parse', 'HEAD')
+    todo = replace(todo, order=replace(todo.order,
+        check=replace(todo.order.check, directory=str(unit))))
+    with comms.goals.todos.writing() as db:
+        todo.upsert(db)
     repo = Repo(checkout=unit, github=todo.repo)
     script = script.model_copy(update={'repos': (repo,)})
     script.write(tmp_path)
@@ -170,16 +165,9 @@ def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
     finally:
         barrier.advance(hold, ReadyPhase)
 
-    class TickComplete(Exception):
-        pass
-
-    def next_tick(seconds):
-        raise TickComplete
-
     lookups.clear()
-    monkeypatch.setattr(time, 'sleep', next_tick)
-    with pytest.raises(TickComplete):
-        script.overdue()
+    comms.goals.todos.reconcile_merges(
+        comms.registry.require('lead').incarnation, comms.registry.storage_rule)
     closed = comms.goals.todos.get(todo.id)
     assert lookups == ['merged'], 'Merge reconciliation did not run exactly once'
     assert closed.state is DoneTodoState and closed.assignment is None
@@ -195,7 +183,6 @@ def test_new_revision_is_not_closed_from_an_old_merge_observation(
     comms, _ = commander
     script, installed = commander_script
     todo, _ = checkout
-    repo = Repo(checkout=installed, github=todo.repo)
     merge = MergedPullRequest(1, 'fix/p1', 'a' * 40, merge='b' * 40, merged_at=500,
                               updated_at=500, orders=(todo.order.id,))
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: (merge,))
@@ -209,7 +196,7 @@ def test_new_revision_is_not_closed_from_an_old_merge_observation(
 
     monkeypatch.setattr(Repo, 'contains', observed)
     comms.goals.todos.reconcile_merges(comms.registry.require('lead').incarnation,
-                                      (repo,), comms.registry.storage_rule)
+                                      comms.registry.storage_rule)
     assert comms.goals.todos.get(todo.id) == newer
 
 
@@ -220,7 +207,7 @@ def test_only_checked_orders_are_selected_for_merge_reconciliation(commander, ch
     with comms.goals.todos.writing() as db:
         unordered.upsert(db)
     comms.goals.todos.reconcile_merges(comms.registry.require('lead').incarnation,
-                                      (), comms.registry.storage_rule)
+                                      comms.registry.storage_rule)
     assert comms.goals.todos.get(todo.id) == unordered
 
 
