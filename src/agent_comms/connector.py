@@ -389,7 +389,7 @@ class Connector:
 
     def application(self) -> web.Application:
         with self.opened_wire() as comms:
-            CommanderHeartbeat.register(comms)
+            CommanderHeartbeat.register(comms.registry)
         app = web.Application()
         app.cleanup_ctx.append(self.watch_orders)
         app.add_routes(
