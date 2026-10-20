@@ -101,6 +101,9 @@ timeout = 60
 # An interpreter missing a plugin refuses to start instead of silently ignoring `timeout`.
 required_plugins = ["pytest-timeout>=2.3", "pytest-xdist>=3.6", "pytest-asyncio>=0.23"]
 markers = ["refactor_guard: permanent architecture guards selected by the required debt check"]
+# /tmp is RAM: keep only the last run's failing tests' directories.
+tmp_path_retention_policy = "failed"
+tmp_path_retention_count = 1
 
 [tool.black]
 line-length = 100
