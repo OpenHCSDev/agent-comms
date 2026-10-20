@@ -549,6 +549,31 @@ class TableSchema(ABC):
         """The writer's answer to a stored schema that differs from the declaration."""
 
 
+class AppendOnlyTables(TableSchema):
+    """Declared history tables reject UPDATE and DELETE, even from raw SQL."""
+
+    @classmethod
+    def _append_only_triggers(cls) -> dict[str, str]:
+        return {
+            f"{row.declared_name}_{operation.lower()}_abort":
+                f'CREATE TRIGGER "{row.declared_name}_{operation.lower()}_abort" '
+                f'BEFORE {operation} ON "{row.declared_name}" '
+                "BEGIN SELECT RAISE(ABORT, 'Bus history is append-only'); END"
+            for row in cls.schema_rows()
+            for operation in ("UPDATE", "DELETE")
+        }
+
+    @classmethod
+    def declared_schema(cls) -> dict[str, str]:
+        return super().declared_schema() | cls._append_only_triggers()
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        super().create_schema(db)
+        for statement in cls._append_only_triggers().values():
+            db.execute(statement)
+
+
 class SharedFileTables(TableSchema):
     """Tables that share a file with others: only their own tables and indexes compare."""
 
