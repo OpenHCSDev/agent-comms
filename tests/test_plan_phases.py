@@ -21,7 +21,6 @@ from agent_comms.todos import (
     ProblemOrder,
     OperationDelivery,
     UnorderedProblemOrder,
-    WithdrawnProblemOrder,
 )
 from agent_comms.tools import CommsOrderServeTool
 from agent_comms.work_dispatch import CheckedPhaseTask
@@ -109,24 +108,22 @@ def test_unordered_findings_have_no_invented_phase_declaration(commander):
     assert comms.goals.todos.get(finding.id) == finding
 
 
-def test_retained_phase_is_derived_and_round_trips_without_a_second_field(commander):
+def test_merged_phase_is_inherited_and_round_trips_without_a_wrapper(commander):
     todo = create(commander, "P1")
     original = todo.order.for_phase(RecordPlanePhase)
-    retained = (
-        original.merged("a" * 40),
-        FoldedProblemOrder(original=original, into="P2", why="Keep one owner"),
-    )
-    for order in retained:
-        saved = replace(todo, order=order, state=DoneTodoState, assignment=None)
-        assert RecordPlanePhase.serving((saved,)) == (saved,)
-        wire = FieldCodec.encode(order)
-        assert "serves" not in wire
-        restored = FieldCodec.decode(ProblemOrder, wire)
-        assert restored == order and restored.phase is RecordPlanePhase
-        changed = replace(order, original=original.for_phase(ControlPlanePhase))
-        assert changed.phase is ControlPlanePhase
-        assert original.phase is RecordPlanePhase
-        assert not order.accepted
+    order = original.merged("a" * 40)
+    saved = replace(todo, order=order, state=DoneTodoState, assignment=None)
+    assert RecordPlanePhase.serving((saved,)) == (saved,)
+    wire = FieldCodec.encode(order)
+    assert "original" not in wire
+    restored = FieldCodec.decode(ProblemOrder, wire)
+    assert restored == order and restored.phase is RecordPlanePhase
+    changed = order.for_phase(ControlPlanePhase)
+    assert changed.phase is ControlPlanePhase
+    assert original.phase is RecordPlanePhase
+    assert not order.accepted
+    folded = FoldedProblemOrder(original=original, into="P2", why="Keep one owner")
+    assert folded.phase is UnplannedPhase
 
 
 def test_closed_related_subtask_does_not_accept_a_whole_phase(commander, monkeypatch):
@@ -143,9 +140,7 @@ def test_closed_related_subtask_does_not_accept_a_whole_phase(commander, monkeyp
     assert not StoryPhase.done((subtask, whole))
     assert StoryPhase.done((subtask, accepted(whole)))
 
-    withdrawn = whole.order.copy_as(
-        WithdrawnProblemOrder, previous=whole.held(), why="The order was sent in error.",
-    )
+    withdrawn = whole.order.withdrawn(whole.held(), "The order was sent in error.", None)
     assert not StoryPhase.done((replace(whole, state=DoneTodoState, order=withdrawn),))
     assert not UnorderedProblemOrder().accepted
     wrong_phase = replace(accepted(whole), order=replace(accepted(whole).order, serves=ControlPlanePhase))

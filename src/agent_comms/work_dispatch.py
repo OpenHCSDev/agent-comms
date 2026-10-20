@@ -105,6 +105,7 @@ class WorkDispatch:
             request=current.goal.request(),
             deadline=current.deadline,
             commander=commander.name,
+            assigner=commander.incarnation,
         )
         cls(action, revision=current.revision).start(comms)
 

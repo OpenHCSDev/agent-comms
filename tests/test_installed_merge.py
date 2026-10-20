@@ -2,6 +2,7 @@
 from dataclasses import fields, replace
 import json
 import subprocess
+import time
 
 import pytest
 
@@ -46,8 +47,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     git(installed, 'fetch', '-q', 'origin', 'main')
     git(installed, 'checkout', '-q', '-B', 'main', base)
     repo = Repo(checkout=installed, github=todo.repo)
-    config = script.CONFIG.model_copy(update={'repos': (repo,)})
-    monkeypatch.setattr(script, 'CONFIG', config)
+    actor = comms.registry.require(caller.name).incarnation
     merge = MergedPullRequest(1, 'fix/p1', sha, merge=sha, merged_at=500,
                               updated_at=500, orders=(original.id,))
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order:
@@ -55,14 +55,15 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
 
     # The object being available locally is not installation: HEAD must contain it.
     assert not repo.contains(sha)
-    assert script.COMMANDER.orders(script.CONFIG.repos) == (todo,)
+    comms.goals.todos.reconcile_merges(actor, (repo,), comms.registry.storage_rule)
+    assert script.held_orders() == (todo,)
     assert comms.goals.todos.get(todo.id) == todo
     if not delivered:
         assert 'waiting on install' in deadline_lines(script)[0]
 
     git(installed, 'checkout', '-q', '-B', 'main', sha)
     assert repo.contains(sha)
-    assert script.COMMANDER.orders(script.CONFIG.repos) == ()
+    comms.goals.todos.reconcile_merges(actor, (repo,), comms.registry.storage_rule)
     assert script.held_orders() == ()
     closed = comms.goals.todos.get(todo.id)
     assert closed.state is DoneTodoState and closed.assignment is None
@@ -98,9 +99,10 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
 
     with monkeypatch.context() as repeat:
         repeat.setattr(subprocess, 'run', no_child)
-        assert script.COMMANDER.orders(script.CONFIG.repos) == ()
+        comms.goals.todos.reconcile_merges(actor, (repo,), comms.registry.storage_rule)
+        assert script.held_orders() == ()
         assert comms.goals.todos.get(todo.id) == closed
-    script.board()
+    script.write_board()
     assert f'| {todo.id}:' not in (tmp_path / 'board.md').read_text()
     assert deadline_lines(script) == []
     assert comms.goals.todos.get(todo.id) == closed
@@ -111,7 +113,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     def next_tick(seconds):
         raise TickComplete
 
-    monkeypatch.setattr(script.time, 'sleep', next_tick)
+    monkeypatch.setattr(time, 'sleep', next_tick)
     with pytest.raises(TickComplete):
         script.overdue()
     assert 'OVERDUE:' not in capsys.readouterr().out
