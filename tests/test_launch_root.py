@@ -1,4 +1,4 @@
-"""A launched root is explicit; child environment and default files grant none."""
+"""The published route is the default; explicit roots win and environments do not."""
 import json
 import os
 import subprocess
@@ -22,24 +22,49 @@ def no_process_selection(monkeypatch):
     monkeypatch.setattr(LaunchRoot, '_current', LaunchRoot.unstarted())
 
 
-def test_rootless_client_cannot_borrow_published_route_or_environment(tmp_path, monkeypatch):
-    monkeypatch.setenv('HOME', str(tmp_path))
+def publish_route(tmp_path):
     root = tmp_path / 'published'
-    root_id = Comms(root).messaging.initialize_private_initial_protocol()
+    comms = Comms(root)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     route = tmp_path / '.local/state/agent-comms/active-route.json'
     route.parent.mkdir(mode=0o700, parents=True)
     route.write_text(json.dumps(ActiveRoute(root, root_id).to_record()))
     route.chmod(0o600)
-    monkeypatch.setenv('AGENT_COMMS_ROOT', str(root))
-    with pytest.raises(RelationViolationError, match='explicit launch root'):
-        resolve_comms_route()
-    with pytest.raises(RelationViolationError, match='explicit launch root'):
-        child_root(dict(os.environ), tmp_path)
-    assert main(['threads']) == 1
-    assert not (root / 'registry.json').exists()
+    return root
 
 
-def test_selection_is_scoped_and_child_ignores_home_and_environment(tmp_path):
+def test_rootless_client_uses_published_route_not_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    root = publish_route(tmp_path)
+    unrelated = tmp_path / 'wrong'
+    monkeypatch.setenv('AGENT_COMMS_ROOT', str(unrelated))
+    LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
+    assert LaunchRoot.current().path == root
+    assert resolve_comms_route().root == root
+    assert child_root(dict(os.environ), tmp_path) == root
+    assert main(['threads']) == 0
+    assert not unrelated.exists()
+
+
+def test_process_keeps_its_startup_root_until_restarted(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    first = publish_route(tmp_path)
+    LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
+    selected = LaunchRoot.current()
+    second = tmp_path / 'second'
+    second_id = Comms(second).messaging.initialize_private_initial_protocol()
+    route = tmp_path / '.local/state/agent-comms/active-route.json'
+    route.write_text(json.dumps(ActiveRoute(second, second_id).to_record()))
+    assert LaunchRoot.current().path == first
+    assert child_root({'AGENT_COMMS_ROOT': str(second)}, tmp_path) == first
+    assert selected.arguments() == ('--comms-root', str(first))
+    LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
+    assert LaunchRoot.current().path == second
+
+
+def test_selection_is_scoped_and_child_ignores_home_and_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
     selected = tmp_path / 'copy'
     with LaunchRoot.from_path(selected).selected():
         assert resolve_comms_route().observe_root() == selected
@@ -48,7 +73,7 @@ def test_selection_is_scoped_and_child_ignores_home_and_environment(tmp_path):
         with LaunchRoot.from_path(tmp_path / 'second').selected():
             assert LaunchRoot.current().path == tmp_path / 'second'
         assert LaunchRoot.current().path == selected
-    with pytest.raises(RelationViolationError, match='explicit launch root'):
+    with pytest.raises(RelationViolationError, match='did not select a root at startup'):
         LaunchRoot.current()
 
 
@@ -75,14 +100,38 @@ def test_root_fixes_relative_meaning_without_hiding_symlinks(tmp_path, monkeypat
     assert LaunchRoot.from_path(link).path == link
 
 
-def test_launch_argument_is_consumed_by_its_owner(tmp_path):
-    arguments = ['program', *LaunchRoot.from_path(tmp_path).arguments(), 'threads']
-    LaunchRoot.startup(arguments)
+def test_launch_argument_is_consumed_by_its_owner(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    published = publish_route(tmp_path)
+    explicit = tmp_path / 'explicit'
+    arguments = ['program', *LaunchRoot.from_path(explicit).arguments(), 'threads']
+    LaunchRoot.startup(arguments, lambda: pytest.fail('explicit root must win'))
     assert arguments == ['program', 'threads']
-    assert LaunchRoot.current().path == tmp_path
+    assert LaunchRoot.current().path == explicit
+    assert LaunchRoot.current().path != published
+    assert LaunchRoot.current().arguments() == ('--comms-root', str(explicit))
 
 
-def test_rootless_real_cli_child_fails_before_using_default(tmp_path):
+@pytest.mark.parametrize('joined', [False, True])
+def test_cli_root_wins_without_published_route(tmp_path, monkeypatch, joined):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    root = tmp_path / 'explicit'
+    comms = Comms(root)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    arguments = [f'--root={root}'] if joined else ['--root', str(root)]
+    assert main([*arguments, 'threads']) == 0
+    assert not (tmp_path / '.local/state/agent-comms/active-route.json').exists()
+
+
+def test_later_root_spelling_does_not_cancel_the_published_launch(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    root = publish_route(tmp_path)
+    assert main(['threads', '--root']) == 1  # malformed CLI option, not a launch override
+    assert LaunchRoot.current().path == root
+
+
+def test_rootless_real_cli_child_fails_without_published_route(tmp_path):
     environment = {**os.environ, 'HOME': str(tmp_path), 'AGENT_COMMS_ROOT': '/live'}
     environment = LaunchRuntime(Path(sys.executable)).environment(environment)
     # Explicitly select the source under test, not an older installed module.
@@ -91,5 +140,18 @@ def test_rootless_real_cli_child_fails_before_using_default(tmp_path):
     result = subprocess.run([sys.executable, '-c', script], env=environment,
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 1
-    assert 'explicit launch root' in result.stdout
+    assert 'No active Comms route is published' in result.stdout
     assert not (tmp_path / '.agent-comms').exists()
+
+
+def test_rootless_real_cli_child_opens_published_route(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    publish_route(tmp_path)
+    environment = {**os.environ, 'HOME': str(tmp_path), 'AGENT_COMMS_ROOT': '/wrong'}
+    environment = LaunchRuntime(Path(sys.executable)).environment(environment)
+    script = ('import sys; sys.path.insert(0, ' + repr(str(Path(__file__).parents[1] / 'src')) + '); '
+              'from agent_comms.cli import main; raise SystemExit(main(["threads"]))')
+    result = subprocess.run([sys.executable, '-c', script], env=environment,
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'worker' in result.stdout

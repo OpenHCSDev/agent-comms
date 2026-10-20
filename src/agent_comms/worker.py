@@ -10,6 +10,7 @@ from .coordinator import Coordination
 from contextlib import suppress
 
 from .acp import CommsAgent
+from .active_route import ActiveRoute
 from .comms import Comms, wire
 from .native_arguments import NativeArguments
 from .launch_root import LaunchRoot
@@ -19,7 +20,7 @@ from .launch_runtime import LaunchRuntime, ThreadLaunch
 async def run() -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
-    LaunchRoot.startup(sys.argv)
+    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     comms = wire()
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
@@ -97,7 +98,7 @@ def main() -> int:
     before consulting a route or wire so discovery cannot start an owner.
     Registration belongs to the original thread management operation.
     """
-    LaunchRoot.startup(sys.argv)
+    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     argparse.ArgumentParser(
         prog="agent-comms-agent", description=__doc__,
         epilog=(

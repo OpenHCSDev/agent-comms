@@ -32,6 +32,7 @@ class Comms:
         projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> None:
         self.route = resolve_comms_route(root)
+        self.route.observe_root()
         publisher.prepare_root(self.root)
         self._wire_lock_path = self.root / "wire"
         self.registry = Registration(self.root / "registry.json")
@@ -79,7 +80,7 @@ def wire(
 
 
 @contextmanager
-def client_wire(root: Path | None) -> Iterator[Comms]:
+def client_wire(root: CommsRoute | Path) -> Iterator[Comms]:
     """One client call: it borrows the published route until it retires and answers in full.
 
     Only the UI yields between index units.

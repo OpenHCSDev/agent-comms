@@ -153,8 +153,8 @@ class NativePiOperationFailed(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .active_route import resolve_comms_route
-    LaunchRoot.startup(sys.argv)
+    from .active_route import ActiveRoute, resolve_comms_route
+    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     package = resolve_comms_route().launch().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(

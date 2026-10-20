@@ -490,9 +490,9 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    from .active_route import resolve_comms_route
+    from .active_route import ActiveRoute, resolve_comms_route
 
-    LaunchRoot.startup(sys.argv)
+    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     with resolve_comms_route().hold_client_route():
         if "--login" in sys.argv[1:]:
             from .login import run_login

@@ -91,17 +91,24 @@ def test_explicit_environment_absent_default_and_invalid_route(tmp_path, monkeyp
     assert resolve_comms_route(explicit) == LocalRoute(explicit)
     assert resolve_comms_route(explicit).observe_root() == explicit
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(explicit))
-    with pytest.raises(RelationViolationError, match="explicit launch root"):
-        resolve_comms_route()
+    with pytest.raises(ValueError, match="active comms route is invalid JSON"):
+        LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
     with LaunchRoot.from_path(explicit).selected():
         assert resolve_comms_route().observe_root() == explicit
     assert not explicit.exists(), "Observation must not create a wire"
     monkeypatch.delenv("AGENT_COMMS_ROOT")
     route.unlink()
     assert CommsRoute.current().observe_root() == tmp_path / ".agent-comms"
-    with pytest.raises(RelationViolationError, match="explicit launch root"):
-        resolve_comms_route()
+    with pytest.raises(RelationViolationError, match="No active Comms route is published"):
+        LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
     assert not (tmp_path / ".agent-comms").exists()
+
+
+def test_rootless_service_rejects_published_root_with_wrong_marker_id(tmp_path, monkeypatch):
+    route, root, _ = route_fixture(tmp_path, monkeypatch)
+    route.write_text(json.dumps(dict(version=2, root=str(root), wire_root_id='0' * 32)))
+    with pytest.raises(RelationViolationError, match='root ID'):
+        LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
 
 
 def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkeypatch, verified_native_package):

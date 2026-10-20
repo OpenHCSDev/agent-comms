@@ -102,6 +102,17 @@ class ActiveRoute(CommsRoute):
     # The CLI command that replaces a file this reader refuses; it registers under this name.
     repair_command: ClassVar[str] = "replace-route"
 
+    @classmethod
+    def published_launch(cls) -> LaunchRoot:
+        match read_active_route():
+            case ActiveRoute() as route:
+                route.observe_root()
+                return LaunchRoot.from_path(route.root)
+            case _:
+                raise RelationViolationError(
+                    "No active Comms route is published; --comms-root or --root is required."
+                )
+
     def to_record(self) -> dict[str, object]:
         return {"version": self.version, **FieldCodec.encode(self)}
 
