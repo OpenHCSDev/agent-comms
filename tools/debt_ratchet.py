@@ -747,7 +747,9 @@ class RuntimeEngineImports(CleanChangedLines, MroDispatch):
                 for path, source in GitMeasure.sources(repo, ref, python_paths(repo, ref, root))}
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+    def compare(
+        cls, repo: Path, base: str, head: str, changed: set[str], root: str
+    ) -> tuple[dict[str, int], dict[str, int]]:
         return PerFileMeasure.align(cls.counts(repo, base, root), cls.counts(repo, head, root))
 
     @classmethod
