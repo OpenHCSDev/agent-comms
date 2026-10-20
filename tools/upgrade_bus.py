@@ -49,8 +49,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import publish_runtime
 from cutover.backup import (
     RestoreSpace,
-    StoreBackup,
     SavedFile,
+    StoreBackup,
     UpgradeRefused,
     bus_files,
     transcripts_held,
@@ -514,7 +514,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         maintenance.clear(restored_hold)
         installed.owners(root, "start", running)
         print(f"upgrade-bus: restored after failure ({type(error).__name__}: {error}); "
-              f"original runtime selected and {running} restarted; backup: {backup.path if backup else None}",
+              f"original runtime selected and {running} restarted; "
+              f"backup: {backup.path if backup else None}",
               file=sys.stderr)
         raise
     return {"stopped_and_started": running, **passed, "services": services,
