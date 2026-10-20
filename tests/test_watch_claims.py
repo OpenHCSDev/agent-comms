@@ -31,7 +31,11 @@ def test_killed_holder_warns_with_original_command(claim_kind, tmp_path, monkeyp
     child.start()
     try:
         assert ready.wait(5), "claim holder did not start"
-        assert isinstance(claim.state(), LiveWatch)
+        live = claim.state()
+        assert isinstance(live, LiveWatch)
+        if claim_kind is LoopClaim:
+            live.report(ClaudeHook("session", "UserPromptSubmit"))
+            assert capsys.readouterr().out == ""
         child.kill()
         child.join(5)
         assert child.exitcode == -signal.SIGKILL

@@ -77,7 +77,8 @@ def main(a, ctx):
                     continue
                 if time.time() - st.st_mtime > 900 and path not in offsets:
                     continue
-                start = offsets.get(path, st.st_size)  # new files: start at end; only new calls matter
+                # New files start at end; only new calls matter.
+                start = offsets.get(path, st.st_size)
                 if st.st_size <= start:
                     offsets[path] = st.st_size if st.st_size < start else start
                     continue
