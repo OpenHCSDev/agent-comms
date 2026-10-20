@@ -33,7 +33,7 @@ class StallExempt:
 class NoModelWait:
     """Native-owned excursions have no Core model-progress deadline."""
 
-    def model_wait(self, backstop: float | None) -> None:
+    def model_wait(self, backstop: object) -> None:
         return None
 
 
