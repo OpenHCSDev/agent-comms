@@ -40,10 +40,6 @@ class ProjectThreadSelection:
             return FoundProjectThread(threads[0])
         return SeveralProjectThreads(threads)
 
-    def name_or(self, fallback: str) -> str:
-        """Keep the caller's existing identity unless one thread was selected."""
-        return fallback
-
 
 @dataclass(frozen=True, slots=True)
 class NoProjectThread(ProjectThreadSelection):
@@ -53,9 +49,6 @@ class NoProjectThread(ProjectThreadSelection):
 @dataclass(frozen=True, slots=True)
 class FoundProjectThread(ProjectThreadSelection):
     thread: Thread
-
-    def name_or(self, fallback: str) -> str:
-        return self.thread.name
 
 
 @dataclass(frozen=True, slots=True)

@@ -126,6 +126,8 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     with pytest.raises(RelationViolationError, match="original source"):
         comms.messaging.pin_user_constraint(owner.name,
             replace(subject.reference, message_id="foreign-original"), worktree=owner.worktree)
+    from conftest import declare_test_bus
+    declare_test_bus(comms, channels=("team",))
     with pytest.raises(RelationViolationError, match="original recipient"):
         comms.messaging.send_user_message("#team", "wrong audience", worktree=owner.worktree, task=pin.task)
     assert (comms.root / "bus.jsonl").read_bytes() == before
@@ -210,6 +212,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
 
 
 def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypatch):
+    comms.messaging.initialize_private_initial_protocol()
     alpha = admit(comms, "alpha")
     beta = admit(comms, "beta")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
@@ -271,6 +274,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
     from agent_comms.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
 
+    comms.messaging.initialize_private_initial_protocol()
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep checked root", "goal", published_seq=0, revision=1))
     comms.registry.register(owner)
@@ -316,7 +320,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     declaration = Decision(
         chosen="A", rejected=("B",), scope=owner.task_scope,
         source_turn=owner.turn_identity,
-        source_turn_id=TurnId(owner.active_turn.id),
+        source_turn_id=TurnId(owner.require_turn_lease().turn_id),
     )
     comms.registry.register(replace(owner, goal=replace(owner.goal, revision=2)))
     message = Message("alpha", "#team", declaration.text, InfoKind, task=declaration)
@@ -338,6 +342,7 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
     owner = admit(comms, "alpha")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "A", "rejected": ["B"], "to": "#team"}
+    comms.messaging.initialize_private_initial_protocol()
     first = invoke_tool(comms, "comms_decision", request)
     comms.registry.release_turn(owner.turn_lease)
     owner, claim_scope = comms.registry.live_owner_with_claim("alpha")
@@ -352,11 +357,12 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
+    comms.messaging.initialize_private_initial_protocol()
     from agent_comms.retained_task_facts import CurrentUserTaskCorrectionFact, RetainedTaskFacts
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
     owner = admit(comms, "alpha")
-    owner = replace(owner, goal=Goal("Keep project scope", "goal", revision=1))
+    owner = replace(owner, goal=Goal("Keep project scope", "goal", published_seq=0, revision=1))
     comms.registry.register(owner)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/old", "rejected": ["/scratch/guess"], "to": "#team"}

@@ -12,7 +12,7 @@ from agent_comms.display_order import CreatedThreadSort
 from agent_comms.locked_store import LockedStore
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
 from agent_comms.store_files import SharedLock, _store_lock
-from test_locked_store import _hold_lock, event, process
+from test_locked_store import _hold_lock, assert_writer_excluded, event, process
 from test_relationships import setup_wire
 
 
@@ -96,10 +96,7 @@ def test_shared_read_scope_holds_lock_until_exit(tmp_path):
     store = RelationshipStore(tmp_path / "r")
     with store.reading() as document:
         assert document == RelationshipDocument()
-        # Separate process descriptors would see the same conflict; this separate
-        # descriptor also proves reading() has not already released its lock.
-        with pytest.raises(BlockingIOError), _store_lock(store.path, blocking=False):
-            pass
+        assert_writer_excluded(store.path)
     with _store_lock(store.path, blocking=False):
         pass
 

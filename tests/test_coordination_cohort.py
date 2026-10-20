@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bus_history import read_history
-from conftest import publish_initial
+from conftest import declare_test_bus, publish_initial
 import hashlib
 import json
 import sqlite3
@@ -65,12 +65,14 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         "Bob": (17003.0, {"team"}),
         "Charlie": (17004.0, {"other"}),
     }
-    lookups: dict[str, str] = {}
-    for name, (created_at, tags) in people.items():
-        comms.registry.register(
-            comms.registry.new_thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
-        )
-        lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
+    declare_test_bus(comms, channels=("team", "other"), threads=(
+        comms.registry.new_thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
+        for name, (created_at, tags) in people.items()
+    ))
+    lookups = {
+        name: RecordedThreadIncarnation("fixture", created_at).lookup
+        for name, (created_at, _tags) in people.items()
+    }
     coordinator = Coordination(str(root / "coordinator.sqlite"), clock_ms=lambda: 4723)
     install_private_cohort_schema(coordinator)
     for name in ("Alice", "Bob", "Charlie"):
@@ -210,7 +212,8 @@ def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
 
 def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    empty = publish_initial(comms, "sender", "#missing", "No recipient")
+    declare_test_bus(comms, channels=("empty",))
+    empty = publish_initial(comms, "sender", "#empty", "No recipient")
     result = accept_delivery_cohort(comms.bus, root_id, empty.seq, store)
     assert isinstance(result, Applied)
     assert (result.value.member_count, result.value.assignment_count, result.value.assignments) == (
@@ -392,7 +395,7 @@ def test_reader_rejects_later_corrupt_row_even_for_earlier_valid_seq(tmp_path: P
     bus_path = tmp_path / "comms" / "bus.jsonl"
     with bus_path.open("ab") as output:
         output.write(b'{"seq": true}\n')
-    with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+    with pytest.raises(RelationViolationError, match="Unreadable bus row.*byte offset"):
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert (
         store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]

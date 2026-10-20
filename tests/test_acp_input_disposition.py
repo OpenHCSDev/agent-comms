@@ -255,10 +255,10 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
         )
         try:
             await wait_for(lambda: native.provider.posts == 1)
-            message = await Coordination.run_worker(partial(
+            message = (await Coordination.run_worker(partial(
                 Comms(native.root).messaging.send,
                 "sender", session, "are you still on the parser?",
-            ))
+            ))).message
             native.provider.response_gate = None
             # The owner's own observation hands the message to the turn.
             await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 2)
@@ -285,8 +285,8 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
                 outcome for outcome in sender_view.sent_notifications
                 if outcome.message.reference == message.reference
             )
-            assert sent_read.state.startswith("Read ")
-            assert sent_read.read_at_ms == assignment.updated_at_ms
+            assert sent_read.state.read and sent_read.state.delivered
+            assert sent_read.state.at_ms == assignment.updated_at_ms
             assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.
             assert native.provider.posts == 2
@@ -346,19 +346,19 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 store.participants.register(lookup, session, session, committed=True)
 
         await Coordination.run_worker(prepare)
-        initial = await Coordination.run_worker(partial(
+        initial = (await Coordination.run_worker(partial(
             Comms(native.root).messaging.send,
             "sender", session, "first",
-        ))
+        ))).message
         try:
             await asyncio.wait_for(opened.wait(), 30)
             # Pi has recorded the tool call and is inside its deliberately slow
             # implementation while Core still has not opened following input.
             await wait_for(lambda: b'"id":"local-tool-once"' in native.session.read_bytes())
-            message = await Coordination.run_worker(partial(
+            message = (await Coordination.run_worker(partial(
                 Comms(native.root).messaging.send,
                 "sender", session, "deliver as soon as following input opens",
-            ))
+            ))).message
             await wait_for(lambda: owner.inputs.state(session).idle_revision is not None)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications_for_references((message.reference,))[key]
@@ -438,7 +438,7 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
             sender = Comms(native.root).messaging
             for body in ("first question", "second question"):
                 await Coordination.run_worker(partial(
-                    sender.send_message, "sender", session, body
+                    sender.send, "sender", session, body
                 ))
             native.provider.response_gate = None
             await owner.set_config_option(
@@ -476,6 +476,8 @@ sys.path[:0] = [sys.argv[4], sys.argv[5]]
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import NativeBackendFixture
 from agent_comms.comms import Comms
+from agent_comms import native_package
+native_package.MANIFEST = Path(sys.argv[6])
 from agent_comms.queued_input import InitialInput
 from stored_inputs import sent_text, stored_inputs
 async def main():
@@ -491,7 +493,8 @@ asyncio.run(main())
 """
     result = await BoundedRun.run(
         (sys.executable, "-c", code, str(native.root), str(native.project),
-         str(native.session), str(Path(__file__).parent), str(Path(__file__).parents[1] / "src")),
+         str(native.session), str(Path(__file__).parent), str(Path(__file__).parents[1] / "src"),
+         str(native.package.path.parents[3] / "pi-native.sha256")),
         timeout=15, cwd=native.project,
     )
     assert result.outcome == ExitedOutcome(17), result.stderr.decode()

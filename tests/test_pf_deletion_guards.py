@@ -65,8 +65,9 @@ def test_claim_claim_uses_nominal_paths_without_raw_coercion():
         .annotation
         == "FileClaimPath"
     )
-    for operation in (Messaging.send, Messaging.send_message, ClaimWrites.publish_claim_envelope):
-        assert (
-            inspect.signature(operation).parameters["claims"].annotation
-            == "Sequence[FileClaimPath]"
-        )
+    # Ordinary conversation cannot carry claims; only native claim authority can.
+    assert "claims" not in inspect.signature(Messaging.send).parameters
+    assert (
+        inspect.signature(ClaimWrites.release_resources).parameters["claims"].annotation
+        == "Sequence[ClaimOwner]"
+    )

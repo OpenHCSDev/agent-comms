@@ -345,6 +345,8 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
     from agent_comms.coordinator import Coordination
 
     old, _live, _source, _messages, root_id = archived_notification
+    from conftest import declare_test_bus
+    declare_test_bus(old, channels=("team",))
     for name in ("sender", "reader", "agent"):
         old.registry.register(
             replace(old.registry.require(name), tags=frozenset({"team"}))

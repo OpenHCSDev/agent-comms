@@ -7,28 +7,24 @@ import pytest
 from agent_comms.registration import Registration
 from agent_comms.channels import AllChannel
 from agent_comms.comms import wire
-from agent_comms.errors import UnregisteredThreadError
+from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from bus_history import read_history
 
 
 @pytest.fixture
-def chat(wired):
-    """Re-tag: PR111 and fixer carry 'ci', PR112 carries 'docs'."""
-    comms = wired
-    pr111 = comms.registry.require("PR111")
-    fixer = comms.registry.require("fixer")
-    comms.registry.declare(
-        comms.registry.new_thread(name='PR111', tags=frozenset({'ci'}), worktree=pr111.worktree, process_identity=pr111.process_identity)
-    )
-    comms.registry.declare(
-        comms.registry.new_thread(name='fixer', tags=frozenset({'ci'}), worktree=fixer.worktree, parent='PR111', task=fixer.task, process_identity=fixer.process_identity)
-    )
-    comms.registry.declare(
-        comms.registry.new_thread(name='PR112', tags=frozenset({'docs'}), worktree='/tmp/wt2')
-    )
-    return comms
+def chat(comms):
+    """Only ci/docs exist; PR111 is owned by this actual process."""
+    import os
+    from agent_comms.child_process import ProcessIdentity
+    from conftest import declare_test_bus
+
+    return declare_test_bus(comms, channels=("ci", "docs"), threads=(
+        comms.registry.new_thread('PR111', frozenset({'ci'}), '/tmp/wt1', process_identity=ProcessIdentity.capture(os.getpid())),
+        comms.registry.new_thread('fixer', frozenset({'ci'}), '/tmp/wt1', parent='PR111', task='fix auth'),
+        comms.registry.new_thread('PR112', frozenset({'docs'}), '/tmp/wt2'),
+    ))
 
 
 class TestChannelTargets:
@@ -64,6 +60,12 @@ class TestChannelTargets:
 
 
 class TestChannelDelivery:
+    def test_undeclared_channel_is_refused_without_creation(self, chat):
+        with pytest.raises(UnknownChannelError, match="Unknown channel"):
+            chat.messaging.send("PR111", "#undeclared", "must not create a channel")
+        assert "#undeclared" not in chat.channels.channels()
+        assert chat.bus.pending_count("fixer") == 0
+
     def test_tag_channel_reaches_tagged_threads_only(self, chat):
         chat.messaging.send("PR111", "#ci", "ci flaked again").message.message_id
         assert chat.bus.pending_count("fixer") == 1  # carries tag 'ci'
@@ -99,9 +101,9 @@ class TestHistory:
         history = [m.body for m in list(chat.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)]
         assert history == ["hello", "hi back"]
 
-    def test_dm_history_requires_registered_threads(self, chat):
-        with pytest.raises(UnregisteredThreadError):
-            list(chat.views.history_page(CommandTarget.named("ghost"), viewer="PR111").messages)
+    def test_dm_history_of_undeclared_peer_is_empty_and_does_not_register_it(self, chat):
+        assert chat.views.history_page(CommandTarget.named("ghost"), viewer="PR111").messages == ()
+        assert "ghost" not in chat.registry
 
     def test_channel_history_returns_all(self, chat):
         chat.messaging.send("PR111", "#ci", "one").message.message_id
@@ -112,11 +114,11 @@ class TestHistory:
     def test_global_channel_history(self, chat):
         chat.messaging.send("PR111", "#all", "hello").message.message_id
         assert [m.body for m in read_history(chat, "#all")] == ["hello"]
-        with pytest.raises(ValueError, match="not a channel"):
+        with pytest.raises(ValueError, match="DM history requires --as <participant>"):
             read_history(chat, "broadcast")
 
     def test_channel_history_rejects_dm_target(self, chat):
-        with pytest.raises(ValueError, match="not a channel"):
+        with pytest.raises(ValueError, match="DM history requires --as <participant>"):
             read_history(chat, "fixer")
 
 
