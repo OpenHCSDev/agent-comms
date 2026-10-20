@@ -165,9 +165,9 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         # The real Pi get_state returns a saved file BEFORE raw prompt send.
         fresh = session_file is None
         if fresh:
-            session_file = session_dir / "one.jsonl"
+            session_file = session_dir / f"{input_id}.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "id": "isolated-session", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
+                json.dumps({"type": "session", "id": f"isolated-session-{input_id}", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None
@@ -1436,7 +1436,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
             return result
 
         monkeypatch.setattr(TrackedTurnSession, "execute", revoke_after_model)
-        with pytest.raises(StaleFence, match="stopped or changed"):
+        with pytest.raises(StaleFence, match="registry owner turn witness is invalid"):
             await SelectedExecution(
                 root=root,
                 wire_root_id=root_id,
@@ -1651,6 +1651,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
 async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path, *, native_runtime_package, cursor_delivery) -> None:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
+    root.chmod(0o755)  # Refuse an unsafe private root before opening its registry.
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
             root=root,
@@ -1680,30 +1681,35 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
         cursor_delivery=cursor_delivery,
     ).run()
     assert result.disposition is CompletedAssignment
-    assert selections == [(SelectedModel("openai-codex", "gpt-6-sol"), "high")] * 2
+    assert selections == [(SelectedModel("openai-codex", "gpt-6-sol"), HighThinkingLevel)] * 2
     assert len(calls) == 2
 
 
-async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
+async def test_owner_without_override_uses_native_default_model(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
+    from agent_comms.native_settings import NativeThreadDefaults
+
     root, root_id, comms, initial, people = _root(tmp_path)
-    comms = Comms(root)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model=None), comms.registry.status("beta"))
     fake, calls = _fake_model()
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    with pytest.raises(IdentityConflict, match="no configured provider/model"):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name="beta",
-            native_package=native_runtime_package,
-            cursor_delivery=cursor_delivery,
-        ).run()
-    assert calls == []
+    models = []
+
+    async def capture(package, **kwargs):
+        models.append(kwargs["model"])
+        return await fake(package, **kwargs)
+
+    monkeypatch.setattr(TrackedTurnSession, "execute", capture)
+    result = await SelectedExecution(
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
+    ).run()
+    assert result is not None and result.disposition is CompletedAssignment
+    assert models == [SelectedModel.decode(NativeThreadDefaults.model)] * len(calls)
+    assert len(calls) == 2
     assert not comms.registry.require("beta").turn_record.executing
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        pending = sealed_cohort_assignments(store, RecordedThreadIncarnation("fixture", owner.created_at).lookup)
-        assert type(pending[0].lifecycle) is TriagePendingAssignment
 
 
 @pytest.mark.parametrize("direct", [True, False])
