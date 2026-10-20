@@ -207,17 +207,17 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     check = f"echo run >> {runs}; cat left"
     todo = create(commander, "P1", command=check, expected=0, deadline=time.time() + 3600)
     ordered_check = todo.order.checked().check
-    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit), unit.parent)
 
     def progress():
         return OrderProgress.read(comms.goals.todos.get("P1"), storage, PullRequests())
 
     commit(2)
-    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit), unit.parent)
     assert "; distance 2, projected done " in progress().line
     assert isinstance(progress().distance_readings().trend, MovingTrend)
     commit(2)
-    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit), unit.parent)
     assert progress().line.endswith("; distance 2, not falling")
     assert runs.read_text().count("run") == 3  # once per commit: base, then each branch commit
 

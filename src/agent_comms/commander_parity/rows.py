@@ -11,6 +11,8 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
+from .delivery import DeliveredCommitCase
+from .handoff import FinishedHandoffCase
 from .lifecycle import (
     AssignOrderCase,
     BuildBoundProofCase,
@@ -50,6 +52,7 @@ class DeliveredCommitParityRow(ParityRow):
     current = "`order.py done`"
     native = "`CommsOrderDoneTool`: merged to main, another branch, or not merged"
     phases = (OneOrderOwnerPhase, RecordPlanePhase)
+    comparison = DeliveredCommitCase.read
 
 
 class InstalledEvidenceParityRow(ParityRow):
@@ -287,6 +290,8 @@ class FinishedWorkTransferParityRow(ParityRow):
     current = "none; scratch transfer moved P507 after its fix was pushed and checked"
     native = "Transfer refuses delivered checked work; that owner merges; check is reused"
     phases = (RecordPlanePhase,)
+
+    comparison = FinishedHandoffCase.read
 
 
 class BuildBoundProofParityRow(ParityRow):

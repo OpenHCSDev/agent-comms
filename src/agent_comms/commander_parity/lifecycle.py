@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import io
 import json
@@ -21,6 +22,7 @@ from pydantic import PrivateAttr
 
 from ..change_report import FileLine
 from ..check_root import CheckRoot
+from ..child_process import BoundedRun, ChildResult
 from ..commander.config import CommanderConfig
 from ..commander.order import Commander, OrderFile
 from ..commander.request import RequestAddVerb
@@ -185,6 +187,21 @@ class LifecycleRun:
                 )
             )
             yield cls(commander, worker.name, decisions, document, root / "application.json")
+
+    @classmethod
+    def invoke(cls, program: str, *arguments: str) -> ChildResult:
+        return cls.invoke_command((sys.executable, "-c", program, *arguments))
+
+    @staticmethod
+    def invoke_command(command: tuple[str, ...]) -> ChildResult:
+        source = str(Path(__file__).resolve().parents[2])
+        return asyncio.run(
+            BoundedRun.run(
+                command,
+                timeout=120,
+                env={**os.environ, "PYTHONPATH": source},
+            )
+        )
 
     @property
     def due(self) -> str:
