@@ -137,11 +137,10 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
             comms.goals, self.todo.id)
         idle = self.idle(comms, commander)
         if not idle:
-            if todo.revision != self.todo.revision:
-                since = time.strftime("%H:%M", time.localtime(self.since))
-                comms.messaging.send(commander, "#comms",
-                    f"STALL with no idle unit: {todo.holder} on {todo.id}, distance not falling"
-                    f" since {since}; struck, still held")
+            since = time.strftime("%H:%M", time.localtime(self.since))
+            comms.messaging.send(commander, "#comms",
+                f"STALL with no idle unit: {todo.holder} on {todo.id}, distance not falling"
+                f" since {since}; struck, still held")
             return
         for unit in idle[:1]:
             yield ReusedWorkDispatch(self.order_for(
