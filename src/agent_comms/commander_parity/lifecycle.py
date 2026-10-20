@@ -23,10 +23,11 @@ from ..change_report import FileLine
 from ..check_root import CheckRoot
 from ..child_process import BoundedRun, ChildResult
 from ..commander.config import CommanderConfig
-from ..commander.order import Commander, OrderFile, hhmm
+from ..commander.order import Commander, OrderFile
 from ..commander.request import RequestAddVerb
 from ..field_codec import FieldCodec
 from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from ..recorded_time import RecordedEventTime
 from ..todos import (
     ApplicationOrderRun,
     MergedProgress,
@@ -205,7 +206,11 @@ class LifecycleRun:
 
     @property
     def due(self) -> str:
-        return time.strftime("%H:%M", time.localtime(time.time() + 3600))
+        return RecordedEventTime(time.time() + 3600).clock()
+
+    @property
+    def deadline(self) -> RecordedEventTime:
+        return RecordedEventTime(time.time()).at_clock(self.due)
 
     def create(self) -> Todo:
         self.commander.problem(
@@ -437,16 +442,16 @@ class OrderProgressMutationCase(LifecycleCase):
             (
                 "unit messages hide clocks",
                 all(
-                    hhmm(clock) not in message.body
+                    clock.clock() not in message.body
                     for clock in (before.deadline, after.deadline)
                     for message in messages
                 ),
             ),
             (
                 "unit goal hides deadline",
-                "Deadline:" not in instructions and hhmm(after.deadline) not in instructions,
+                "Deadline:" not in instructions and after.deadline.clock() not in instructions,
             ),
-            ("commander still sees deadline", f"due {hhmm(after.deadline)}" in output),
+            ("commander still sees deadline", f"due {after.deadline.clock()}" in output),
         )
 
 

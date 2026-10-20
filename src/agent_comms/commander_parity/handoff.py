@@ -12,7 +12,7 @@ from uuid import uuid4
 from ..change_report import FileLine
 from ..child_process import ChildOutcome, ChildResult, ExitedOutcome
 from ..commander.config import CommanderConfig
-from ..commander.order import OrderFile, deadline
+from ..commander.order import OrderFile
 from ..field_codec import FieldCodec
 from ..goal_actions import OrderGoalAction
 from ..tools import CommsOrderTool
@@ -84,7 +84,7 @@ class FinishedHandoffCase:
                 expected_revision=todo.revision,
                 assigner=context.incarnation,
                 order=document.order,
-                deadline=deadline(run.due),
+                deadline=run.deadline,
                 commander=context.commander,
                 request=document.order.request(
                     context.comms.registry.require(context.commander), (pid,)
