@@ -47,7 +47,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
-from agent_comms.typed_table import Column, ExpressionIndex, TypedTable
+from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -79,8 +79,18 @@ class DeclaredOptions:
         return FieldCodec.decode_arguments(cls, args)
 
 
+class BridgeStateTable(DurableTables):
+    """The bridge's delivery.sqlite3: its binding and every delivery attempt.
+
+    The bus holds the messages, not whether this harness was sent them, so
+    nothing rebuilds these rows: a stored schema that differs is refused.
+    """
+
+    __slots__ = ()
+
+
 @dataclass(frozen=True)
-class Binding(TypedTable):
+class Binding(BridgeStateTable, TypedTable):
     root: str
     bus: str = field(metadata={'wire_name': 'bus_thread'})
     thread: str = field(metadata={'wire_name': 'session'})
@@ -103,9 +113,10 @@ class Binding(TypedTable):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
         with closing(CoordinationStore.writer(state / 'delivery.sqlite3')) as db:
             db.execute('PRAGMA synchronous=FULL')
-            for row in (cls, DeliveryRow, ObservedPart):
-                row.create(db, if_not_exists=True)
-            db.commit()
+            with SQLiteFile.write_transaction(db):
+                if not BridgeStateTable.stored_schema(db):
+                    BridgeStateTable.create_schema(db)
+                BridgeStateTable.reconcile_schema(db)
             yield db
 
     @classmethod
@@ -200,7 +211,7 @@ class ObservedMonitor(MonitorEvidence):
 
 
 @dataclass(frozen=True)
-class ObservedPart(TypedTable):
+class ObservedPart(BridgeStateTable, TypedTable):
     id: str = field(metadata={'sql': Column(primary_key=True)})
     number: int = field(metadata={'sql': Column(primary_key=True)})
     sender: str
@@ -210,7 +221,7 @@ class ObservedPart(TypedTable):
 
 
 @dataclass(frozen=True)
-class DeliveryRow(TypedTable):
+class DeliveryRow(BridgeStateTable, TypedTable):
     sequence_sql: ClassVar[str] = "json_extract({payload}, '$.seq')"
     indexes = (ExpressionIndex((sequence_sql,)),)
 

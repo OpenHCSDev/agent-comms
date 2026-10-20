@@ -86,7 +86,7 @@ with patch('sqlite3.connect', side_effect=lambda *a, **k: connect(*a, factory=Pa
 print('opened', flush=True)
 '''
 
-    async def open_together():
+    async def open_together(*, fresh):
         children = []
         try:
             for _ in range(2):
@@ -94,9 +94,11 @@ print('opened', flush=True)
                     sys.executable, '-c', worker, str(tmp_path),
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE))
-            ready = await asyncio.wait_for(asyncio.gather(
-                *(child.stdout.readline() for child in children)), 20)
-            assert ready == [b'ready\n', b'ready\n']
+                if fresh and len(children) == 1:
+                    # The first opener holds its write transaction at CREATE TABLE
+                    # while the second opens; the second waits, then finds the schema.
+                    ready = await asyncio.wait_for(children[0].stdout.readline(), 20)
+                    assert ready == b'ready\n'
             results = await asyncio.wait_for(asyncio.gather(
                 *(child.communicate(b'go\n') for child in children)), 20)
             assert [(child.returncode, out, err) for child, (out, err)
@@ -107,7 +109,7 @@ print('opened', flush=True)
                     child.kill()
                 await child.wait()
 
-    await open_together()
+    await open_together(fresh=True)
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
@@ -116,7 +118,7 @@ print('opened', flush=True)
         assert Binding.bind(db, binding) == binding
         with db:
             assert pending.insert_if_absent(db).rowcount
-    await open_together()
+    await open_together(fresh=False)
     with Binding.open(tmp_path) as db:
         assert Binding.bind(db, None) == binding
         assert DeliveryRow.select(db) == [pending]

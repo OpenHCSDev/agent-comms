@@ -1,6 +1,8 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
+from contextlib import closing
 from html import escape
 import json
+import sqlite3
 
 import pytest
 
@@ -13,6 +15,7 @@ from agent_comms.cli_bridges.shared import (
     Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
     ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch,
 )
+from agent_comms.errors import RelationViolationError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -172,3 +175,31 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     assert {m.reference for m in wired.bus.inbox('fixer')}=={first.reference,second.reference}
     assert wired.messaging.acknowledge('fixer',(first.reference,))==1
     assert [m.reference for m in wired.bus.inbox('fixer')]==[second.reference]
+
+
+# delivery.sqlite3 as bridges wrote it before the sequence index was declared:
+# its outcome index held the name the sequence index now declares.
+_OLD_DELIVERY_FILE = (
+    'CREATE TABLE "binding" ("root" TEXT NOT NULL, "bus" TEXT NOT NULL, "thread" TEXT NOT NULL) STRICT',
+    'CREATE TABLE "delivery" ("id" TEXT NOT NULL, "payload" TEXT NOT NULL, "outcome" TEXT NOT NULL'
+    ' CHECK ("outcome" IN (\'filtered\', \'unconfirmed\', \'delivered\', \'emitted\')),'
+    ' "monitor" TEXT NOT NULL, PRIMARY KEY ("id")) STRICT',
+    'CREATE INDEX "delivery_0_idx" ON "delivery" ("outcome")',
+    'CREATE INDEX "delivery_sequence" ON "delivery" (json_extract(payload, \'$.seq\'))',
+    'CREATE TABLE "observed_part" ("id" TEXT NOT NULL, "number" INTEGER NOT NULL, "sender" TEXT NOT NULL,'
+    ' "body" TEXT NOT NULL, "record_id" TEXT NOT NULL, "timestamp" REAL NOT NULL,'
+    ' PRIMARY KEY ("id", "number")) STRICT',
+)
+
+
+def test_old_delivery_index_set_is_refused_not_kept(tmp_path):
+    path = tmp_path / 'delivery.sqlite3'
+    with closing(sqlite3.connect(path)) as db:
+        for statement in _OLD_DELIVERY_FILE:
+            db.execute(statement)
+        db.commit()
+    before = path.read_bytes()
+    with pytest.raises(RelationViolationError, match='BridgeStateTable differs'):
+        with Binding.open(tmp_path):
+            pass
+    assert path.read_bytes() == before
