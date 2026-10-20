@@ -25,7 +25,7 @@ class Load(ToolResult):
         owed = tuple(t for t in todos.held_for_commander(owner.incarnation) if t.pending)
         forks = tuple(sorted(
             thread.name for thread in snapshot.threads.values()
-            if thread.parent == owner.name and snapshot.statuses[thread.name].receiving
+            if thread.parent == owner.name and snapshot.status(thread.name).receiving
             and todos.held_for_commander(thread.incarnation)
         ))
         return cls(len(owed), sum(t.overdue(now) for t in owed),

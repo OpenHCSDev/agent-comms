@@ -337,7 +337,7 @@ class Commander(CommanderContext):
             occupied = {todo.holder for todo in held} | {self.commander} | self.parked
             idle = sorted(thread.name for thread in snapshot.threads.values()
                           if thread.name not in occupied and thread.role.executor(thread)
-                          and snapshot.statuses[thread.name].active)
+                          and snapshot.status(thread.name).active)
             problems.append(f'{unit} already holds plan orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
