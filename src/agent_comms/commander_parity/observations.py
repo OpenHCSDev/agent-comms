@@ -1,4 +1,4 @@
-"""Observe real native command returns and their actual output."""
+"""Observe real native command returns and their actual output or stored publication."""
 
 from __future__ import annotations
 
@@ -12,14 +12,21 @@ from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
 from types import CodeType, MethodType
+from typing import TypeGuard
 
+import agent_comms.standing_rules as native_rules
 from agent_comms.commander import capacity
 from agent_comms.commander.cli import main as commander_main
 from agent_comms.commander.cli import tool_name
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander
+from agent_comms.commander.send_guard import CommanderSession, RawSendCommand
+from agent_comms.commander_heartbeat import CommanderReview
+from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_tools import NativeToolDeclaration
+from agent_comms.turn_context import InstructionSegment
 
 
 @dataclass(frozen=True)
@@ -105,6 +112,95 @@ class CapacityObservation(NativeObservation):
             str(capacity.__file__),
             str(selected.comms.root),
             selected.commander,
+        )
+
+
+def standing_rule_return(value: object) -> TypeGuard[tuple[native_rules.StandingRule, ...]]:
+    """Validate CPython's untyped return, without choosing rule variants."""
+    return isinstance(value, tuple) and all(
+        isinstance(rule, native_rules.StandingRule) for rule in value
+    )
+
+
+class StandingRulesObservation(NativeObservation):
+    def read(self, root: Path) -> MeasuredOutput:
+        if root.resolve() == CommanderConfig.read(CommanderConfig.path()).root.resolve():
+            raise ValueError("Heartbeat publication verification requires an isolated bus copy")
+        config = CommanderConfig.read_root(root)
+        comms = Comms(config.root)
+        measured: list[tuple[str, ...]] = []
+        before = comms.bus.log.latest_sequence()
+
+        def returned(value: object) -> None:
+            if not standing_rule_return(value):
+                raise TypeError("StandingRule.broken returned outside its declared contract")
+            measured.append(tuple(rule.line() for rule in value))
+
+        with returned_values({method_code(native_rules.StandingRule.broken): returned}):
+            CommanderReview().wake(
+                comms, config.commander, comms.registry.require(config.commander)
+            )
+        with comms.bus.log.opened_wire_snapshot() as source:
+            published = tuple(
+                message for message in source.newest_messages() if message.seq > before
+            )
+        if len(measured) != 1 or len(published) != int(bool(measured[0])):
+            raise ValueError("Heartbeat must consume one observation and commit its actual message")
+        if published and (
+            published[0].sender != config.commander or published[0].target != config.commander
+        ):
+            raise ValueError("Heartbeat published outside its configured commander route")
+        lines = tuple(
+            line.removeprefix("RULE ")
+            for message in published
+            for line in message.body.splitlines()
+            if line.startswith("RULE ")
+        )
+        return MeasuredOutput(
+            "\n".join(lines),
+            "\n".join(measured[0]),
+            str(native_rules.__file__),
+            str(comms.root),
+            config.commander,
+        )
+
+
+class RuleReviewObservation(NativeObservation):
+    def read(self, root: Path) -> MeasuredOutput:
+        config = CommanderConfig.read_root(root)
+        current = tuple(
+            rule.line()
+            for rule in native_rules.RulesDue.violations(Comms(config.root), config.commander)
+        )
+        segments = tuple(
+            segment.__name__ for segment in InstructionSegment.members_with(InstructionSegment)
+        )
+        raise SystemExit(
+            "Missing native owner: commander rule-review InstructionSegment with rule-file "
+            f"provenance. Current RulesDue={current!r}; "
+            f"native instruction declarations={segments!r}"
+        )
+
+
+class OrderContactObservation(NativeObservation):
+    def read(self, root: Path) -> MeasuredOutput:
+        config = CommanderConfig.read_root(root)
+        context = Commander.read_root(config.root)
+        units = sorted(context.units())
+        current = tuple(
+            RawSendCommand.refused(
+                ("agent-comms", "send", "--from", config.commander, "--to", unit),
+                CommanderSession("", context),
+            )
+            for unit in units[:1]
+        )
+        native = tuple(
+            tool.declared_name for tool in NativeToolDeclaration.members_with(NativeToolDeclaration)
+        )
+        raise SystemExit(
+            "Missing native owner: order-only-contact native harness hook "
+            "checking Core order tools. "
+            f"Current RawSendCommand={current!r}; native coding declarations={native!r}"
         )
 
 

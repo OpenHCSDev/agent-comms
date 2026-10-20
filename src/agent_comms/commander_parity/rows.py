@@ -21,6 +21,7 @@ from .lifecycle import (
 )
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
+from .rules_contact import OrderContactComparison, RuleReviewComparison, StandingRulesComparison
 from .story import StoryCase
 
 
@@ -148,9 +149,13 @@ class ScheduledWakeParityRow(ParityRow):
 class StandingRulesParityRow(ParityRow):
     number = 15
     capability = "Standing rules broken right now"
-    current = "`rotate.py broken_rules`"
+    current = "`CommanderReview.wake` (replaces `rotate.py broken_rules`)"
     native = "`StandingRule` members derive violations on read"
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return StandingRulesComparison.read()
 
 
 class RuleReviewParityRow(ParityRow):
@@ -159,6 +164,10 @@ class RuleReviewParityRow(ParityRow):
     current = "`rules.py`; `rules.jsonl`; maximum age"
     native = "Rule instruction segments in the commander's turn context, with provenance"
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return RuleReviewComparison.read()
 
 
 class LoadForkingParityRow(ParityRow):
@@ -205,6 +214,10 @@ class OrderOnlyContactParityRow(ParityRow):
     current = "`send_guard.py` (PreToolUse hook)"
     native = "Harness hook checking Core order tools"
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return OrderContactComparison.read()
 
 
 class ConfigurationParityRow(ParityRow):

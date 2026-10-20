@@ -45,7 +45,7 @@
 | 12 | What the commander has not judged yet | `judge.py unjudged`; `vibe_watch.py` | `comms_unjudged`: calls and unit messages after the last verdict | `review_queue` |
 | 13 | Public story and roasts | `fleet-narrative.md`; `judge.py roast` | `comms_order_story`, `comms_fleet_story`; send-back reason posted once | `story` |
 | 14 | Heartbeat: next unit every minute | `rotate.py` (60 s loop) | Core-owned scheduled commander wake | `control_plane` |
-| 15 | Standing rules broken right now | `rotate.py broken_rules` | `StandingRule` members derive violations on read | `control_plane` |
+| 15 | Standing rules broken right now | `CommanderReview.wake` (replaces `rotate.py broken_rules`) | `StandingRule` members derive violations on read | `control_plane` |
 | 16 | Rule review | `rules.py`; `rules.jsonl`; maximum age | Rule instruction segments in the commander's turn context, with provenance | `control_plane` |
 | 17 | Load and forking | `agent-comms-commander capacity`: load and live fork reports; ten-minute beat age | Reporting-only `commander.capacity.Load.of`; no capacity refusal or automatic fork policy | `control_plane` |
 | 18 | Growth alarm | `StandingRule.broken` growth delivery (formerly `growth_watch.py`) | `commander.standing.MergeGrowth.violations`: captured first-parent growth | `control_plane` |
