@@ -10,6 +10,8 @@ import pytest
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.todos import StorageStrikeTodo
+from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.transcript_events import ToolStartTranscript
 from test_commander_problem_orders import create
 
 
@@ -50,6 +52,30 @@ def test_every_coding_family_uses_the_shared_storage_decision(commander):
 def test_coordination_call_digests_its_arguments():
     call = CodingCall.decode('coordination-1', 'comms_threads', {})
     assert call.digest() == 'comms_threads {}'
+
+
+def test_recorded_coordination_digest_keeps_original_request_arguments():
+    arguments = {'from': 'worker', 'to': 'lead', 'body': 'the original body'}
+    event = ToolStartTranscript(
+        position=1, timestamp=1.0, tool_call_id='original-call', tool_name='comms_send',
+        raw_input=arguments,
+        tool=ToolDeclaration.record('comms_send', arguments, call_id='original-call'),
+    )
+    calls = {}
+    event.record_call(calls, 0.0)
+    assert calls['original-call'].digest == CodingCall.decode(
+        'original-call', 'comms_send', arguments).digest()
+    assert 'the original body' in calls['original-call'].digest
+
+
+def test_undeclared_record_keeps_original_name_and_arguments():
+    event = ToolStartTranscript(
+        position=1, timestamp=1.0, tool_call_id='external-call', tool_name='external_unknown',
+        raw_input={'original': 'argument'},
+    )
+    calls = {}
+    event.record_call(calls, 0.0)
+    assert calls['external-call'].digest == 'external_unknown {"original": "argument"}'
 
 
 def test_a_malformed_line_raises_instead_of_skipping_history(tool_watch, commander, commander_script):
