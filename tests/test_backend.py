@@ -13,7 +13,7 @@ import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.acp_failure import ProviderRetryResult
+from agent_comms.acp_failure import RecoveredRetry
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_pi import CAPABILITY
@@ -1503,7 +1503,7 @@ time.sleep(60)
             ok=True,
             text="recovered reply",
             diagnostic={"exit_code": 0},
-            retry_result=ProviderRetryResult(success=True, attempt=1),
+            retry_result=RecoveredRetry(attempt=1),
         )
 
     async def test_routine_compaction_emits_no_false_recovery_states(self, tmp_path):

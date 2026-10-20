@@ -22,18 +22,23 @@ from .field_codec import (
 class SourceReference(ABC):
     """A source reference either supplies its location or explains why it is required."""
 
-    @classmethod
-    @boundary_decoder
-    def from_optional(cls, location: FileLine | None) -> SourceReference:
-        return NoSourceReference() if location is None else location
-
     @abstractmethod
     def require(self, reason: str) -> FileLine: ...
 
+    @abstractmethod
+    def located(self) -> tuple[FileLine, ...]:
+        """The source lines this reference names, for an existence check."""
 
-class NoSourceReference(SourceReference):
+
+@dataclass(frozen=True, slots=True)
+class NoSourceReference(NullMember, SourceReference):
+    """No file:line was supplied; whoever requires one refuses."""
+
     def require(self, reason: str) -> FileLine:
         raise ValueError(reason)
+
+    def located(self) -> tuple[FileLine, ...]:
+        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +58,9 @@ class FileLine(WireValue, SourceReference):
 
     def require(self, reason: str) -> FileLine:
         return self
+
+    def located(self) -> tuple[FileLine, ...]:
+        return (self,)
 
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()

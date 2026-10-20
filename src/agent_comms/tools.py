@@ -87,7 +87,7 @@ from .restart_queue import (
     enqueue as enqueue_restart,
     status as restart_status,
 )
-from .thread_management import RenameThreadResult
+from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .transcript_events import SentTranscript
 from .todos import (
     CorrectCheckTodo,
@@ -1462,15 +1462,15 @@ class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
     parent: Annotated[str, *tool_field("Parent thread name", binding=SubjectBinding)]
     task: Annotated[str, *tool_field("Optional task for the child")] = ""
     tags: Annotated[
-        str | None, *tool_field("Comma-separated tags; omitted inherits parent tags")
-    ] = None
+        TagChoice, *tool_field("Comma-separated tags; omitted inherits parent tags")
+    ] = InheritedTags()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCreatedResult:
         parent = comms.registry.require(self.parent)
         return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
                               project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
-                              tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
+                              tags=self.tags).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -12,7 +12,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
@@ -29,22 +29,22 @@ def test_import_path_preserves_absent_and_empty_then_removes_explicitly(source):
 
 
 @pytest.mark.parametrize(('inherited', 'expected'), [
-    (None, '/runtime/bin' + os.pathsep + os.defpath),
-    ('', '/runtime/bin:'),
-    ('/usr/bin', '/runtime/bin:/usr/bin'),
-    ('/runtime/bin:/usr/bin:/runtime/bin', '/runtime/bin:/usr/bin'),
+    (UnsetVariable(), '/runtime/bin' + os.pathsep + os.defpath),
+    (SetVariable(''), '/runtime/bin:'),
+    (SetVariable('/usr/bin'), '/runtime/bin:/usr/bin'),
+    (SetVariable('/runtime/bin:/usr/bin:/runtime/bin'), '/runtime/bin:/usr/bin'),
 ])
 def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, expected):
     interpreter = Path('/runtime/bin/python')
     original = RestartEnvironment(path=inherited)
     configured = original.for_interpreter(interpreter)
-    path = configured.path
+    path = configured.path.otherwise('')
     entries = path.split(os.pathsep)
     assert entries[0] == '/runtime/bin'
     assert entries.count('/runtime/bin') == 1
     assert path == expected
     assert configured.for_interpreter(interpreter) == configured
-    applied = configured.apply_runtime({'PATH': inherited or '', 'AUTHORED_CREDENTIAL': 'kept'})
+    applied = configured.apply_runtime({'PATH': inherited.otherwise(''), 'AUTHORED_CREDENTIAL': 'kept'})
     assert applied['PATH'] == expected
     assert applied['AUTHORED_CREDENTIAL'] == 'kept'
 

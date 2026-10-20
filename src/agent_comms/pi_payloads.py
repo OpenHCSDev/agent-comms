@@ -179,9 +179,9 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
 @dataclass(frozen=True)
 class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
     def result(self, attempt: int, redact):
-        from .acp_failure import ProviderRetryResult
+        from .acp_failure import RecoveredRetry
 
-        return ProviderRetryResult(success=True, attempt=attempt)
+        return RecoveredRetry(attempt=attempt)
 
     def recovery_events(self, session):
         from .turn_phase import ModelWaitPhase
@@ -206,11 +206,9 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
             raise ValueError("Failed provider retry end requires finalError")
 
     def result(self, attempt: int, redact):
-        from .acp_failure import ProviderRetryResult
+        from .acp_failure import ExhaustedRetry
 
-        return ProviderRetryResult(
-            success=False, attempt=attempt, final_error=redact(self.final_error)
-        )
+        return ExhaustedRetry(attempt=attempt, final_error=redact(self.final_error))
 
     def apply(self, event, session):
         from .turn_phase import FailedPhase

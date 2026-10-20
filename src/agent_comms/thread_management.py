@@ -36,7 +36,8 @@ from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .input_disposition import InputDispositions
-from .launch_runtime import LaunchRuntime
+from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
@@ -58,6 +59,49 @@ from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
 
 
+class TagChoice(SubclassUnion, affix="Tags"):
+    """The tags a new thread takes: the ones given, or a fork's parent's."""
+
+    @abstractmethod
+    def for_new(self) -> frozenset[str]: ...
+
+    @abstractmethod
+    def for_child(self, parent: frozenset[str]) -> frozenset[str]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class GivenTags(TagChoice):
+    """Tags spelled as comma-separated text on the command line, in the editor and in tools."""
+
+    tags: frozenset[str]
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(TagListText.from_text(FieldCodec.decode(str, data)))
+
+    def to_wire(self) -> str:
+        return TagListText.encode(self.tags)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
+
+    def for_new(self) -> frozenset[str]:
+        return self.tags
+
+    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
+        return self.tags
+
+
+@dataclass(frozen=True, slots=True)
+class InheritedTags(NullMember, TagChoice):
+    def for_new(self) -> frozenset[str]:
+        return frozenset()
+
+    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
+        return parent
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
     """Prepares the session outside the wire lock, then registers the thread under it."""
@@ -67,14 +111,14 @@ class NewThreadSpec:
     model: str
     thinking_level: ThinkingLevelField
     task: LaunchInput = field(default_factory=LaunchInput)
-    tags: frozenset[str] | None = None
+    tags: TagChoice = InheritedTags()
 
     @classmethod
     def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self, project: str, registry: Registration) -> Thread:
-        return registry.new_thread(name=self.name, task=self.task.text, tags=self.tags or frozenset(),
+        return registry.new_thread(name=self.name, task=self.task.text, tags=self.tags.for_new(),
                       worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     @contextmanager
@@ -101,7 +145,7 @@ class ForkSpec(NewThreadSpec):
 
     def child(self, parent: Thread, runtime: RuntimeLocation, registry: Registration) -> Thread:
         return replace(self.declaration(self.project, registry), parent=parent.name,
-                       tags=parent.tags if self.tags is None else self.tags,
+                       tags=self.tags.for_child(parent.tags),
                        backend=parent.backend, session_file=runtime.read_key)
 
     @contextmanager

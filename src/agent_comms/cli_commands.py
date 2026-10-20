@@ -76,6 +76,7 @@ from .field_codec import (
     TargetBound,
     WireName,
     WireOmitDefault,
+    boundary_decoder,
 )
 from .harness_install import Harness, HarnessInstalled
 from .history_result import HistoryPageResult
@@ -110,7 +111,9 @@ from .thread_execution import (
     ThreadExecution,
 )
 from .thread_identity import NoThreadText
-from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
+from .thread_management import (
+    ForkSpec, GivenTags, InheritedTags, NewThreadSpec, TagChoice, ThreadDeleted,
+)
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .tool_result import ToolResult
@@ -143,8 +146,10 @@ def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
 
 
-def _optional_tags(value: str | None) -> list[str] | None:
-    return None if value is None else _tags(value)
+@boundary_decoder
+def _tag_choice_text(value: str | None) -> str | None:
+    """Command-line and editor text is the given tags' wire; no text inherits."""
+    return value
 
 
 def _tag_text(value: frozenset[str] | None) -> str | None:
@@ -1799,11 +1804,11 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         str, Multiline(), Argument(flags=("--task",))
     ] = ""
     tags: Annotated[
-        frozenset[str] | None,
-        EditorFormat(_tag_text),
-        Normalize(_optional_tags),
+        TagChoice,
+        EditorFormat(FieldCodec.encode),
+        Normalize(_tag_choice_text),
         Argument(flags=("--tags",)),
-    ] = None
+    ] = InheritedTags()
     project: Annotated[
         str,
         Argument(
@@ -1851,7 +1856,7 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 
     @classmethod
     def thread_binding(cls, thread):
-        return cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
+        return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=thread.worktree,
                    model=thread.model, thinking_level=thread.thinking_level)
 
 

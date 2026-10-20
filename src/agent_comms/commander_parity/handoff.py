@@ -64,9 +64,11 @@ class FinishedHandoffCase:
     @staticmethod
     def current(run: LifecycleRun, receiver: str, document: OrderFile, pid: str) -> ChildResult:
         return run.invoke(
-            "import sys; from agent_comms.commander.order import Commander, OrderFile; "
+            "import sys; from agent_comms.change_report import FileLine; "
+            "from agent_comms.commander.order import Commander, OrderFile, ReassignReason; "
             "Commander.model_validate_json(sys.argv[1]).send(sys.argv[2], sys.argv[3], "
-            "OrderFile.read(sys.argv[4]), reassign=sys.argv[5], traced=sys.argv[6])",
+            "OrderFile.read(sys.argv[4]), reassign=ReassignReason(sys.argv[5]), "
+            "traced=FileLine.from_wire(sys.argv[6]))",
             run.commander.model_dump_json(),
             receiver,
             run.due,

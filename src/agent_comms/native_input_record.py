@@ -257,8 +257,6 @@ class FullNativeExecution(NativeInputExecution):
 
     def published_replies(self, db, owner_lookup):
         from .coordination_tables.responses import ResponseObligation
-        from .message_reference import MessageReference
-
         execution = self._execution(db)
         if not self.matches_execution(execution, owner_lookup):
             return ()
@@ -269,12 +267,7 @@ class FullNativeExecution(NativeInputExecution):
             return ()
         return tuple(
             sorted(
-                (
-                    MessageReference(
-                        row.lifecycle.publication_seq, row.lifecycle.published_message_id
-                    )
-                    for row in obligations
-                ),
+                (row.lifecycle.published_reference() for row in obligations),
                 key=lambda reference: reference.seq,
             )
         )

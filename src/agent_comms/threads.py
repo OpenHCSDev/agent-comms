@@ -458,8 +458,9 @@ def current_thread(registry) -> Thread:
         name=launch.name,
         tags=launch.tags,
         worktree=launch.worktree,
-        parent=launch.parent,
-        task=NoThreadText.from_input(launch.task),
+        # Thread still declares a missing parent as None.
+        parent=launch.parent.otherwise(None),
+        task=launch.task.otherwise(NO_THREAD_TEXT),
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
 

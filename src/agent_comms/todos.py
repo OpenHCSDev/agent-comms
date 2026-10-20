@@ -30,7 +30,7 @@ from uuid import uuid4
 
 from . import skills
 from .bus_publication import AgentOrigin
-from .change_report import FileLine, SourceReference
+from .change_report import FileLine, NoSourceReference, SourceReference
 from .channel_targets import CommandTarget
 from .child_process import (
     BoundedRun,
@@ -1384,6 +1384,80 @@ class LocatedProblemFinding(ProblemFinding):
 
 
 @dataclass(frozen=True, kw_only=True)
+class Successor(SubclassUnion, affix="Successor"):
+    """The problem that already owns a withdrawn order's fix, or none."""
+
+    @abstractmethod
+    def withdrawal_note(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class SupersedingProblem(Successor):
+    problem: str
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(FieldCodec.decode(str, data))
+
+    def to_wire(self) -> str:
+        return self.problem
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
+
+    def withdrawal_note(self) -> str:
+        return f" (superseded by {self.problem})"
+
+
+@dataclass(frozen=True, slots=True)
+class NoSuccessor(NullMember, Successor):
+    def withdrawal_note(self) -> str:
+        return ""
+
+
+class Replacement(SubclassUnion, affix="Replacement"):
+    """The order message a resend replaces, or none named."""
+
+    @abstractmethod
+    def names_latest(self, todo: Todo) -> bool: ...
+
+    @abstractmethod
+    def refusals(self, replacing: bool) -> tuple[str, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ReplacedMessage(Replacement):
+    message_id: str
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(FieldCodec.decode(str, data))
+
+    def to_wire(self) -> str:
+        return self.message_id
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
+
+    def names_latest(self, todo: Todo) -> bool:
+        return todo.sent_in(self.message_id)
+
+    def refusals(self, replacing: bool) -> tuple[str, ...]:
+        return () if replacing else (
+            "--replaces: fix: name the current order on these problems to the same unit",)
+
+
+@dataclass(frozen=True, slots=True)
+class NoReplacement(NullMember, Replacement):
+    def names_latest(self, todo: Todo) -> bool:
+        return False
+
+    def refusals(self, replacing: bool) -> tuple[str, ...]:
+        return ()
+
+
 class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
 
@@ -1685,7 +1759,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
                          "its order has none.")
 
-    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
+    def withdrawn(self, previous: Assignment, why: str, superseded_by: Successor) -> ProblemOrder:
         self.require_withdrawal()
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
@@ -1867,7 +1941,7 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
 
     previous: Assignment
     why: str
-    superseded_by: Annotated[str | None, WireOmitDefault()] = None
+    superseded_by: Annotated[Successor, WireOmitDefault()] = NoSuccessor()
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
 
@@ -1875,9 +1949,8 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
         """Retiring an erroneous order does not claim installed work."""
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
-        superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
         return (f"{todo.id}: order {self.id} withdrawn from {self.previous.owner}, "
-                f"no strike: {self.why}{superseded}",)
+                f"no strike: {self.why}{self.superseded_by.withdrawal_note()}",)
 
 
 @dataclass(frozen=True)
@@ -2098,7 +2171,7 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         pass
 
     @classmethod
-    def assign(cls, current: Todo, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference) -> Todo:
         raise TodoConflict(current)
 
     @classmethod
@@ -2117,7 +2190,7 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
 class OpenTodoState(TodoState):
     @classmethod
-    def assign(cls, current, proposed, traced=None):
+    def assign(cls, current, proposed, traced):
         return current.assigned(proposed, traced)
 
 
@@ -2188,7 +2261,7 @@ class AssignTodo(TodoOperation):
     deadline: EventTime
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
-    traced: Annotated[FileLine | None, WireOmitDefault()] = None
+    traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
     def apply(self, current: Todo) -> Todo:
         self.deadline.require_deadline()
@@ -2733,7 +2806,7 @@ class WithdrawTodo(CloseOrderTodo):
     """An undelivered order sent in error leaves its problem with its reason and no strike."""
     previous: Assignment
     why: str
-    superseded_by: str | None = None
+    superseded_by: Successor = NoSuccessor()
 
     def closed(self, current: Todo) -> ProblemOrder:
         order = current.order.withdrawn(self.previous, self.why, self.superseded_by)
@@ -2916,10 +2989,10 @@ class Todo(TypedTable):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return self.holder_state.proposed_assignment(proposed)
 
-    def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+    def assigned(self, proposed: Assignment, traced: SourceReference) -> Todo:
         self.order.require_transfer(self)
         holder = self.holder_state
-        holder.require_trace(proposed.owner, SourceReference.from_optional(traced))
+        holder.require_trace(proposed.owner, traced)
         proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
@@ -2941,10 +3014,10 @@ class Todo(TypedTable):
         """Only the latest recorded send names this order, not an earlier replacement."""
         return bool(self.messages) and self.messages[-1].message_id == message_id
 
-    def require_replacement(self, message_id: str) -> None:
+    def require_replacement(self, replaces: Replacement) -> None:
         if not self.messages:
             raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
-        if not self.sent_in(message_id):
+        if not replaces.names_latest(self):
             raise ValueError(
                 f"{self.holder} already holds {self.id}; "
                 f"pass --replaces {self.messages[-1].message_id}"
@@ -3332,7 +3405,7 @@ class TodoStore(TypedStore):
         goal: GoalRef,
         deadline: EventTime,
         order: PendingProblemOrder,
-        traced: FileLine | None = None,
+        traced: FileLine | NoSourceReference = NoSourceReference(),
     ) -> Todo:
         proposed = Assignment.of(_thread(owner), assigner, generation)
         return self.apply(

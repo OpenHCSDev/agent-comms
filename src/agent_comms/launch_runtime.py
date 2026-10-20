@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import BaseModel
 
@@ -20,7 +20,9 @@ from .field_codec import (
     GitCommitText,
     JsonShapeFamily,
     JsonShapeMember,
+    NullMember,
     PathText,
+    SubclassUnion,
     TextRepresentation,
     boundary_decoder,
     NativeScope,
@@ -168,6 +170,39 @@ class SpecifiedImportPath(ImportPath, JsonShapeMember):
     value: str
 
 
+class EnvironmentValue(SubclassUnion, affix="Variable"):
+    """One inherited environment variable: its text, or unset."""
+
+    @abstractmethod
+    def otherwise[Default](self, default: Default) -> str | Default:
+        """The variable's text; an unset variable takes the reader's own default."""
+
+
+@dataclass(frozen=True, slots=True)
+class SetVariable(EnvironmentValue):
+    text: str
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(FieldCodec.decode(str, data))
+
+    def to_wire(self) -> str:
+        return self.text
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
+
+    def otherwise[Default](self, default: Default) -> str:
+        return self.text
+
+
+@dataclass(frozen=True, slots=True)
+class UnsetVariable(NullMember, EnvironmentValue):
+    def otherwise[Default](self, default: Default) -> Default:
+        return default
+
+
 @dataclass(frozen=True)
 class EnvironmentRecord:
     """A record whose fields are the environment variables their wire names spell."""
@@ -209,14 +244,14 @@ class RestartEnvironment(EnvironmentRecord):
     """
 
     home: Annotated[
-        str | None, WireOmitDefault(), WireName("HOME")
-    ] = None
+        EnvironmentValue, WireOmitDefault(), WireName("HOME")
+    ] = UnsetVariable()
     path: Annotated[
-        str | None,
+        EnvironmentValue,
         WireOmitDefault(),
         WireName("PATH"),
         RuntimeScope(),
-    ] = None
+    ] = UnsetVariable()
     pythonpath: Annotated[
         ImportPath,
         WireOmitDefault(),
@@ -224,14 +259,14 @@ class RestartEnvironment(EnvironmentRecord):
         RuntimeScope(),
     ] = field(default_factory=NoImportPath)
     virtual_env: Annotated[
-        str | None,
+        EnvironmentValue,
         WireOmitDefault(),
         WireName("VIRTUAL_ENV"),
         RuntimeScope(),
-    ] = None
+    ] = UnsetVariable()
     config: Annotated[
-        str | None, WireOmitDefault(), WireName("XDG_CONFIG_HOME")
-    ] = None
+        EnvironmentValue, WireOmitDefault(), WireName("XDG_CONFIG_HOME")
+    ] = UnsetVariable()
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
     native_config: Annotated[
         Path,
@@ -249,7 +284,7 @@ class RestartEnvironment(EnvironmentRecord):
 
     def absolute(self, directory: Path) -> Path:
         if directory.is_relative_to("~"):
-            directory = Path(self.home or Path.home()) / directory.relative_to("~")
+            directory = Path(self.home.otherwise(str(Path.home()))) / directory.relative_to("~")
         return directory.expanduser().resolve()
 
     @classmethod
@@ -271,11 +306,11 @@ class RestartEnvironment(EnvironmentRecord):
     def for_interpreter(self, interpreter: Path) -> RestartEnvironment:
         """Put this process's runtime first, exactly once; preserve other search paths."""
         directory = str(interpreter.parent)
-        inherited = os.defpath if self.path is None else self.path
+        inherited = self.path.otherwise(os.defpath)
         path = os.pathsep.join(
             (directory, *(entry for entry in inherited.split(os.pathsep) if entry != directory))
         )
-        return replace(self, path=path)
+        return replace(self, path=SetVariable(path))
 
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
@@ -345,11 +380,11 @@ class ThreadLaunch(EnvironmentRecord):
         WireName("AGENT_COMMS_TAGS"),
     ] = frozenset()
     parent: Annotated[
-        str | None, WireOmitDefault(), WireName("PI_PARENT_ID")
-    ] = None
+        EnvironmentValue, WireOmitDefault(), WireName("PI_PARENT_ID")
+    ] = UnsetVariable()
     task: Annotated[
-        str | None, WireOmitDefault(), WireName("PI_TASK")
-    ] = None
+        EnvironmentValue, WireOmitDefault(), WireName("PI_TASK")
+    ] = UnsetVariable()
     managed: Annotated[
         bool,
         FlagText,
@@ -357,10 +392,10 @@ class ThreadLaunch(EnvironmentRecord):
         WireName("AGENT_COMMS_MANAGED"),
     ] = False
     startup_input: Annotated[
-        str | None,
+        EnvironmentValue,
         WireOmitDefault(),
         WireName("AGENT_COMMS_STARTUP_INPUT_KEY"),
-    ] = None
+    ] = UnsetVariable()
 
     @classmethod
     @boundary_decoder
@@ -369,8 +404,9 @@ class ThreadLaunch(EnvironmentRecord):
             thread.name,
             thread.worktree,
             frozenset(thread.tags),
-            thread.parent,
-            cast(str | None, FieldCodec.encode(thread.task)),
+            UnsetVariable() if thread.parent is None else SetVariable(thread.parent),
+            # The task's wire text is this variable's; thread_identity imports this module.
+            FieldCodec.decode(EnvironmentValue, FieldCodec.encode(thread.task)),
         )
 
     @classmethod
@@ -401,7 +437,8 @@ class ThreadLaunch(EnvironmentRecord):
         """This launch's startup input, removed so no reread or child process sees it."""
         startup_input = cls.current(environment).startup_input
         cls.strip(environment, "startup_input")
-        return startup_input
+        # The worker still declares no startup input as None.
+        return startup_input.otherwise(None)
 
     def apply(self, environment: dict[str, str]) -> dict[str, str]:
         """Replace any inherited launch with this one."""

@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from agent_comms import field_codec
 
-from .change_report import FileLine
+from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -553,7 +553,9 @@ class OrderGoalAction(ProblemOrderGoalAction):
     """The order's commander gives the problem to this thread."""
 
     expected_revision: int
-    traced: Annotated[FileLine | None, field_codec.WireOmitDefault()] = None
+    traced: Annotated[FileLine | NoSourceReference, field_codec.WireOmitDefault()] = (
+        NoSourceReference()
+    )
     assigner: ThreadIncarnation
 
     def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:

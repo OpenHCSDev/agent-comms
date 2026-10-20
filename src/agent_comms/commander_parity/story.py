@@ -5,7 +5,7 @@ from dataclasses import replace
 from ..commander.order import OrderFile
 from ..goal_actions import CreateProblemGoalAction
 from ..order_story import FleetStory, OrderStory
-from ..todos import SendBackVerdict, StrikeReason, Todo
+from ..todos import ReplacedMessage, SendBackVerdict, StrikeReason, Todo
 from ..tool_result import ToolResult
 from ..tools import (
     CommsFleetStoryTool,
@@ -41,7 +41,7 @@ class StoryCase(LifecycleCase):
             run.due,
             document,
             clean=True,
-            replaces=sent_back.messages[-1].message_id,
+            replaces=ReplacedMessage(sent_back.messages[-1].message_id),
         )
         run.commander.strike(run.worker, created.id, cls.strike_reason,
                              evidence=(created.order.checked().owner,))

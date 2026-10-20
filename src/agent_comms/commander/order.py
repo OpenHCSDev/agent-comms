@@ -26,18 +26,22 @@ from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Self
+from collections.abc import Sequence
+from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
 
-from ..change_report import FileLine, SourceReference
+from ..change_report import FileLine, NoSourceReference
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions
 from ..comms import Comms
 from ..declared_family import DeclaredFamily
+from ..errors import RelationViolationError
 from ..field_codec import (
     FieldCodec,
     MalformedRecord,
+    NullMember,
+    SubclassUnion,
     boundary_decoder,
     Argument,
     FactoryArgumentDefault,
@@ -64,15 +68,19 @@ from ..todos import (
     LocatedProblemFinding,
     MeasuredDeadline,
     NoDeliveryEvidence,
+    NoReplacement,
+    NoSuccessor,
     OperationDelivery,
     OrderedHunt,
     OrderMessage,
     OrderProgress,
     PendingProblemOrder,
     PlannedInstallDeadline,
+    Replacement,
     Slop,
     StrikeReason,
     StrikeTodo,
+    Successor,
     Todo,
     UnlocatedProblemFinding,
     VerdictAudience,
@@ -298,10 +306,115 @@ class CommanderContext(CommanderConfig):
         return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
 
 
+class Reassignment(SubclassUnion, affix="Reassignment"):
+    """Why a held problem changes owner, or no change of owner."""
+
+    # A resend to the same unit is a send-back strike unless it reassigns.
+    strikes_send_back: ClassVar[bool]
+
+    @abstractmethod
+    def refusals(self, holders: Sequence[str]) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def note(self) -> str:
+        """The order's line saying why the unit takes the work over."""
+
+    @abstractmethod
+    def because(self) -> str:
+        """The reason told to each former holder."""
+
+
+@dataclass(frozen=True, slots=True)
+class ReassignReason(Reassignment):
+    text: str
+    strikes_send_back = False
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(FieldCodec.decode(str, data))
+
+    def to_wire(self) -> str:
+        return self.text
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
+
+    def refusals(self, holders: Sequence[str]) -> tuple[str, ...]:
+        return () if len(self.text.split()) >= 8 else (
+            '--reassign needs the concrete failure that forces replacement (8+ words), '
+            'told to the old and new owner',)
+
+    def note(self) -> str:
+        return f'\nTaken over because: {self.text}'
+
+    def because(self) -> str:
+        return self.text
+
+
+@dataclass(frozen=True, slots=True)
+class NoReassignment(NullMember, Reassignment):
+    strikes_send_back = True
+
+    def refusals(self, holders: Sequence[str]) -> tuple[str, ...]:
+        return () if not holders else (
+            f'fact already owned by {list(holders)}; keep that owner, or pass --reassign '
+            '"<the concrete failure: provider diagnostic, strikes, missed deadline>"',)
+
+    def note(self) -> str:
+        return ''
+
+    def because(self) -> str:
+        raise RelationViolationError('a held problem changes owner only with --reassign')
+
+
+class StrikeSelector(SubclassUnion, affix="Strike"):
+    """Which live strike a void takes back: the one recorded at a clock time, or the newest."""
+
+    @abstractmethod
+    def selects(self, strike: StrikeTodo) -> bool: ...
+
+    @abstractmethod
+    def refusal(self, task: str) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ClockedStrike(StrikeSelector):
+    clock: str
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(FieldCodec.decode(str, data))
+
+    def to_wire(self) -> str:
+        return self.clock
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
+
+    def selects(self, strike: StrikeTodo) -> bool:
+        return strike.at.clock() == self.clock
+
+    def refusal(self, task: str) -> str:
+        return f'Refused: {task} has no live strike recorded at {self.clock}.'
+
+
+@dataclass(frozen=True, slots=True)
+class NewestStrike(NullMember, StrikeSelector):
+    def selects(self, strike: StrikeTodo) -> bool:
+        return True
+
+    def refusal(self, task: str) -> str:
+        return f'Refused: {task} has no live strike.'
+
+
 class Commander(CommanderContext):
     @boundary_decoder
-    def send(self, unit, due: EventTime, document: OrderFile, clean=False, reassign=None, new=None,
-             traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(),
+    def send(self, unit, due: EventTime, document: OrderFile, clean=False,
+             reassign: Reassignment = NoReassignment(), new=None,
+             traced: FileLine | NoSourceReference = NoSourceReference(),
+             replaces: Replacement = NoReplacement(), disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
         problems = document.problems_found(clean)
@@ -367,14 +480,7 @@ class Commander(CommanderContext):
         # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
         holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
         replacing = not new and bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
-        trace = None
-        if traced is not None:
-            try:
-                with MalformedRecord.refusing('--traced'):
-                    trace = FileLine.from_wire(traced)
-                    references.append(trace)
-            except MalformedRecord as error:
-                problems.append(f'--traced: {error}; fix: supply PATH:LINE')
+        references.extend(traced.located())
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
@@ -393,24 +499,18 @@ class Commander(CommanderContext):
                     if replacing:
                         listed[pid].require_replacement(replaces)
                     if pid in listed:
-                        listed[pid].holder_state.require_trace(
-                            unit, SourceReference.from_optional(trace),
-                        )
+                        listed[pid].holder_state.require_trace(unit, traced)
             except MalformedRecord as error:
                 problems.append(str(error))
-        if replaces and not replacing:
-            problems.append('--replaces: fix: name the current order on these problems to the same unit')
-        if holders and not reassign:
-            problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
-        if reassign is not None and len(reassign.split()) < 8:
-            problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
+        problems.extend(replaces.refusals(replacing))
+        problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
             f'Problems: {", ".join(group)}', *order.work_instructions()))
-        message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+        message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + reassign.note() + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                    + '\nStart now and push as you go.')  # a unit shown a due time takes until then
-        taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
+        taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign.because()}. Stop that work; do not touch its files.' for other in holders}
         fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
         if not order.run.mechanical and fired:
             sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
@@ -429,7 +529,7 @@ class Commander(CommanderContext):
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                assigner=self.incarnation, traced=trace,
+                assigner=self.incarnation, traced=traced,
                 order=order, request=request, deadline=due_at, commander=self.commander)))
         message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
         sent = self.post(VerdictAudience((unit,)), message, answers)
@@ -445,7 +545,7 @@ class Commander(CommanderContext):
         if replacing and not clean and struck_already:
             print(f'{unit} already struck on this order of {group[0]}; '
                   'the send-back counts that one miss once')
-        elif replacing and not clean and not reassign:
+        elif replacing and not clean and reassign.strikes_send_back:
             # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
             # Done here so the commander cannot send work back and forget either.
             verdict = document.prose.strip()
@@ -627,13 +727,12 @@ class Commander(CommanderContext):
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
         print(f'hunt recorded: {where} -> {sent or "clean"}')
 
-    @boundary_decoder
-    def unstrike(self, task: str, why: str, at: str | None = None) -> None:
+    def unstrike(self, task: str, why: str, at: StrikeSelector = NewestStrike()) -> None:
         """A strike recorded in error is voided in Core, then announced to #comms."""
         todo = self.comms.goals.todos.get(task)
-        live = [s for s in todo.live_strikes() if at in (None, s.at.clock())]
+        live = [s for s in todo.live_strikes() if at.selects(s)]
         if not live:
-            sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
+            sys.exit(at.refusal(task))
         voided = live[-1]
         refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the void
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
@@ -661,8 +760,7 @@ class Commander(CommanderContext):
                   VerdictAudience.of(todo.held().owner, todo.goal))
         print(f'{pid}: due {moved.clock()}')
 
-    @boundary_decoder
-    def withdraw(self, pid: str, why: str, superseded_by: str | None = None) -> None:
+    def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
         """Core retires an undelivered order sent in error.
 
         The reason goes on the public record and to the unit that held it."""
@@ -803,17 +901,17 @@ class SendVerb(OrderVerb, DirectiveVerb):
         ),
     ] = False
     reassign: Annotated[
-        str | None,
+        Reassignment,
         Argument(
             flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
         ),
-    ] = None
+    ] = NoReassignment()
     replaces: Annotated[
-        str | None,
+        Replacement,
         Argument(
             flags=("--replaces",), options={"help": "the current message this order replaces"}
         ),
-    ] = None
+    ] = NoReplacement()
     disk: Annotated[
         bool,
         Argument(
@@ -822,7 +920,7 @@ class SendVerb(OrderVerb, DirectiveVerb):
         ),
     ] = False
     traced: Annotated[
-        str | None,
+        FileLine | NoSourceReference,
         Argument(
             flags=("--traced",),
             options={
@@ -830,7 +928,7 @@ class SendVerb(OrderVerb, DirectiveVerb):
                 "help": "the first failing source line, required after two owners",
             },
         ),
-    ] = None
+    ] = NoSourceReference()
 
     def run(self, ctx: Commander) -> None:
         ctx.send(self.unit, self.due, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
@@ -880,11 +978,11 @@ class UnstrikeVerb(OrderVerb):
     pid: Annotated[str, Argument(flags=("pid",))]
     why: Annotated[str, Argument(flags=("--why",))]
     at: Annotated[
-        str | None,
+        StrikeSelector,
         Argument(
             flags=("--at",), options={"help": "HH:MM the strike was recorded; default the newest"}
         ),
-    ] = None
+    ] = NewestStrike()
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
@@ -928,12 +1026,12 @@ class WithdrawVerb(OrderVerb):
     pid: Annotated[str, Argument(flags=("pid",))]
     why: Annotated[str, Argument(flags=("--why",))]
     superseded_by: Annotated[
-        str | None,
+        Successor,
         Argument(
             flags=("--superseded-by",),
             options={"metavar": "PID", "help": "the problem that already owns this fix"},
         ),
-    ] = None
+    ] = NoSuccessor()
 
     def run(self, ctx: Commander) -> None:
         ctx.withdraw(self.pid, self.why, self.superseded_by)

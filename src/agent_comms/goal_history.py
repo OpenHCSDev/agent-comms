@@ -33,7 +33,7 @@ class GoalHistoryError(RuntimeError):
 @dataclass(frozen=True)
 class RecordedGoalRevision:
     """A history entry's public fields; its owner key and journal state stay in the store."""
-    sequence: int | None
+    sequence: int
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
     before: GoalDeclaration
@@ -44,7 +44,7 @@ class RecordedGoalRevision:
 class GoalHistoryEntry(TypedTable):
     # The durable kind field is a journal fact, not the TypedTable family tag.
 
-    sequence: Annotated[int | None, Column(primary_key=True)]
+    sequence: Annotated[int, Column(primary_key=True)]
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
     before: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
@@ -191,15 +191,16 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
         after: GoalDeclaration,
     ) -> int:
         with self._transaction() as connection:
-            cursor = GoalHistoryEntry(
-                None,
-                kind,
-                time.time(),
-                before,
-                after,
+            # SQLite assigns the sequence; a stored entry always has one.
+            cursor = GoalHistoryEntry.insert_values(
+                connection,
+                kind=kind,
+                observed_at=time.time(),
+                before=before,
+                after=after,
                 owner_created_at=owner_created_at,
                 state=state,
-            ).insert(connection)
+            )
             sequence = cursor.lastrowid
             if sequence is None:
                 raise GoalHistoryError("Goal history insert returned no sequence.")

@@ -61,9 +61,6 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         require_nonempty(self.exact_target, "exact_target")
         require_bounded(self.exact_target, "exact_target", MAX_IDENTIFIER_CHARS)
         require_optional_nonempty(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
-        require_optional_nonempty(
-            self.lifecycle.published_message_id, "receipt_message_id", MAX_IDENTIFIER_CHARS
-        )
         if self.revision <= 0:
             raise ValueError("revision must be positive")
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
