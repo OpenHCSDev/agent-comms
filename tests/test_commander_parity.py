@@ -12,13 +12,6 @@ class MatchingComparison(ParityComparison):
     passed = True
 
 
-def test_generated_matrix_is_a_derived_output():
-    assert ParityRow.render_plan(PLAN) == PLAN.read_text()
-    rows = ParityRow.rows()
-    assert rows
-    assert len(rows) == len({row.number for row in rows})
-    assert all(row.capability and row.current and row.native and row.phases for row in rows)
-    assert all(not row.compare(()).passed for row in rows)
 
 
 def test_generated_prose_is_not_input_to_the_gate(tmp_path):

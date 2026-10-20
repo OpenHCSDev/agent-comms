@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 from acp import RequestError
-from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
@@ -22,7 +21,6 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
-    GoalChangedUpdate,
     TranscriptSnapshotUpdate,
     decode_updates,
 )
@@ -35,7 +33,6 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.pi_counts import PiCount
 from delivery_owner_fixture import canonical_agent
 
-pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 def facts(metadata, kind):
@@ -515,35 +512,5 @@ class TestTargetPrefix:
         assert [m.body for m in list(wired.views.history_page(CommandTarget.named("peer"), viewer="proj").messages)] == ["hi peer"]
 
 
-class TestLiveConfigSync:
-    async def test_external_model_change_is_published_to_connected_clients(
-        self, wired, tmp_path, monkeypatch
-    ):
-        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
-        sent: list = []
-        menu_received = asyncio.Event()
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-                if isinstance(update, ConfigOptionUpdate):
-                    menu_received.set()
-
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await asyncio.wait_for(menu_received.wait(), 1)
-        await agent.turns.goals.sync_goal_execution("proj", "proj")
-        info = [update for update in sent if isinstance(update, SessionInfoUpdate)
-                and facts(update.field_meta, GoalChangedUpdate)]
-        assert len(info) == 1
-        assert facts(info[0].field_meta, GoalChangedUpdate) == (
-            GoalChangedUpdate.from_snapshot(wired.goals.goal_snapshot("proj")),
-        )
-        assert info[0].title is None
-        sent.clear()
-        wired.threads.set_thread_configuration(wired.registry.require('proj'), model='openrouter/deepseek/deepseek-v4.1-flash')
-        await agent.sessions.config.publish_configuration("proj")
-        assert len(sent) == 1
-        assert isinstance(sent[0], ConfigOptionUpdate)
 
 

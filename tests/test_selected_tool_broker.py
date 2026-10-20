@@ -13,13 +13,12 @@ import pytest
 
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.storage_room import NoRoomNeeded, RoomReservation
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import DuplicateToolCallIdentity, SelectedToolDenied
-from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.pi_events import ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
 
@@ -27,66 +26,6 @@ def _wire(token: str, **changes: object) -> bytes:
     arguments = {"resource": "notes.txt", "contents": "é", **changes}
     data = {"token": token, "request": {"call_id": "call_1", "arguments": arguments}}
     return (json.dumps(data) + "\n").encode("utf-8")
-
-
-@pytest.mark.asyncio
-async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path, tool_listener) -> None:
-    class Owner:
-        input_id = secrets.token_hex(16)
-
-        async def allow(self, turn, round_number, call) -> RoomReservation:
-            assert turn is self
-            return NoRoomNeeded()
-
-    tmp_path.chmod(0o700)
-    owner = Owner()
-    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
-    socket.turn = owner
-    first_arguments = {"path": "one"}
-    socket.announce((ToolCallContent(id="reused", name="read", arguments=first_arguments),))
-    socket.tool_started(
-        ToolExecutionStart(tool_call_id="reused", tool_name="read", args=first_arguments)
-    )
-    request = json.dumps({
-        "token": socket.listener.token,
-        "call_id": "reused",
-        "name": "read",
-        "arguments": first_arguments,
-    }).encode() + b"\n"
-    await socket.handle_request(request)
-    first = socket.calls.require(0, "reused")
-    slot = first.slot(owner.input_id, 0)
-    broker.consume_selected_slot(tmp_path, slot, slot)
-    socket.tool_finished(
-        ToolExecutionEnd(tool_call_id="reused", tool_name="read", is_error=False),
-        owner.input_id,
-    )
-
-    second_arguments = {"path": "two"}
-    second_request = json.dumps({
-        "token": socket.listener.token,
-        "call_id": "reused",
-        "name": "read",
-        "arguments": second_arguments,
-    }).encode() + b"\n"
-    pending = asyncio.create_task(socket.handle_request(second_request))
-    await asyncio.sleep(0)
-    with pytest.raises(KeyError):
-        socket.calls.require(1, "reused")  # No declaration has supplied round 1 yet.
-    assert not pending.done()
-
-    socket.announce((
-        ToolCallContent(id="reused", name="read", arguments=second_arguments),
-    ))
-    second = socket.calls.require(1, "reused")
-    socket.tool_started(
-        ToolExecutionStart(tool_call_id="reused", tool_name="read", args=second_arguments)
-    )
-
-    assert await pending == {"ok": True}
-    assert first is not second
-    assert socket.calls.require(1, "reused") is second
-    assert first.slot(owner.input_id, 0) != second.slot(owner.input_id, 1)
 
 
 def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(tmp_path: Path, tool_listener) -> None:

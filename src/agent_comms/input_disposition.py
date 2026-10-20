@@ -29,7 +29,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 from .tool_result import ToolResult
-from .typed_table import Column, Index, TypedStore, TypedTable, sql_literal
+from .typed_table import Column, Generated, Index, TypedStore, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -186,18 +186,19 @@ class InputDispositionRow(TypedTable):
 
     key: Annotated[str, Column(primary_key=True)]
     attempt: StoredInput
-    owner: Annotated[str, Column(generated="json_extract(attempt,'$.owner')")] = field(
-        init=False, default=None, compare=False, repr=False
+    owner: ClassVar[Generated] = Generated(str, Column(generated="json_extract(attempt,'$.owner')"))
+    turn_id: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract(attempt,'$.turn_id')", nullable=True),
     )
-    turn_id: Annotated[str | None, Column(generated="json_extract(attempt,'$.turn_id')")] = (
-        field(init=False, default=None, compare=False, repr=False)
+    sequence: ClassVar[Generated] = Generated(
+        int,
+        Column(generated="json_extract(attempt,'$.sequence')", nullable=True),
     )
-    sequence: Annotated[
-        int | None, Column(generated="json_extract(attempt,'$.sequence')")
-    ] = field(init=False, default=None, compare=False, repr=False)
-    unresolved: Annotated[
-        bool, Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")
-    ] = field(init=False, default=None, compare=False, repr=False)
+    unresolved: ClassVar[Generated] = Generated(
+        bool,
+        Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}"),
+    )
     checks = ("key = json_extract(attempt,'$.key')",)
     indexes = (
         Index(("owner", "unresolved")),

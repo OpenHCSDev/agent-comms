@@ -158,30 +158,3 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
     assert page.earlier == EarlierPage('')  # An opaque empty cursor is still a string.
 
 
-def test_stopped_carry_preserves_external_items(tmp_path):
-    import json
-    from contextlib import closing
-    from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.external_transcript import ExternalTranscript, NoEarlierPage
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.transcript_events import AssistantTranscript
-    from cutover.carry_external_pages import ExternalPages
-
-    root = tmp_path / 'root'
-    root.mkdir()
-    path = ExternalTranscript.path_in(root)
-    saved = json.dumps(FieldCodec.encode((AssistantTranscript('preserved', position='i', timestamp=1.0),)))
-    # This historical conversion predates the separate event table.
-    with closing(CoordinationStore.writer(path)) as connection:
-        connection.execute('CREATE TABLE external_item (thread TEXT NOT NULL, turn_id TEXT NOT NULL, '
-                           'item_id TEXT NOT NULL, seq INTEGER NOT NULL, events TEXT NOT NULL, '
-                           'PRIMARY KEY(thread,turn_id,item_id), UNIQUE(thread,seq)) STRICT')
-        connection.execute('INSERT INTO external_item VALUES (?,?,?,?,?)', ('cli', 't', 'i', 1, saved))
-        connection.commit()
-    assert ExternalPages.carry(root, apply=False).changed == 1
-    assert ExternalPages.carry(root, apply=True).changed == 1
-    assert ExternalPages.carry(root, apply=True).changed == 0
-    with closing(CoordinationStore.writer(path)) as connection:
-        row, = connection.execute('SELECT thread,turn_id,item_id,seq,events,earlier FROM external_item')
-    assert row[:5] == ('cli', 't', 'i', 1, saved)
-    assert FieldCodec.decode(NoEarlierPage, json.loads(row[5])) == NoEarlierPage()

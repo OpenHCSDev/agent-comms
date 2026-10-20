@@ -450,10 +450,6 @@ class FieldPlan:
             policy.rejects_null(self.declared) for policy in NullPolicy.single(self.annotation)
         )
 
-    @property
-    def choices(self) -> Callable[[], Iterable[str]] | None:
-        return WireChoices.read(self.annotation, None)
-
     @cached_property
     def value(self) -> ValueDecoder[object]:
         return compile_decoder(self.annotation)
@@ -553,8 +549,10 @@ class FieldPlan:
         value = captured[self.name]
         if self.reject_null and value is None:
             raise MalformedRecord(f"Null field {self.key}")
-        if self.choices is not None and value not in self.choices():
-            raise MalformedRecord(f"Field {self.key} must be one of: {', '.join(self.choices())}")
+        for choices in WireChoices.single(self.annotation):
+            if value not in choices.value():
+                raise MalformedRecord(
+                    f"Field {self.key} must be one of: {', '.join(choices.value())}")
         return {self.name: decode(value)}
 
     def read(self, data: object) -> object:
@@ -649,8 +647,10 @@ class InlineFieldPlan(DeclaredFieldPlan):
     @cached_property
     def inlined(self) -> type:
         declared, representation = FieldCodec._representation(self.annotation)
-        inline = cast("type[InlineRecord] | None", representation)
-        return cast(type, declared) if inline is None else inline.wire_record()
+        match representation:
+            case type() as inline if issubclass(inline, InlineRecord):
+                return inline.wire_record()
+        return cast(type, declared)
 
     @cached_property
     def record(self):

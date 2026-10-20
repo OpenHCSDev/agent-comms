@@ -7,6 +7,7 @@ the declared columns and field types without upgrading existing storage.
 
 from __future__ import annotations
 
+import annotationlib
 import json
 import os
 import sqlite3
@@ -22,6 +23,7 @@ from typing import (
     Annotated,
     ClassVar,
     Literal,
+    NoReturn,
     Self,
     TypeVar,
     Union,
@@ -36,7 +38,9 @@ from .field_codec import (
     FieldDirective,
     FieldPlan,
     MalformedRecord,
+    NullMember,
     ValueDecoder,
+    WireName,
     compile_decoder,
 )
 from .locked_store import DurableFile, FileStore, SQLiteFile
@@ -50,13 +54,18 @@ def _identifier(name: str) -> str:
     return f'"{name}"'
 
 
+def _absent(member: object) -> bool:
+    """SQL NULL stores this union member: None, or a declared null member."""
+    return member is types.NoneType or (isinstance(member, type) and issubclass(member, NullMember))
+
+
 def _base_type(annotation: object) -> tuple[object, bool]:
     if get_origin(annotation) is Annotated:
         annotation = get_args(annotation)[0]
     if get_origin(annotation) in (Union, types.UnionType):
         members = get_args(annotation)
-        if types.NoneType in members and len(members) == 2:
-            return next(member for member in members if member is not types.NoneType), True
+        if len(members) == 2 and sum(map(_absent, members)) == 1:
+            return next(member for member in members if not _absent(member)), True
     return annotation, False
 
 
@@ -276,6 +285,45 @@ class Column(FieldDirective):
 
 
 @dataclass(frozen=True)
+class Generated:
+    """A stored column SQLite computes from its row, declared ``name: ClassVar[Generated]``.
+
+    Keys, indexes, constraints and predicates name it like any column, in its declared
+    place. No record carries it, so no record holds a value SQLite has not computed.
+    """
+
+    annotation: object
+    column: Column
+
+    def __post_init__(self) -> None:
+        if self.column.writable:
+            raise TypeError("A generated column declares its SQL expression")
+
+    def __get__(self, instance: object, owner: type) -> NoReturn:
+        raise AttributeError("SQLite computes this column for queries; no record carries it")
+
+    def table_column(self, name: str) -> _Field:
+        return _Field(
+            name=name,
+            wire_name=WireName.read(self.annotation, name) if self.column.record_key else name,
+            init=False,
+            annotation=self.annotation,
+            nullable=self.column.nullable,
+            storage=self.column.storage or SqlStorage.for_type(self.annotation),
+            column=self.column,
+            value=compile_decoder(self.annotation),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class UnallocatedRowId(NullMember):
+    """SQLite allocates this row's AUTOINCREMENT id when the row is inserted."""
+
+
+RowId = int | UnallocatedRowId
+
+
+@dataclass(frozen=True)
 class Index:
     columns: tuple[str, ...]
     unique: bool = False
@@ -404,13 +452,19 @@ class TypedRow:
         return tuple(declared[name] for name in names)
 
     @classmethod
+    def _computed_columns(cls) -> frozenset[str]:
+        """Columns a query may return that no record of this declaration carries."""
+        return frozenset()
+
+    @classmethod
     def _positions(cls, cursor: sqlite3.Cursor,
                    extra: Mapping[str, str] = types.MappingProxyType({})) -> dict[str, int]:
         if cursor.description is None:
             raise ValueError("Typed read requires a result set")
         names = tuple(item[0] for item in cursor.description)
         projection = {**cls.column_projection(), **extra}
-        if len(set(names)) != len(names) or set(names) != set(projection.values()):
+        carried = set(names).difference(cls._computed_columns())
+        if len(set(names)) != len(names) or carried != set(projection.values()):
             raise MalformedRecord(f"Query columns do not match {cls.__name__}: {names!r}")
         return {key: names.index(column) for key, column in projection.items()}
 
@@ -531,6 +585,41 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return ()
 
     @classmethod
+    @lru_cache(maxsize=256)
+    def _columns(cls) -> tuple[_Field, ...]:
+        """Every stored column: the record's fields, each generated column after the field
+        declared before it."""
+        fields = cls._fields()
+        if any(not item.column.writable for item in fields):
+            raise TypeError(f"{cls.__name__} must declare generated columns as ClassVar[Generated]")
+        names = {item.name for item in fields}
+        following: dict[str, list[_Field]] = {}
+        for owner in cls.__mro__:
+            declared = tuple(annotationlib.get_annotations(owner, format=annotationlib.Format.STRING))
+            for position, name in enumerate(declared):
+                match vars(owner).get(name):
+                    case Generated() as declaration:
+                        match [before for before in declared[:position] if before in names]:
+                            case [*_, anchor]:
+                                following.setdefault(anchor, []).append(
+                                    declaration.table_column(name))
+                            case []:
+                                raise TypeError(f"{cls.__name__}.{name} follows no record field")
+        return tuple(column for item in fields for column in (item, *following.get(item.name, ())))
+
+    @classmethod
+    def _computed_columns(cls) -> frozenset[str]:
+        return frozenset(item.wire_name for item in cls._columns() if not item.column.writable)
+
+    @classmethod
+    def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
+        """Resolve declared columns, generated ones included, by their declared names."""
+        declared = {item.name: item for item in cls._columns()}
+        if unknown := set(names).difference(declared):
+            raise ValueError(f"Unknown columns for {cls.__name__}: {sorted(unknown)}")
+        return tuple(declared[name] for name in names)
+
+    @classmethod
     def _column_list(cls, names: tuple[str, ...]) -> str:
         if not names:
             raise ValueError(f"Empty column list for {cls.declared_name}")
@@ -542,7 +631,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 
     @classmethod
     def _sql(cls, expression: str) -> str:
-        for item in cls._fields():
+        for item in cls._columns():
             expression = expression.replace("{" + item.name + "}", item.wire_name)
         return expression
 
@@ -550,11 +639,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         definitions = []
-        keys = tuple(item.name for item in cls._fields() if item.column.primary_key)
-        auto_keys = tuple(item.name for item in cls._fields() if item.column.auto_increment)
+        keys = tuple(item.name for item in cls._columns() if item.column.primary_key)
+        auto_keys = tuple(item.name for item in cls._columns() if item.column.auto_increment)
         if auto_keys and (auto_keys != keys or len(keys) != 1 or cls.without_rowid):
             raise TypeError("AUTOINCREMENT requires one rowid primary key")
-        for item in cls._fields():
+        for item in cls._columns():
             column = item.column
             sql = f"{_identifier(item.wire_name)} {item.storage.sql_type}"
             if column.auto_increment:
@@ -585,7 +674,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
         indexes = cls.indexes + tuple(
-            Index((item.name,)) for item in cls._fields() if item.column.index
+            Index((item.name,)) for item in cls._columns() if item.column.index
         )
         for ordinal, index in enumerate(indexes):
             index_name = f"{cls.declared_name}_{ordinal}_idx"

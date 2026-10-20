@@ -967,7 +967,7 @@ class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
     """The fleet's next install: one time for the bus and the unit that runs it, set by the
     commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
     carries it as its own deadline.
-    Each live install by ``tools/upgrade_bus.py`` plans the next one a cadence later."""
+    Each live ``agent-comms install`` plans the next one a cadence later."""
 
     filename: ClassVar[str] = "install-deadline.json"
     cadence: ClassVar[int] = 30 * 60
@@ -1021,7 +1021,7 @@ class InstallDue(UndatedStandingRule):
 
     def line(self) -> str:
         return (f"INSTALL DUE ({self.why}) -> the installer rehearses and installs main with "
-                "tools/upgrade_bus.py and posts the result to the commander")
+                "agent-comms install and posts the result to the commander")
 
 
 @dataclass(frozen=True)

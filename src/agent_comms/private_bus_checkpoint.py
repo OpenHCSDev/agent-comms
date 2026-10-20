@@ -49,6 +49,7 @@ from .thread_identity import ThreadIncarnation
 from .typed_table import (
     Column,
     ForeignKey,
+    Generated,
     Index,
     SQLiteSchemaObject,
     SqlValue,
@@ -611,16 +612,18 @@ class ClaimCommits(CheckpointTable, TypedTable):
     """
 
     transition: ClaimTransition
-    seq: Annotated[
-        int | None, Column(unique=True, generated="json_extract(transition,'$.seq')")
-    ] = field(default=None, init=False, compare=False)
-    operation_id: Annotated[
-        str | None,
+    seq: ClassVar[Generated] = Generated(
+        int,
+        Column(unique=True, generated="json_extract(transition,'$.seq')", nullable=True),
+    )
+    operation_id: ClassVar[Generated] = Generated(
+        str,
         Column(
             unique=True,
             generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')",
+            nullable=True,
         ),
-    ] = field(default=None, init=False, compare=False)
+    )
 
     @classmethod
     def latest_sequence(cls, db: sqlite3.Connection) -> int:

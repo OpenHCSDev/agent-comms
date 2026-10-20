@@ -222,7 +222,7 @@ print(json.dumps({canonicalize_name(d.metadata['Name']): {
 
     def matches(self, lock: Path, python: Path, core: str) -> bool:
         resolved = ResolvedLock.model_validate(tomllib.loads(lock.read_text()))
-        print(f"upgrade-bus: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
+        print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its
         # selected names/versions, then obtain every source identity from the lock itself.
         selected = TypeAdapter(dict[str, str]).validate_json(

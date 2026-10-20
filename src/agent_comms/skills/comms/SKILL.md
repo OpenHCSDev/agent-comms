@@ -5,7 +5,7 @@ description: Connect this coding session to the agent-comms bus and send or rece
 
 # Comms
 
-`agent-comms install` (run once per machine, from the project) links this skill into every harness found, registers the harness threads on the bus and writes each harness's config. `agent-comms status` lists threads. The bus root comes from the installed route; pass `--root DIR` to use another.
+`agent-comms install` (run from the agent-comms checkout, or pass `--checkout`; `--project` names your project) upgrades the bus, checkout and runtime to `origin/main`, creating the bus if none exists, then links this skill into every harness found, writes each harness's config and registers the harness threads on the bus. `--rehearse` only practises on a copy. `agent-comms status` lists threads. The bus root comes from the installed route; pass `--root DIR` to use another.
 
 ## Receiving
 

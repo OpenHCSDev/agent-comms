@@ -37,7 +37,7 @@ from .turn_context import (
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
-from .typed_table import Column, Index, TypedStore, TypedTable
+from .typed_table import Column, Generated, Index, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
@@ -195,10 +195,14 @@ class ContextSegmentVersion(TypedTable):
 class ContextRequest(TypedTable):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     identity: RecordedContextIdentity
-    thread_name: Annotated[str, Column(generated="json_extract(identity,'$.thread.name')")]
-    thread_birth: Annotated[
-        float, Column(generated="json_extract(identity,'$.thread.created_at')")
-    ]
+    thread_name: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract(identity,'$.thread.name')"),
+    )
+    thread_birth: ClassVar[Generated] = Generated(
+        float,
+        Column(generated="json_extract(identity,'$.thread.created_at')"),
+    )
     versions: tuple[int, ...]
     size: int
     indexes = (Index(("thread_name", "thread_birth", "id")),)
@@ -441,12 +445,23 @@ class ContextStore(TypedStore):
     def record_in(self, db: sqlite3.Connection, manifest: ContextManifest) -> int:
         source = ContextStoreInfo.source_in(db).initialized(db)
         prior = self.latest(db, source.source, manifest.thread)
+        return self.record_after(db, source.source, prior, manifest).record_id
+
+    def record_after(
+        self,
+        db: sqlite3.Connection,
+        source: ContextStoreIdentity,
+        prior: RecordedContextState,
+        manifest: ContextManifest,
+    ) -> CapturedContext:
+        """Record ``manifest`` after ``prior``; the result is the next request's prior,
+        so a writer holding its last request never resolves it again."""
         record, entries = prior.capture(manifest)
         record.turn.require_recorded()
         for entry in entries:
             # A journal identity owns the first entry value across requests.
             ContextEntry.capture(entry).insert_if_absent(db)
-        return ContextRequest.append(db, record)
+        return CapturedContext(source, ContextRequest.append(db, record), record, manifest)
 
     def resolve(
         self,

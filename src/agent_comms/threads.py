@@ -379,9 +379,10 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         inherited = {}
         if previous is not None:
             inherited = {
-                plan.name: policy.choose(getattr(self, plan.name), getattr(previous, plan.name))
+                plan.name: directive.value.choose(
+                    getattr(self, plan.name), getattr(previous, plan.name))
                 for plan in FieldCodec.field_plans(type(self))
-                if (policy := plan.setting(RegistrationPolicy, None)) is not None
+                for directive in RegistrationPolicy.single(plan.annotation)
             }
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved

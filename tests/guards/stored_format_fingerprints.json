@@ -17,27 +17,5 @@
       "target": "ed3745f30c77c59218d2be474aa580ec5bc2b0d53e144c4277f006f6952b24c4",
       "conversion": "agent_comms.registry_store.RegistryGoalConversion"
     }
-  ],
-  "baseline_carries": [
-    "cutover.carry_acp_roles.AcpRoles",
-    "cutover.carry_archived_read_ledgers.ArchivedReadLedgers",
-    "cutover.carry_catalog_tags.CatalogTags",
-    "cutover.carry_check_revision.CheckRevisions",
-    "cutover.carry_display_counts.DisplayCounts",
-    "cutover.carry_earlier_projects.EarlierProjects",
-    "cutover.carry_external_pages.ExternalPages",
-    "cutover.carry_external_positions.ExternalPositions",
-    "cutover.carry_goal_wait_targets.GoalWaitTargets",
-    "cutover.carry_hunts.HuntRecords",
-    "cutover.carry_order_run.OrderRuns",
-    "cutover.carry_p495_read_ledger.ReadLedgerConversations",
-    "cutover.carry_problem_goal_prose.ProblemGoalProse",
-    "cutover.carry_route_package.RoutePackage",
-    "cutover.carry_runtime_info.RuntimeInfo",
-    "cutover.carry_starting_activity.StartingActivity",
-    "cutover.carry_todo_corrections.TodoCorrections",
-    "cutover.carry_todo_messages.TodoMessages",
-    "cutover.carry_todo_open_indexes.TodoOpenIndexes",
-    "cutover.carry_turn_records.TurnRecords"
   ]
 }

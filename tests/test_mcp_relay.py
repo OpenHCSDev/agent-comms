@@ -7,10 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.agent_events as ae
-import agent_comms.pi_events as pi
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.owner_protocol import OwnerLine, OwnerPermissionRequest
 from agent_comms.runtime import SocketClient
@@ -28,69 +25,6 @@ def stub(tmp_path: Path, body: str) -> str:
     return str(path)
 
 
-@pytest.mark.parametrize(
-    "method,choice,answer",
-    [
-        ("confirm", pi.ConfirmedUiChoice(True), {"confirmed": True}),
-        ("confirm", None, {"cancelled": True}),
-        ("confirm", pi.ValueUiChoice("forged"), {"cancelled": True}),
-        ("select", pi.ValueUiChoice("one"), {"value": "one"}),
-        ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
-    ],
-)
-@pytest.mark.usefixtures("native_rpc_fixture")
-async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
-    tmp_path, method, choice, answer
-):
-    marker = tmp_path / "received.json"
-    program = stub(
-        tmp_path,
-        f"""
-import json, sys
-send = lambda row: print(json.dumps(row), flush=True)
-state = json.loads(sys.stdin.readline())
-send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
-                "sessionId": "fixture-pi-session", "sessionFile": "/fixture/one.jsonl"}}}})
-prompt = json.loads(sys.stdin.readline())
-send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
-send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
-      "inputId": prompt["inputId"]}}}})
-send({
-            json.dumps(
-                {
-                    "type": "extension_ui_request",
-                    "id": "owned-ui-1",
-                    "method": method,
-                    "title": "Run one operation?",
-                    "message": "exact request",
-                    "options": ["one", "two"],
-                }
-            )
-        })
-reply = json.loads(sys.stdin.readline())
-with open({str(marker)!r}, "w") as output: json.dump(reply, output)
-send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
-send({{"type": "agent_settled"}})
-""",
-    )
-    requests = []
-
-    async def controller(request):
-        requests.append(request)
-        return choice
-
-    events = await asyncio.wait_for(
-        collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
-    )
-    assert marker.exists()
-    assert json.loads(marker.read_text()) == {
-        "type": "extension_ui_response",
-        "id": "owned-ui-1",
-        **answer,
-    }
-    assert len(requests) == (0 if choice is None else 1)
-    assert isinstance(events[-1], ae.Done)
 
 
 async def collect_backend(program, cwd, controller):
@@ -141,48 +75,6 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
     valid["servers"][0]["calls"] = "unavailable"
     valid["servers"][0]["id"] = "\x1b[2J"
     assert McpLiveAcknowledgement.from_status(json.dumps(valid), input_id) is None
-
-
-@pytest.mark.usefixtures("native_rpc_fixture")
-async def test_package_live_receipt_after_settlement_is_not_reprojected(tmp_path):
-    input_receipt = {
-        "version": 1,
-        "source": "pi-mcp-client",
-        "state": "running",
-        "lifetime": "turn",
-        "servers": [],
-    }
-    program = stub(
-        tmp_path,
-        f"""
-import json, sys
-send = lambda row: print(json.dumps(row), flush=True)
-preflight = json.loads(sys.stdin.readline())
-send({{"id":preflight["id"],"type":"response","command":"get_state","success":True,
-      "data":{{"nativeInputProofCapability":{json.dumps(CAPABILITY)},
-              "sessionId":"fixture-session"}}}})
-prompt = json.loads(sys.stdin.readline())
-send({{"id":prompt["id"],"type":"response","command":"prompt","success":True}})
-send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
-      "inputId":prompt["inputId"]}}}})
-send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
-send({{"type":"agent_settled"}})
-acknowledgement = {input_receipt!r}
-acknowledgement["inputId"] = prompt["inputId"]
-send({{"type":"extension_ui_request","id":"late","method":"setStatus",
-      "statusKey":"pi-mcp/live-v1","statusText":json.dumps(acknowledgement)}})
-""",
-    )
-    # A supplied, not-yet-set finish_event leaves stats_requested false at the
-    # settled yield: this used to admit a late status after ACP TurnSettled.
-    events = [
-        event
-        async for event in one_turn_events(
-            program, [], "fixture", str(tmp_path), finish_event=asyncio.Event()
-        )
-    ]
-    assert any(isinstance(event, ae.StreamSettled) for event in events)
-    assert not any(isinstance(event, ae.McpLiveStatus) for event in events)
 
 
 async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission():

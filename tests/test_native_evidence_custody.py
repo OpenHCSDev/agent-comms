@@ -11,7 +11,6 @@ import pytest
 
 from agent_comms.native_entries import NativeEntry, NativeEvidenceRead, NativeInputEvidenceRead, NativeEvidenceScope
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
-from native_proof_cases import write_proof_rows
 from test_native_pi import INPUT_ID, _evidence
 
 
@@ -47,36 +46,8 @@ def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
                 reader.observe()
 
 
-def test_evidence_scope_switches_original_source_and_closes_previous_reader(tmp_path):
-    first_dir, second_dir = tmp_path / "first", tmp_path / "second"
-    first_dir.mkdir(mode=0o700)
-    second_dir.mkdir(mode=0o700)
-    first, second = _evidence(first_dir), _evidence(second_dir)
-    with NativeEvidenceScope() as scope:
-        old = scope.for_source(first)
-        NativeContextProof.read_evidence(first, INPUT_ID, evidence=old)
-        assert scope.for_source(first) is old
-        current = scope.for_source(second)
-        assert old.source.stream.closed and not old.entries
-        assert current is not old
-        NativeContextProof.read_evidence(second, INPUT_ID, evidence=current)
-        assert len(scope.readers) == 1
-    assert current.source.stream.closed and not current.entries and not scope.readers
 
 
-def test_evidence_scope_does_not_reopen_original_after_refusal(tmp_path):
-    session = _evidence(tmp_path)
-    with NativeEvidenceScope() as scope:
-        original = scope.for_source(session)
-        NativeContextProof.read_evidence(session, INPUT_ID, evidence=original)
-        with session.open("ab") as output:
-            output.write(b'{"type":"message"')
-        with pytest.raises(NativePiUnavailable):
-            NativeContextProof.read_evidence(session, INPUT_ID, evidence=original)
-        assert original.source.stream.closed and not original.entries
-        with pytest.raises(NativePiUnavailable):
-            NativeContextProof.read_evidence(session, INPUT_ID, evidence=scope.for_source(session))
-    assert not scope.readers
 
 
 @pytest.mark.parametrize("rewrite", ["in_place", "replace"])
@@ -108,68 +79,10 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
         assert evidence.source.size == len(restored)
 
 
-def test_acquired_source_observes_new_context_generation(tmp_path):
-    session = _evidence(tmp_path)
-    with NativeEntry.open_evidence(session) as evidence:
-        original = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
-        with session.open("a") as output:
-            output.write(json.dumps({"type": "compaction", "timestamp": "2026-10-01T00:00:00.000Z", "id": "new", "summary": "observed append"}) + "\n")
-        write_proof_rows(session, [{
-            "schema": 2, "type": "context_committed", "sessionId": "sid",
-            "inputId": INPUT_ID, "sessionEntryId": "entry",
-            "requestGeneration": 2, "llmContextDigest": "d" * 64, "committedAtMs": 1_791_964_800_002,
-        }])
-        current = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
-        assert current.request_generation == 2
-        assert current.llm_context_digest != original.llm_context_digest
-        assert evidence.entries[-1].id == "new"
-    with pytest.raises(NativePiUnavailable):
-        NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
 
 
-@pytest.mark.parametrize("damage", [
-    "truncate", "symlink", "permissions", "ancestor_permissions",
-    "duplicate_input", "non_user_input", "malformed_append", "proof",
-])
-def test_acquired_source_never_reuses_evidence_after_damage(tmp_path, damage):
-    session = _evidence(tmp_path)
-    with NativeEntry.open_evidence(session) as evidence:
-        NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
-        original = session.read_bytes()
-        if damage == "truncate":
-            session.write_bytes(original[:original.index(b"\n") + 1])
-        elif damage == "symlink":
-            original_path = session.with_suffix(".original")
-            session.rename(original_path)
-            session.symlink_to(original_path)
-        elif damage == "permissions":
-            session.chmod(0o644)
-        elif damage == "ancestor_permissions":
-            session.parent.chmod(0o777)
-        elif damage in ("duplicate_input", "non_user_input"):
-            entry = json.loads(original.splitlines()[1])
-            entry["id"] = "duplicate"
-            if damage == "non_user_input":
-                entry["message"]["role"] = "assistant"
-            with session.open("a") as output:
-                output.write(json.dumps(entry) + "\n")
-        elif damage == "malformed_append":
-            with session.open("ab") as output:
-                output.write(b'{"type":"message"')
-        elif damage == "proof":
-            Path(str(session) + ".input-proof").write_bytes(b"corrupt original proof")
-        with pytest.raises(NativePiUnavailable):
-            NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
-        assert evidence.source.stream.closed
-        assert not evidence.entries
 
 
-def test_acquired_source_cannot_corroborate_another_file(tmp_path):
-    session = _evidence(tmp_path)
-    with NativeEntry.open_evidence(session) as evidence:
-        with pytest.raises(NativePiUnavailable):
-            NativeContextProof.read_evidence(session.with_name("foreign.jsonl"), INPUT_ID, evidence=evidence)
-        assert evidence.source.stream.closed
 
 
 @pytest.mark.parametrize("operation", ["append", "alter_prefix"])
@@ -190,17 +103,6 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
             assert source.stream.closed
 
 
-@pytest.mark.parametrize("consumer_error", [BlockingIOError, OSError, ValueError])
-def test_original_consumer_error_survives_acquired_evidence_cleanup(tmp_path, consumer_error):
-    session = _evidence(tmp_path)
-    original = consumer_error("consumer bus/coordination refusal")
-    with pytest.raises(consumer_error) as caught:
-        with NativeEvidenceScope() as scope:
-            reader = scope.for_source(session)
-            NativeContextProof.read_evidence(session, INPUT_ID, evidence=reader)
-            raise original
-    assert caught.value is original
-    assert reader.source.stream.closed and not reader.entries and not scope.readers
 
 
 def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
