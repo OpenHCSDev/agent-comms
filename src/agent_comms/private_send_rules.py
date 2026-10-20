@@ -87,6 +87,14 @@ class RegistryIncarnationRule(ReservationRule):
         return check.actual.incarnation != check.expected.incarnation
 
 
+class RegistryNameRule(ReservationRule):
+    check_type = RegistryIdentityCheck
+    explanation = "The captured owner name changed."
+
+    def violated(self, check: RegistryIdentityCheck) -> bool:
+        return check.actual.name != check.expected.name
+
+
 class RegistryProcessRule(ReservationRule):
     check_type = RegistryIdentityCheck
     explanation = "The registered process is not the captured current owner process."

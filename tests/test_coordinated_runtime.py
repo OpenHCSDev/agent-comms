@@ -1685,7 +1685,7 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path,
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     root.chmod(0o755)  # Refuse an unsafe private root before opening its registry.
-    with pytest.raises(SessionSetupFailed):
+    with pytest.raises(SessionSetupFailed) as failure:
         await SelectedExecution(
             root=root,
             wire_root_id="0" * 32,
@@ -1693,6 +1693,7 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path,
             native_package=native_runtime_package,
             cursor_delivery=cursor_delivery,
         ).run()
+    assert isinstance(failure.value.__cause__, NativePiUnavailable)
     assert not list(root.iterdir())
 
 
