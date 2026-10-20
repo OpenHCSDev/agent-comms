@@ -286,7 +286,8 @@ class OwnerLifecycle:
             )
 
     def start(
-        self, name: str, *, record: LaunchRecord
+        self, name: str, *, record: LaunchRecord | None = None,
+        agent_bin: str | None = None, agent_args: Sequence[str] | None = None,
     ) -> OwnerStartResult:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -302,7 +303,11 @@ class OwnerLifecycle:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
-            owner = self._launch_owner_unlocked(thread, record)
+            selected = LaunchRecord.current() if record is None else record
+            selected = replace(selected,
+                agent_bin=selected.agent_bin if agent_bin is None else agent_bin,
+                agent_args=selected.agent_args if agent_args is None else tuple(agent_args))
+            owner = self._launch_owner_unlocked(thread, selected)
             return OwnerStartResult(owner.name, owner.require_process().pid, True)
 
     @cached_property

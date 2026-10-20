@@ -43,7 +43,7 @@ class LaunchRuntime:
 
     @classmethod
     def running(cls) -> LaunchRuntime:
-        return LaunchRecord.current().runtime
+        return cls(Path(sys.executable))
 
     @property
     def prefix(self) -> Path:
