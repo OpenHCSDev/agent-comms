@@ -18,8 +18,6 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
 - Carry the source-first ownership method into every delegated task and after compaction through these existing instructions. Reason from source before implementation; tests and the actual configured saved-session/application path confirm the coherent change last. Each check, review and handoff needs a concrete delivery or risk reason; "industry best practice" alone justifies nothing. Propagate the instruction directly without acknowledgement chatter or another reminder mechanism.
 - Work in persistent isolated worktrees under `/home/ts/wt`. Preserve the dirty
   main checkout, other agents' work, native sessions and uncertain input records.
-- Rebase your own branch onto current `origin/main` before delivery; do not merge
-  `main` into it. Never rewrite another agent's branch.
 - Reuse a finished isolated checkout on a new branch. Create another worktree only when genuinely concurrent source changes or a different repository require it. Publish unfinished implementation as a branch checkpoint; stashes are temporary, not delivery. Keep a checkout only while source, an installed package, a running job or retained evidence actually needs that path, and remove closed owned checkouts once published branches and borrower checks permit it.
 - Fix a demonstrated defect yourself or assign a named implementation owner at
   the next safe checkpoint. Follow through to the actual affected entry path.
@@ -51,16 +49,19 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
   installed affected native/ACP/UI path. Extend the existing continuous saved-state
   user journey; controlled provider replies are allowed, real UI/transport/state
   are required. A fork check includes immediate opening and its first actual reply.
-- Ship substantial useful checkpoints: implementation owners merge and send
-  the installer the Core/Toad SHAs.
-  Installs run through tools/upgrade_bus.py, by whichever unit the commander assigns, on either machine.
-  Deferred CI and final latency targets do not hold those checkpoints.
+- Every runtime qualification sends one fresh DM to a copied agent while its Toad tab is open, waits for that agent's reply, and confirms Toad survives the turn and tab return. An inbound row alone does not exercise managed turn startup; never replay a failed or uncertain input.
+- Ship substantial useful checkpoints and install the paired pins after checking
+  them. Deferred CI and final latency targets do not hold those checkpoints.
 - Retain warm rendered bodies across tab returns within the existing resource
   limits. Scroll preparation follows velocity and destination intent, then shrinks
   when idle. Do not introduce a parallel cache to repair ownership or freshness.
 - Keep a concrete checklist and report merged, installed and verified states
   accurately. Retire test processes and owned scratch; check disk/RAM before large
   work. Never replay an uncertain input or restart an active owner for convenience.
+- Runtime builds and migration copies must keep `/home` above 10 GB free. Do not
+  impose a 3 GB scratch cap on this work.
+- Never attach a debugger to a running agent process. Investigate saved records;
+  add tracing only before a separately authorized launch.
 
 - Retire evidence when its work is accepted or superseded. Keep concise source,
   results and receipts; keep a recording or large profile only while an unresolved
