@@ -44,6 +44,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     disk: Path
     parked: frozenset[str] = frozenset()
 
+    @property
+    def peer_sync_log(self) -> Path:
+        return self.scratch / "peer-sync.log"
+
     @staticmethod
     def path(home: Path | None = None) -> Path:
         return (home or Path.home()) / '.config/agent-comms/commander.json'

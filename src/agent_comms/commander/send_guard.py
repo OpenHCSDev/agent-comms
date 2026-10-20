@@ -18,14 +18,16 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms_hooks import ClaudeBashHook
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
 from ..todos import InstallDeadline
-from .order import Commander
+
+if TYPE_CHECKING:
+    from .order import Commander
 
 Words = tuple[str, ...]
 
