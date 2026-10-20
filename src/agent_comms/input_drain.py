@@ -477,7 +477,6 @@ class InputObservation:
             cursor = CursorOwner(
                 thread=owner.thread, claimed_generation=owner.claimed_generation,
                 wire_root_id=root_id, generation=participant.participant_generation,
-                permission=owner.goal_permission,
             ).cursor(store.session._connection)
             original = store.session.path.stat()
         observation = PrivateObservation
