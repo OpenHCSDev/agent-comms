@@ -107,7 +107,7 @@ def test_tool_start_is_one_draft_row_then_one_completed_row(tmp_path):
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
-        assert row.events == (start_event, call.ended('done', True, 'call', 2.0))
+        assert row.events == call.finished('done', True, 'call', 2.0)
 
 
 def test_non_text_items_never_acquire_invented_text(tmp_path):

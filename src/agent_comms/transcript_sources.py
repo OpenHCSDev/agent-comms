@@ -75,11 +75,6 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
     def resolve_sent(self, messages):
         return tuple(messages)
 
-    def resolve_sent_messages(self, reports):
-        """Qualify reports through this source, preserving their original object identities."""
-        reports = tuple(reports)
-        return dict(zip(map(id, reports), self.resolve_sent(reports)))
-
 
 @dataclass(frozen=True)
 class NoWireFrontier(WireFrontier):
