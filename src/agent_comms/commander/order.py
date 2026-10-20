@@ -45,7 +45,7 @@ from ..message_reference import MessageReference
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, PlanPhase
 from ..progress_claims import MergedClaim, WorkingClaim
-from ..recorded_time import RecordedEventTime
+from ..recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from ..repo import Repo
 from ..standing_rules import HuntDue
 from ..storage_rules import UnitStorage
@@ -58,6 +58,7 @@ from ..todos import (
     DirectiveText,
     FileDeliveryEvidence,
     LocatedProblemFinding,
+    MeasuredDeadline,
     NoDeliveryEvidence,
     OperationDelivery,
     OrderedHunt,
@@ -287,7 +288,7 @@ class CommanderContext(CommanderConfig):
 
 class Commander(CommanderContext):
     @boundary_decoder
-    def send(self, unit, due, document: OrderFile, clean=False, reassign=None, new=None,
+    def send(self, unit, due: EventTime, document: OrderFile, clean=False, reassign=None, new=None,
              traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
@@ -302,8 +303,6 @@ class Commander(CommanderContext):
             self.comms.registry.storage_rule.require_quota(self.comms.registry.require(unit))
         except SelectedToolDenied as quota:
             problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-        if not re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d', due):
-            problems.append('due: fix: supply HH:MM local time (00:00 through 23:59)')
         group = [new[0]] if new else list(document.problems)
         listed = {t.id: t for t in self.todos()}
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
@@ -405,8 +404,10 @@ class Commander(CommanderContext):
         # A miss already struck on the order this replaces is one miss:
         # the send-back records no second strike.
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
+        measured = MeasuredDeadline.read(self.comms.goals.todos)
+        measured_at = measured.deadline(order)
+        due_at = due.continued_from(measured_at.at)
         request = order.request(self.comms.registry.require(self.commander), tuple(group))
-        due_at = RecordedEventTime(time.time()).at_clock(due)
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
@@ -424,6 +425,8 @@ class Commander(CommanderContext):
                 self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
         for other, text in taken.items():
             self.post(VerdictAudience((other,)), text)
+        print(f'{measured.summary}; selected deadline {due_at.clock()}; '
+              f'measured deadline {measured_at.clock()}')
         print(order.id)
         if replacing and not clean and struck_already:
             print(f'{unit} already struck on this order of {group[0]}; '
@@ -763,8 +766,12 @@ class OrderVerb(CommanderVerb):
 class SendVerb(OrderVerb, DirectiveVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
-    due: str = option("due", help="HH:MM local time")
     body_file: str = option("body_file", metavar="ORDER.json")
+    due: EventTime = option("--due", type=RecordedEventTime.from_clock,
+                            normalize=FieldCodec.encode, default_factory=UnrecordedEventTime,
+                            parser_default_factory=UnrecordedEventTime,
+                            choices=None, metavar="HH:MM",
+                            help="HH:MM local time; default measured from deliveries")
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
     replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
@@ -925,7 +932,11 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
     help = "Core records the problem with its order, or nothing"
     order: str = option("order", metavar="ORDER.json")
     to: str = option("--to")
-    due: str = option("--due", help="HH:MM local time")
+    due: EventTime = option("--due", type=RecordedEventTime.from_clock,
+                            normalize=FieldCodec.encode, default_factory=UnrecordedEventTime,
+                            parser_default_factory=UnrecordedEventTime,
+                            choices=None, metavar="HH:MM",
+                            help="HH:MM local time; default measured from deliveries")
     where: str = option("--where", help="the actual file:line where this problem occurs")
     disk: bool = option("--disk", default=False)
 

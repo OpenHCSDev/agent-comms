@@ -21,7 +21,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
+from math import ceil
 from pathlib import Path
+from statistics import median
 from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
@@ -1586,6 +1588,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         for check in (self.check, *self.deletes.checks):
             check.require_writable()
 
+    def delivery_rates(self) -> Iterator[tuple[str, float]]:
+        """Undelivered orders provide no observed delivery duration."""
+        return iter(())
+
     def untouched(self, touched: Sequence[str]) -> int:
         """The numbered edits naming a file:line where ``touched`` changed none of those files."""
         def changed(name: str) -> bool:
@@ -1738,6 +1744,11 @@ class DeliveredProblemOrder(CheckedProblemOrder):
     def line(self) -> str:
         return f"Delivered: {self.delivery.line}, waiting on install"
 
+    def delivery_rates(self) -> Iterator[tuple[str, float]]:
+        yield self.id, (
+            self.delivery.at.recorded_at("A delivery") - self.at.recorded_at("An order")
+        ) / len(self.edits)
+
     def story(self) -> tuple[StoryLine, ...]:
         return (*super().story(), *self.delivery.story())
 
@@ -1808,6 +1819,39 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class InstalledMergedProblemOrder(MergedProblemOrder, InstalledProblemOrder):
     """An installed merge retains the application's existing evidence, without a wrapper."""
+
+
+@dataclass(frozen=True)
+class MeasuredDeadline:
+    """A snapshot's distinct delivered-order observations, never another duration store."""
+
+    rates: tuple[float, ...]
+
+    @classmethod
+    def read(cls, store: TodoStore) -> MeasuredDeadline:
+        rates = {
+            identity: rate
+            for todo in store._select("1", ())
+            for order in todo.order_history
+            for identity, rate in order.delivery_rates()
+        }
+        return cls(tuple(rates.values()))
+
+    @cached_property
+    def seconds_per_edit(self) -> float:
+        return median(self.rates)
+
+    @property
+    def summary(self) -> str:
+        if not self.rates:
+            return "Measured median: unavailable (0 delivered orders); minimum 2 minutes"
+        return (f"Measured median: {self.seconds_per_edit:g} seconds per edit "
+                f"from {len(self.rates)} delivered orders")
+
+    def deadline(self, order: CheckedProblemOrder) -> RecordedEventTime:
+        seconds = self.seconds_per_edit * len(order.edits) if self.rates else 0
+        at = order.at.recorded_at("An order")
+        return RecordedEventTime(ceil((at + max(120, seconds)) / 60) * 60)
 
 
 @dataclass(frozen=True, kw_only=True)

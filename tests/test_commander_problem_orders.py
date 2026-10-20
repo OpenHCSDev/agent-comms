@@ -519,7 +519,8 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     git('add', '.')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
     body = Path(order_body(repo))
-    due = '23:59'
+    clock = '23:59'
+    due = RecordedEventTime.from_clock(clock)
     script.problem(str(body), 'worker', due, f'{__file__}:1')
     created = comms.goals.todos.get('P1')
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
@@ -548,7 +549,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     (link,) = sent_back.messages[-1:]
     sent = next(m.body for m in comms.views.history_page(CommandTarget.named('worker'), viewer='lead').messages if m.message_id == link.message_id)
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
-    assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
+    assert 'Due' not in sent and clock not in sent  # the deadline stays the commander's fire line
 
     script.hunt(f'{__file__}:1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
     assert [h.sent for h in comms.goals.todos.hunts_for_commander(comms.registry.require('lead').incarnation)] == [sent_back.order.id]
@@ -586,7 +587,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra='', deletes=N
 
 
 def problem(script, body):
-    script.problem(body, 'worker', '23:59', f'{__file__}:1')
+    script.problem(body, 'worker', RecordedEventTime.from_clock('23:59'), f'{__file__}:1')
 
 
 def test_reassignment_validates_trace_at_commander_boundary(commander, commander_script):
@@ -608,11 +609,12 @@ def test_reassignment_validates_trace_at_commander_boundary(commander, commander
     source = repo / 'trace.py'
     source.write_text('first = True\n')
     why = 'The previous worker stopped after its provider rejected every new turn'
+    due = RecordedEventTime.from_clock('23:59')
     with pytest.raises(SystemExit, match='does not exist'):
-        script.send('third', '23:59', document, clean=True, reassign=why, traced='trace.py:2')
+        script.send('third', due, document, clean=True, reassign=why, traced='trace.py:2')
     assert comms.goals.todos.get('P1') == second
     source.write_text('first = True\nsecond = True\n')
-    script.send('third', '23:59', document, clean=True, reassign=why, traced='trace.py:2')
+    script.send('third', due, document, clean=True, reassign=why, traced='trace.py:2')
     transferred = comms.goals.todos.get('P1')
     assert transferred.holder == 'third'
     assert [old.name for old in transferred.assignment.previous_owners] == ['worker', 'second']
@@ -637,7 +639,7 @@ def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
     reviews.write('lead', AnsweredRuleReviewEntry(
         1, 'Keep the current order message with its Todo. P1'))
     command = [str(Path(sys.executable).with_name('agent-comms-commander')),
-               'order', 'send', 'worker', '23:59', str(body)]
+               'order', 'send', 'worker', str(body), '--due', '23:59']
     env = {**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
            'AGENT_COMMS_ROOT': str(comms.root)}
     refused = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
@@ -720,10 +722,11 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     document = json.loads(Path(body).read_text())
     document['problems'] = ['P1']
     numbered = json.dumps(document)
-    script.send('worker', '23:59', commander_order.OrderFile.read(numbered),
+    due = RecordedEventTime.from_clock('23:59')
+    script.send('worker', due, commander_order.OrderFile.read(numbered),
                 replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', commander_order.OrderFile.read(numbered),
+    script.send('worker', due, commander_order.OrderFile.read(numbered),
                 replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
