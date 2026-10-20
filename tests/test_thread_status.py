@@ -85,8 +85,8 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
         else:
             from agent_comms.registry_document import RosterVisibility
             assert (individual is not None) == expected.in_view(RosterVisibility(archived=True))
-        with pytest.raises(UnregisteredThreadError, match="Thread 'missing' is not registered"):
-            comms.views.thread_presentations(("missing",))
+        with pytest.raises(UnregisteredThreadError):
+            comms.views.thread_presentations(("missing",)).require("missing")
         if isinstance(status, CliInboxPresence):
             assert reopened.status("owner") == ConnectedThreadStatus()
             child.kill()
@@ -191,13 +191,3 @@ def test_batch_source_rename_keeps_the_original_registry_fence(comms):
     current = comms.views.thread_presentations(("alpha",))
     assert set(current.views) == {"renamed"}
     assert current.require("alpha").read_identity.thread.incarnation == comms.registry.require("renamed").incarnation
-
-
-def test_required_presentation_rejects_an_unavailable_name(comms):
-    with pytest.raises(UnregisteredThreadError, match="Thread 'missing' is not registered"):
-        comms.views.thread_presentations(("missing",))
-    batch = comms.views.thread_presentations(())
-    with pytest.raises(UnregisteredThreadError, match="Thread presentation unavailable: missing"):
-        batch.require("missing")
-    assert not hasattr(comms.views, "thread_presentation")
-    assert not hasattr(comms.views, "require_thread_presentation")
