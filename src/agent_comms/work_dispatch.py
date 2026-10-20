@@ -1,4 +1,4 @@
-"""Checked work starts through Core's existing order and native lifecycle owners.
+"""Core assigns checked work to its unit, then starts it through the native lifecycle.
 
 A phase declares an existing PendingProblemOrder, not a second task format. Work
 without that declaration stays visible; readiness is not permission to invent an
@@ -44,6 +44,7 @@ class WorkDispatch:
         return f"unit-{self.action.problem.lower()}-r{self.revision}"
 
     def publish(self, comms: Comms, child: Thread) -> Thread:
+        """Assign the native order before its unit can begin work."""
         comms.goals.update_goal(child.name, self.action)
         return comms.registry.require(child.name)
 
@@ -122,7 +123,7 @@ class CheckedPhaseTask(PhaseTask):
     text: str
     order: PendingProblemOrder
     deadline_seconds: float
-    instruction = "Core starts the declared checked task in its own unit checkout"
+    instruction = "Core assigns the declared checked task to a unit and starts it"
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.deadline_seconds) or self.deadline_seconds <= 0:

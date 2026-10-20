@@ -33,6 +33,7 @@ from agent_comms.messages import Message
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder
@@ -129,7 +130,7 @@ class RunProofCommand(ProofCommand):
 
     def apply(self, project: Path) -> int:
         root = self.root.expanduser().resolve()
-        allowed = Path.home() / ".cache/agent-scratch/pi-cn-phase7"
+        allowed = StorageRule().scratch_base
         if not root.is_relative_to(allowed) or root.exists():
             raise ValueError("Proof needs a NEW root under the owner's agent-scratch directory")
         home = root.parent / "home"

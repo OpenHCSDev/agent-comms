@@ -244,7 +244,10 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     assert comms.goals.todos.get("P2").holder is None
     [unowned] = module.UnownedWheelSpin.violations(comms, "lead")
     assert unowned.todo.id == "P2"
-    assert type(unowned.dispatch) is module.WorkDispatch
+    # Firing releases P2 without striking its recently active worker on that order.
+    # Reuse that eligible idle unit instead of allocating a second process.
+    assert type(unowned.dispatch) is module.ReusedWorkDispatch
+    assert unowned.unit == "worker"
     assert unowned.line() == (
         f"WHEEL SPIN: {unowned.unit} holds no order while P2 is unowned"
         f" -> Core gives it to {unowned.unit}")

@@ -74,7 +74,7 @@ def test_one_rule_pairs_idle_units_before_allocating_unowned_fallbacks(commander
     comms, _ = commander
     create(commander, "P1")
     create(commander, "P2")
-    comms.goals.fire("worker", StrikeReason("Release both orders for reassignment."), "lead")
+    comms.goals.fire("worker", StrikeReason("The unit stopped work on both orders and left their changes unfinished."), "lead")
     spare = comms.registry.declare(comms.registry.new_thread(
         "spare", frozenset({"comms"}), str(comms.root), created_at=3.0))
     working(comms, spare.name, spare.created_at)
