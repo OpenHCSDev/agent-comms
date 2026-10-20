@@ -5,6 +5,7 @@ from contextlib import closing
 from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import RootFile
 from agent_comms.schema_report import StoreSchemaReport
 from agent_comms.typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedStore, _identifier
 
@@ -14,7 +15,9 @@ from .carry import Carried, Carry
 class IndexNames(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return tuple(sorted(root.rglob("*.sqlite3")))
+        TypedStore.declarations()  # Acquire the declared modules, not a filename/version roster.
+        return tuple(sorted(path for path in RootFile.paths_in(root)
+                            if path.is_file() and CoordinationStore.is_database(path)))
 
     @staticmethod
     def changes(
@@ -24,10 +27,6 @@ class IndexNames(Carry):
             report = StoreSchemaReport.for_store(db, path, owner)
         else:
             report = StoreSchemaReport.read(db, path)
-            # A retired/unowned file with no current index declaration is not
-            # permission to invent a schema or alter its saved data.
-            if not report.index_names:
-                return ()
         stored_indexes = {item.name for item in SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL "
             "AND name NOT LIKE 'sqlite_%'"))}

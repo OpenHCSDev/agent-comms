@@ -17,6 +17,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .message_reference import MessageReference
 from .notification_progress import AnsweredProgress, AssignmentProgress, QueuedProgress, SentProgress, ShownToModelProgress
+from .locked_store import RootFile
 from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
 
 if TYPE_CHECKING:
@@ -224,7 +225,9 @@ class NotificationAssignmentRead:
 
 
 @dataclass(frozen=True)
-class NotificationAssignment(NotificationSource):
+class NotificationAssignment(NotificationSource, RootFile):
+    filename = "coordination.sqlite3"
+
     assignment: WakeAssignment
     activity: AssignmentActivity
 
@@ -249,7 +252,7 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def database_path(cls, root: Path) -> Path:
-        return root / "coordination.sqlite3"
+        return cls.path_in(root)
 
     @classmethod
     def handling_paths(cls, root: Path) -> tuple[Path, ...]:

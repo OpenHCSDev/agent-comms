@@ -832,14 +832,7 @@ class TypedStore(RootFile, StoreWriter):
         This explicit installation discovery is not part of ordinary snapshot reads.
         """
         TypedTable.__registry__.values()
-        declared: dict[str, type[TypedStore]] = {}
-        pending = [cls]
-        while pending:
-            family = pending.pop()
-            pending.extend(family.__subclasses__())
-            if "filename" in vars(family) and "rows" in vars(family):
-                declared[family.filename] = family
-        return tuple(declared[name] for name in sorted(declared))
+        return super().declarations()
 
     @classmethod
     def declared_indexes(cls) -> dict[str, str]:

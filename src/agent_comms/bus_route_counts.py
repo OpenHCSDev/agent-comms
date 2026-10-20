@@ -24,6 +24,7 @@ from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
+from .locked_store import RootFile
 from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -334,12 +335,13 @@ class RouteIndexRebuilding(CoordinationReadUnavailable):
         super().__init__(f"Route index covers {through} of {size} bytes")
 
 
-class BusRouteCounts:
+class BusRouteCounts(RootFile):
+    filename = f"bus_route_counts.v{RouteTable.schema}.sqlite3"
     rebuild_bytes = 4 * 1024 * 1024
 
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
-        self.path = bus_path.with_name(f"bus_route_counts.v{RouteTable.schema}.sqlite3")
+        self.path = self.path_in(bus_path.parent)
 
     def __enter__(self) -> BusRouteCounts:
         """Open one committed WAL snapshot without taking the writer lock.

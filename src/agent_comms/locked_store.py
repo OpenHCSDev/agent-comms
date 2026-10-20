@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
 from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner
@@ -137,6 +137,21 @@ class RootFile:
     filename: ClassVar[str]
 
     @classmethod
+    def declarations(cls) -> tuple[type[Self], ...]:
+        declared: dict[str, type[Self]] = {}
+        pending = [cls]
+        while pending:
+            family = pending.pop()
+            pending.extend(family.__subclasses__())
+            if "filename" in vars(family):
+                declared[family.filename] = family
+        return tuple(declared[name] for name in sorted(declared))
+
+    @classmethod
+    def paths_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(owner.path_in(root) for owner in cls.declarations())
+
+    @classmethod
     def path_in(cls, root: Path | str) -> Path:
         return Path(root) / cls.filename
 
@@ -149,16 +164,6 @@ class RuntimeFile(RootFile):
     """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
 
     __slots__ = ()
-
-    @classmethod
-    def paths_in(cls, root: Path) -> frozenset[Path]:
-        declared, pending = set(), [cls]
-        while pending:
-            family = pending.pop()
-            pending.extend(family.__subclasses__())
-            if "filename" in vars(family):
-                declared.add(family.path_in(root))
-        return frozenset(declared)
 
 
 class DocumentConversion(ABC):

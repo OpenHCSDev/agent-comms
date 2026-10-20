@@ -37,6 +37,7 @@ from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, Relation
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec, MalformedRecord
+from .locked_store import RootFile
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
@@ -1270,7 +1271,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
 
 
 def _path(bus_path: Path) -> Path:
-    return bus_path.with_name("private_bus_checkpoint.sqlite3")
+    return WritableCheckpoint.path_in(bus_path.parent)
 
 
 def _tail(stream, offset: int) -> str:
@@ -1383,9 +1384,10 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
 
 
 @dataclass(frozen=True)
-class WritableCheckpoint:
+class WritableCheckpoint(RootFile):
     """A writable bus's checkpoint; the lock mode chooses how its holder reads it."""
 
+    filename = "private_bus_checkpoint.sqlite3"
     path: Path
 
     def open_read_only(self) -> sqlite3.Connection:
