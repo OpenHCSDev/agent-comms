@@ -11,7 +11,7 @@ from ..comms import Comms
 from ..standing_rules import DiskLow, StandingRule
 from ..storage_rules import UnitStorage
 from . import ParityComparison, UnverifiedParity
-from .load import state_files
+from .load import LoadComparison, state_files
 
 
 @dataclass(frozen=True)
@@ -87,3 +87,11 @@ class StorageComparison(ParityComparison):
     @classmethod
     def read(cls) -> StorageComparison:
         return cls(RuleComparison.read(UnitStorage), RuleComparison.read(DiskLow))
+
+
+def measured_load() -> ParityComparison:
+    observed = LoadComparison.read()
+    return UnverifiedParity(
+        f"Live Load comparison passed={observed.passed}: {observed.describe()}; "
+        "missing native self-report comparison owner"
+    )
