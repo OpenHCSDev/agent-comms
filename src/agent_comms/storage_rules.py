@@ -10,6 +10,7 @@ import subprocess
 import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
+from functools import cached_property
 from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -271,6 +272,18 @@ class UnitStorage(UndatedStandingRule):
                 f'limit {self.rule.max_checkouts}{home} -> order the cleanup')
 
 
+@dataclass
+class StorageProjection:
+    """One call's lazy snapshot; ordinary writes never need a checkout inventory."""
+
+    rule: StorageRule
+    thread: Thread
+
+    @cached_property
+    def storage(self) -> UnitStorage:
+        return UnitStorage.read(self.rule, self.thread)
+
+
 class ShellProgram:
     names: ClassVar[frozenset[str]] = frozenset()
     programs: ClassVar[dict[str, type[ShellProgram]]] = {}
@@ -308,28 +321,25 @@ class StorageEffect:
 class WriteStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, rule, thread, storage):
-        rule.require_path(thread, self.path)
-        return storage
+    def check(self, projection: StorageProjection):
+        projection.rule.require_path(projection.thread, self.path)
 
 
 @dataclass(frozen=True)
 class ForbiddenStorageEffect(StorageEffect):
     reason: str
 
-    def check(self, rule, thread, storage):
-        rule.deny(self.reason)
+    def check(self, projection: StorageProjection):
+        projection.rule.deny(self.reason)
 
 
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
     work = (AllocationRoomWork,)
 
-    def check(self, rule, thread, storage):
-        rule.require_floor()
-        storage = storage if storage is not None else UnitStorage.read(rule, thread)
-        storage.require_quota()
-        return storage
+    def check(self, projection: StorageProjection):
+        projection.rule.require_floor()
+        projection.storage.require_quota()
 
 
 class BuildStorageEffect(AllocateStorageEffect):
@@ -344,21 +354,22 @@ class TestGateStorageEffect(AllocateStorageEffect):
 class CheckoutStorageEffect(AllocateStorageEffect):
     path: Path
 
-    def check(self, rule, thread, storage):
+    def check(self, projection: StorageProjection):
+        rule, thread = projection.rule, projection.thread
         rule.require_path(thread, self.path)
         if not rule.owns_checkout(thread, self.path):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
-        return super().check(rule, thread, storage).adding(self.path)
+        super().check(projection)
+        projection.storage = projection.storage.adding(self.path)
 
 
 @dataclass(frozen=True)
 class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, rule, thread, storage):
-        storage = storage if storage is not None else UnitStorage.read(rule, thread)
-        return storage.removing(self.path)
+    def check(self, projection: StorageProjection):
+        projection.storage = projection.storage.removing(self.path)
 
 
 def physical_path(value, cwd):

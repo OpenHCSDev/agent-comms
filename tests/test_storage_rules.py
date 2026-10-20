@@ -11,7 +11,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.storage_rules import (
     AllocateStorageEffect, CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
-    WriteStorageEffect, shell_storage_effects,
+    StorageProjection, WriteStorageEffect, shell_storage_effects,
 )
 from agent_comms.threads import Thread
 
@@ -100,7 +100,7 @@ def test_allocation_floor_is_checked_before_usage_walk(tmp_path, monkeypatch):
     monkeypatch.setattr(StorageRule, 'free_gib', lambda self: 0)
     monkeypatch.setattr(StorageRule, 'checkouts_of', lambda *args: pytest.fail('walked before rejecting allocation'))
     with pytest.raises(SelectedToolDenied, match='allocation requires'):
-        AllocateStorageEffect().check(rule, thread, None)
+        AllocateStorageEffect().check(StorageProjection(rule, thread))
 
 
 @pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync',
@@ -109,9 +109,9 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     rule = StorageRule()
     thread = Thread('worker', frozenset(), str(tmp_path), storage_roots=rule.initial_roots('worker'))
     with pytest.raises(SelectedToolDenied):
-        storage = None
+        projection = StorageProjection(rule, thread)
         for effect in shell_storage_effects(command, tmp_path):
-            storage = effect.check(rule, thread, storage)
+            effect.check(projection)
 
 
 def test_programs_do_not_claim_to_be_effect_values():
