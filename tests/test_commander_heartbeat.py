@@ -71,11 +71,14 @@ async def test_real_rules_publish_once_per_change_and_rotate_units(commander):
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
         assert list(comms.bus.inbox("lead")) == changed
         reviews = RuleReviews(comms.root)
-        reviews.write("lead", DrawnRuleReviewEntry(("Keep behavior with its owner.",), 0))
+        reviews.write("lead", DrawnRuleReviewEntry((
+            "Keep each fact with its existing owner and derive all consumers.",
+        )))
         reviews.write(
             "lead",
             AnsweredRuleReviewEntry(
-                1, "This review uses the existing Core rule owner and actual inbox publication."
+                1, "Keep each fact with its existing owner and derive all consumers. "
+                   "Applied at src/agent_comms/commander_heartbeat.py:23."
             ),
         )
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
