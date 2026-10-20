@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence,
+)
 from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -245,15 +247,20 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         return {name: counts[actor] for name, actor in actors.items()}
 
     def pending_counts_opened(self, source: WireSnapshot,
-                              selection: CapturedSelection) -> Mapping[str, int]:
+                              selection: CapturedSelection, *,
+                              conversations: Iterable[str] = ()) -> Mapping[str, int]:
         """Count unread messages using the caller's bus, registrations and read positions."""
         actor = selection.require_viewer()
         seen = selection.seen(source)
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
+        # A sidebar asks for every declared conversation, including exact zeros.
+        # Other readers keep the sparse public count contract by passing no names.
+        counts = dict.fromkeys(conversations, 0)
         with self.projection(
             self.log.path, source, selection.registry, {actor: delivery}
         ) as index:
-            return index.unseen_counts({actor: seen})[actor]
+            counts.update(index.unseen_counts({actor: seen})[actor])
+        return counts
 
     def delivered(
         self, name: str, references: Sequence[MessageReference]
