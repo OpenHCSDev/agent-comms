@@ -34,6 +34,8 @@ sys.path.insert(0, str(
 ))
 
 import audit
+from audit.findings import Package as AuditPackage, ParsedModule as AuditModule, RawShape
+from audit.repository import Repository as AuditRepository
 from audit.handler_declarations import BuiltinHandlerDeclarations
 from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
@@ -609,6 +611,20 @@ class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
         spelling = NoneSpelling()
         spelling.dispatch_sync(node)
         return spelling.found
+
+class RawRecordShapes(PerFileMeasure):
+    """Reuse the overlay's raw-shape detector outside its existing codec owner."""
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        if filename.endswith(FieldCodec.__module__.replace(".", "/") + ".py"):
+            return 0
+        text = source.decode()
+        module = AuditModule(filename, text, ast.parse(text, filename), filename)
+        package = AuditPackage(AuditRepository(Path.cwd()), "", filename, (module,), ())
+        return sum(1 for facts in package.functions[filename]
+                   for _finding in RawShape.from_facts(facts, package))
+
 
 class FunctionLocalImport(PerFileMeasure):
     """Imports executed inside a function, including nested local classes."""
