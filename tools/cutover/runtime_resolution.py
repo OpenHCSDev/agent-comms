@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -98,34 +99,30 @@ class VirtualSource(BaseModel):
         raise ValueError("A virtual project is not an installed distribution")
 
 
-class DeclaredVersion(RootModel[str]):
-    def matches(self, selected: str) -> bool:
-        return self.root == selected
-
-
-class DynamicVersion(BaseModel):
-    """uv omits an editable project's dynamically supplied version from the lock."""
-
-    def matches(self, selected: str) -> bool:
-        return True
-
-
 class LockedPackage(BaseModel):
     name: str
-    version: DeclaredVersion | DynamicVersion = Field(default_factory=DynamicVersion)
-    source: RegistrySource | GitSource | EditableSource | VirtualSource
     markers: list[str] = Field(default_factory=list, alias="resolution-markers")
 
     def selects(self, name: str, version: str) -> bool:
-        return (
-            canonicalize_name(self.name) == name
-            and self.version.matches(version)
-            and (not self.markers or any(Marker(marker).evaluate() for marker in self.markers))
+        return canonicalize_name(self.name) == name and (
+            not self.markers or any(Marker(marker).evaluate() for marker in self.markers)
         )
 
 
+class VersionedPackage(LockedPackage):
+    version: str
+    source: RegistrySource | GitSource
+
+    def selects(self, name: str, version: str) -> bool:
+        return super().selects(name, version) and self.version == version
+
+
+class LocalPackage(LockedPackage):
+    source: EditableSource | VirtualSource
+
+
 class ResolvedLock(BaseModel):
-    package: list[LockedPackage]
+    package: list[VersionedPackage | LocalPackage]
 
     def pins(self, selected: dict[str, str], core: str) -> dict[str, PackagePin]:
         result: dict[str, PackagePin] = {}
@@ -163,6 +160,7 @@ class RuntimeResolution(InstalledBuildManifest):
 
     def matches(self, lock: Path, python: Path, core: str) -> bool:
         resolved = ResolvedLock.model_validate(tomllib.loads(lock.read_text()))
+        print(f"upgrade-bus: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its
         # selected names/versions, then obtain every source identity from the lock itself.
         selected = TypeAdapter(dict[str, str]).validate_json(
