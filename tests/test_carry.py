@@ -201,7 +201,7 @@ def test_upgrade_transcript_hold_covers_selected_snapshot(comms):
         before = bus_files(comms.root)
         path = ExternalTranscript.path_in(comms.root)
         backup = StoreBackup.take(comms.root, comms.root.parent / "no-route.json",
-                                  (path,), comms.root.parent / 'backup')
+                                  (path,), comms.root.parent / 'spill')
         assert bridge_publishes(comms.root).endswith("database is locked")
         assert carried(comms.root, before, [], RehearsalFiles.declared([])) == (
             RehearsalFiles(len(before), 0, (), 0))

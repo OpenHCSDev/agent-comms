@@ -145,7 +145,12 @@ class ResourceBackup[Contents](ABC):
     contents: ClassVar[type]
 
     @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], path: Path) -> Self:
+    @abstractmethod
+    def directory(cls, spill_dir: Path, root: Path) -> Path: ...
+
+    @classmethod
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> Self:
+        path = cls.directory(spill_dir, root)
         backup = cls(root, route, path)
         selected = tuple(str(file.relative_to(root)) for file in files)
         if path.exists():
@@ -194,6 +199,26 @@ class ResourceBackup[Contents](ABC):
 class StoreBackup(ResourceBackup[str]):
     """Snapshot declared databases through SQLite; restore only the selected files."""
     contents: ClassVar[type] = str
+    kept: ClassVar[int] = 2
+
+    @classmethod
+    def directory(cls, spill_dir: Path, root: Path) -> Path:
+        return spill_dir / f'{root.name}.upgrade-{time.strftime("%Y%m%dT%H%M%S")}'
+
+    @classmethod
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
+        if not files:
+            return NoBackup.take(root, route, files, spill_dir)
+        return super().take(root, route, files, spill_dir)
+
+    @classmethod
+    def retain(cls, spill_dir: Path, root: Path) -> tuple[Path, ...]:
+        backups = sorted(path for path in spill_dir.glob(f'{root.name}.upgrade-*')
+                         if path.is_dir())
+        retired = tuple(backups[:-cls.kept])
+        for path in retired:
+            shutil.rmtree(path)
+        return retired
 
     def report(self) -> BackupReport:
         return BackupReport(self.description, sum(path.stat().st_size for path in self.path.rglob('*')
@@ -319,10 +344,10 @@ class NoBackup(StoreBackup):
     """A runtime-only install takes no snapshot and cannot restore files."""
 
     @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], path: Path) -> Self:
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> Self:
         if files:
             raise UpgradeRefused('NoBackup cannot select files')
-        return cls(root, route, path)
+        return cls(root, route, cls.directory(spill_dir, root))
 
     def original(self) -> bool:
         return True
