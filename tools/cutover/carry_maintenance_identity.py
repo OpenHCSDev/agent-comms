@@ -12,14 +12,14 @@ from pathlib import Path
 from typing import Literal
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, Id128Text, compile_decoder
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
     MaintenanceState,
     ReadyPhase,
 )
-from agent_comms.field_codec import Id128Text
+
 from .carry import Carried, Carry
 
 
@@ -61,6 +61,9 @@ class IdentifiedState(MaintenanceState):
         return Carried(0)
 
 
+type StoredMaintenanceState = IdentifiedState | OldReadyState
+
+
 class MaintenanceIdentity(Carry):
     @classmethod
     def precedes(cls, later: type[Carry]) -> bool:
@@ -81,8 +84,8 @@ class MaintenanceIdentity(Carry):
             if barrier.marker_path.exists():
                 raise RelationViolationError("Maintenance has a marker but no stored holder")
             return Carried(0)
-        state = FieldCodec.decode(
-            IdentifiedState | OldReadyState, FieldCodec.parse(barrier.state_path.read_text())
+        state: StoredMaintenanceState = compile_decoder(StoredMaintenanceState).decode(
+            FieldCodec.parse(barrier.state_path.read_text())
         )
         return state.carried(barrier, apply=apply)
 

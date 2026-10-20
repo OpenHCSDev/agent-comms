@@ -66,7 +66,7 @@ class HookResult:
 
 
 def main() -> None:
-    home = Path("/home/ts/.cache/agent-scratch/pi-install-gate/p275-publication-proof")
+    home = Path("/home/ts/.cache/agent-scratch/pi-install-gate/p275-publication-proof-final")
     home.mkdir(mode=0o700)
     settings = home / ".claude/settings.json"
     settings.parent.mkdir()
