@@ -30,6 +30,7 @@ from ..todos import (
     MechanicalOrderRun,
     Todo,
 )
+from ..tool_caller import ThreadCaller
 from ..tools import CommsOrderDoneTool, CommsTodoCreateTool, ProblemOrdered
 from . import ParityComparison, ParityRow
 from .lifecycle import LifecycleObservation, LifecycleRun, MeasuredCommander
@@ -244,22 +245,7 @@ class NativeDeletionPath(DeletionPath):
             delivery=CommitDelivery(commit=commit, delivered_commit=commit),
             claims=(MergedClaim(commit),),
         )
-        arguments = FieldCodec.encode(request)
-        arguments.pop(request.family_discriminator)
-        return (
-            sys.executable,
-            "-m",
-            "agent_comms.cli",
-            "--root",
-            str(run.commander.root),
-            "tool",
-            "--from",
-            run.commander.commander,
-            "--tool",
-            request.declared_name,
-            "--arguments",
-            json.dumps(arguments),
-        )
+        return request.cli_command(ThreadCaller(run.commander.commander)).argv(run.commander.root)
 
 
 class DeletionTargetParityRow(ParityRow):
