@@ -241,7 +241,7 @@ class ChannelManagement:
                         f"Thread {thread.name!r} is not a member of {view.name}."
                     ))
                 if pinned and (
-                    not view.matches(thread.tags) or not snapshot.statuses[thread.name].visible
+                    not view.matches(thread.tags) or not snapshot.status(thread.name).visible
                 ):
                     raise ValueError(
                         f"Thread {thread.name!r} is not a member of {view.name}."

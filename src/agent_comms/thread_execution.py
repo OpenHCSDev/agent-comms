@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .child_process import ProcessState
 from .errors import RelationViolationError
-from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
+from .thread_status import NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -134,7 +134,7 @@ class NativeThreadExecution(ThreadExecution):
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
         from .thread_presentation import LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 
-        if not snapshot.statuses[thread.name].active or not thread.process_alive:
+        if not snapshot.status(thread.name).active or not thread.process_alive:
             return UnavailableThreadOwnerBinding()
         return LiveThreadOwnerBinding(
             snapshot.owner_identity(thread.name), thread.require_process(),
@@ -163,10 +163,7 @@ class ExternalThreadExecution(ThreadExecution):
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
-        """Core launches no process here: the inbox is connected while its bridge lives."""
-        if requested.active and thread.process_alive:
-            return ConnectedThreadStatus()
-        return NoBridgeThreadStatus()
+        return NoBridgeThreadStatus().registered(thread)
 
     @classmethod
     def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,

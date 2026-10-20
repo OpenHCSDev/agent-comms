@@ -85,7 +85,7 @@ class RegistryEdit:
 
     def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
         current = owner.require_source_snapshot(self.original.snapshot)
-        status = self.document.statuses[current.name]
+        status = self.document.status(current.name)
         return NativeSourcePublication(
             thread=replace(current, session_file=session_file), status=status,
             previous=current, previous_status=status,

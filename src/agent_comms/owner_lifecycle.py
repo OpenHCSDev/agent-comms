@@ -167,7 +167,7 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
             return False
         if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
             return False
-        return self.after == snapshot.claimed_generations[self.name] and snapshot.statuses[self.name].stopped
+        return self.after == snapshot.claimed_generations[self.name] and snapshot.status(self.name).stopped
 
 
     def require_native_loss(self, snapshot, source) -> None:
@@ -369,12 +369,12 @@ class OwnerLifecycle:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
-            if not snapshot.statuses[thread.name].active and (
+            if not snapshot.status(thread.name).active and (
                 thread.process_identity.allows_inactive_stop()
             ):
                 return
             if (
-                snapshot.statuses[thread.name].active
+                snapshot.status(thread.name).active
                 and thread.process_identity.runs_here()
             ):
                 if ThreadLaunch.called_by(

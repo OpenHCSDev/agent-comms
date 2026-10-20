@@ -15,6 +15,7 @@ from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, Inactiv
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .registry_document import RosterVisibility
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,12 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
+
+    def registered(self, thread: Thread) -> ThreadStatus:
+        return self
+
+    def declaration(self) -> ThreadStatus:
+        return self
 
     def require_visible(self) -> None:
         if not self.visible:
@@ -88,7 +95,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
                                   status=InactiveThreadPresentationStatus())
 
 
-class ActiveThreadPresence:
+class ActiveThreadPresence(ThreadStatus, declared_name=None):
     """Shared semantics of running and idle owners; not a second state family."""
 
     active = True
@@ -124,7 +131,7 @@ class ActiveThreadPresence:
         return activity.ordinary_presentation(title)
 
 
-class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
+class RunningThreadStatus(ActiveThreadPresence):
     running = True
     receiving = True
 
@@ -135,7 +142,7 @@ class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
         pass
 
 
-class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):
+class IdleThreadStatus(ActiveThreadPresence):
     receiving = True
 
 
@@ -152,10 +159,20 @@ class StoppedThreadStatus(ThreadStatus):
 
 
 class CliInboxPresence:
-    """Presence of a CLI inbox: only its bridge's registration changes it."""
+    """The declared inbox resolves its bridge process at every read."""
+
+    def registered(self, thread: Thread) -> ThreadStatus:
+        return (ConnectedThreadStatus() if thread.process_identity.alive()
+                else NoBridgeThreadStatus())
+
+    def declaration(self) -> ThreadStatus:
+        return NoBridgeThreadStatus()
+
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return True
 
     def restored(self) -> ThreadStatus:
-        """A restored inbox has no bridge until one registers again."""
+        """Restoration preserves the inbox declaration, never a liveness answer."""
         return NoBridgeThreadStatus()
 
     def after_heartbeat(self, name: str) -> ThreadStatus:
@@ -173,11 +190,6 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
 
     It has no launched process to stop or restart, so it stays in every view.
     """
-
-    receiving = False
-
-    def in_view(self, visibility: RosterVisibility) -> bool:
-        return True
 
     def require_self_rename(self) -> None:
         """The CLI participant itself calls rename; it needs no bridge."""

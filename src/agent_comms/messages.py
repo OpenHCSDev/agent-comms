@@ -2,33 +2,36 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import re
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type
 
+from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
-from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
-from .response_policy import InformationalPolicy, ResponseEligibility
-from .thread_identity import AgentThreadRole, ThreadRole
-from .task_sources import Decision, TaskAttachment, NoTaskAttachment
-from .wake_policy import BoundedTriageWake, PassiveWake
-from .ui_model.message_category import MessageCategory, InboundCategory, OtherCategory
-
 from .page_traversal import LiveCursor, PageCursor
+from .response_policy import InformationalPolicy, ResponseEligibility
+from .task_sources import Decision, NoTaskAttachment, TaskAttachment
+from .thread_identity import AgentThreadRole, ThreadRole
+from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
+from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
+    from .private_bus_checkpoint import ClaimCommits
+    from .retained_task_facts import ExactTaskFact
     from .threads import Thread
+    from .typed_table import TypedTable
 
 
 class MessageKind(DeclaredFamily, affix="Kind"):
@@ -40,6 +43,10 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     """
 
     conversation_message: ClassVar[bool] = True
+
+    @classmethod
+    def message_record(cls) -> type[Message]:
+        return Message
 
     @classmethod
     def require_sendable(cls) -> None:
@@ -61,10 +68,22 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     conversation_message = False
 
     @classmethod
+    def message_record(cls) -> type[Message]:
+        return ClaimMessage
+
+    @classmethod
     def claimed(cls, owner: Thread) -> Message:
         return Message(
             owner.name, owner.name, "Claimed", cls,
         )
+
+
+class ClaimHistoryKind(ClaimNoticeKind, declared_name="claim-history"):
+    """A copied claim notice has display facts, not a live claim envelope."""
+
+    @classmethod
+    def message_record(cls) -> type[Message]:
+        return Message
 
 
 class InfoKind(SendableMessageKind):
@@ -309,7 +328,7 @@ class Message:
     sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
     target: str = field(metadata={"wire_name": "to", "wire_order": 3})
     body: str = field(metadata={"wire_name": "text", "wire_order": 6})
-    type: Type[MessageKind] = field(metadata={"wire_order": 5})
+    type: builtins.type[MessageKind] = field(metadata={"wire_order": 5})
     timestamp: float = field(
         default_factory=time.time, metadata={"wire_name": "ts", "wire_order": 4}
     )
@@ -321,10 +340,6 @@ class Message:
     mentions: tuple[ThreadMention, ...] = field(
         default=(),
         metadata={"wire_omit_default": True, "wire_order": 10, "publication_exclude": True},
-    )
-    claim_transition: ClaimTransition | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_order": 11, "publication_exclude": True},
     )
     task: TaskAttachment = field(
         default_factory=NoTaskAttachment, metadata={"wire_omit_default": True, "wire_order": 12}
@@ -376,30 +391,24 @@ class Message:
     @property
     def history_snapshot(self) -> Message:
         """Retain display facts, never another root's resource-claim authority."""
-        return replace(self, claim_transition=None)
+        return self
 
     def checkpoint_rows(self, previous_sequence: int):
         """The envelope declares both publication and optional claim facts."""
         from .private_bus_checkpoint import ClaimCommits, PublicMessages
 
         yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
-        if self.claim_transition is not None:
-            yield ClaimCommits(self.claim_transition)
+        yield from self.claim_rows(ClaimCommits)
+
+    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
+        return ()
 
     def require_claim_transition(self) -> ClaimTransition:
-        if self.claim_transition is None:
-            raise RelationViolationError("Original wire message has no claim transition")
-        return self.claim_transition
+        raise RelationViolationError("Original wire message has no claim transition")
 
     def retained_task_facts(self):
-        from .retained_task_facts import (
-            ClaimTaskFact,
-        )
-
         yield from self.sender_role.user_task_facts(self)
         yield from self.task.retained_task_facts(self)
-        if self.claim_transition is not None:
-            yield ClaimTaskFact(self)
 
     def __post_init__(self) -> None:
         if not self.sender:
@@ -409,14 +418,6 @@ class Message:
         if not self.body:
             raise ValueError("Message body cannot be empty.")
         self.task.require_sender(self.sender)
-        if self.claim_transition is not None:
-            transition = self.claim_transition
-            if self.seq > 0 and (
-                transition.owner != self.sender
-                or transition.seq != self.seq
-                or transition.message_id != self.message_id
-            ):
-                raise RelationViolationError("Claim transition does not bind this message.")
         if any(
             not (0 <= mention.start < mention.end <= len(self.body))
             or self.body[mention.start] != "@"
@@ -462,7 +463,8 @@ class Message:
         public = {
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
-        return FieldCodec.decode(cls, {"ts": 0.0, **public})
+        kind = MessageKind.member_named(public[FieldCodec.record_key(Message, 'type')])
+        return FieldCodec.decode(kind.message_record(), {"ts": 0.0, **public})
 
     @classmethod
     def from_committed_wire(cls, record: Mapping) -> Message:
@@ -482,7 +484,7 @@ class Message:
         return message
 
     def require_retained_claim(self, claimed_after_seq: int) -> None:
-        if self.claim_transition is None and self.seq > claimed_after_seq:
+        if self.seq > claimed_after_seq:
             raise RelationViolationError(
                 "Unattested public initial exceeds the retained history boundary."
             )
@@ -508,3 +510,43 @@ class Message:
     def reply_target(self) -> str | None:
         """An external sender may receive an automatic live reply."""
         return self.sender_role.reply_target(self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimMessage(Message):
+    """An original claim envelope, distinct from a fresh conversation message."""
+    claim_transition: ClaimTransition = field(metadata={'wire_order': 11})
+
+    @classmethod
+    def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:
+        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
+                   claim_transition=transition)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        transition = self.claim_transition
+        if (transition.owner != self.sender or transition.seq != self.seq
+                or transition.message_id != self.message_id):
+            raise RelationViolationError('Claim transition does not bind this message.')
+
+    @property
+    def history_snapshot(self) -> Message:
+        """A copied history keeps the envelope's display facts and drops its claim."""
+        return Message(**{
+            **{item.name: getattr(self, item.name) for item in fields(Message)},
+            "type": ClaimHistoryKind,
+        })
+
+    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
+        return (table(self.claim_transition),)
+
+    def require_claim_transition(self) -> ClaimTransition:
+        return self.claim_transition
+
+    def retained_task_facts(self) -> Iterator[ExactTaskFact]:
+        from .retained_task_facts import ClaimTaskFact
+        yield from super().retained_task_facts()
+        yield ClaimTaskFact(self)
+
+    def require_retained_claim(self, claimed_after_seq: int) -> None:
+        """The envelope carries its own committed claim facts."""

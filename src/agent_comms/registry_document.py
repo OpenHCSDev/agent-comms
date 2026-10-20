@@ -52,20 +52,20 @@ class RosterVisibility:
 DEFAULT_ROSTER = RosterVisibility()
 
 
-class RegistryPresence(RegistryNames[Thread]):
+class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
     """Presence reads shared by the acquired document and its detached cut."""
 
     __slots__ = ()
 
-    statuses: Mapping[str, ThreadStatus]
+    statuses: StatusMap
     last_seen: Mapping[str, float]
 
+    def set_status(self: RegistryPresence[dict[str, ThreadStatus]], name: str, status: ThreadStatus) -> None:
+        self.statuses[name] = status.declaration()
+
     def status(self, name: str) -> ThreadStatus:
-        canonical = self.canonical_name(name)
-        try:
-            return self.statuses[canonical]
-        except KeyError as error:
-            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+        thread = self.require(name)
+        return self.statuses[thread.name].registered(thread)
 
     def require_active(self, name: str) -> Thread:
         try:
@@ -82,9 +82,9 @@ class RegistryPresence(RegistryNames[Thread]):
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
         selected = (self.threads.values() if names is None else
-                    (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
+                    {thread.name: thread for thread in map(self.require, names)}.values())
         return (executor for thread in selected
-                if thread is not None and self.statuses[thread.name].in_view(visibility)
+                if self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
 
     def channel_audience(self) -> Iterator[Thread]:
@@ -222,7 +222,7 @@ class WholeDocumentValue(ThreadSlice[int]):
 
 @ThreadSlice.required
 @dataclass(slots=True)
-class RegistryDocument(RegistryPresence):
+class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Literal[1] = field(
         default=1, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
     threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
@@ -278,7 +278,7 @@ class RegistryDocument(RegistryPresence):
         thread = self.require(name)
         return RegistryEntry(
             thread=thread,
-            status=self.statuses[thread.name],
+            status=self.status(thread.name),
             last_seen=self.last_seen[thread.name],
             owner_generation=self.owners.generations[thread.name],
             claimed_generation=self.claims.generations[thread.name],
@@ -386,8 +386,8 @@ class RegistryDocument(RegistryPresence):
             raise RelationViolationError(
                 f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
             )
-        if (current := self.statuses.get(thread.name)) is not None:
-            current.require_mutable(thread.name)
+        if thread.name in self.statuses:
+            self.status(thread.name).require_mutable(thread.name)
         previous = self.threads.get(thread.name)
         if previous is not None:
             thread = thread.preserve_registration_history(previous)
@@ -395,7 +395,7 @@ class RegistryDocument(RegistryPresence):
                 thread=thread,
                 status=status,
                 previous=previous,
-                previous_status=self.statuses[thread.name],
+                previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
         if any(existing.created_at == thread.created_at for existing in self.threads.values()):
@@ -444,7 +444,7 @@ class RegistryDocument(RegistryPresence):
         aliases = source.restorable_aliases(available, self.aliases)
         for thread in additions:
             self.threads[thread.name] = thread
-            self.statuses[thread.name] = source.statuses[thread.name].restored()
+            self.set_status(thread.name, source.status(thread.name).restored())
             self.last_seen[thread.name] = source.seen_at(thread.name)
             self.advance_claim(thread.name)
             self.owners.advance(thread.name)
@@ -460,7 +460,7 @@ class RegistryDocument(RegistryPresence):
         if new_name == canonical:
             return canonical, canonical
         current = self.threads[canonical]
-        self.statuses[canonical].require_self_rename()
+        self.status(canonical).require_self_rename()
         if self.taken(new_name, owner=canonical):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
         replacement = replace(current, name=new_name)
@@ -470,7 +470,7 @@ class RegistryDocument(RegistryPresence):
         last_seen = self.last_seen.pop(canonical)
         del self.threads[canonical]
         self.threads[new_name] = replacement
-        self.statuses[new_name] = status
+        self.set_status(new_name, status)
         self.last_seen[new_name] = last_seen
         for child_name, child in tuple(self.threads.items()):
             if child.parent == canonical:
@@ -498,30 +498,26 @@ class RegistryDocument(RegistryPresence):
             raise OwnerChangedBeforeFenceRefusal()
         if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
-        self.statuses[expected.name] = expected.execution.registered_status(
-            expected, StoppedThreadStatus())
+        self.set_status(expected.name, expected.execution.registered_status(
+            expected, StoppedThreadStatus()))
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
         return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        if self.statuses[name].active:
+        name = self.require(name).name
+        if self.status(name).active:
             self.owners.advance(name)
         thread = self.threads[name]
-        self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
+        self.set_status(name, thread.execution.registered_status(thread, StoppedThreadStatus()))
         self.advance_claim(name)
         self.threads[name] = thread.without_turn()
 
     def archive(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        if self.statuses[name].active:
+        name = self.require(name).name
+        if self.status(name).active:
             self.owners.advance(name)
-        self.statuses[name] = ArchivedThreadStatus()
+        self.set_status(name, ArchivedThreadStatus())
         self.advance_claim(name)
 
     def require_originals(self, originals: Sequence[Thread]) -> None:
@@ -557,23 +553,19 @@ class RegistryDocument(RegistryPresence):
         return {original.name: self.remove(original.name) for original in originals}
 
     def begin_delete(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        self.statuses[name] = self.statuses[name].for_deletion()
+        name = self.require(name).name
+        self.set_status(name, self.status(name).for_deletion())
         self.advance_claim(name)
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+        name = self.require(name).name
         detached = tuple(
             sorted(child.name for child in self.threads.values() if child.parent == name)
         )
         for child_name in detached:
             self.threads[child_name] = replace(self.threads[child_name], parent=None)
-        if self.statuses[name].active:
+        if self.status(name).active:
             self.owners.advance(name)
         self.advance_claim(name)
         del self.threads[name]
@@ -583,15 +575,13 @@ class RegistryDocument(RegistryPresence):
         return detached
 
     def heartbeat(self, name: str) -> None:
-        name = self.canonical_name(name)
-        if name not in self.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        previous = self.statuses[name]
+        name = self.require(name).name
+        previous = self.status(name)
         resumed = previous.after_heartbeat(name)
         if previous.changes_owner(resumed):
             self.advance_claim(name)
             self.owners.advance(name)
-        self.statuses[name] = resumed
+        self.set_status(name, resumed)
         self.last_seen[name] = time.time()
 
     def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]:
@@ -609,8 +599,8 @@ class RegistryDocument(RegistryPresence):
         turn = record.read().require_active()
         if not turn.may_release(canonical_lease):
             return False, NoFinishedTurn()
-        attested = canonical_lease.can_attest(self.claims.generations[name])
-        attested = attested and turn.claimed_generation is not None and self.statuses[name].active
+        attested = (canonical_lease.can_attest(self.claims.generations[name])
+                    and turn.held_by(canonical_lease) and self.status(name).active)
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
@@ -667,7 +657,7 @@ class RegistryEntry:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(RegistryPresence, RegistryProvenance):
+class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
     threads: Mapping[str, Thread]
     statuses: Mapping[str, ThreadStatus]
     last_seen: Mapping[str, float]
@@ -683,7 +673,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         return tuple(
             thread
             for thread in self.threads_for(fence.identity.incarnation.require_recorded())
-            if self.statuses[thread.name].active
+            if self.status(thread.name).active
             and thread.latest_idle_turn(fence, self.claimed_generations.get(thread.name, 0))
         )
 

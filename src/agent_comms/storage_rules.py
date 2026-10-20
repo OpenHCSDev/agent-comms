@@ -9,7 +9,8 @@ import shutil
 import subprocess
 import time
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import cached_property
 from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -100,10 +101,10 @@ class StorageRule(RoomAllocation):
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
-        home = self.checkout_base / thread.name
-        home = (home if home.exists() else Path(thread.worktree)).expanduser().resolve()
+        home = self.checkout_base.expanduser().resolve() / thread.name
         ordered = self.order_checkout(thread.name, 'P*')
-        candidates = (home, *(path for path in ordered.parent.glob(ordered.name)
+        candidates = (home, Path(thread.worktree).expanduser().resolve(),
+                      *(path for path in ordered.parent.glob(ordered.name)
                               if path.is_dir() and self.owns_checkout(thread, path)))
         checkouts = {home}
         listed = set()
@@ -122,7 +123,7 @@ class StorageRule(RoomAllocation):
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
-        raise SelectedToolDenied(f'StorageRule: {reason}')
+        raise StorageDenied(f'StorageRule: {reason}')
 
     def free_gib(self):
         return shutil.disk_usage(self.volume).free / 2**30
@@ -180,9 +181,12 @@ class StorageRule(RoomAllocation):
     def require_quota(self, thread: Thread, *proposed: Path):
         UnitStorage.read(self, thread, *proposed).require_quota()
 
-    def require_allocation(self, thread: Thread, *proposed: Path):
+    def require_floor(self) -> None:
         if self.below_floor(self.free_gib()):
             self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}')
+
+    def require_allocation(self, thread: Thread, *proposed: Path):
+        self.require_floor()
         self.require_quota(thread, *proposed)
 
     def require_path(self, thread: Thread, path):
@@ -234,7 +238,7 @@ class UnitStorage(UndatedStandingRule):
         units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
         registry = comms.registry
         read = (cls.read(registry.storage_rule, registry.require(unit)) for unit in units)
-        return tuple(storage for storage in read if storage.over_checkouts)
+        return tuple(storage for storage in read if storage.over_checkouts or storage.missing_home)
 
     @property
     def extra_checkouts(self) -> tuple[Path, ...]:
@@ -244,13 +248,40 @@ class UnitStorage(UndatedStandingRule):
     def over_checkouts(self) -> bool:
         return len(self.extra_checkouts) > self.rule.max_checkouts
 
+    @property
+    def missing_home(self) -> bool:
+        return not self.checkouts[0].is_dir()
+
+    def adding(self, path: Path) -> UnitStorage:
+        proposed = replace(self, checkouts=tuple(dict.fromkeys((*self.checkouts, path))))
+        proposed.require_quota()
+        return proposed
+
+    def removing(self, path: Path) -> UnitStorage:
+        if path not in self.extra_checkouts:
+            self.rule.deny('only a current extra checkout can be removed')
+        return replace(self, checkouts=tuple(p for p in self.checkouts if p != path))
+
     def require_quota(self) -> None:
         if self.over_checkouts:
             self.rule.deny(f'at most {self.rule.max_checkouts} checkouts besides the home checkout')
 
     def line(self) -> str:
+        home = f'; declared home {self.checkouts[0]} is missing' if self.missing_home else ''
         return (f'VIOLATION storage quota: {self.unit} holds {len(self.extra_checkouts)} checkouts besides home, '
-                f'limit {self.rule.max_checkouts} -> order the cleanup')
+                f'limit {self.rule.max_checkouts}{home} -> order the cleanup')
+
+
+@dataclass
+class StorageProjection:
+    """One call's lazy snapshot; ordinary writes never need a checkout inventory."""
+
+    rule: StorageRule
+    thread: Thread
+
+    @cached_property
+    def storage(self) -> UnitStorage:
+        return UnitStorage.read(self.rule, self.thread)
 
 
 class ShellProgram:
@@ -277,6 +308,10 @@ class ShellProgram:
                      for effect in decode(self, args, cwd))
 
 
+class StorageDenied(SelectedToolDenied):
+    """The storage preflight refused an operation before it executed."""
+
+
 class StorageEffect:
     """Preflight one actual operation and declare its measured work, if any."""
     work: ClassVar[tuple] = ()
@@ -286,24 +321,25 @@ class StorageEffect:
 class WriteStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, rule, thread):
-        rule.require_path(thread, self.path)
+    def check(self, projection: StorageProjection):
+        projection.rule.require_path(projection.thread, self.path)
 
 
 @dataclass(frozen=True)
 class ForbiddenStorageEffect(StorageEffect):
     reason: str
 
-    def check(self, rule, thread):
-        rule.deny(self.reason)
+    def check(self, projection: StorageProjection):
+        projection.rule.deny(self.reason)
 
 
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
     work = (AllocationRoomWork,)
 
-    def check(self, rule, thread):
-        rule.require_allocation(thread)
+    def check(self, projection: StorageProjection):
+        projection.rule.require_floor()
+        projection.storage.require_quota()
 
 
 class BuildStorageEffect(AllocateStorageEffect):
@@ -318,26 +354,27 @@ class TestGateStorageEffect(AllocateStorageEffect):
 class CheckoutStorageEffect(AllocateStorageEffect):
     path: Path
 
-    def check(self, rule, thread):
+    def check(self, projection: StorageProjection):
+        rule, thread = projection.rule, projection.thread
         rule.require_path(thread, self.path)
         if not rule.owns_checkout(thread, self.path):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
-        rule.require_allocation(thread, self.path)
+        super().check(projection)
+        projection.storage = projection.storage.adding(self.path)
 
 
 @dataclass(frozen=True)
 class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, rule, thread):
-        if self.path not in UnitStorage.read(rule, thread).extra_checkouts:
-            rule.deny('only a current extra checkout can be removed')
+    def check(self, projection: StorageProjection):
+        projection.storage = projection.storage.removing(self.path)
 
 
 def physical_path(value, cwd):
     if '$' in value or '`' in value:
-        raise SelectedToolDenied('StorageRule: use a literal storage destination')
+        raise StorageDenied('StorageRule: use a literal storage destination')
     path = Path(value).expanduser()
     return (path if path.is_absolute() else cwd / path).resolve()
 
@@ -422,7 +459,7 @@ class AddsCheckout(ShellProgram):
         while tail and tail[0].startswith('-'):
             tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
         if not tail:
-            raise SelectedToolDenied('StorageRule: worktree destination is missing')
+            raise StorageDenied('StorageRule: worktree destination is missing')
         return (CheckoutStorageEffect(physical_path(tail[0], cwd)),)
 
 
@@ -447,7 +484,7 @@ class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTr
     def effects(self, args, cwd):
         while args and args[0] in ('-C', '-c', '--git-dir', '--work-tree'):
             if len(args) < 2:
-                raise SelectedToolDenied('StorageRule: incomplete git option')
+                raise StorageDenied('StorageRule: incomplete git option')
             if args[0] == '-C':
                 cwd = physical_path(args[1], cwd)
             args = args[2:]

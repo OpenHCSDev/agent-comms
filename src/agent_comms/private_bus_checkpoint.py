@@ -31,6 +31,7 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
+    ResourceClaim, UnclaimedResource,
 )
 from .coordination_tables.publications import PublicationIntents
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .retained_task_facts import ExactTaskFact
     from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
 
 OriginalSource = TypeVar("OriginalSource")
@@ -314,7 +316,7 @@ class CheckedRead:
             )
         PublicMessages.require_unused(self.connection, sender, message_id)
 
-    def claim(self, resource: str) -> ClaimOwner | None:
+    def claim(self, resource: str) -> ResourceClaim:
         """Look up the current claim for a resource in the checked index."""
         self.require_open_prefix()
         return ResourceClaims.owner_for(self.connection, resource)
@@ -328,9 +330,9 @@ class CheckedRead:
         self.require_open_prefix()
         return ClaimCommits.operation_used(self.connection, operation_id)
 
-    def prepare_claim(self, transition: ClaimTransition) -> None:
+    def prepare_claim(self, transition: ClaimTransition, registry: RegistrySnapshot) -> None:
         self.require_open_prefix()
-        ClaimCommits.prepare(self.connection, transition)
+        ClaimCommits.prepare(self.connection, transition, registry)
 
     def claim_projection(self) -> ClaimProjection:
         """Explicit current-claim inspection; no historical bus rows are decoded."""
@@ -670,15 +672,21 @@ class ClaimCommits(CheckpointTable, TypedTable):
         return cls.one(db, operation_id=operation_id) is not None
 
     @classmethod
-    def prepare(cls, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
-        projected = transition.apply(ResourceClaims.claims_for(db, transition.resources))
+    def prepare(cls, db: sqlite3.Connection, transition: ClaimTransition,
+                registry: RegistrySnapshot) -> ClaimProjection:
+        projected = transition.apply(ResourceClaims.claims_for(db, transition.resources), registry)
         transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
         return projected
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         """Apply this original in the caller's existing prefix transaction."""
         try:
-            projected = self.prepare(db, self.transition)
+            projected = self.transition.project(
+                ResourceClaims.claims_for(db, self.transition.resources)
+            )
+            self.transition.require_new_operation(
+                lambda operation: self.operation_used(db, operation)
+            )
         except (ClaimTransitionError, IdentityConflict) as error:
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
         inserted = super().insert(db)
@@ -702,12 +710,12 @@ class ResourceClaims(CheckpointTable, TypedTable):
                            deferred=True, on_delete="CASCADE"),)
 
     @classmethod
-    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ClaimOwner | None:
-        original = ClaimCommits.one(
+    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
+        originals = ClaimCommits.select(
             db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
             parameters=(resource,),
         )
-        return original.transition.claimed(resource) if original is not None else None
+        return next((row.transition.claimed(resource) for row in originals), UnclaimedResource())
 
     @classmethod
     def all_claims(cls, db: sqlite3.Connection) -> ClaimProjection:

@@ -4,31 +4,33 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Type
 
 from .active_route import guard_original_root_write
 from .registration import Registration
 
-if TYPE_CHECKING:
-    pass
 from .bus_publication import AgentOrigin, HumanOrigin
-from .envelope_claim_transitions import FileClaimPath
+from .change_report import ChangeReport
 from .errors import RelationViolationError, UnregisteredThreadError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
+from .message_reference import MessageReference
+from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .publisher import InitialWrites, OwnerPublisher
-from .change_report import ChangeReport
+from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .store_files import SharedLock, _store_lock
+from .task_sources import (
+    CurrentTaskScopeSelection,
+    HumanConstraintPin,
+    NativeInputConstraintPin,
+    NoTaskAttachment,
+    OriginalTaskChange,
+    TaskAttachment,
+    TaskChange,
+    TaskScopeSelection,
+)
 from .thread_identity import UserThreadRole
 from .threads import Thread
 from .todos import TodoError, TodoStore
-from .send_result import CorrectionComplete, CorrectionFailed, SendResult
-from .task_sources import TaskAttachment, NoTaskAttachment
-from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
-from .task_sources import TaskChange, OriginalTaskChange
-from .message_reference import MessageReference
-
 
 
 class Messaging:
@@ -43,11 +45,9 @@ class Messaging:
         sender: str,
         target: str,
         body: str,
-        type: Type[MessageKind] = InfoKind,
+        type: type[MessageKind] = InfoKind,
         *,
         role: MessageRole = ConversationRole(),
-        claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path] = (),
         task: TaskAttachment = NoTaskAttachment(),
         report: ChangeReport | None = None,
         answers: Sequence[MessageReference] = (),
@@ -80,16 +80,7 @@ class Messaging:
                 answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
             publisher: OwnerPublisher = self.bus.publisher
-            if claims or releases:
-                committed = publisher.publish_claim_envelope(
-                    message,
-                    worktree=Path(owner.worktree),
-                    incarnation=str(owner.created_at),
-                    claims=claims,
-                    releases=releases,
-                )
-            else:
-                committed = publisher.publish_ordinary(message, origin=AgentOrigin())
+            committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
             todos.correct(owner.name, committed.message_id, body)
         except TodoError as error:

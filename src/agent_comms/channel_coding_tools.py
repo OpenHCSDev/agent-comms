@@ -24,6 +24,7 @@ from .native_arguments import NativeArguments
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
+from .pi_payloads import StorageDenialToolDetails
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -33,6 +34,7 @@ from .selected_tool_broker import (
     verify_sent_full_input,
 )
 from .storage_room import NoRoomNeeded, RoomReservation
+from .storage_rules import StorageDenied
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -61,20 +63,18 @@ class CodingToolOwner(ABC):
             resource = call.allowed_claim()
             if resource is not None:
                 canonical = resource.normalized(Path(owner.worktree))
-                self.claims[canonical] = self.claim_resource(
-                    store, turn, resource, slot, self.claims.get(canonical))
+                self.claims[canonical] = self.claim_resource(store, turn, resource, slot)
 
         reservation = await self.reserve_room(call)
-        async with reservation.checking():
-            async with self.check_lock:
-                await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+        async with reservation.checking(), self.check_lock:
+            await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
         return reservation
 
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
 
     @abstractmethod
-    def claim_resource(self, store, turn, resource, slot, prior): ...
+    def claim_resource(self, store, turn, resource, slot): ...
 
     def for_original(self, assignment, operation_id):
         raise SelectedToolDenied("An ordinary input has no selected original")
@@ -112,8 +112,8 @@ class SelectedCodingToolOwner(CodingToolOwner):
         verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
         verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
 
-    def claim_resource(self, store, turn, resource, slot, prior):
-        scope = prior.claim_scope if prior is not None else replace(self.claim_scope, operation_id=slot)
+    def claim_resource(self, store, turn, resource, slot):
+        scope = replace(self.claim_scope, operation_id=slot)
         return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
 
 
@@ -174,6 +174,13 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             await asyncio.gather(*tuple(self.completions))
         for call in self.calls.values():
             await asyncio.to_thread(call.progress.room.abandon)
+
+    async def handle_request(self, raw: bytes) -> dict[str, object]:
+        try:
+            return await super().handle_request(raw)
+        except StorageDenied as denial:
+            return {"ok": False, "error": str(denial),
+                    "details": StorageDenialToolDetails(str(denial)).to_wire()}
 
     @staticmethod
     def failure_response(error: Exception) -> dict[str, object]:
