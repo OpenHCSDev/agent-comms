@@ -361,9 +361,9 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
-            plan.key: binding
+            plan.key: binding.value
             for plan in FieldCodec.field_plans(cls)
-            if (binding := plan.setting(field_codec.ContextSource, None)) is not None
+            for binding in field_codec.ContextSource.single(plan.annotation)
         }
 
     @classmethod

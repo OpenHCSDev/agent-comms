@@ -99,7 +99,9 @@ class ExternalRecord(RecordMember):
 @dataclass(frozen=True)
 class WheelFiles(ExternalRecord):
     packages: tuple[str, ...]
-    force_include: typing.Annotated[dict[str, str], field_codec.WireName("force-include")] = field(default_factory=dict)
+    force_include: typing.Annotated[dict[str, str], field_codec.WireName("force-include")] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)

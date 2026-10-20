@@ -901,7 +901,7 @@ class WireRevision(ReadState):
             **{
                 plan.name: ()
                 for plan in FieldCodec.field_plans(cls)
-                if field_codec.WatchPaths.find(plan.annotation) is not None
+                if field_codec.WatchPaths.single(plan.annotation)
             },
             expiry_tick=0,
         )
@@ -910,9 +910,9 @@ class WireRevision(ReadState):
     def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
         """Stat and watch the sources declared by the revision fields themselves."""
         return {
-            plan.name: paths(views)
+            plan.name: source.value(views)
             for plan in FieldCodec.field_plans(cls)
-            if (paths := plan.setting(field_codec.WatchPaths, None)) is not None
+            for source in field_codec.WatchPaths.single(plan.annotation)
         }
 
     @classmethod

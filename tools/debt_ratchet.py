@@ -315,7 +315,9 @@ class StringFieldMetadata(PerFileOccurrenceMeasure):
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:
-        metadata = typing.cast(types.MemberDescriptorType, dataclasses.Field.metadata).__name__
+        metadata = typing.cast(
+            types.MemberDescriptorType, typing.cast(typing.Any, dataclasses.Field).metadata
+        ).__name__
         return sum(
             typing.cast(int, MetadataKeys().visit(keyword.value))
             for keyword in typing.cast(ast.Call, node).keywords

@@ -172,10 +172,10 @@ class ThreadSlice[Value](ABC):
 
     @staticmethod
     def of(plan: field_codec.FieldPlan) -> type[ThreadSlice]:
-        kind = plan.setting(field_codec.SlicePolicy, None)
-        if kind is None or not issubclass(kind, ThreadSlice):
-            raise TypeError(f"{plan.name} declares no thread slice")
-        return kind
+        for policy in field_codec.SlicePolicy.single(plan.annotation):
+            if issubclass(policy.value, ThreadSlice):
+                return policy.value
+        raise TypeError(f"{plan.name} declares no thread slice")
 
     @staticmethod
     def required[Document: type](document: Document) -> Document:

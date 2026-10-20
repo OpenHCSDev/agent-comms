@@ -86,7 +86,7 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     @classmethod
     def family_constraints(cls, column: str, annotation: object) -> tuple[str, ...]:
         """The generated selector CHECK, also consumed by stopped DDL carries."""
-        if FieldCodec._representation(annotation)[1] is not None:
+        if compile_decoder(annotation).uses_representation:
             return ()
         declared, _ = _base_type(annotation)
         if get_origin(declared) is not type:
@@ -262,7 +262,9 @@ class Column(FieldDirective):
 
     @classmethod
     def declared(cls, annotation: object) -> Column:
-        return next(iter(cls.single(annotation)), cls())
+        for column in cls.single(annotation):
+            return column
+        return cls()
 
     @property
     def writable(self) -> bool:

@@ -328,8 +328,7 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         # different evidence since the existence check, even in autocommit use.
         statement, values = cls(execution_id, observed, False, True, 1)._insertion()
         db.execute(
-            statement
-            + """
+            statement + """
             ON CONFLICT (execution_id) DO UPDATE SET
                 facts = facts | excluded.facts,
                 replay_safe = 0,

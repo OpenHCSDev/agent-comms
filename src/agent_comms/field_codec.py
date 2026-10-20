@@ -382,7 +382,9 @@ class Argument(FieldDirective):
 
     @classmethod
     def declared(cls, annotation: object) -> Argument:
-        return next(iter(cls.single(annotation)), cls())
+        for argument in cls.single(annotation):
+            return argument
+        return cls()
 
     def description(self, name: str) -> str:
         return FieldCodec.decode(str, self.options.get("help", name.replace("_", " ").capitalize()))
@@ -1578,6 +1580,10 @@ class ValueDecoder[T](ABC):
 
     field_names: ClassVar[tuple[str, ...]] = ()
 
+    @property
+    def uses_representation(self) -> bool:
+        return False
+
     def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
         return self.decode(data)
 
@@ -1696,6 +1702,11 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
+
+    @property
+    def uses_representation(self) -> bool:
+        return True
+
     def encode(self, value: object) -> object:
         return None if value is None else self.representation.encode(value)
 
