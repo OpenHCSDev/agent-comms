@@ -22,7 +22,7 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
@@ -32,8 +32,13 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion,
-    WireValue, boundary_decoder,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
 from .plan_phases import OrderPhase, UnplannedPhase

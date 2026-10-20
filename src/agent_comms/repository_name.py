@@ -16,9 +16,7 @@ class RepositoryName(WireValue):
     _part: ClassVar[re.Pattern[str]] = re.compile(r"(?!\.{1,2}$)[\w.-]+\Z")
 
     def __post_init__(self) -> None:
-        if len(f"{self.owner}/{self.name}") > 200 or not all(
-            self._part.fullmatch(part) for part in (self.owner, self.name)
-        ):
+        if len(self.to_wire()) > 200 or not all(self._part.fullmatch(part) for part in self.key):
             raise ValueError("Repo ID must have the exact owner/repo form.")
 
     @property

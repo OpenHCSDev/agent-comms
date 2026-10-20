@@ -20,11 +20,13 @@ class Repo(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     checkout: Path
-    github: InstanceOf[Annotated[
-        RepositoryName,
-        PlainValidator(RepositoryName.from_wire, json_schema_input_type=str),
-        PlainSerializer(RepositoryName.to_wire),
-    ]]
+    github: InstanceOf[
+        Annotated[
+            RepositoryName,
+            PlainValidator(RepositoryName.from_wire, json_schema_input_type=str),
+            PlainSerializer(RepositoryName.to_wire),
+        ]
+    ]
     source: str = "src"
 
     def holds(self, todo: Todo) -> bool:

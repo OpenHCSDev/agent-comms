@@ -37,8 +37,8 @@ from .goals import (
     UnorderedGoalOrder,
 )
 from .progress_claims import ProgressClaim
-from .repository_name import RepositoryName
 from .recorded_time import EventTime
+from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
