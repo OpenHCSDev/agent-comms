@@ -888,8 +888,13 @@ class CommsOrderDoneTool(CommsTodoTool):
     description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
     order_id: str = tool_field("Exact open order ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
+    claims: tuple[ProgressClaim, ...] = tool_field(
+        "Merged, installed or working claims, each with the artifact Core verifies in the order's "
+        "checkout; at least one")
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        ProgressClaim.require_claimed(self.claims, "delivered")
+        ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
         return DeliverTodo(todo.revision, actor, self.delivery, self.order_id)
 
 

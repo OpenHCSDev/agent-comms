@@ -42,6 +42,7 @@ from ..goals import OrderCheck, ProblemGoalOrder
 from ..message_reference import MessageReference
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase
+from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..repo import Repo
 from ..standing_rules import HuntDue, RulesDue
@@ -592,12 +593,14 @@ class Commander(CommanderContext):
         evidence = FileDeliveryEvidence(seen or screenshot) if seen or screenshot else NoDeliveryEvidence()
         if operation:
             delivery = OperationDelivery(evidence=evidence)
+            claim = WorkingClaim(evidence.artifact())
         else:
             delivered_commit = revision(repo, sha)
             delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
                                       delivered_commit=delivered_commit, evidence=evidence)
+            claim = MergedClaim(delivery.delivered)
         self.call(CommsOrderDoneTool(problem=pid,
-            order_id=todo.order.id, delivery=delivery))
+            order_id=todo.order.id, delivery=delivery, claims=(claim,)))
         delivered_todo = self.comms.goals.todos.get(pid)
         for late in delivered_todo.strikes[len(todo.strikes):]:
             self.posted(unit, delivered_todo, late)
