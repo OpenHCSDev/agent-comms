@@ -109,7 +109,7 @@ class UnreadTranscriptCursor(TranscriptCursor):
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
         return self
 
-    def mark_read(self, reads, viewer, runtime: RuntimeLocation) -> None:
+    def mark_read(self, reads: object, viewer: object, runtime: RuntimeLocation) -> None:
         """Nothing has been drawn, so there is nothing to acknowledge."""
 
 
