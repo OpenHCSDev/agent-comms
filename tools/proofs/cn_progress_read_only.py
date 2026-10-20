@@ -10,7 +10,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
 from agent_comms.todos import CorrectCheckTodo, DistanceReadings, PushedProgress, Todo
-from agent_comms.tools import CommsTodoListTool, CommsChangeProblemTool, TodoList
+from agent_comms.tools import CommsChangeProblemTool, CommsTodoListTool, TodoList
 
 MARKER = ROOT / "explicit-check-count"
 MARKER_CONTENT = b"x"

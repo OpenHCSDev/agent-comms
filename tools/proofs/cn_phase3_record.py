@@ -35,10 +35,10 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.tools import (
+    CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderDoneTool,
     CommsTodoCreateTool,
-    CommsChangeProblemTool,
     CommsVerdictTool,
     ToolRequest,
 )
