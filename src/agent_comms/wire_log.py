@@ -49,7 +49,8 @@ from .errors import (
     StoredHistoryUnreadable,
 )
 from .field_codec import FieldCodec, MalformedRecord
-from .locked_store import DurableFile, WireWakeFile
+from .locked_store import DurableFile, RegistryFile, WireWakeFile
+from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
 from .private_bus_checkpoint import CheckedRead, RecordedContextManifestSources
 from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
@@ -779,10 +780,13 @@ class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
     def append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
         """Durably reserve a sequence, append one row, then sync its parent.
 
-        A failed append or bus parent sync leaves the outcome UNKNOWN.
+        A failed append or bus parent sync leaves the outcome UNKNOWN. Every bus write lands
+        here, so maintenance refuses each writer here once, whichever operation it came
+        through; the holder's own children carry its nonce.
         """
         StoreLock.current_release().require_active()
         metadata.access.require_append()
+        MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         WireRecord.require_row_size(encoded, message="Private bus row exceeds the byte limit.")
         record = WireRecord.from_wire(row, metadata.root_id)

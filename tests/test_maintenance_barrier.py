@@ -519,6 +519,7 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
     gate = MaintenanceBarrier(tmp_path / 'registry.json')
     hold = gate.begin(MaintenanceOperator.current())
     for argv in (('send', '--from', 'a', '--to', 'b', '--body', 'hi'),
+                 ('user-send', '--to', 'b', '--body', 'hi', '--worktree', '/wt'),
                  ('activity', '--name', 'a', '--state', 'working')):
         code, out = cli(*argv)
         assert code != 0 and 'under maintenance' in out
