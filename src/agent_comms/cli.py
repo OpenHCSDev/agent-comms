@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root",
         default=None,
-        help="Explicit Comms root directory (otherwise requires --comms-root at launch)",
+        help="Explicit Comms root directory (otherwise uses the published active route)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):

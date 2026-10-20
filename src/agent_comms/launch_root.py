@@ -1,4 +1,4 @@
-"""The explicit process root and its child-process boundary."""
+"""The process root selected explicitly or from the published route, and its child boundary."""
 
 from __future__ import annotations
 
@@ -37,9 +37,15 @@ class LaunchRoot:
     @classmethod
     def current(cls) -> LaunchRoot:
         if isinstance(cls._current, UnstartedLaunch):
-            raise RelationViolationError(
-                "Comms requires an explicit launch root (--comms-root or --root)."
-            )
+            # Import here: the route owner also imports LaunchRoot for explicit selection.
+            from .active_route import read_active_route
+
+            route = read_active_route()
+            if route is None:
+                raise RelationViolationError(
+                    "No active Comms route is published; --comms-root or --root is required."
+                )
+            return cls.from_path(route.root)
         return cls._current
 
     def install(self) -> None:
