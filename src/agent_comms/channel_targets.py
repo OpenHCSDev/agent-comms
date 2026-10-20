@@ -347,10 +347,8 @@ class ChannelTarget(NamedTarget):
         return frozenset(mention.thread for mention in message.mentions).intersection(audience.canonical_members)
 
     def addressed(self, threads: tuple[str, ...], body: str) -> str:
-        """Mentions limit the wake to the declared audience, so a send without one is refused."""
-        if not threads:
-            raise ValueError(f"A send to {self.name} reaches many threads; declare its audience.")
-        return " ".join(f"@{thread}" for thread in threads) + f" {body}"
+        """Keep collective posts unchanged; prefix mentions for a named audience."""
+        return " ".join((*(f"@{thread}" for thread in threads), body))
 
     def wake_policy(self, recipient, mentions):
         if mentions:
