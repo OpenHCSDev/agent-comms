@@ -16,6 +16,7 @@ from agent_comms.commander import standing
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
+from agent_comms import coordinator
 from agent_comms.thread_identity import StallWatcherIncarnation
 from agent_comms.todos import (BlockedTodoState, ChangeTodoState, CorrectCheckTodo,
                               ReleaseTodo, StrikeReason, StrikeTodo, TodoConflict)
@@ -77,13 +78,14 @@ def test_a_failed_stall_pass_logs_and_releases_the_root_before_the_next_pass(com
             raise asyncio.CancelledError
 
     monkeypatch.setattr(standing.UnownedWheelSpin, "after_stall", classmethod(after_stall))
-    monkeypatch.setattr(standing.asyncio, "sleep", wait)
+    monkeypatch.setattr(coordinator.asyncio, "sleep", wait)
     try:
-        asyncio.run(standing.UnownedWheelSpin.watch(opened_wire))
+        asyncio.run(coordinator.Coordination.watch_worker(
+            lambda: standing.UnownedWheelSpin.watch_pass(opened_wire)))
     except asyncio.CancelledError:
         pass
     assert len(passes) == 2 and not borrowed
-    assert "Stall watcher pass failed" in caplog.text
+    assert "Service worker pass failed" in caplog.text
     assert "FileNotFoundError: no commander config" in caplog.text
 
 
@@ -197,10 +199,10 @@ finally:
             await asyncio.Future()
 
     active_route_path().parent.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(standing.asyncio, 'sleep', between)
+    monkeypatch.setattr(coordinator.asyncio, 'sleep', between)
     async with TestClient(TestServer(connector.application())):
         await asyncio.wait_for(done.wait(), timeout=30)
-    assert 'Stall watcher pass failed' not in caplog.text
+    assert 'Service worker pass failed' not in caplog.text
     after = Comms(copied).goals.todos.get('P1')
     assert after.holder == 'spare' and len(after.strikes) == len(after.released) == 1
     assert original.goals.todos.get('P1') == before

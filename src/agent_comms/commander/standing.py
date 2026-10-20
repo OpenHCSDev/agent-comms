@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
-import logging
 import subprocess
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
 from ..comms import Comms
-from ..coordinator import Coordination
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
 from ..repo import Repo
@@ -36,7 +33,7 @@ from .config import CommanderConfig
 @dataclass(frozen=True)
 class Detached(UndatedStandingRule):
     unit: str
-    unread: int
+    unread: int = field(compare=False)
     orders: tuple[str, ...]
 
     @classmethod
@@ -182,17 +179,6 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         """The worker borrows the root for this pass, never while the timer is idle."""
         with opened_wire() as comms:
             cls.after_stall(comms)
-
-    @classmethod
-    async def watch(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        """Run a pass each minute; failures go to the existing service log."""
-        while True:
-            (outcome,) = await asyncio.gather(
-                Coordination.run_worker(lambda: cls.watch_pass(opened_wire)),
-                return_exceptions=True)
-            if isinstance(outcome, Exception):
-                logging.error("Stall watcher pass failed", exc_info=outcome)
-            await asyncio.sleep(60)
 
 
 @dataclass(frozen=True)
