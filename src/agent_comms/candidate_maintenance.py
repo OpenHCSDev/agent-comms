@@ -10,8 +10,8 @@ from pathlib import Path
 from .bus_route_counts import BusRouteCounts
 from .coordination_errors import CoordinationError
 from .routing import DeliveryMessage
-from .wire_log import CurrentSnapshotOpening, WireLog
 from .wake_candidate_index import FirstBuild, ProjectionUnavailableError, WakeCandidateIndex
+from .wire_log import CurrentSnapshotOpening, WireLog
 
 _LOG = logging.getLogger(__name__)
 _MAX_ACTIVE_ROOTS = 32
@@ -51,14 +51,22 @@ class CandidateMaintenance(threading.Thread):
                 with self.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
                     route_result = routes.sync(
                         snapshot,
-                        lambda record: DeliveryMessage.from_wire(record, root_id=snapshot.metadata.root_id),
+                        lambda record: DeliveryMessage.from_wire(
+                            record, root_id=snapshot.metadata.root_id
+                        ),
                     )
                 if result.caught_up and route_result.complete:
                     with _guard:
                         if self.through_bytes <= result.checkpoint_bytes:
                             _pending.pop(root)
                             return
-        except (OSError, ValueError, sqlite3.Error, CoordinationError, ProjectionUnavailableError) as error:
+        except (
+            OSError,
+            ValueError,
+            sqlite3.Error,
+            CoordinationError,
+            ProjectionUnavailableError,
+        ) as error:
             failure = CandidateMaintenanceFailed(root)
             _LOG.exception("%s", failure)
             raise failure from error
