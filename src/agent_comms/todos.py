@@ -1394,6 +1394,10 @@ class FoldedProblemOrder(ProblemOrder):
     why: str
     line: ClassVar[str] = "Folded"
 
+    @property
+    def phase(self) -> type[OrderPhase]:
+        return self.original.phase
+
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return (f"{todo.id} folded into {self.into}: {self.why}",)
 
