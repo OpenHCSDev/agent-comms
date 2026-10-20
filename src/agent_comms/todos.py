@@ -2804,10 +2804,14 @@ class TodoStore(TypedStore):
     def recent_closed_for_commander(self, commander: ThreadIncarnation,
                                     limit: int = 50) -> tuple[Todo, ...]:
         """The bounded outcome tail shown beside the open fleet, never all history."""
+        condition, parameters = Todo._condition("1", (), {
+            "creator": commander.name, "creator_created": commander.wire_birth,
+            "state": DoneTodoState})
         with self.snapshot() as db:
-            return tuple(Todo.select(
-                db, creator=commander.name, creator_created=commander.wire_birth,
-                state=DoneTodoState, order_by=("rowid",), descending=True, limit=limit))
+            return tuple(Todo.read(db.execute(
+                f"SELECT * FROM todo WHERE {condition} "
+                "ORDER BY json_extract(predicted_finish, '$.actual') DESC, rowid DESC LIMIT ?",
+                (*parameters, limit))))
 
     def stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
         """Observe active held orders without changing owners, strikes or releases."""
