@@ -1,4 +1,4 @@
-"""Run real rotation/native dispatch on a new scratch bus and retain its reply.
+"""Run real checked-order native dispatch on a new scratch bus and retain its reply.
 
 No fake transport, provider or history is used. Failed attempts remain retained.
 """
@@ -22,7 +22,6 @@ from uuid import uuid4
 
 from agent_comms.change_report import FileLine
 from agent_comms.cli_bridges.shared import DeclaredOptions
-from agent_comms.commander import rotate
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import CommanderContext
 from agent_comms.comms import Comms
@@ -40,7 +39,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool
+from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool, CommsStandingRulesTool
 from agent_comms.wire_watch import WatchSource, WireWatch
 from agent_comms.work_dispatch import CheckedPhaseTask
 
@@ -139,8 +138,8 @@ class RunProofCommand(ProofCommand):
         home.mkdir(parents=True)
         comms = Comms(root)
         comms.messaging.initialize_private_initial_protocol()
-        # A fresh interpreter acquires the scratch configuration before importing
-        # rotation. Keep the actual storage declaration across its isolated HOME.
+        # A fresh interpreter acquires the scratch commander configuration.
+        # Keep the actual storage declaration across its isolated HOME.
         (root / "storage.json").write_text(
             json.dumps(FieldCodec.encode(comms.registry.storage_rule))
         )
@@ -234,7 +233,7 @@ class ObserveProofCommand(ProofCommand):
             ("git", "-C", str(project), "rev-parse", "HEAD"), text=True
         )
         print(f"SOURCE {source.strip()}", flush=True)
-        for line in rotate.broken_rules(context):
+        for line in context.call(CommsStandingRulesTool()).broken:
             print(line, flush=True)
         assigned = comms.goals.todos.get(problem)
         received_order = FieldCodec.decode(PendingProblemOrder, FieldCodec.encode(assigned.order))
@@ -248,7 +247,7 @@ class ObserveProofCommand(ProofCommand):
         )
         (root.parent / "order.json").write_text(json.dumps(FieldCodec.encode(assigned), indent=2))
         before = comms.registry.all_threads()
-        for line in rotate.broken_rules(context):
+        for line in context.call(CommsStandingRulesTool()).broken:
             print(line, flush=True)
         assert comms.registry.all_threads().keys() == before.keys(), "duplicate unit"
         after = FieldCodec.decode(
