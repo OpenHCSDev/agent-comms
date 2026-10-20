@@ -9,8 +9,10 @@ from ..plan_phases import (
     ReviewQueuePhase,
     StoryPhase,
 )
-from . import ParityComparison, ParityRow
+from ..commander.standing import MergeGrowth
+from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
+from .measurements import RuleComparison, StorageComparison, measured_load
 
 
 class CreateProblemParityRow(ParityRow):
@@ -158,17 +160,25 @@ class LoadForkingParityRow(ParityRow):
 class GrowthAlarmParityRow(ParityRow):
     number = 18
     capability = "Growth alarm"
-    current = "`growth_watch.py`: merges growing src by more than 40 net lines"
-    native = "`commander.config.Repo.main_changes` → `commander_measurements.MergeGrowth.read`"
+    current = "`StandingRule.broken` growth delivery (formerly `growth_watch.py`)"
+    native = "`commander.standing.MergeGrowth.violations`: captured first-parent growth"
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return RuleComparison.read(MergeGrowth)
 
 
 class StorageHygieneParityRow(ParityRow):
     number = 19
     capability = "Storage hygiene"
-    current = "`storage.py`: checkout limit, cleanup under 30 GB, allocation floor 5 GB"
-    native = "`UnitStorage`, derived from worktree paths and free disk"
+    current = "`StandingRule.broken` storage delivery (formerly `storage.py`)"
+    native = "`UnitStorage.violations`, `DiskLow.violations`; live `StorageRule` thresholds"
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return StorageComparison.read()
 
 
 class OrderOnlyContactParityRow(ParityRow):
@@ -248,6 +258,10 @@ class MeasuredLoadParityRow(ParityRow):
     )
     phases = (ControlPlanePhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return measured_load()
+
 
 class FinishedWorkTransferParityRow(ParityRow):
     number = 29
@@ -282,6 +296,10 @@ class UnitTimeParityRow(ParityRow):
         "classify large waits"
     )
     phases = (CommanderPagePhase, ControlPlanePhase)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return UnverifiedParity(f"Missing native owner: {cls.native}")
 
 
 class OrderProgressParityRow(ParityRow):
