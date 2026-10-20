@@ -302,6 +302,8 @@ class HistoricalMessage(Message):
     def project(
         cls, message: Message, source: HistorySource, order: int, snapshot: RegistryProvenance
     ) -> HistoricalMessage:
+        message = message.history_snapshot
+
         def creation(name: str) -> float | None:
             declaration = snapshot.threads.get(snapshot.canonical_name(name))
             # A registration created after the message cannot identify its sender

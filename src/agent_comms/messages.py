@@ -78,6 +78,14 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
         )
 
 
+class ClaimHistoryKind(ClaimNoticeKind, declared_name="claim-history"):
+    """A copied claim notice has display facts, not a live claim envelope."""
+
+    @classmethod
+    def message_record(cls) -> type[Message]:
+        return Message
+
+
 class InfoKind(SendableMessageKind):
     pass
 
@@ -524,7 +532,10 @@ class ClaimMessage(Message):
     @property
     def history_snapshot(self) -> Message:
         """A copied history keeps the envelope's display facts and drops its claim."""
-        return Message(**{item.name: getattr(self, item.name) for item in fields(Message)})
+        return Message(**{
+            **{item.name: getattr(self, item.name) for item in fields(Message)},
+            "type": ClaimHistoryKind,
+        })
 
     def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
         return (table(self.claim_transition),)

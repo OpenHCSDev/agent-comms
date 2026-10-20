@@ -1471,11 +1471,10 @@ class UncarriedRecordFormat(Measure):
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-formats-") as scratch:
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
-            # Extracted source is stamped with its commit the way a build stamps it.
-            for module in {module.split(".")[0] for module in modules}:
-                WheelStamp(revision(repo, ref)).write(
-                    Path(scratch) / package / module / "package_stamp.py"
-                )
+            # Tools import Core too; stamp its archived owner, not the tool module.
+            module = Path(*WheelStamp.__module__.split(".")).with_suffix(".py")
+            for owner in Path(scratch).glob(f"**/{module}"):
+                WheelStamp(revision(repo, ref)).write(owner.with_name("package_stamp.py"))
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
                                      *modules], cwd=scratch, env=cls.environment(root),
