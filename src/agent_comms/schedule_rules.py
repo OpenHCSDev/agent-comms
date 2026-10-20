@@ -15,7 +15,7 @@ from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationE
 from .routing import ScheduledTurn
 
 if TYPE_CHECKING:
-    from .goals import Goal
+    from .goals import GoalDeclaration
     from .coordinated_runtime import SelectedExecution
     from .input_drain import InputDrain
     from .thread_identity import OwnerIdentity
@@ -94,7 +94,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.goal.active()
-                self._retain_goal_turns(pending, next(iter(goal), None))
+                self._retain_goal_turns(pending, goal)
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -130,11 +130,12 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     inputs.effects.turns.turn_tasks.pop(session_id, None)
 
     @staticmethod
-    def _retain_goal_turns(pending: list[ScheduledTurn], goal: "Goal | None") -> None:
+    def _retain_goal_turns(pending: list[ScheduledTurn], goal: "GoalDeclaration") -> None:
         """Discard stale goal work without dropping independent incoming turns."""
+        active_ids = frozenset(current.id for current in goal)
         pending[:] = [
             turn for turn in pending
-            if turn.goal_id is None or (goal is not None and turn.goal_id == goal.id)
+            if not turn.autonomous_goal or turn.goal_id in active_ids
         ]
 
 
