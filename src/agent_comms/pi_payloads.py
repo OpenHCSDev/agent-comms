@@ -34,7 +34,9 @@ from .transcript_events import SentTranscript
 from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
-    from .agent_events import ProviderUsage
+    from .agent_events import AgentEvent, ProviderUsage
+    from .backend import TurnSession
+    from .pi_events import AutoRetryEnd
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
@@ -148,7 +150,7 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     @abstractmethod
     def result(self, attempt: int, redact): ...
 
-    def apply(self, event, session):
+    def apply(self, event: AutoRetryEnd, session: TurnSession) -> tuple[AgentEvent, ...]:
         self.finish_request(session)
         return ()
 
@@ -212,12 +214,12 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
 
         super().apply(event, session)
         session.watchdog.retry_recovery_pending = False
-        session.watchdog.phase = FailedPhase(error=CodelessProviderDiagnosticError(
-            session.output.redact(self.final_error)))
         return (
             *event.exhausted(session),
             session.watchdog.state(
-                "failed", "provider_retry_exhausted", 0, phase=session.watchdog.phase,
+                "failed", "provider_retry_exhausted", 0,
+                phase=FailedPhase(error=CodelessProviderDiagnosticError(
+                    session.output.redact(self.final_error))),
             ),
         )
 
