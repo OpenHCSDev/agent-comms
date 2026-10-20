@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.field_codec import FieldCodec, boundary_decoder
+from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo, TodoStore
 from agent_comms.typed_table import TypedStore
 from .backup import StoreBackup
@@ -230,16 +230,11 @@ class TodoRows(StoreCarry):
         return step.revision
 
     @classmethod
-    @boundary_decoder
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        """Decode the external store through its conversion before admitting typed rows."""
-        counts: Mapping[str, int] = {}
-        with cls.store_transaction(root, apply=apply) as db:
-            if db is not None:
-                counts = cls.converted(db)
-                for _row in Todo.stream(db):
-                    pass
-        return cls.carried(root, sum(counts.values()), dict(counts), apply=apply)
+        counts: dict[str, int] = {}
+        with cls.todo_rows(root, apply=apply, convert=lambda db: counts.update(cls.converted(db))):
+            pass
+        return cls.carried(root, sum(counts.values()), counts, apply=apply)
 
     @classmethod
     @abstractmethod
@@ -248,11 +243,18 @@ class TodoRows(StoreCarry):
 
     @classmethod
     @contextmanager
-    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
-        """Retain the original entrypoint for immutable, already-published steps."""
+    def todo_rows(
+        cls,
+        root: Path,
+        *,
+        apply: bool,
+        convert: Callable[[sqlite3.Connection], object] = lambda db: (),
+    ) -> Iterator[sqlite3.Connection | None]:
+        """Old steps use the context body; new steps supply conversion at the same boundary."""
         with cls.store_transaction(root, apply=apply) as db:
             yield db
             if db is not None:
+                convert(db)
                 for _row in Todo.stream(db):
                     pass
 

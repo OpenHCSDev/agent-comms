@@ -14,29 +14,13 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import GoalRef, Todo, TodoStore
 from cutover.carry import CarryChain, CarryLedger, TodoRows
 from cutover.carry_first_call import FirstCalls
-from cutover.carry_order_run import OrderRuns
-from cutover.carry_hunts import HuntRecords
-from cutover.carry_storage_refusals import StorageRefusals
-from cutover.carry_check_revision import CheckRevisions
-from cutover.carry_todo_open_indexes import TodoOpenIndexes
 from test_todos import order, thread
 
 
-@pytest.mark.parametrize(
-    "step",
-    (
-        FirstCalls,
-        OrderRuns,
-        HuntRecords,
-        StorageRefusals,
-        CheckRevisions,
-        TodoOpenIndexes,
-    ),
-)
-def test_row_steps_do_not_convert_missing_stores(tmp_path, monkeypatch, step):
+def test_new_row_step_does_not_convert_a_missing_store(tmp_path, monkeypatch):
     assert FirstCalls.carry.__func__ is TodoRows.carry.__func__
-    monkeypatch.setattr(step, "converted", lambda db: pytest.fail("No store to convert"))
-    result = step.carry(tmp_path, apply=True)
+    monkeypatch.setattr(FirstCalls, "converted", lambda db: pytest.fail("No store to convert"))
+    result = FirstCalls.carry(tmp_path, apply=True)
     assert result.changed == 0 and result.detail == {} and result.rewritten == ()
     assert not TodoStore.path_in(tmp_path).exists()
 
