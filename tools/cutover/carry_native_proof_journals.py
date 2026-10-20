@@ -77,11 +77,9 @@ class NativeProofJournals(Carry):
                 # A rehearsal copies the bus without rewriting SQL identities.
                 # Its bus-owned session belongs to the copied directory, not the live one.
                 local = original
-                if (
-                    original.parent.name == owner
-                    and original.parent.parent.name == "native-sessions"
-                ):
-                    local = root / original.parent.parent.name / owner / original.name
+                relative = Path("native-sessions") / owner / original.name
+                if original == original.parents[2] / relative:
+                    local = root / relative
                 sources.append((original, NativeSessionFiles(local)))
             return tuple(sources)
 
