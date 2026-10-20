@@ -247,6 +247,9 @@ def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, m
 def test_claim_and_keyed_response_append_share_checked_prefix(tmp_path: Path) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
     from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
+    from agent_comms.coordination_session import NativeBoundary
+    from agent_comms.envelope_claim_transitions import NativeClaim
+    from agent_comms.message_reference import MessageReference
     from test_coordination_response import _ready
 
     case = _ready(tmp_path, direct=True)
@@ -254,13 +257,20 @@ def test_claim_and_keyed_response_append_share_checked_prefix(tmp_path: Path) ->
         comms = case.comms
         resource = tmp_path / "owned.py"
         resource.write_text("owned\n")
-        claim = comms.messaging.send(
-            "sender",
-            "owner",
-            "claim",
-            HandoffKind,
-            claims=[ExistingFileClaim(Path("owned.py"))],
-        ).message
+        with NativeBoundary(comms.bus) as boundary:
+            owner = boundary.registry.require("sender")
+            scope = NativeClaim(
+                owner_claimed_generation=boundary.registry.claimed_generations[owner.name],
+                operation_id="a" * 32, turn_id="claim-turn", input_id="claim-input",
+            )
+            acquired = comms.bus.publisher._publish_acquisition_unlocked(
+                boundary.bus_lock, boundary.registry, owner,
+                ExistingFileClaim(Path("owned.py")).normalized(tmp_path), scope,
+                activity=boundary.activity,
+            )
+        (claim,) = comms.bus.log.messages_for_references(
+            (MessageReference(acquired.seq, acquired.message_id),)
+        )
         assert claim.claim_transition is not None
         intent = prepare_fenced_response(
             case.store, case.bus, case.fence, "done",
