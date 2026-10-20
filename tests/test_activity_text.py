@@ -16,7 +16,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_events import ToolExecutionStart
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
-from agent_comms.turn_phase import ModelWaitPhase
+from agent_comms.turn_phase import IdlePhase, ModelWaitPhase, ToolRunningPhase
 
 
 @pytest.mark.parametrize("length", [0, Activity.detail_limit - 1, Activity.detail_limit,
@@ -66,8 +66,7 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
         phase = ModelWaitPhase()
         for index in range(2):
             title = f"tool_{index}_" + "x" * Activity.detail_limit
-            phase = phase.on(ToolExecutionStart(tool_call_id=str(index), tool_name=title),
-                             {str(previous) for previous in range(index)})
+            phase = ToolExecutionStart(tool_call_id=str(index), tool_name=title).on(phase)
             comms.agents.observe_native_phase(lease, phase)
             activity = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
             assert activity.state is ActivityState.WORKING
@@ -92,13 +91,13 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
     def members(result):
         return result.derived[0]["#clock"].members
 
-    output.status(ActivityState.WORKING, "unchanged")
+    output.enter(ToolRunningPhase("unchanged"))
     lease = comms.agents.begin_turn(native.name, "clock-order").turn_lease
     try:
         started = observed()
         assert members(started) == (native.name, cli.name)
         assert comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp >= comms.registry.require(native.name).turn_state.active.started_at
-        output.status(ActivityState.WORKING, "unchanged")
+        output.enter(ToolRunningPhase("unchanged"))
         external = observed()
         assert members(external) == (cli.name, native.name)
         assert not external.same_observation(started)
@@ -121,13 +120,13 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
 def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     thread = comms.registry.declare(comms.registry.new_thread('cli-worker', frozenset(), str(comms.root), execution=ExternalThreadExecution, process_identity=ProcessIdentity.capture(os.getpid())))
     output = ThreadOutput(ExternalTranscript(comms.root, thread.incarnation), comms.agents)
-    output.status(ActivityState.WORKING, "  tool:\n\t" + "x" * Activity.detail_limit)
+    output.enter(ToolRunningPhase("  tool:\n\t" + "x" * Activity.detail_limit))
     activity = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
     assert activity.detail.startswith("tool: x")
     assert activity.detail.endswith("…")
     assert len(activity.detail) == Activity.detail_limit
     assert "\n" not in activity.detail and "\t" not in activity.detail
-    output.status(ActivityState.WORKING, "  short:\n\ttext  ")
+    output.enter(ToolRunningPhase("  short:\n\ttext  "))
     assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).detail == "short: text"
     shown = comms.views.thread_presentations((thread.name,)).require(thread.name)
     assert shown.status.working
@@ -135,5 +134,5 @@ def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     assert shown.marker == "⌛"
     attention = replace(shown, status=shown.status.with_attention())
     assert ExternalThreadExecution.presentation(thread, comms.registry.snapshot().status(thread.name), attention, attention.binding) == attention
-    output.status(ActivityState.IDLE)
+    output.enter(IdlePhase())
     assert not comms.views.thread_presentations((thread.name,)).require(thread.name).status.working

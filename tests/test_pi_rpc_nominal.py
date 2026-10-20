@@ -51,9 +51,7 @@ class AuditFailure(failures.TurnFailure):
 
 
 def test_new_excursion_declares_both_transitions_without_dispatch_edits():
-    phase = ModelWaitPhase().on(
-        PiRpcChannel.decode_record(b'{"type":"audit_pause_start"}\n'), set()
-    )
+    phase = PiRpcChannel.decode_record(b'{"type":"audit_pause_start"}\n').on(ModelWaitPhase())
     assert isinstance(phase, AuditPausePhase)
     assert TurnPhase.member_named(phase.declared_name) is type(phase)
     assert phase.declared_name in TurnPhase.names()
@@ -63,7 +61,7 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
     assert (stalled.stall_reason, stalled.declared_name) == (
         "audit_pause_no_progress", "audit_pause"
     )
-    assert isinstance(phase.on(AuditPauseEnd(), set()), ModelWaitPhase)
+    assert isinstance(AuditPauseEnd().on(phase), ModelWaitPhase)
     assert issubclass(AuditPausePhase, StallExempt)
     assert AuditPausePhase in TurnPhase.members_with(StallExempt)
 
@@ -74,18 +72,18 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     assert (stalled.stall_reason, stalled.declared_name) == (
         "prompt_acceptance_timeout", "prompt_acceptance"
     )
-    phase = ModelWaitPhase().on(pi.CompactionStart(), {"tool"})
+    phase = pi.CompactionStart().on(ModelWaitPhase())
     assert isinstance(phase, CompactionPhase) and phase.pauses_input_clock
     # Compaction completion exits even if a tool was already present.
-    assert isinstance(phase.on(pi.CompactionEnd(), {"tool"}), ModelWaitPhase)
-    phase = ModelWaitPhase().on(pi.ToolExecutionStart(tool_call_id="a"), {"a"})
-    phase = phase.on(pi.ToolExecutionStart(tool_call_id="b"), {"a", "b"})
+    assert isinstance(pi.CompactionEnd().on(phase), ModelWaitPhase)
+    phase = pi.ToolExecutionStart(tool_call_id="a").on(ModelWaitPhase())
+    phase = pi.ToolExecutionStart(tool_call_id="b").on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("a", "b")
-    phase = phase.on(pi.ToolExecutionEnd(tool_call_id="a"), {"b"})
+    phase = pi.ToolExecutionEnd(tool_call_id="a").on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("b",)
-    assert isinstance(phase.on(pi.ToolExecutionEnd(tool_call_id="b"), set()), ModelWaitPhase)
+    assert isinstance(pi.ToolExecutionEnd(tool_call_id="b").on(phase), ModelWaitPhase)
 
 
 @pytest.mark.parametrize(
@@ -291,6 +289,6 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     watchdog.now = 0.0
     watchdog.progress()
     assert wait.timeout() == 180.0
-    watchdog.phase = ModelWaitPhase().on(pi.ToolExecutionStart(), {"tool"})
+    watchdog.phase = pi.ToolExecutionStart().on(ModelWaitPhase())
     session.tool_socket.active_tools = {"tool"}
     assert watchdog.wait_for(session).timeout() is None

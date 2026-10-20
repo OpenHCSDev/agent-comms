@@ -27,7 +27,12 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
-from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted
+from .child_process import (
+    BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
+)
+from .bus_publication import AgentOrigin
+from .external_transcript import ExternalTranscript
+from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -36,8 +41,9 @@ from .field_codec import (
 )
 from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
+from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .standing_rules import UndatedStandingRule
@@ -74,7 +80,7 @@ class FileDeliveryEvidence(DeliveryEvidence):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrderDelivery(DeclaredFamily, affix="Delivery"):
+class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
     evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
                                       metadata={"wire_omit_default": True})
@@ -87,6 +93,9 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     def line(self) -> str:
         return self.work
 
+    def story_text(self) -> str:
+        return self.work
+
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
         if result.outcome != ExitedOutcome(0):
@@ -95,8 +104,9 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
 
     async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
-        check = todo.order.check
-        for each in (check, *todo.order.deletes.checks):
+        order = todo.order.checked()
+        check = order.check
+        for each in (check, *order.deletes.checks):
             await self.require_source(each)
             each.result.require(await self.checked(each))
         return replace(self, at=await self.delivery_time(check))
@@ -110,12 +120,12 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
-    def strikes(
-        self, todo: Todo, order_id: str, actor: ThreadIncarnation
-    ) -> tuple[StrikeTodo, ...]:
-        """An operation has no commit time: recording it later is the commander's delay, so its
-        lateness is judged at the OVERDUE alarm and its delivery strikes nobody."""
+    def merged_commits(self, repo: Repo) -> tuple[str, ...]:
+        """Operations have no commit whose ancestry could prove a merge."""
         return ()
+
+    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
+        """Only a commit delivery can fail a check on delivered source."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -137,6 +147,18 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     def work(self) -> str:
         return f"delivered commit {self.delivered}"
 
+    def merged_commits(self, repo: Repo) -> tuple[str, ...]:
+        return (self.delivered,) if repo.contains(self.delivered, "origin/main") else ()
+
+    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
+        if self.commit != self.delivered:
+            return  # A failed integration check is not evidence that the unit's commit failed.
+        now = time.time()
+        spent = (now - todo.order.checked().at.recorded_at("An order")) / 60
+        FailedCheckStrike.make(todo, now,
+            f"reported done at {self.delivered} but its order check failed: {error}; "
+            f"cost {spent:.1f} minutes").record(goals, todo.id)
+
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
 
@@ -146,15 +168,6 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
             await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
-
-    def strikes(
-        self, todo: Todo, order_id: str, actor: ThreadIncarnation
-    ) -> tuple[StrikeTodo, ...]:
-        """A commit delivered after the order's deadline strikes its holder once."""
-        lateness = self.at.lateness(todo.deadline)
-        reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
-                  f"(caught by {actor.name} at review)")
-        return (StrikeTodo(todo.revision, actor, todo.held(), reason),) * lateness.late()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -663,6 +676,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The order's distance readings; progress that read no commit has none."""
         return DistanceReadings()
 
+    def deadline_strikes(self, todo: Todo, now: float) -> tuple[ObjectiveStrike, ...]:
+        """Observed work or unread progress cannot prove an absence of delivery."""
+        return ()
+
     def stalled(self, ordered: float, now: float) -> bool:
         return False
 
@@ -723,6 +740,7 @@ class Stalling:
 @dataclass(frozen=True)
 class Moving(Stalling):
     """Work whose last commit, push or PR change was observed at ``at``."""
+    seconds: ClassVar[int] = 15 * 60
     at: float = field(kw_only=True)
     readings: DistanceReadings = field(default=DistanceReadings(), kw_only=True, compare=False)
 
@@ -735,6 +753,10 @@ class Moving(Stalling):
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
+    def deadline_strikes(self, todo: Todo, now: float) -> tuple[ObjectiveStrike, ...]:
+        return MissedDeadlineStrike.late(todo, RecordedEventTime(now),
+                                        "without an observed commit or linked pull request")
+
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
         return tuple(MergedProgress.found(source))
 
@@ -1323,13 +1345,18 @@ class LocatedProblemFinding(ProblemFinding):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
+class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
+
+    def observe_objective(self, failure: type[ObjectiveStrike], goals: Goals, todo: Todo,
+                          now: float, pulls: PullRequests) -> tuple[ObjectiveStrike, ...]:
+        """Completed or retired orders do not acquire new pending-work failures."""
+        return ()
 
     def reissued(self, at: float) -> PendingProblemOrder:
         """This order sent again at ``at`` to a new owner, its first-call window kept."""
@@ -1420,6 +1447,9 @@ class FoldedProblemOrder(ProblemOrder):
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return (f"{todo.id} folded into {self.into}: {self.why}",)
 
+    def story(self) -> tuple[StoryLine, ...]:
+        return self.original.story()
+
 
 @dataclass(frozen=True, kw_only=True)
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
@@ -1432,6 +1462,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Check fresh order prose, never reinterpret stored history or shell commands."""
         for text in (*self.edits, *self.banned, self.report, *self.run.instructions()):
             DirectiveText.require(text)
+
+    def story(self) -> tuple[StoryLine, ...]:
+        return (StoryLine(self.at, f"Ordered {self.id}: {'; '.join(self.edits)}"),)
 
     id: str
     owner: FileLine
@@ -1504,6 +1537,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+        return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
+                     if repo.contains(merged.sha))
+
     @property
     def pull_request_reference(self) -> str:
         return f"{self.pull_request_label} {self.id}"
@@ -1540,7 +1577,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
             f"Order: {self.id}", self.pull_request_instruction(todo.id),
-            *self.work_instructions(), f"Deadline: {FieldCodec.encode(todo.deadline)}"))
+            *self.work_instructions()))
 
     def delivered(self, delivery):
         delivery.at.require_delivery()
@@ -1586,6 +1623,10 @@ class PendingProblemOrder(CheckedProblemOrder):
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
 
+    def observe_objective(self, failure: type[ObjectiveStrike], goals: Goals, todo: Todo,
+                          now: float, pulls: PullRequests) -> tuple[ObjectiveStrike, ...]:
+        return failure.observe(goals, todo, now, pulls)
+
     def reissued(self, at: float) -> PendingProblemOrder:
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
                   - self.at.recorded_at("An order"))
@@ -1626,6 +1667,9 @@ class DeliveredProblemOrder(CheckedProblemOrder):
     def line(self) -> str:
         return f"Delivered: {self.delivery.line}, waiting on install"
 
+    def story(self) -> tuple[StoryLine, ...]:
+        return (*super().story(), *self.delivery.story())
+
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
         raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
@@ -1634,6 +1678,11 @@ class DeliveredProblemOrder(CheckedProblemOrder):
         if delivery != self.delivery:
             raise ValueError("The order already records a different delivery.")
         return self
+
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+        commits = self.delivery.merged_commits(repo)
+        return (tuple(self.merged(commit) for commit in commits)
+                or super().observed_merges(repo, source))
 
     def closing_artifact(self) -> str:
         return self.delivery.evidence.artifact()
@@ -1696,6 +1745,9 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
+
+    def require_close(self) -> None:
+        """Retiring an erroneous order does not claim installed work."""
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
@@ -1942,8 +1994,13 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
         return self
 
     def record(self, goals: Goals, problem: str) -> Todo:
-        """Write this operation; one that also revises the holder's Goal routes through it."""
-        return goals.apply_problem(problem, self)
+        """Write this operation; publish its effects only after the canonical row was written."""
+        changed = goals.apply_problem(problem, self)
+        self.after_record(goals, changed)
+        return changed
+
+    def after_record(self, goals: Goals, changed: Todo) -> None:
+        """Most operations have no automatic public effect."""
 
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
@@ -1985,7 +2042,7 @@ class AssignTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(TodoOperation):
+class StrikeTodo(TodoOperation, StoryEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -1997,9 +2054,18 @@ class StrikeTodo(TodoOperation):
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
-        if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
+        if any(self.repeats(recorded) for recorded in self.prior_strikes(current)):
             return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+    def story_text(self) -> str:
+        return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
+
+    def prior_strikes(self, current: Todo) -> tuple[StrikeTodo, ...]:
+        return current.live_strikes(self.previous.owner)
+
+    def matches_objective(self, strike: ObjectiveStrike) -> bool:
+        return False
 
     def repeats(self, recorded: StrikeTodo) -> bool:
         return False
@@ -2012,6 +2078,96 @@ class StorageStrikeTodo(StrikeTodo):
     def repeats(self, recorded: StrikeTodo) -> bool:
         return (self.actor == recorded.actor and self.previous.owner == recorded.previous.owner
                 and self.reason == recorded.reason)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ObjectiveStrike(StrikeTodo, declared_name=None):
+    """An objective failure recorded in the existing strike history, once per order and kind."""
+
+    order_id: str
+
+    @classmethod
+    def make(cls, todo: Todo, now: float, reason: str) -> Self:
+        return cls(todo.revision, StallWatcherIncarnation.watcher(), todo.held(), reason,
+                   RecordedEventTime(now), order_id=todo.order.checked().id)
+
+    @classmethod
+    def observe(cls, goals: Goals, todo: Todo, now: float,
+                pulls: PullRequests) -> tuple[ObjectiveStrike, ...]:
+        return ()
+
+    def prior_strikes(self, current: Todo) -> tuple[StrikeTodo, ...]:
+        # A void is not permission to repeat this same automatic failure on every pass.
+        return current.strikes
+
+    def matches_objective(self, strike: ObjectiveStrike) -> bool:
+        return (self.__class__ == strike.__class__ and self.order_id == strike.order_id
+                and self.previous.owner_identity == strike.previous.owner_identity)
+
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return recorded.matches_objective(self)
+
+    def apply(self, current: Todo) -> Todo:
+        struck = super().apply(current)
+        if struck != current and struck.struck_out(self.previous.owner):
+            return ReleaseTodo(struck.revision, self.actor, self.previous,
+                               StrikeReason(self.reason), self.at).apply(struck)
+        return struck
+
+    def after_record(self, goals: Goals, changed: Todo) -> None:
+        if changed.revision == self.expected_revision:
+            return
+        count = len(changed.live_strikes(self.previous.owner))
+        line = (f"Core strike {count} on {changed.id} order {self.order_id}: "
+                f"{self.previous.owner} {self.reason}"
+                + (f"; {changed.id} taken away" if not changed.holder else ""))
+        goals.bus.publisher.publish_ordinary(
+            Message(sender=changed.creator, target="#comms", body=line, type=InfoKind),
+            origin=AgentOrigin())
+
+
+@dataclass(frozen=True, kw_only=True)
+class MissedDeadlineStrike(ObjectiveStrike):
+    @classmethod
+    def late(cls, todo: Todo, at: EventTime, detail: str) -> tuple[Self, ...]:
+        lateness = at.lateness(todo.deadline)
+        if not lateness.late() or todo.deadline.before(
+                todo.order.checked().at.recorded_at("An order")):
+            return ()
+        strike = cls.make(todo, at.recorded_at("A deadline failure"),
+            f"{todo.id} order {todo.order.checked().id} late by {lateness.seconds:g} s {detail}; "
+            f"missed its order deadline; cost {lateness.seconds / 60:.1f} minutes late")
+        return () if any(strike.repeats(prior) for prior in todo.strikes) else (strike,)
+
+    @classmethod
+    def observe(cls, goals: Goals, todo: Todo, now: float,
+                pulls: PullRequests) -> tuple[ObjectiveStrike, ...]:
+        if not todo.deadline.before(now):
+            return ()
+        source = ProgressSource.of(todo, goals.registry.storage_rule, pulls)
+        return OrderProgress.from_source(source).deadline_strikes(todo, now)
+
+
+@dataclass(frozen=True, kw_only=True)
+class MissedFirstCallStrike(ObjectiveStrike):
+    @classmethod
+    def observe(cls, goals: Goals, todo: Todo, now: float,
+                pulls: PullRequests) -> tuple[Self, ...]:
+        order = todo.order.checked()
+        due = order.first_call_deadline.recorded_at("A first-call deadline")
+        if now <= due:
+            return ()
+        transcript = ExternalTranscript(goals.root, todo.held().owner_identity)
+        if transcript.tool_call_between(order.at.recorded_at("An order"), due):
+            return ()
+        return (cls.make(todo, now,
+            f"made no first tool call before its first-call deadline; "
+            f"cost {(now - due) / 60:.1f} minutes late"),)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FailedCheckStrike(ObjectiveStrike):
+    """DeliverTodo records this failure at the check boundary, before rejecting done."""
 
 
 @dataclass(frozen=True)
@@ -2029,12 +2185,18 @@ class VerdictAudience:
 
 
 @dataclass(frozen=True)
-class OrderVerdict(TodoCommand, declared_name=None):
+class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
+
+    def story_text(self) -> str:
+        return f"{self.actor.name} judged {self.previous.owner}: {self.line}"
+
+    def implied_strikes(self) -> tuple[StrikeTodo, ...]:
+        return ()
 
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
@@ -2054,6 +2216,9 @@ class OrderVerdict(TodoCommand, declared_name=None):
 class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
     tool_call_id: str
 
+    def story_text(self) -> str:
+        return f"{super().story_text()}; tool call {self.tool_call_id}"
+
     def apply(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         _text(self.tool_call_id, "Judged tool call ID", 200)
@@ -2063,6 +2228,9 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 @dataclass(frozen=True)
 class QuotedVerdict(OrderVerdict, declared_name=None):
     quote: str
+
+    def story_text(self) -> str:
+        return f'{super().story_text()}; quoted: "{self.quote}"'
 
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
@@ -2146,6 +2314,9 @@ class SupersededVerdict(ToolCallVerdict):
     reason: str
     line = "Superseded"
 
+    def story_text(self) -> str:
+        return f"{super().story_text()} by {self.replacement}: {self.reason}"
+
     def prepare(self, goals, current):
         replacing = [todo for todo in goals.todos.held_for_commander(self.actor)
                      if todo.sent_in(self.replacement)]
@@ -2170,9 +2341,15 @@ class SendBackVerdict(ToolCallVerdict):
     def line(self) -> str:
         return f"Sent back: {self.reason.text}"
 
+    def implied_strikes(self) -> tuple[StrikeTodo, ...]:
+        return (StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
+                           self.at),)
+
+    def story_text(self) -> str:
+        return f"{super().story_text()} (strike recorded)"
+
     def judged(self, current: Todo) -> Todo:
-        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                            self.at)
+        (strike,) = self.implied_strikes()
         return strike.apply(current)
 
     def record(self, goals: Goals, problem: str) -> Todo:
@@ -2180,12 +2357,16 @@ class SendBackVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class VoidStrikeTodo(TodoOperation):
+class VoidStrikeTodo(TodoOperation, StoryEvent):
     """The commander takes back a strike recorded in error; the strike stays on the record."""
     actor: ThreadIncarnation
     strike: StrikeTodo
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def story_text(self) -> str:
+        return (f"{self.actor.name} voided a strike against {self.strike.previous.owner}: "
+                f"{self.reason}")
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
@@ -2198,8 +2379,11 @@ class VoidStrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class ReleaseTodo(TodoOperation):
+class ReleaseTodo(TodoOperation, StoryEvent):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
+
+    def story_text(self) -> str:
+        return f"{self.actor.name} released {self.previous.owner}: {self.reason.text}"
     actor: ThreadIncarnation
     previous: Assignment
     reason: StrikeReason
@@ -2294,7 +2478,12 @@ class DeliverTodo(TodoOperation):
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
         verified = self.delivery.verified(current, goals.registry)
-        return replace(self, delivery=asyncio.run(verified))
+        try:
+            delivered = asyncio.run(verified)
+        except OrderCheckFailedError as error:
+            self.delivery.check_failed(goals, current, error)
+            raise
+        return replace(self, delivery=delivered)
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
@@ -2302,8 +2491,6 @@ class DeliverTodo(TodoOperation):
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
         return replace(current, order=current.order.delivered(self.delivery),
-                       strikes=(*current.strikes,
-                                *self.delivery.strikes(current, self.order_id, self.actor)),
                        revision=current.revision + 1)
 
 
@@ -2401,6 +2588,17 @@ class Todo(TypedTable):
     @property
     def pending(self):
         return self.order.pending
+
+    def story(self) -> ProblemStory:
+        implied = frozenset(strike for verdict in self.verdicts
+                            for strike in verdict.implied_strikes())
+        sources: tuple[StorySource, ...] = (
+            self.order, *(strike for strike in self.strikes if strike not in implied),
+            *self.voided, *self.released, *self.verdicts,
+        )
+        events = tuple(sorted((event for source in sources for event in source.story()),
+                              key=lambda event: event.at.chronology()))
+        return ProblemStory(self.id, self.order.line, events)
 
     def overdue(self, now: float) -> bool:
         """An undelivered order remains past due until its result is recorded."""
@@ -2672,6 +2870,13 @@ class TodoStore(TypedStore):
     def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
         return cls._one(cls._rows(db, "id=?", (todo_id,)), todo_id)
 
+    def for_order(self, order_id: str) -> tuple[Todo, ...]:
+        """A sent order can cover several linked problems; its ID is not a Todo key."""
+        rows = self._select("json_extract(\"order\",'$.id')=?", (order_id,))
+        if not rows:
+            raise TodoError(f"Unknown saved order: {order_id!r}")
+        return rows
+
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
         return self._one(self._select("id=?", (todo_id,)), todo_id)
@@ -2684,14 +2889,32 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
-    def stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
-        """Observe active held orders without changing owners, strikes or releases."""
-        held = tuple(todo for todo in self._open(
-            "assignment IS NOT NULL", (), OpenTodoState) if todo.pending)
+    def held_orders(self) -> tuple[Todo, ...]:
+        return self._open("assignment IS NOT NULL", (), OpenTodoState)
+
+    def advance_objective_failures(self, goals: Goals) -> None:
+        now = time.time()
+        held = self.held_orders()
         pulls = PullRequests(held)
-        return tuple(todo for todo in held
-                     if OrderProgress.from_source(source := ProgressSource.of(todo, storage, pulls))
-                     .stalled(source.since, time.time()))
+        for observed in held:
+            for failure in ObjectiveStrike.members_with(ObjectiveStrike):
+                current = self.get(observed.id)
+                if not current.holder:
+                    break
+                for strike in current.order.observe_objective(failure, goals, current, now, pulls):
+                    strike.record(goals, current.id)
+
+    def reassignable(self, storage: StorageRule) -> tuple[Todo, ...]:
+        """Include Core-released work, never a commander's deliberately released backlog."""
+        pending = tuple(todo for todo in self._open("1", (), OpenTodoState) if todo.pending)
+        released = tuple(todo for todo in pending if not todo.holder and todo.released
+                         and todo.released[-1].actor == StallWatcherIncarnation.watcher())
+        held = tuple(todo for todo in pending if todo.holder)
+        pulls = PullRequests(held)
+        return released + tuple(todo for todo in held
+                                if OrderProgress.from_source(
+                                    source := ProgressSource.of(todo, storage, pulls))
+                                .stalled(source.since, time.time()))
 
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:
@@ -2699,12 +2922,11 @@ class TodoStore(TypedStore):
         checked = tuple((todo, order) for todo in self.held_for_commander(commander)
                         if isinstance(order := todo.order, CheckedProblemOrder))
         pulls = PullRequests(tuple(todo for todo, _ in checked))
-        completed = tuple(DoneTodoState.closed(todo, order.merged(merged.sha))
+        completed = tuple(DoneTodoState.closed(todo, merged)
                           for todo, order in checked
                           for repo in repos if repo.github.lower() == todo.repo
-                          for merged in MergedProgress.found(
-                              ProgressSource.of(todo, storage, pulls))
-                          if repo.contains(merged.sha))
+                          for merged in order.observed_merges(
+                              repo, ProgressSource.of(todo, storage, pulls)))
         if not completed:
             return
         with self.writing() as db:

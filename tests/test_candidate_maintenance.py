@@ -53,15 +53,15 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
             _SCHEDULE,
         )
         indexed = threading.Event()
-        original = maintenance._drain_candidate
+        original = maintenance.CandidateMaintenance.run
 
-        def observe(root):
-            original(root)
+        def observe(worker):
+            original(worker)
             # Candidate catch-up alone is not completion: the same worker
             # still owns route preparation and its final pending-root check.
             indexed.set()
 
-        monkeypatch.setattr(maintenance, "_drain_candidate", observe)
+        monkeypatch.setattr(maintenance.CandidateMaintenance, "run", observe)
         message = comms.messaging.send("sender", "beta", "selected original").message
         assert indexed.wait(timeout=5), "deferred checkpoint did not catch up"
         page = WakeCandidateIndex(comms.bus.log).page(
@@ -111,14 +111,15 @@ def test_notification_runs_after_wire_and_bus_locks_and_scheduler_defect_raises(
 def test_failed_drain_is_named_and_retires_pending_state(monkeypatch, tmp_path, caplog) -> None:
     comms, _root_id = _wire(tmp_path)
     root = comms.bus.log.path.parent
-    maintenance._pending[root] = (comms.bus.log, 1)
+    worker = maintenance.CandidateMaintenance(comms.bus.log, 1)
+    maintenance._pending[root] = worker
 
     def fail(*args, **kwargs):
         raise ValueError("synthetic index failure")
 
     monkeypatch.setattr(WakeCandidateIndex, "catch_up_committed_append", fail)
     with pytest.raises(maintenance.CandidateMaintenanceFailed) as failed:
-        maintenance._drain_candidate(root)
+        worker.run()
     assert failed.value.root == root
     assert root not in maintenance._pending
     assert "Candidate maintenance failed for" in caplog.text
@@ -152,8 +153,9 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
         ).checkpoint_bytes == first_bytes
         through_bytes = index.log.path.stat().st_size
         hint = index.notify_committed_append(root_id=root_id, through_bytes=through_bytes)
-        maintenance._pending[index.log.path.parent] = (index.log, through_bytes)
-        maintenance._drain_candidate(comms.bus.log.path.parent)
+        worker = maintenance.CandidateMaintenance(index.log, through_bytes)
+        maintenance._pending[index.log.path.parent] = worker
+        worker.run()
         assert not maintenance._pending
         assert index.catch_up_committed_append(hint).caught_up
         page = index.page(
@@ -172,7 +174,7 @@ def test_source_replacement_during_replay_does_not_kill_the_worker(monkeypatch, 
     replay = WakeCandidateIndex._replay_prefix
     replaced, finished = threading.Event(), threading.Condition()
     failures = []
-    drain = maintenance._drain_candidate
+    drain = maintenance.CandidateMaintenance.run
 
     def replace_once(cls, source, *args, **kwargs):
         batch = replay(source, *args, **kwargs)
@@ -185,9 +187,9 @@ def test_source_replacement_during_replay_does_not_kill_the_worker(monkeypatch, 
             replaced.set()
         return batch
 
-    def observed(path):
+    def observed(worker):
         try:
-            drain(path)
+            drain(worker)
         except Exception as error:
             failures.append(error)
         finally:
@@ -199,7 +201,7 @@ def test_source_replacement_during_replay_does_not_kill_the_worker(monkeypatch, 
             return root not in maintenance._pending
 
     monkeypatch.setattr(WakeCandidateIndex, "_replay_prefix", classmethod(replace_once))
-    monkeypatch.setattr(maintenance, "_drain_candidate", observed)
+    monkeypatch.setattr(maintenance.CandidateMaintenance, "run", observed)
     monkeypatch.setattr(maintenance, "schedule_candidate_catchup", _SCHEDULE)
     comms.messaging.send("sender", "beta", "first original")
     assert replaced.wait(5)
@@ -215,11 +217,11 @@ def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tm
     root = comms.bus.log.path.parent
     finished = threading.Condition()
     failures = []
-    drain = maintenance._drain_candidate
+    drain = maintenance.CandidateMaintenance.run
 
-    def observed_drain(path):
+    def observed_drain(worker):
         try:
-            drain(path)
+            drain(worker)
         except Exception as error:
             failures.append(error)
             raise
@@ -231,7 +233,7 @@ def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tm
         with maintenance._guard:
             return root not in maintenance._pending
 
-    monkeypatch.setattr(maintenance, "_drain_candidate", observed_drain)
+    monkeypatch.setattr(maintenance.CandidateMaintenance, "run", observed_drain)
     monkeypatch.setattr(maintenance, "schedule_candidate_catchup", _SCHEDULE)
     messages = [comms.messaging.send("sender", "beta", str(n) + "x" * (128 * 1024)).message
                 for n in range(128)]
