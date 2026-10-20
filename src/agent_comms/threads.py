@@ -413,7 +413,7 @@ class Thread(ThreadProvenance):
 
     def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
         """Only the exact latest completed turn can release a dependency."""
-        return not self.executing and self.observed_turn(claim_scope) == fence.renamed(self.name)
+        return not self.executing and self.observed_turn(claim_scope) == fence
 
     @property
     def is_fork(self) -> bool:

@@ -107,7 +107,7 @@ class RecordedGoalWait(GoalWait):
         return self.wait_id == wait_id
 
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
-        return self.owner.same_publication_birth(owner)
+        return self.owner == owner
 
     def consume_dependency(self, comms, canonical: str) -> bool:
         return comms.goals.consume_goal_wait(canonical, self.wait_id)

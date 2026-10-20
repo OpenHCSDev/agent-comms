@@ -242,7 +242,7 @@ class AgentActivity:
         """A successful later backend turn disproves only an older drain failure."""
         snapshot = self.registry.snapshot()
         thread = snapshot.require(lease.identity.incarnation.name)
-        if thread.turn_lease != lease.renamed(thread.name) or thread.backend != backend:
+        if thread.turn_lease != lease or thread.backend != backend:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()

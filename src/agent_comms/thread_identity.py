@@ -85,7 +85,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         thread = snapshot.threads.get(snapshot.canonical_name(self.name))
-        return thread is not None and thread.incarnation == self.renamed(thread.name)
+        return thread is not None and thread.incarnation == self
 
     def recorded_or(
         self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
@@ -99,9 +99,6 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         return assigned
 
     def selects_lookup(self, lookup: str) -> bool:
-        return False
-
-    def same_publication_birth(self, other: ThreadIncarnation) -> bool:
         return False
 
     def matches_recorded_name(self, name: str, snapshot: RegistryProvenance) -> bool:
@@ -123,8 +120,13 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
 @dataclass(frozen=True)
 class RecordedThreadIncarnation(ThreadIncarnation):
-    """Only a positive recorded birth can select a durable lookup."""
+    """The recorded creation owns identity; names remain registry-resolved routes.
 
+    Equality and hashing use the same birth as ``lookup``. Registry operations
+    still require ``current`` / ``resolved`` to prove the original alias lineage.
+    """
+
+    name: str = field(compare=False)
     created_at: float
 
     @property
@@ -145,9 +147,6 @@ class RecordedThreadIncarnation(ThreadIncarnation):
 
     def selects_lookup(self, lookup: str) -> bool:
         return self.lookup == lookup
-
-    def same_publication_birth(self, other: ThreadIncarnation) -> bool:
-        return self.renamed(other.name) == other
 
     @property
     def birth_description(self) -> str:
@@ -343,13 +342,13 @@ class OwnerIdentity:
 
     def owns(self, thread: Thread, generation: int, process: ProcessIdentity) -> bool:
         return (
-            self.incarnation.renamed(thread.name) == thread.incarnation
+            self.incarnation == thread.incarnation
             and self.generation == generation
             and thread.same_local_process(process)
         )
 
     def require_current(self, thread: Thread, generation: int, process: ProcessIdentity) -> None:
-        if self.incarnation.renamed(thread.name) != thread.incarnation:
+        if self.incarnation != thread.incarnation:
             raise RelationViolationError("Thread incarnation changed during owner attachment")
         if self.generation != generation:
             raise RelationViolationError("Owner lease changed during attachment")
