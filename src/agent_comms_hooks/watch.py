@@ -19,7 +19,6 @@ from os import fstat
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.commander import cli
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
 if TYPE_CHECKING:
@@ -123,8 +122,7 @@ class PeerSync(ClaudeHookProgram):
 
     @classmethod
     def command(cls) -> str:
-        commander = cls.console_script(f"{cli.__name__}:{cli.main.__name__}")
-        return f"{commander} order {cls.verb}"
+        return f"agent-comms-commander order {cls.verb}"
 
     @classmethod
     def sent(cls, config: CommanderConfig, target: str) -> None:
