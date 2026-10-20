@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms.selected_tool_broker import SelectedToolMode
 from agent_comms.tracked_turn import NoObserver, TrackedTurnSession
+from conftest import await_event_or_task
 
 
 class _Measurements:
@@ -65,12 +66,14 @@ async def test_cancelled_turn_unlinks_tool_socket_before_native_retirement(tmp_p
     turn.retain_or_close = MethodType(retain_or_close, turn)
 
     task = asyncio.create_task(turn.complete())
-    await asyncio.wait_for(running.wait(), 2)
+    async with asyncio.timeout(2):
+        await await_event_or_task(running.wait(), task)
     socket_path = sessions / "s"
     assert socket_path.exists()
 
     task.cancel()
-    await asyncio.wait_for(retirement_started.wait(), 2)
+    async with asyncio.timeout(2):
+        await await_event_or_task(retirement_started.wait(), task)
     try:
         assert not socket_path.exists()
     finally:
