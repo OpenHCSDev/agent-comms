@@ -2,7 +2,7 @@
 
 import json
 import os
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 
 import pytest
@@ -46,6 +46,10 @@ async def test_real_rules_publish_once_per_change_and_rotate_units(commander, mo
     floor = comms.registry.storage_rule.floor_gib
     free = floor + 1
     monkeypatch.setattr(StorageRule, "free_gib", lambda self: free)
+    heartbeat = CommanderHeartbeat()
+    with external_commander(comms, "lead"):
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+    assert not comms.bus.inbox("lead")
     comms.registry.declare(
         comms.registry.new_thread(
             "other",
@@ -63,7 +67,6 @@ async def test_real_rules_publish_once_per_change_and_rotate_units(commander, mo
     comms.goals.update_goal("other", SetGoalAction(text="Other unit brief", goal_id="other-goal"))
     create(commander, "P1")
     create(commander, "P2", owner="other")
-    heartbeat = CommanderHeartbeat("claude-ai")
 
     @contextmanager
     def opened():
@@ -124,7 +127,7 @@ async def test_real_rules_publish_once_per_change_and_rotate_units(commander, mo
     assert list(comms.bus.inbox("lead")) == changed
 
 
-async def test_each_registered_request_holder_has_independent_wakes(commander):
+async def test_each_registered_request_holder_has_independent_wakes(commander, monkeypatch):
     comms, _ = commander
     connector_sender(comms)
     comms.registry.declare(
@@ -136,7 +139,7 @@ async def test_each_registered_request_holder_has_independent_wakes(commander):
             text="Second owner request", goal_id="second-request", order=RequestGoalOrder()
         ),
     )
-    heartbeat = CommanderHeartbeat("claude-ai")
+    heartbeat = CommanderHeartbeat()
 
     @contextmanager
     def opened():
@@ -144,6 +147,8 @@ async def test_each_registered_request_holder_has_independent_wakes(commander):
 
     with external_commander(comms, "lead"), external_commander(comms, "second"):
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        assert not comms.bus.inbox("lead") and not comms.bus.inbox("second")
+        monkeypatch.setattr(StorageRule, "free_gib", lambda self: self.floor_gib - 1)
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
         assert len(comms.bus.inbox("lead")) == len(comms.bus.inbox("second")) == 1
         assert not comms.bus.inbox("worker")
@@ -179,8 +184,10 @@ async def test_directive_backlog_ignores_order_revision_and_summarizes_new_direc
     def opened():
         yield comms
 
-    heartbeat = CommanderHeartbeat("claude-ai")
+    heartbeat = CommanderHeartbeat()
     with external_commander(comms, "lead"), external_commander(comms, "worker"):
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        assert not received()
         for number in range(60):
             direct(number)
         initial = comms.registry.require("lead").goal.require()
@@ -217,6 +224,86 @@ async def test_directive_backlog_ignores_order_revision_and_summarizes_new_direc
         assert f"newest {latest.seq} due {latest.due_time}" in directive_lines[0]
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
         assert received() == changed
+
+
+async def test_restarted_heartbeat_sends_only_changes_after_its_baseline(commander, monkeypatch):
+    comms, _ = commander
+    free = comms.registry.storage_rule.floor_gib + 1
+    monkeypatch.setattr(StorageRule, "free_gib", lambda self: free)
+
+    @contextmanager
+    def opened():
+        yield comms
+
+    heartbeat = CommanderHeartbeat()
+    with external_commander(comms, "lead"):
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        assert not comms.bus.inbox("lead")
+        free = comms.registry.storage_rule.floor_gib - 1
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        original = list(comms.bus.inbox("lead"))
+        assert len(original) == 1
+        restarted = CommanderHeartbeat()
+        await Coordination.run_worker(lambda: restarted.watch_pass(opened))
+        await Coordination.run_worker(lambda: restarted.watch_pass(opened))
+        assert list(comms.bus.inbox("lead")) == original
+        free -= 0.1  # The same violation with a new measurement is still unchanged.
+        await Coordination.run_worker(lambda: restarted.watch_pass(opened))
+        assert list(comms.bus.inbox("lead")) == original
+        free = comms.registry.storage_rule.floor_gib + 1
+        await Coordination.run_worker(lambda: restarted.watch_pass(opened))
+        changed = list(comms.bus.inbox("lead"))
+        assert len(changed) == 2
+        lines = [line for line in changed[-1].body.splitlines()
+                 if line.startswith(("RULE ", "NO LONGER CURRENT:"))]
+        assert len(lines) == 2
+        assert all("DISK LOW:" in line for line in lines)
+        assert sum(line.startswith("NO LONGER CURRENT:") for line in lines) == 1
+        await Coordination.run_worker(lambda: restarted.watch_pass(opened))
+        assert list(comms.bus.inbox("lead")) == changed
+
+
+async def test_heartbeat_uses_its_registered_sender_and_groups_unowned_rows(commander):
+    from agent_comms.commander.standing import UnownedWheelSpin
+    from agent_comms.todos import StrikeReason
+
+    comms, _ = commander
+    connector_sender(comms)
+
+    @contextmanager
+    def opened():
+        yield comms
+
+    heartbeat = CommanderHeartbeat()
+    with external_commander(comms, "lead"):
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        assert not comms.bus.inbox("lead")
+        for number in range(3):
+            create(commander, f"P{number}")
+        comms.goals.fire("worker", StrikeReason(
+            "Release these rows so the heartbeat reports the missing unit honestly."), "lead")
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        messages = list(comms.bus.inbox("lead"))
+        assert len(messages) == 1
+        assert messages[0].sender == "commander-heartbeat"
+        assert messages[0].sender != "claude-ai"
+        assert "commander-heartbeat" in comms.registry
+        assert "RULE 3 unowned rows wait for a new unit: P0, P1, P2" in messages[0].body
+        assert "WHEEL SPIN:" not in messages[0].body
+        assert "GROWTH" not in messages[0].body
+        assert "unit-p" not in messages[0].body
+        before = frozenset(UnownedWheelSpin.violations(comms, "lead"))
+        assert len(before) == 3
+        assert frozenset(UnownedWheelSpin.violations(comms, "lead")) == before
+        create(commander, "P3")
+        comms.goals.fire("worker", StrikeReason(
+            "Release the additional row to prove the grouped row list changes."), "lead")
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        messages = list(comms.bus.inbox("lead"))
+        assert len(messages) == 2
+        grouped = [line for line in messages[-1].body.splitlines() if "unowned rows" in line]
+        assert grouped == ["RULE 4 unowned rows wait for a new unit: P0, P1, P2, P3"]
+        assert not comms.registry.require("lead").goal.require().order.directives
 
 
 def test_changing_measurements_do_not_reannounce_a_rule(commander):

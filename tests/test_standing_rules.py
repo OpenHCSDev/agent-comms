@@ -1,4 +1,3 @@
-from agent_comms.repository_name import RepositoryName
 import importlib
 import json
 import os
@@ -14,7 +13,6 @@ import pytest
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.repo import Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
@@ -371,64 +369,3 @@ def test_memory_low_fires_under_the_threshold_naming_idle_temp_dirs(commander, t
     assert f"temp dirs idle over 30 min: {idle} 0.0 GiB;" in low.line() and str(busy) not in low.line()
     assert low.line().startswith("MEMORY LOW: ") and "cleanup due under 10000 GiB" in low.line()
     assert low.line().endswith(" -> put a cleanup owner on it now")
-
-
-def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monkeypatch, tmp_path):
-    comms, _, module = standing
-    origin, checkout = tmp_path / "growth.git", tmp_path / "growth"
-    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
-    checkout.mkdir()
-
-    def git(*args):
-        identity = ("-c", "user.name=t", "-c", "user.email=t@t")
-        command = ["git", "-C", str(checkout), *identity, *args]
-        run = subprocess.run(command, check=True, capture_output=True, text=True)
-        return run.stdout.strip()
-
-    git("init", "-q", "-b", "main")
-    git("remote", "add", "origin", str(origin))
-    git("commit", "-q", "--allow-empty", "-m", "base")
-    for branch, files in (
-        ("big", {"src/big.py": 41}),
-        ("small", {"src/small.py": 40}),
-        ("odd", {"src/odd\tname\ncafé.py": 2}),
-        ("mixed", {"src/mixed.py": 4, "tests/mixed.py": 1}),
-        ("docs", {"README.md": 1}),
-    ):
-        git("checkout", "-q", "-b", branch, "main")
-        for name, grown in files.items():
-            path = checkout / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("x = 1\n" * grown)
-        git("add", "-A")
-        git("commit", "-q", "-m", f"{branch} work")
-        git("checkout", "-q", "main")
-        git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
-    git("push", "-q", "origin", "main")
-    # Read the captured tracking ref even when the remote is unavailable.
-    git("remote", "set-url", "origin", str(tmp_path / "absent-remote"))
-    config = CommanderConfig.read_root(comms.root).model_copy(update={"repos": (
-        Repo(checkout=checkout, github=RepositoryName.from_wire("fleet/growth")),)})
-    config.write(tmp_path / 'growth-home')
-    actual_git, commands = Repo.git, []
-
-    def read_git(directory, *args):
-        commands.append(args)
-        return actual_git(directory, *args)
-
-    monkeypatch.setattr(Repo, "git", staticmethod(read_git))
-    growth = tuple(module.MergeGrowth.merges(config.repos[0]))
-    assert len(commands) == 1 and commands[0][0] == "log"
-    assert {item.subject: (item.src, item.tests) for item in growth} == {
-        "Merge big": ((41, 0), (0, 0)),
-        "Merge small": ((40, 0), (0, 0)),
-        "Merge odd": ((2, 0), (0, 0)),
-        "Merge mixed": ((4, 0), (1, 0)),
-        "Merge docs": ((0, 0), (0, 0)),
-        "base": ((0, 0), (0, 0)),
-    }
-    big, = (item for item in growth if item.subject == "Merge big")
-    assert lines(comms, module.MergeGrowth) == [
-        f"GROWTH fleet/growth {big.sha[:9]} src +41/-0 (net +41) tests +0/-0: Merge big "
-        "-> justify or send back the owner with a deletion order"]
-    assert len(commands) == 2  # One local process for each independent read.

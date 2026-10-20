@@ -407,7 +407,7 @@ class Connector:
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
-        heartbeat = CommanderHeartbeat(CALLER.name)
+        heartbeat = CommanderHeartbeat()
         tasks = (
             asyncio.create_task(Coordination.watch_worker(
                 lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
