@@ -717,7 +717,6 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     body = order_body(repo, 'grep -c two count.txt -> 1')
     problem(script, body)
-    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
@@ -734,10 +733,15 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     fixed = git('rev-parse', 'HEAD')
     with pytest.raises(ValueError, match=r'The order check is 1 away from CountCheckResult\(expected=1\)\.'):
         script.done('P1', fixed, seen=working(comms)[0].screenshot)
+    failed = comms.goals.todos.get('P1')
+    from agent_comms.todos import FailedCheckStrike
+    assert len(failed.strikes) == 1 and isinstance(failed.strikes[0], FailedCheckStrike)
+    assert (failed.order.id, failed.assignment, failed.deadline) == (
+        sent.order.id, sent.assignment, sent.deadline)
     script.correct_check('P1', corrected, why)
     current = comms.goals.todos.get('P1')
     assert (current.order.id, current.assignment, current.deadline, current.strikes) == (
-        sent.order.id, sent.assignment, sent.deadline, sent.strikes)
+        failed.order.id, failed.assignment, failed.deadline, failed.strikes)
     [record] = current.order.check_corrections
     assert (record.previous, record.check, record.reason) == (
         sent.order.check, OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)), why)

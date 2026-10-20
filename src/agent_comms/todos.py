@@ -100,8 +100,9 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
 
     async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
-        check = todo.order.check
-        for each in (check, *todo.order.deletes.checks):
+        order = todo.order.checked()
+        check = order.check
+        for each in (check, *order.deletes.checks):
             await self.require_source(each)
             each.result.require(await self.checked(each))
         return replace(self, at=await self.delivery_time(check))
