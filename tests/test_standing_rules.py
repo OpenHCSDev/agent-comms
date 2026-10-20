@@ -246,7 +246,8 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     assert unowned.todo.id == "P2"
     # Firing releases P2 without striking its recently active worker on that order.
     # Reuse that eligible idle unit instead of allocating a second process.
-    assert type(unowned.dispatch) is module.ReusedWorkDispatch
+    [dispatch] = unowned.dispatches(comms, "lead")
+    assert type(dispatch) is module.ReusedWorkDispatch
     assert unowned.unit == "worker"
     assert unowned.line() == (
         f"WHEEL SPIN: {unowned.unit} holds no order while P2 is unowned"

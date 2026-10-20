@@ -1,6 +1,7 @@
 """State-level sanity checks, not the required native startup/first-reply proof."""
 
 from dataclasses import replace
+import time
 
 import pytest
 
@@ -9,6 +10,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import StandingRule
 from agent_comms.todos import DoneTodoState, OperationDelivery, ProblemOrder, StrikeReason
 from agent_comms.phase_tasks import UnspecifiedPhaseTask
 from agent_comms.work_dispatch import CheckedPhaseTask, ReusedWorkDispatch, WorkDispatch
@@ -86,13 +88,41 @@ def test_one_rule_pairs_idle_units_before_allocating_unowned_fallbacks(commander
     rules = UnownedWheelSpin.violations(comms, "lead")
     assert {rule.todo.id for rule in rules} == {"P1", "P2"}
     assert len({rule.unit for rule in rules}) == 2
-    reused = [rule for rule in rules if isinstance(rule.dispatch, ReusedWorkDispatch)]
-    fresh = [rule for rule in rules if type(rule.dispatch) is WorkDispatch]
+    dispatches = [dispatch for rule in rules for dispatch in rule.dispatches(comms, "lead")]
+    reused = [dispatch for dispatch in dispatches if isinstance(dispatch, ReusedWorkDispatch)]
+    fresh = [dispatch for dispatch in dispatches if type(dispatch) is WorkDispatch]
     assert len(reused) == len(fresh) == 1
-    assert reused[0].unit == spare.name
-    assert not fresh[0].todo.holder
+    assert reused[0].name == spare.name
+    assert all(not rule.todo.holder for rule in rules)
     # Selection must not allocate or launch either destination.
     assert set(comms.registry.all_threads()) == {"lead", "worker", "spare"}
+
+
+def test_unowned_heartbeat_identity_survives_time_and_unrelated_todo_fields(commander, monkeypatch):
+    comms, _ = commander
+    create(commander, "P1")
+    create(commander, "P2")
+    comms.goals.fire("worker", StrikeReason("Release both checked orders for reassignment."), "lead")
+    spare = comms.registry.declare(comms.registry.new_thread(
+        "spare", frozenset({"comms"}), str(comms.root), created_at=3.0))
+    working(comms, spare.name, spare.created_at)
+    clock = [time.time()]
+    monkeypatch.setattr(time, "time", lambda: clock[0])
+    first = UnownedWheelSpin.violations(comms, "lead")
+    clock[0] += 30
+    second = UnownedWheelSpin.violations(comms, "lead")
+    assert len(first) == len(second) == 2  # one paired unit and one unpaired allocation
+    assert StandingRule.heartbeat_changes(first, second) == ()
+    assert frozenset(first) == frozenset(second)
+    rule = first[0]
+    refreshed = replace(rule, todo=replace(rule.todo, text="A refreshed non-identity field"))
+    assert refreshed == rule and hash(refreshed) == hash(rule)
+    revised = replace(rule, todo=replace(rule.todo, revision=rule.todo.revision + 1))
+    assert revised != rule and replace(rule, unit="another-unit") != rule
+    for current in second:
+        [dispatch] = current.dispatches(comms, "lead")
+        assert dispatch.action.order.at.recorded_at("Dispatch") == clock[0]
+        assert dispatch.action.assigner == comms.registry.require("lead").incarnation
 
 
 def test_released_order_preserves_the_two_owner_trace_requirement(commander):
