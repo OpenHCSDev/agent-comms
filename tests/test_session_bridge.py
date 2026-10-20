@@ -19,7 +19,6 @@ from agent_comms.cli_bridges.monitor import AttachMonitor, EndSession, MonitorSe
 from agent_comms.cli_bridges.shared import Binding, BridgeLog, DeliveryRow, MONITOR_FRAME, ObservedMonitor, Options, Serve
 from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, UnconfirmedOutcome
 from agent_comms.messages import InfoKind, Message
-from agent_comms_hooks import ClaudeHook
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
@@ -270,17 +269,16 @@ async def test_confirmed_outcome_cannot_be_downgraded_by_socket_completion(endpo
     assert DeliveryRow.select(bridge.db)[0].outcome is DeliveredOutcome
 
 
-def test_enrol_is_idempotent_and_guard_reports_only_missing_reader(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(WatchClaim, 'path', property(lambda self: tmp_path / 'session.lock'))
+def test_enrol_is_idempotent_and_refuses_another_command(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
     claim = WatchClaim('session')
     record = WatchRecord('viewer', str(tmp_path), ('bridge', 'watch'))
     claim.enrol(record)
     assert claim.state().record == record
     with claim.held(record):
         claim.enrol(record)
-        hook = ClaudeHook('session', 'PostToolUse')
-        claim.state().report(hook)
-        assert 'Delivery is paused' in capsys.readouterr().out
+        with pytest.raises(ValueError):
+            claim.enrol(WatchRecord('viewer', str(tmp_path), ('other', 'watch')))
+        assert not claim.has_reader()
         with claim.reader_held():
-            claim.state().report(hook)
-            assert capsys.readouterr().out == ''
+            assert claim.has_reader()

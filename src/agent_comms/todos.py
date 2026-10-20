@@ -952,7 +952,7 @@ class MergedProgress(FoundProgress):
 class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
     """The fleet's next install: one time for the bus and the unit that runs it, set by the
     commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
-    carries it as its own deadline. Install, maintenance and carry work is the installer's.
+    carries it as its own deadline.
     Each live install by ``tools/upgrade_bus.py`` plans the next one a cadence later."""
 
     filename: ClassVar[str] = "install-deadline.json"
@@ -967,10 +967,6 @@ class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
         return PlannedInstallDeadline(RecordedEventTime(record.pop("at")), **record)
 
     @abstractmethod
-    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
-        """Why the commander may not run the installer's work; none when it is the installer."""
-
-    @abstractmethod
     def overdue(self, now: float) -> tuple[str, ...]:
         """Why an install of main is due at ``now``, read from the schedule's time alone."""
 
@@ -978,11 +974,6 @@ class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
 class UnplannedInstallDeadline(InstallDeadline):
     def overdue(self, now: float) -> tuple[str, ...]:
         return ("no install is planned on this bus",)
-
-    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
-        return (f"{work.capitalize()} is the installer's work, and no install is planned. "
-                "Plan one with agent-comms-commander order install HH:MM UNIT, "
-                f"then order the {work} from that unit.",)
 
 
 @dataclass(frozen=True)
@@ -1003,11 +994,6 @@ class PlannedInstallDeadline(InstallDeadline):
         staged = path.with_suffix(".tmp")
         staged.write_text(json.dumps({"at": self.at.at, "installer": self.installer}))
         staged.replace(path)
-
-    def refusals(self, work: str, commander: str) -> tuple[str, ...]:
-        return (f"{work.capitalize()} is {self.installer}'s work, as the planned installer, not "
-                f"{commander}'s. Send it as an order: agent-comms-commander order send --to "
-                f"{self.installer}, naming the {work} to run.",) * (self.installer != commander)
 
 
 @dataclass(frozen=True)

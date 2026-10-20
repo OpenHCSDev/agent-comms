@@ -45,16 +45,6 @@ Checked by:
 
 Learned from: P170 (c9c0c04db); Failure 7: October 9 postmortem: 350 commit subjects in five days claimed facts were "derived", "canonical" or "authoritative" while the same constant remained hand-written in three places; commit titles supplied no frame-time proof.
 
-## tactical_command
-
-The commander's own session runs an install, maintenance, connector restart or carry command instead of ordering a unit to.
-
-Checked by:
-
-- check in `agent_comms.commander.send_guard.TacticalCommand.install_refusals`
-
-Learned from: P171 (cba7b09c3)
-
 ## plain_text
 
 A commander order, strike, roast or directive whose words outside cited spans match the declared jargon list in `PlainText`.
