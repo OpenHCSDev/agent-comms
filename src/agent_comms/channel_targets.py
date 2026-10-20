@@ -207,16 +207,35 @@ class NamedTarget(CommandTarget):
         """Non-direct targets impose no exact-recipient requirement."""
 
 
-class ThreadTarget(NamedTarget, ConversationPreparation[NamedTarget]):
-    history_result_type = DmHistoryPageResult
-    kind = "thread"
-    incoming_scope = "direct message"
+@dataclass(frozen=True)
+class ThreadViewTarget(ConversationPreparation["ThreadViewTarget"]):
+    """A participant's view identity, without command or delivery capabilities."""
+
+    name: str
 
     def native(self) -> NativeThreadTarget:
         return NativeThreadTarget(self.name)
 
     def external(self) -> ThreadTarget:
-        return self
+        return ThreadTarget(self.name)
+
+    def canonical_name(self, canonical):
+        return canonical(self.name)
+
+    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
+        if viewer is None:
+            raise ValueError("DM history requires --as <participant>.")
+        return direct(viewer, self.name)
+
+    def available(self, snapshot) -> bool:
+        return self.canonical_name(snapshot.canonical_name) in snapshot.threads
+
+
+class ThreadTarget(ThreadViewTarget, NamedTarget):
+    history_result_type = DmHistoryPageResult
+    kind = "thread"
+    incoming_scope = "direct message"
 
     def require_frozen_recipients(self, message, audience):
         message.role.require_recipients(self, audience)
@@ -225,17 +244,8 @@ class ThreadTarget(NamedTarget, ConversationPreparation[NamedTarget]):
     def direct_names(self):
         return self.names
 
-    def canonical_name(self, canonical):
-        return canonical(self.name)
-
     def require_dm_peer(self):
         return self.name
-
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
-                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        if viewer is None:
-            raise ValueError("DM history requires --as <participant>.")
-        return direct(viewer, self.name)
 
     def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
@@ -243,9 +253,6 @@ class ThreadTarget(NamedTarget, ConversationPreparation[NamedTarget]):
 
     def contexts(self, declaration, channel):
         return declaration.selection_channels(channel, self.name)
-
-    def available(self, snapshot) -> bool:
-        return self.canonical_name(snapshot.canonical_name) in snapshot.threads
 
     def pending_count(self, counts, snapshot, require_channel):
         return counts.get(snapshot.require(self.name).name, 0)
@@ -300,7 +307,7 @@ class ThreadTarget(NamedTarget, ConversationPreparation[NamedTarget]):
         views.mark_thread_user_read(self.name, worktree=worktree)
 
 
-class NativeThreadTarget(ThreadTarget):
+class NativeThreadTarget(ThreadViewTarget):
     """A saved reply view, not the human DM with that participant."""
 
 

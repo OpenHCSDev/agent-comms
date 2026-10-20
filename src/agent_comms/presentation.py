@@ -16,7 +16,7 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
-from .channel_targets import ChannelTarget, CommandTarget, NativeThreadTarget, ThreadTarget
+from .channel_targets import ChannelTarget, CommandTarget, NativeThreadTarget, ThreadTarget, ThreadViewTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
@@ -689,7 +689,7 @@ class ThreadView(ThreadRecord):
 class CoordinationSnapshot:
     threads: Mapping[str, ThreadView]
     channels: Mapping[str, ChannelView]
-    unread: Mapping[CommandTarget, UnreadPresentation]
+    unread: Mapping[CommandTarget | ThreadViewTarget, UnreadPresentation]
     last_sent: Mapping[str, float]
     references: DisplayReferences
     channel_order: type[ChannelSort] = NameChannelSort
@@ -712,7 +712,7 @@ class CoordinationSnapshot:
             registry, declarations.visible(visibility), catalog.pinned_members(), catalog.list_order,
             activities, sent, messages, visibility,
         ))
-        counts: dict[CommandTarget, UnreadPresentation] = {
+        counts: dict[CommandTarget | ThreadViewTarget, UnreadPresentation] = {
             ChannelTarget(name): unread(ChannelTarget(name)) for name in channels}
         counts.update((target, unread(target)) for target in map(ThreadTarget, threads))
         counts.update((NativeThreadTarget(name), UnobservedUnread()) for name in threads)

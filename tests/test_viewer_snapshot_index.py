@@ -120,7 +120,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         assert comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent.items(), registry=basis.registry) == sent
         assert "bob" in sent and "renamed-bob" not in sent
     latest = comms.views.viewer_snapshot(str(tmp_path))
-    assert dm_counts(latest.unread) == {"renamed-bob": 1}
+    assert dm_counts(latest) == {"renamed-bob": 1}
     assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
 
 
@@ -254,7 +254,7 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
         while receiver.poll():
             answers.append(receiver.recv())
         completed = [answer for answer in answers if isinstance(answer, SidebarObserved)][-1]
-        assert dm_counts(completed.snapshot.unread) == {"sender": 2}
+        assert dm_counts(completed.snapshot) == {"sender": 2}
         assert not {reference.name for reference, shown in completed.snapshot.unread.items() if shown.pending}
         assert service.interest.observations[SidebarReading].request is request
     finally:
@@ -280,7 +280,7 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
 
     monkeypatch.setattr(comms.bus.log, "opened_wire_snapshot", observed)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
-    assert dm_counts(snapshot.unread) == {"bob": 1}
+    assert dm_counts(snapshot) == {"bob": 1}
     assert snapshot.unread[ChannelTarget('#team')].count == 1
     assert snapshot.last_sent["bob"] > 0
     assert len(opened) == 1 and opened[0].stream.closed
@@ -559,7 +559,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
             viewer, (messages[1], messages[4]), comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer, displayed)
-    assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread) == {"bob": 2}
+    assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path))) == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
     from agent_comms.routing import DeliveryScope
 
@@ -574,7 +574,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     assert expected == {"renamed-bob": 2}
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         snapshot = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-        assert dm_counts(snapshot.unread) == expected
+        assert dm_counts(snapshot) == expected
         assert decode.call_count == 0
     ledger = comms.bus.reads.read()
     receiver, connection = Pipe()
@@ -587,14 +587,14 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             receiver.recv()
         observer = service.interest.observations[SidebarReading]
         published = observer.published
-        assert dm_counts(published.snapshot.unread) == expected
+        assert dm_counts(published.snapshot) == expected
         with closing(CoordinationStore.writer(BusRouteCounts(comms.bus.log.path).path)) as writer:
             writer.execute("BEGIN IMMEDIATE")
             comms.messaging.send("renamed-bob", viewer, "during index contention").message
             # Human unread uses the page index, so an unrelated route writer
             # must neither defer the new count nor stall the existing observer.
             with patch.object(CoordinationStore, "writer_timeout", 0):
-                assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread) == {
+                assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path))) == {
                     "renamed-bob": 3}
                 await service.observe(set())
             writer.rollback()
@@ -605,8 +605,8 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         while receiver.poll():
             recovered.append(receiver.recv())
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
-        assert dm_counts(latest.snapshot.unread) == {"renamed-bob": 3}
-        assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread) == {"renamed-bob": 3}
+        assert dm_counts(latest.snapshot) == {"renamed-bob": 3}
+        assert dm_counts(wire(tmp_path).views.viewer_snapshot(str(tmp_path))) == {"renamed-bob": 3}
         assert service.interest.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.reads.read() == ledger

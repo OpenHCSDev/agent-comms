@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from agent_comms.channel_targets import CommandTarget
+    from agent_comms.channel_targets import CommandTarget, ThreadViewTarget
     from agent_comms.presentation import CoordinationSnapshot
 
 
@@ -15,7 +15,7 @@ class UnreadPresentation(ABC):
     pending = False
 
     @staticmethod
-    def for_view(snapshot: CoordinationSnapshot, target: CommandTarget) -> UnreadPresentation:
+    def for_view(snapshot: CoordinationSnapshot, target: CommandTarget | ThreadViewTarget) -> UnreadPresentation:
         return snapshot.unread[target]
 
     @property

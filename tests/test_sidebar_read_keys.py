@@ -44,7 +44,7 @@ def test_idle_sidebar_does_not_read_keys_and_append_only_reads_changed_thread(tm
         for number in range(10):
             snapshot = comms.views.viewer_snapshot(
                 str(tmp_path), RosterVisibility(archived=number % 2 == 0))
-            assert {reference.name: shown.count for reference, shown in snapshot.unread.items() if isinstance(reference, NativeThreadTarget)} == ({'worker': 1, 'other': 1} if number % 2 == 0 else {'worker': 1})
+            assert {name: snapshot.unread[NativeThreadTarget(name)].count for name in snapshot.threads} == ({'worker': 1, 'other': 1} if number % 2 == 0 else {'worker': 1})
         assert calls == []
         append(source, content="Only the worker changed")
         comms.views.viewer_snapshot(str(tmp_path))
