@@ -405,10 +405,8 @@ class Commander(CommanderContext):
 
     def say(self, units, body_file):
         body = open(body_file).read()
-        # Numbered edits or a report line are an order: it needs a deadline, so it goes through send.
-        if len(re.findall(r'(?m)^\s*\d+[.)] ',
-            body)) >= 2 or re.search(r'(?mi)^\s*(report|due)\b.*:', body):
-            sys.exit('Refused: a numbered edit list or a Report/Due line is an order. Use `order send` so it gets a tracked deadline.')
+        if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) >= 2:
+            sys.exit('Refused: an edit list needs a tracked deadline; use order send with a JSON file.')
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip()))
 
