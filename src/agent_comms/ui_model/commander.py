@@ -1,4 +1,5 @@
 """Commander cards prepared by Core from its existing order and progress owners."""
+
 from __future__ import annotations
 
 import time
@@ -82,18 +83,27 @@ class OpenCardDetail(CardDetail):
     @property
     def text(self) -> str:
         lines = [
-            order.todo.order.instructions(order.todo) + "\nLatest work: " + order.progress.line
+            order.todo.order.checked().instructions(order.todo)
+            + "\nLatest work: "
+            + order.progress.line
             for order in self.orders
         ]
-        lines.append("Published commits:\n" + "\n".join(
-            f"{order.todo.id}: {point.sha}" for order in self.orders for point in order.published
-        ))
+        lines.append(
+            "Published commits:\n"
+            + "\n".join(
+                f"{order.todo.id}: {point.sha}"
+                for order in self.orders
+                for point in order.published
+            )
+        )
         lines.append("Recent turns (newest first):")
         return "\n\n".join(lines)
 
     @property
     def turn_lines(self) -> tuple[str, ...]:
-        return tuple(turn.line for turn in self.turns.turns) or ("No recorded turns.",)
+        return tuple(
+            f"Turn {turn.turn_id}: {len(turn.events)} recorded events" for turn in self.turns.turns
+        ) or ("No recorded turns.",)
 
 
 @dataclass(frozen=True)
@@ -133,14 +143,21 @@ class CommanderModel:
         grouped: dict[ThreadIncarnation, list[CommanderOrder]] = {}
         for todo in todos:
             source = MeasuredProgressSource.of(todo, storage, pulls)
-            grouped.setdefault(todo.held().owner_identity, []).append(CommanderOrder(
-                todo, OrderProgress.from_source(source), todo.overdue(now),
-                tuple(source.published()), source.pushes,
-            ))
+            grouped.setdefault(todo.held().owner_identity, []).append(
+                CommanderOrder(
+                    todo,
+                    OrderProgress.from_source(source),
+                    todo.overdue(now),
+                    tuple(source.published()),
+                    source.pushes,
+                )
+            )
         cards = []
         for unit, orders in grouped.items():
             if comms.registry.require(unit.name).incarnation != unit:
-                raise ValueError(f"Order holder {unit.name} changed incarnation; refresh its assignment.")
+                raise ValueError(
+                    f"Order holder {unit.name} changed incarnation; refresh its assignment."
+                )
             current = tuple(orders)
             detail: CardDetail = CardDetail()
             if unit in request.expanded:
@@ -148,8 +165,10 @@ class CommanderModel:
             cards.append(UnitCard(unit, current, detail))
         alarms = tuple(
             f"STALLED {order.todo.held().owner} {order.todo.id}: {order.progress.line}"
-            for card in cards for order in card.orders
-            if order.todo.pending and order.progress.stalled(order.todo.order.checked().at.recorded_at("An order"), now)
+            for card in cards
+            for order in card.orders
+            if order.todo.pending
+            and order.progress.stalled(order.todo.order.checked().at.recorded_at("An order"), now)
         )
         return cls(commander, tuple(sorted(cards, key=lambda card: card.priority)), alarms)
 
