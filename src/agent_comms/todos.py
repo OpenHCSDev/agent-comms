@@ -1401,6 +1401,9 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
+    def require_installation(self) -> None:
+        raise ValueError("Check the delivered order before recording installation.")
+
     def require_withdrawal(self) -> None:
         raise ValueError("Only an undelivered order can be withdrawn.")
 
@@ -1696,9 +1699,11 @@ class DeliveredProblemOrder(CheckedProblemOrder):
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
+    def require_installation(self) -> None:
+        self.delivery.proof_build.require_installed()
+
     def installed(self, works, artifact):
         self.run.require_closing(works)
-        self.delivery.proof_build.require_installed()
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
     def require_checked(self, problem: str) -> None:
@@ -2520,6 +2525,12 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
 class InstallTodo(CloseOrderTodo):
     works: str
     artifact: str
+
+    def prepare(self, goals, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.order.require_installation()
+        return self
 
     def closed(self, current: Todo) -> ProblemOrder:
         if not Path(self.artifact).is_file():
