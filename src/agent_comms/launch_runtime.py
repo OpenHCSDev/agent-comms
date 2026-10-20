@@ -211,6 +211,11 @@ class ExplicitLaunchRoot(LaunchRoot):
 
 
 class CurrentLaunchRoot(LaunchRoot):
+    @classmethod
+    def capture(cls) -> CurrentLaunchRoot:
+        from .active_route import CommsRoute
+        return cls(CommsRoute.current().observe_root())
+
     @contextmanager
     def write_scope(self):
         from .active_route import guard_default_route_write
@@ -358,6 +363,15 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
         record = cls.read(cls.argument_path(arguments))
         index = arguments.index(cls.argument)
         del arguments[index:index + 2]
+        cls.install(record)
+        return record
+
+    @classmethod
+    def client_startup(cls, arguments: list[str]) -> LaunchRecord:
+        """Client entrypoints consume a supplied record or select the current route."""
+        if cls.argument in arguments:
+            return cls.startup(arguments)
+        record = CommandLineLaunchRecord.entrypoint(CurrentLaunchRoot.capture())
         cls.install(record)
         return record
 
