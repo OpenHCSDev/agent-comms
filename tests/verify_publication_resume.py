@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+from uuid import uuid4
 from unittest.mock import patch
 
 from agent_comms.active_route import ActiveRoute, publish_active_route
@@ -27,10 +28,11 @@ def main():
     units = ('core-read-locks-2', 'core-goal-retry')
     target = Path('/home/ts/.local/share/agent-comms/current').resolve()
     previous = Path(sys.executable).parent.parent.resolve()
-    home = base / 'private-home-3'
+    run = uuid4().hex
+    home = base / f'private-home-{run}'
     home.mkdir(mode=0o700)
     prepare_runtime_home(home)
-    with CheckRoot(source, units, base / 'bus-copy-3').open() as copied:
+    with CheckRoot(source, units, base / f'bus-copy-{run}').open() as copied:
         shutil.copy2(source.root / 'carries.json', copied.root / 'carries.json')
         chain = CarryChain.at(checkout, 'HEAD')
         assert not chain.pending(CarryLedger(copied.root).applied())
@@ -85,6 +87,7 @@ def main():
             stack.owners(copied.root, 'stop', list(units))
         finally:
             os.environ['HOME'] = original_home
+            shutil.rmtree(home)
 
 
 if __name__ == '__main__':

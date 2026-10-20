@@ -246,6 +246,9 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
 
     def restart(self, lifecycle, request) -> tuple[OwnerRestartResult, ...]:
         snapshot = lifecycle.registry.snapshot()
+        for original in self.selection:
+            if snapshot.require(original.name).incarnation != original.identity.incarnation:
+                raise ValueError('Saved publication owner incarnation changed')
         running = replace(request, names=tuple(
             thread.name for thread in request.threads(snapshot)
             if thread.restart_candidates(snapshot.status(thread.name))))
@@ -254,16 +257,17 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
         # environment is gone; normal start derives their declared launch anew.
         # The stopped batch has released its wire/route locks before this step.
         for original in self.selection:
+            if any(result.thread == original.name for result in results):
+                continue
             thread = lifecycle.registry.require(original.name)
             if thread.incarnation != original.identity.incarnation:
                 raise ValueError('Saved publication owner incarnation changed')
-            if not thread.process_alive:
-                completed = subprocess.run([
-                    self.runtime / 'bin/agent-comms', '--root', str(lifecycle.root),
-                    'start', '--name', original.name,
-                ], capture_output=True, text=True, check=True, timeout=60)
-                started = FieldCodec.decode(OwnerStartResult, FieldCodec.parse(completed.stdout))
-                results += (OwnerRestartResult(original.name, original.process.pid, started.pid),)
+            completed = subprocess.run([
+                self.runtime / 'bin/agent-comms', '--root', str(lifecycle.root),
+                'start', '--name', original.name,
+            ], capture_output=True, text=True, check=True, timeout=60)
+            started = FieldCodec.decode(OwnerStartResult, FieldCodec.parse(completed.stdout))
+            results += (OwnerRestartResult(original.name, original.process.pid, started.pid),)
         return results
 
     def stopped_resources(self, lifecycle):
