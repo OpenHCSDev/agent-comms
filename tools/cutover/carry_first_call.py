@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.field_codec import boundary_decoder
 from agent_comms.todos import Todo
 from agent_comms.typed_table import TypedRow
 
@@ -28,17 +29,21 @@ class FirstCalls(carry.TodoRows):
     """Strip the copy throughout both declared locations of saved orders."""
 
     @classmethod
+    @boundary_decoder
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         changed = 0
         with cls.todo_rows(root, apply=apply) as db:
             if db is not None:
-                for column in ("order", "prior_orders"):
-                    saved = SavedKey.read(db.execute(
-                        f'SELECT t.id, n.fullkey AS path FROM "{Todo.declared_name}" t,'
-                        f' json_tree(t."{column}") n WHERE n.key=?'
-                        ' ORDER BY length(n.fullkey) DESC',
-                        ("first_call",),
-                    ))
+                for field in Todo._fields_named(("order", "prior_orders")):
+                    column = field.wire_name
+                    saved = SavedKey.read(
+                        db.execute(
+                            f'SELECT t.id, n.fullkey AS path FROM "{Todo.declared_name}" t,'
+                            f' json_tree(t."{column}") n WHERE n.key=?'
+                            " ORDER BY length(n.fullkey) DESC",
+                            ("first_call",),
+                        )
+                    )
                     for row in saved:
                         db.execute(
                             f'UPDATE "{Todo.declared_name}"'
