@@ -593,7 +593,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
     @property
     def measured_tokens(self) -> PiCount:
-        return self.usage.total_tokens
+        return self.stop_reason.measured(self.usage.total_tokens)
 
     def require_failed_terminal(self):
         raise ValueError("Native recovery requires an unambiguous failed terminal")
