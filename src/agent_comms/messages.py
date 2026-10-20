@@ -380,6 +380,11 @@ class Message:
         self.task.require_target(self.target, snapshot)
         self.task.require_publication(sender, snapshot, original_source)
 
+    @property
+    def history_snapshot(self) -> Message:
+        """Retain display facts, never another root's resource-claim authority."""
+        return self
+
     def checkpoint_rows(self, previous_sequence: int):
         """The envelope declares both publication and optional claim facts."""
         from .private_bus_checkpoint import ClaimCommits, PublicMessages
@@ -515,6 +520,11 @@ class ClaimMessage(Message):
         if (transition.owner != self.sender or transition.seq != self.seq
                 or transition.message_id != self.message_id):
             raise RelationViolationError('Claim transition does not bind this message.')
+
+    @property
+    def history_snapshot(self) -> Message:
+        """A copied history keeps the envelope's display facts and drops its claim."""
+        return Message(**{item.name: getattr(self, item.name) for item in fields(Message)})
 
     def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
         return (table(self.claim_transition),)
