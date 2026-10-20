@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bus_history import read_history
+from agent_comms.private_bus_checkpoint import ClaimCommits
 from dataclasses import replace
 from pathlib import Path
 
@@ -62,20 +62,23 @@ def nominal_broker_stub(monkeypatch):
     return intent_type, mode_type, bound
 
 
-def test_owner_configuration_requires_nominal_intent_and_private_binding(
-    private_directory, nominal_broker_stub
+@pytest.mark.asyncio
+async def test_owner_configuration_requires_nominal_intent_and_private_binding(
+    private_directory, private_comms, nominal_broker_stub
 ):
     intent_type, _mode_type, _bound = nominal_broker_stub
-    wire = private_directory / "wire"
+    wire = private_directory / "shared"
     wire.mkdir(mode=0o700)
     comms = Comms(wire)
     with pytest.raises(TypeError, match="nominal owner intent"):
         CommsAgent(comms, private_selected_tool_intent=object())
     with pytest.raises(PublicationActivationBlocked, match="private bus root"):
         CommsAgent(comms, private_selected_tool_intent=intent_type())
-    comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(comms, private_selected_tool_intent=intent_type())
-    assert type(agent._private_selected_tool_intent) is intent_type
+    agent = CommsAgent(private_comms, private_selected_tool_intent=intent_type())
+    try:
+        assert type(agent._private_selected_tool_intent) is intent_type
+    finally:
+        await agent.shutdown()
 
 
 @pytest.mark.asyncio
@@ -196,7 +199,8 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(pr
     assert session_dir == kwargs_seen[0]["session"].directory
     assert "selected_claimed_write at most once" in calls[0][1]
     assert "using no tools" not in calls[0][1]
-    assert not any(message.claim_transition for message in read_history(comms))
+    with comms.bus.log.checked_read() as source:
+        assert ClaimCommits.count(source.connection) == 0
 
 
 @pytest.mark.asyncio
@@ -295,4 +299,5 @@ async def test_selected_full_failure_never_reissues_or_forges_response(private_d
         is None
     )
     assert len(calls) == len(bound) == 1
-    assert not any(message.claim_transition for message in read_history(comms))
+    with comms.bus.log.checked_read() as source:
+        assert ClaimCommits.count(source.connection) == 0

@@ -1,23 +1,17 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_package import pinned_native_package
-
 import asyncio
 import json
 from pathlib import Path
 
 import pytest
-from acp import RequestError
 
 import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import (
     NativeMessageFailureSource,
     ProviderQuotaFailure,
-    RequestFailure,
+    NativeTurnError,
 )
-from agent_comms.field_codec import FieldCodec
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 
 RATE_LIMIT = "Too many requests for this provider"
@@ -53,7 +47,7 @@ class RateLimitedProvider:
 
 @pytest.mark.asyncio
 async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
-    wired, tmp_path, monkeypatch,
+    private_comms, tmp_path, monkeypatch,
 ):
     provider = RateLimitedProvider()
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
@@ -70,8 +64,10 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     }}))
     (config / "settings.json").write_text(json.dumps({
         "compaction": {"enabled": False},
+        "nativeRecoveryBackoffMs": [1, 1, 1],
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.setenv("PI_PROVIDER", "limit-offline")
     monkeypatch.setenv("PI_MODEL", "fixture")
@@ -80,11 +76,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
     arguments = ["--provider", "limit-offline", "--model", "fixture", "--thinking", "off",
                  "--no-extensions", "--no-skills", "--no-context-files"]
-    agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
-    package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
+    agent = canonical_agent(private_comms, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     updates = []
 
     class Client:
@@ -95,7 +87,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     try:
         async with asyncio.timeout(90):
             await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
-            with pytest.raises(RequestError) as caught:
+            with pytest.raises(NativeTurnError) as caught:
                 await agent.turns.run_agent_turn(
                     "project", "project", "One isolated request that remains rate limited",
                     original_owner_input=True,
@@ -113,12 +105,12 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
         assert RATE_LIMIT in report.failure.action
         assert report.failure.next_step.startswith("Wait for the provider limit")
         assert isinstance(report.source, NativeMessageFailureSource)
-        request = FieldCodec.decode(RequestFailure, caught.value.data["agentCommsFailure"])
+        request = caught.value.request
         assert request.notification_published and request.failure == report.failure
         assert provider.posts == 4
         assert not any(getattr(getattr(update, "content", None), "text", None)
                        for update in updates)
-        saved = Path(wired.registry.require("project").session_file)
+        saved = Path(private_comms.registry.require("project").session_file)
         journal = [json.loads(line) for line in saved.read_text().splitlines()]
         users = [row for row in journal if row.get("type") == "message"
                  and row["message"]["role"] == "user"]
