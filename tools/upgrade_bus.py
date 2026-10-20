@@ -612,7 +612,7 @@ WORKER = (
 class CarryPass(ABC):
     """One of the two operations every step declares, run on every pending step in order."""
 
-    operation: ClassVar[Callable[..., Carried]]
+    operation_name: ClassVar[str]
 
     def run(self, step: Step, root: Path, runtime: Runtime, revisions: Revisions) -> Carried:
         """Run one step from the revision that declares it, with that revision's src and the
@@ -626,7 +626,7 @@ class CarryPass(ABC):
             WORKER,
             f"cutover.{step.name}",
             step.declaration,
-            self.operation.__name__,
+            self.operation_name,
             root,
             cwd=tree,
             env=runtime.environment(tree / "src", tree / "tools"),
@@ -646,7 +646,7 @@ class CarryPass(ABC):
 class BeforeStop(CarryPass):
     """What the running installation needs before its owners stop and read the bus."""
 
-    operation = Carry.before_stop
+    operation_name = Carry.before_stop.__name__
 
     def columns(self, step: Step, root: Path, revisions: Revisions) -> Carried:
         return TodoColumnCarry.before_stop(root, apply=True)
@@ -663,7 +663,7 @@ class BeforeStop(CarryPass):
 class CarryOver(CarryPass):
     """Each step's carry, recorded in the ledger as it applies."""
 
-    operation = Carry.carry
+    operation_name = Carry.carry.__name__
 
     def columns(self, step: Step, root: Path, revisions: Revisions) -> Carried:
         return TodoColumnCarry.carry_step(

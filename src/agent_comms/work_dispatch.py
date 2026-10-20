@@ -1,4 +1,4 @@
-"""Checked work starts through Core's existing order and native lifecycle owners.
+"""Core assigns checked work to its unit, then starts it through the native lifecycle.
 
 A phase declares an existing PendingProblemOrder, not a second task format. Work
 without that declaration stays visible; readiness is not permission to invent an
@@ -7,6 +7,7 @@ acceptance check. Failed startup state stays retained for explicit disposition.
 
 from __future__ import annotations
 
+import math
 import subprocess
 import time
 from collections.abc import Iterable
@@ -16,7 +17,6 @@ from typing import TYPE_CHECKING
 from .goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
-    OrderGoalAction,
     ProblemOrderGoalAction,
 )
 from .native_settings import NativeThreadDefaults
@@ -34,16 +34,24 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class WorkDispatch:
-    """One checked native order: allocate its unit, record its claim, then start it."""
+    """Allocate a unit, assign its checked native order, then start it."""
 
     action: ProblemOrderGoalAction
     revision: int
 
+    @property
+    def name(self) -> str:
+        return f"unit-{self.action.problem.lower()}-r{self.revision}"
+
+    def publish(self, comms: Comms, child: Thread) -> Thread:
+        """Assign the native order before its unit can begin work."""
+        comms.goals.update_goal(child.name, self.action)
+        return comms.registry.require(child.name)
+
     def start(self, comms: Comms) -> Thread:
         defaults = NativeThreadDefaults()
-        # A concurrent rotation of this same row contends on one git checkout,
-        # not on two newly generated unit names. Never adopt a partial attempt.
-        name = f"unit-{self.action.problem.lower()}-r{self.revision}"
+        # A concurrent rotation contends on one checkout. Never adopt a partial attempt.
+        name = self.name
         storage = comms.registry.storage_rule
         checkout = storage.order_checkout(name, self.action.problem)
         candidate = comms.registry.new_thread(
@@ -86,28 +94,24 @@ class WorkDispatch:
             StoppedThreadStatus(),
         )
         # A failed publication leaves a stopped unit and its checkout, not an
-        # untracked running task. A failed/uncertain start never releases the claim.
-        comms.goals.update_goal(child.name, self.action)
+        # untracked running task. A failed/uncertain start never releases its order.
+        self.publish(comms, child)
         comms.owners.start(child.name)
         return comms.registry.require(child.name)
 
-    @classmethod
-    def reissue(cls, comms: Comms, commander: Thread, todo: Todo) -> None:
-        """Retained checked work needs no already-idle unit."""
-        current = comms.goals.todos.get(todo.id)
-        current.require_revision(todo.revision)
-        if current.holder or not current.pending:
-            return
-        action = OrderGoalAction(
-            problem=current.id,
-            expected_revision=current.revision,
-            order=current.order.reissued(time.time()),
-            request=current.goal.request(),
-            deadline=current.deadline,
-            commander=commander.name,
-            assigner=commander.incarnation,
-        )
-        cls(action, revision=current.revision).start(comms)
+
+@dataclass(frozen=True)
+class ReusedWorkDispatch(WorkDispatch):
+    """Publish to an existing unit without allocating or starting another process."""
+
+    unit: Thread
+
+    @property
+    def name(self) -> str:
+        return self.unit.name
+
+    def start(self, comms: Comms) -> Thread:
+        return self.publish(comms, comms.registry.require(self.name))
 
 
 @dataclass(frozen=True)
@@ -119,19 +123,19 @@ class CheckedPhaseTask(PhaseTask):
     text: str
     order: PendingProblemOrder
     deadline_seconds: float
-    instruction = "Core starts the declared checked task in its own unit checkout"
+    instruction = "Core assigns the declared checked task to a unit and starts it"
 
     def __post_init__(self) -> None:
-        if not 0 < self.deadline_seconds <= 24 * 60 * 60:
-            raise ValueError("A phase task needs a positive deadline of at most one day.")
+        if not math.isfinite(self.deadline_seconds) or self.deadline_seconds <= 0:
+            raise ValueError("A phase task needs a finite positive deadline interval.")
 
     def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase]) -> None:
         history = comms.goals.todos.history_for_commander(commander.incarnation)
         if not phase.ready(history) or phase.ordered(history):
             return
-        # An existing unowned row belongs to UnownedWork, which reissues that
-        # row's actual order instead of replacing it with a phase template.
-        if any(todo.state.open for todo in phase.serving(history)):
+        # This task's existing row belongs to UnownedWheelSpin. Other phase subtasks
+        # neither supply this task's check nor replace its explicit identity.
+        if any(todo.id == self.problem for todo in history):
             return
         now = time.time()
         order = replace(self.order.reissued(now), serves=phase)

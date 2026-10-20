@@ -1313,7 +1313,6 @@ class LocatedProblemFinding(ProblemFinding):
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
-    accepted: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
@@ -1337,6 +1336,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     def for_phase(self, phase: type[OrderPhase]) -> ProblemOrder:
         raise ValueError("Only a checked order can declare a plan phase.")
+
+    @property
+    def accepted(self) -> bool:
+        return False
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
@@ -1393,6 +1396,10 @@ class FoldedProblemOrder(ProblemOrder):
     into: str
     why: str
     line: ClassVar[str] = "Folded"
+
+    @property
+    def phase(self) -> type[OrderPhase]:
+        return self.original.phase
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return (f"{todo.id} folded into {self.into}: {self.why}",)
@@ -1634,8 +1641,11 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 class InstalledProblemOrder(DeliveredProblemOrder):
     works: str
     artifact: str
-    accepted: ClassVar[bool] = True
     line: ClassVar[str] = "Installed"
+
+    @property
+    def accepted(self) -> bool:
+        return True
 
     def __post_init__(self):
         super().__post_init__()
@@ -1647,11 +1657,19 @@ class InstalledProblemOrder(DeliveredProblemOrder):
             raise ValueError("The order already records different installed evidence.")
         return self
 
+    def merged(self, sha: str) -> ProblemOrder:
+        return self.copy_as(InstalledMergedProblemOrder, sha=sha)
+
     def require_close(self):
         pass
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledMergedProblemOrder(MergedProblemOrder, InstalledProblemOrder):
+    """An installed merge retains the application's existing evidence, without a wrapper."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2419,6 +2437,8 @@ class Todo(TypedTable):
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
+        elif self.released:
+            self.released[-1].previous.require_trace(proposed.owner, traced)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:

@@ -217,10 +217,13 @@ class PlanIdle(UndatedStandingRule):
             if phase.ready(todos) and not phase.ordered(todos)
         )
 
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.phase.task.start(comms, comms.registry.require(commander), self.phase)
+
     def line(self) -> str:
         return (
             f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
-            " -> dispatch it this wake"
+            f" -> {self.phase.task.instruction}"
         )
 
 

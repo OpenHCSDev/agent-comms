@@ -74,6 +74,9 @@ class Repository:
         self.git("init", "-q")
         self.git("config", "user.email", "carry@example.invalid")
         self.git("config", "user.name", "Carry test")
+        declarations = self.path / STEPS / "carry.py"
+        declarations.parent.mkdir(parents=True, exist_ok=True)
+        declarations.write_bytes((REPO / STEPS / "carry.py").read_bytes())
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(["git", "-C", str(self.path), *args], text=True, timeout=10).strip()
@@ -99,7 +102,7 @@ def test_each_step_at_head_is_the_one_carry_its_module_declares():
         (declared,) = [value for value in vars(module).values() if isinstance(value, type)
                        and issubclass(value, Carry) and value.__module__ == module.__name__]
         assert (declared.__name__, declared.name()) == (step.declaration, step.name)
-        assert declared.__mro__[1] is step.family
+        assert declared.__mro__[1].__name__ == step.family.__name__
 
 
 def test_steps_run_in_the_order_the_main_line_merged_them(tmp_path):
@@ -442,10 +445,12 @@ def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_pat
         store._write_unlocked(json.dumps(old, indent=2))
     with pytest.raises(RegistryNeedsConversion):
         RegistryStore.at(root).read()
+    from cutover.carry_registry_version import RegistryVersion
+
     chain = CarryChain.at(REPO, "HEAD").steps
-    for step in chain[:-1]:
+    target = next(index for index, step in enumerate(chain) if step.name == RegistryVersion.name())
+    for step in chain[:target]:
         CarryLedger(root).record(step.name)
-    assert chain[-1].name == "carry_registry_version"
 
     before = bus_files(root)
     carried(root, before, [run_step("carry_registry_version", root)])
