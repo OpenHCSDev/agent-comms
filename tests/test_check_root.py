@@ -12,7 +12,6 @@ from agent_comms.cli import main
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.envelope_claim_transitions import ClaimRelease, ClaimTransition
-from agent_comms.errors import RelationViolationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
@@ -101,28 +100,30 @@ def test_python_failure_removes_root(source, tmp_path):
     assert not root.exists()
 
 
-def test_failed_population_preserves_protocol_error_and_retires_root(source, tmp_path):
+@pytest.mark.parametrize("release", (False, True))
+def test_initial_history_retains_display_not_source_claim_authority(source, tmp_path, release):
     with source.bus.log.opened_wire_snapshot() as history:
         message = next(history.newest_messages())
     owner = source.registry.require(message.sender).incarnation.require_recorded()
-    released = replace(message, claim_transition=ClaimTransition(
+    resource = str(tmp_path / "retained.py")
+    retained = replace(message, claim_transition=ClaimTransition(
         owner=message.sender, incarnation=owner.lookup,
         seq=message.seq, message_id=message.message_id,
-        releases=(ClaimRelease(str(tmp_path / "retained.py"), "a" * 32),),
+        claims=() if release else (resource,),
+        releases=(ClaimRelease(resource, "a" * 32),) if release else (),
+        generation=None if release else "a" * 32,
     ))
 
-    class ReleasedHistoryCheckRoot(CheckRoot):
+    class ClaimHistoryCheckRoot(CheckRoot):
         def _populate(self, copied):
-            # Exercise actual protocol initialization, not a fake registry error.
-            copied.messaging.initialize_private_initial_protocol(history=(released,))
+            copied.messaging.initialize_private_initial_protocol(history=(retained,))
 
-    root = tmp_path / "release-only-history"
-    with pytest.raises(RelationViolationError, match="Committed claim transition") as failure:
-        with ReleasedHistoryCheckRoot(source, ("A", "B"), root).open():
-            pytest.fail("A release-only historical prefix was silently accepted")
-    assert "without a live claim" in str(failure.value.__cause__)
+    root = tmp_path / "claim-history"
+    with ClaimHistoryCheckRoot(source, ("A", "B"), root).open() as copied:
+        with copied.bus.log.opened_wire_snapshot() as history:
+            assert next(history.newest_messages()) == message
+        assert retained.claim_transition is not None
     assert not root.exists()
-    # The source remains independently readable after the failed copy.
     assert source.registry.require("A").name == "A"
     with source.bus.log.opened_wire_snapshot() as history:
         assert next(history.newest_messages()) == message
