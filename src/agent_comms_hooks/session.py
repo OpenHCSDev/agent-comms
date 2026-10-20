@@ -11,14 +11,12 @@ from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.cli_bridges.monitor import EndSession, VerifySession
 from agent_comms.cli_bridges.shared import Serve
 from agent_comms.field_codec import FieldCodec
-from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
+from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
 from agent_comms_hooks.watch import LiveWatch, RecordedWatch, WatchClaim
 
 
 @dataclass(frozen=True)
-class SessionHook(ClaudeHook):
-    transcript_path: str
-
+class SessionHook(ClaudeTranscriptHook):
     @classmethod
     def current(cls, session: str, transcript: str) -> SessionHook:
         return cls(session_id=session, hook_event_name="SessionStart", transcript_path=transcript)
