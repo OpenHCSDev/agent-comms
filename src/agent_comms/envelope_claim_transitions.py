@@ -248,6 +248,8 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
+    expired: tuple[Annotated[str, ResourcePathText], ...] = field(
+        default=(), kw_only=True, metadata={"wire_omit_default": True})
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
@@ -267,7 +269,15 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
         raise ClaimTransitionError("Release originals do not acquire resources.")
 
     def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
-        return self.project(previous)
+        live = ClaimProjection(previous.last_seq, {
+            resource: owner for resource, owner in previous.items() if owner.live(registry)
+        })
+        self.require_holders(live)
+        # Only registry evidence expires original claims; never accept caller-authored expiry.
+        return replace(self, expired=()).project(live)
+
+    def require_holders(self, previous: ClaimProjection) -> None:
+        """Release members validate their exact generation while projecting."""
 
     @abstractmethod
     def project(self, previous: ClaimProjection) -> ClaimProjection: ...
@@ -277,7 +287,8 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     ) -> dict[str, ClaimOwner]:
         if self.seq <= previous.last_seq:
             raise ClaimTransitionError("Claim sequence must increase.")
-        remaining = dict(previous)
+        remaining = {resource: owner for resource, owner in previous.items()
+                     if resource not in self.expired}
         for release in releases:
             current = remaining.get(release.resource)
             if current is None:
@@ -317,11 +328,10 @@ class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
         if is_used(self.claim_scope.operation_id):
             raise IdentityConflict("Claim operation was already consumed")
 
-    def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
+    def require_holders(self, previous: ClaimProjection) -> None:
         for resource in self.claims:
-            if resource in previous and previous[resource].live(registry):
+            if resource in previous:
                 previous[resource].require_holder(self.owner, self.incarnation)
-        return self.project(previous)
 
     def project(self, previous: ClaimProjection) -> ClaimProjection:
         remaining = self.remaining(previous, ())

@@ -329,9 +329,11 @@ class CheckedRead:
         self.require_open_prefix()
         return ClaimCommits.operation_used(self.connection, operation_id)
 
-    def prepare_claim(self, transition: ClaimTransition, registry: RegistrySnapshot) -> None:
+    def prepare_claim[Change: ClaimTransition](
+        self, transition: Change, registry: RegistrySnapshot,
+    ) -> Change:
         self.require_open_prefix()
-        ClaimCommits.prepare(self.connection, transition, registry)
+        return ClaimCommits.prepare(self.connection, transition, registry)
 
     def claim_projection(self) -> ClaimProjection:
         """Explicit current-claim inspection; no historical bus rows are decoded."""
@@ -671,11 +673,16 @@ class ClaimCommits(CheckpointTable, TypedTable):
         return cls.one(db, operation_id=operation_id) is not None
 
     @classmethod
-    def prepare(cls, db: sqlite3.Connection, transition: ClaimTransition,
-                registry: RegistrySnapshot) -> ClaimProjection:
-        projected = transition.apply(ResourceClaims.claims_for(db, transition.resources), registry)
+    def prepare[Change: ClaimTransition](
+        cls, db: sqlite3.Connection, transition: Change, registry: RegistrySnapshot,
+    ) -> Change:
+        previous = ResourceClaims.all_claims(db)
+        projected = transition.apply(previous, registry)
         transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
-        return projected
+        return replace(transition, expired=tuple(
+            resource for resource in previous
+            if resource not in projected and resource not in transition.resources
+        ))
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         """Apply this original in the caller's existing prefix transaction."""
@@ -689,9 +696,9 @@ class ClaimCommits(CheckpointTable, TypedTable):
         except (ClaimTransitionError, IdentityConflict) as error:
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
         inserted = super().insert(db)
-        marks = ",".join("?" for _ in self.transition.resources)
-        ResourceClaims.delete(db, where=f'"resource" IN ({marks})',
-                              parameters=self.transition.resources)
+        removed = self.transition.resources + self.transition.expired
+        marks = ",".join("?" for _ in removed)
+        ResourceClaims.delete(db, where=f'"resource" IN ({marks})', parameters=removed)
         for owner in projected.values():
             ResourceClaims(owner.resource, owner.seq).insert(db)
         return inserted
