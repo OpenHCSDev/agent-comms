@@ -39,7 +39,10 @@ class InstallRun:
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
         TargetTree(checkout, scratch, target).add()
-        return cls(replace(command, checkout=checkout), root, scratch, target)
+        # Paths resolve here: the install child runs in the target tree, not the caller's cwd.
+        return cls(replace(command, checkout=checkout, project=command.project.resolve(),
+                           repos=tuple(repo.resolve() for repo in command.repos)),
+                   root, scratch, target)
 
     def launch(self, output: TextIO) -> int:
         """The install outlives its caller: a new session, its output in files beside the bus.
