@@ -16,6 +16,7 @@ from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
 from .native_turn_context import NativeContextManifestData
+from .native_input_record import NativeInputCommit, NativeInputLocation
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
     AbsentMessage,
@@ -444,10 +445,7 @@ class CompactionStart(ReasonedCompaction, starts=phases.CompactionPhase):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ContextCommitted(NativePiEvent):
-    input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
-    session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
-    session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
+class ContextCommitted(NativePiEvent, NativeInputCommit):
     request_generation: int | None = field(
         default=None, metadata={"wire_name": "requestGeneration"}
     )
@@ -668,10 +666,8 @@ class EditorUiRequest(DialogUiRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputCommitted(NativePiEvent):
-    input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
-    session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
-    session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
+class InputCommitted(NativePiEvent, NativeInputLocation):
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)

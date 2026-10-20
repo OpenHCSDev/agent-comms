@@ -314,6 +314,7 @@ class RecoveryMonitorCapability:
                 try:
                     proof = NativeContextProof.read_evidence(
                         session.path, source.input_id, evidence=evidence,
+                        session_entry_start=source.require_context_proof().session_entry_start,
                     )
                 except NativePiUnavailable:
                     # No conclusive context proof never means the input was unsent.
@@ -423,7 +424,8 @@ class RecoveryMonitorCapability:
                 if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
                     raise RecoveryBlocked("native failure lacks its bound original input")
                 proof = NativeContextProof.read_evidence(
-                    session_file, reserved.input_id, evidence=evidence
+                    session_file, reserved.input_id, evidence=evidence,
+                    session_entry_start=reserved.require_context_proof().session_entry_start,
                 )
                 original_session.require_context(proof)
                 _header, entries = evidence.observe()

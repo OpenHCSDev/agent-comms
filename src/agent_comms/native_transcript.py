@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .native_pi import NativeContextProof
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
@@ -260,7 +261,9 @@ class NativeTranscript(TranscriptSource):
         return tuple(identity for record in self.forward(after, through)
                      if (identity := record.annotation_id) is not None)
 
-    def require_publication_context(self, user):
+    def require_publication_context(
+        self, user: NativeEntry, *, session_entry_start: int,
+    ) -> NativeContextProof:
         """Corroborate the existing native producer's context, without replay.
 
         Native inputDigest identifies a request envelope, not plain text. The
@@ -280,7 +283,9 @@ class NativeTranscript(TranscriptSource):
             proof = NativeContextJournal.for_input(db, user.input_id)
             if proof is None:
                 raise MalformedRecord("Native publication has no committed context inclusion")
-            return proof.corroborate(self.path.absolute(), header, user)
+            return proof.corroborate(
+                self.path.absolute(), header, user, session_entry_start=session_entry_start,
+            )
 
     def inputs_for(self, records) -> tuple:
         """Find the user input behind each record in one reverse walk for the batch.
@@ -298,7 +303,7 @@ class NativeTranscript(TranscriptSource):
             if entry is None:
                 continue
             if entry.input_boundary:
-                found[position] = entry
+                found[position] = record
             else:
                 waiting[entry.parent_id].append(position)
                 latest = max(latest, record.start)
@@ -312,7 +317,7 @@ class NativeTranscript(TranscriptSource):
                 chain = waiting.pop(entry.id)
                 if entry.input_boundary:
                     for position in chain:
-                        found[position] = entry
+                        found[position] = ancestor
                 else:
                     waiting[entry.parent_id].extend(chain)
                     waiting.pop(None, None)
@@ -341,9 +346,9 @@ class NativeTranscript(TranscriptSource):
             user = self.input_for(record)
             if user is None:
                 raise RelationViolationError("Native publication has no tracked input ancestry")
-            user = user.require_tracked_user()
-            self.require_publication_context(user)
-            return record, user
+            entry = user.entry.require_tracked_user()
+            self.require_publication_context(entry, session_entry_start=user.start)
+            return record, entry
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
 
     def tail(self, *, max_bytes: int | None = None):

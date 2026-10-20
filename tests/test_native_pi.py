@@ -33,6 +33,7 @@ from agent_comms.native_pi import (
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.coordinated_runtime import IndependentExecution
 from agent_comms.native_startup import NativeStartup
+from agent_comms.native_transcript import NativeTranscript
 from agent_comms.turn_watchdog import ModelWait
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -85,14 +86,15 @@ def _evidence(tmp_path: Path) -> Path:
 
 def test_read_only_journal_parser_is_not_recovery_authority(tmp_path: Path) -> None:
     session = _evidence(tmp_path)
-    first = NativeContextProof.read_evidence(session, INPUT_ID)
-    second = NativeContextProof.read_evidence(session, INPUT_ID)
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
+    first = NativeContextProof.read_evidence(session, INPUT_ID, session_entry_start=input_record.start)
+    second = NativeContextProof.read_evidence(session, INPUT_ID, session_entry_start=input_record.start)
     assert first == second
     assert first.session_id == "sid"
     assert first.session_entry_id == "entry"
     assert first.request_generation == 1
     with pytest.raises(NativePiUnavailable, match="assembled-context proof"):
-        NativeContextProof.read_evidence(session, "d" * 32)
+        NativeContextProof.read_evidence(session, "d" * 32, session_entry_start=input_record.start)
 
 
 @pytest.mark.parametrize(
@@ -113,6 +115,7 @@ def test_corrupt_or_redirected_journal_cannot_assert_context(tmp_path: Path, dam
     from agent_comms.native_pi import NativeContextJournal
 
     session = _evidence(tmp_path)
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
     journal = Path(str(session) + ".input-proof")
     if damage == "malformed_database":
         journal.write_bytes(b"not a SQLite database")
@@ -135,7 +138,7 @@ def test_corrupt_or_redirected_journal_cannot_assert_context(tmp_path: Path, dam
         with sqlite3.connect(journal) as db:
             db.execute(f"DROP TRIGGER {NativeContextJournal.declared_name}_append")
     with pytest.raises(NativePiUnavailable):
-        NativeContextProof.read_evidence(session, INPUT_ID)
+        NativeContextProof.read_evidence(session, INPUT_ID, session_entry_start=input_record.start)
 
 
 def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_facts(tmp_path):
@@ -143,12 +146,15 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     from agent_comms.native_pi import NativeContextJournal
 
     session = _evidence(tmp_path)
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
     journal = Path(str(session) + ".input-proof")
     original = journal.read_bytes()
     row = read_proof_rows(session)[0]
     decoded = FieldCodec.decode(NativeContextJournal, row)
     assert FieldCodec.encode(decoded) == row
-    assert decoded.at(session) == NativeContextProof.read_evidence(session, INPUT_ID)
+    assert decoded.at(session, session_entry_start=input_record.start) == NativeContextProof.read_evidence(
+        session, INPUT_ID, session_entry_start=input_record.start
+    )
     for changed in (
         {**row, "schema": True},
         {**row, "schema": 1},
@@ -163,21 +169,24 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     ):
         with pytest.raises((ValueError, TypeError)):
             FieldCodec.decode(NativeContextJournal, changed)
-    assert NativeContextProof.read_evidence(session, INPUT_ID) == decoded.at(session)
+    assert NativeContextProof.read_evidence(
+        session, INPUT_ID, session_entry_start=input_record.start
+    ) == decoded.at(session, session_entry_start=input_record.start)
     assert journal.read_bytes() == original
 
 
 def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_path: Path) -> None:
     session = _evidence(tmp_path)
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
     data = session.read_text()
     user = json.loads(data.splitlines()[1])
     session.write_text(data + json.dumps({**user, "id": "another"}) + "\n")
     with pytest.raises(NativePiUnavailable, match="ambiguous"):
-        NativeContextProof.read_evidence(session, INPUT_ID)
+        NativeContextProof.read_evidence(session, INPUT_ID, session_entry_start=input_record.start)
     session.write_text(data)
     session.parent.chmod(0o777)
     with pytest.raises(NativePiUnavailable, match="unsafe ancestor"):
-        NativeContextProof.read_evidence(session, INPUT_ID)
+        NativeContextProof.read_evidence(session, INPUT_ID, session_entry_start=input_record.start)
 
 
 @pytest.mark.parametrize("unsafe", ["public_directory", "public_session", "symlink_directory"])
@@ -999,7 +1008,8 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             assert reopened.context.session_file == result.context.session_file
             assert (
                 NativeContextProof.read_evidence(
-                    result.context.session_file, INPUT_ID, request_generation=1
+                    result.context.session_file, INPUT_ID, request_generation=1,
+                    session_entry_start=result.context.session_entry_start,
                 )
                 == result.context
             )
@@ -1147,8 +1157,11 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
     from agent_comms.native_pi import NativeContextProof
     from agent_comms.turn_failure import ModelRequestFailed
 
+    session = _evidence(tmp_path)
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
     context = NativeContextProof(
-        INPUT_ID, "session", "entry", 1, DIGEST, 1_791_964_800_001, tmp_path / "session.jsonl"
+        INPUT_ID, "sid", "entry", 1, DIGEST, 1_791_964_800_001, session,
+        session_entry_start=input_record.start,
     )
     failed = NativePiTerminalFailure(
         "SECRET provider response including prompt data", context, SelectedModel("provider", "model"),
@@ -1165,7 +1178,8 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
 
 def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     session = _evidence(tmp_path)
-    recorded = NativeContextProof.read_evidence(session, INPUT_ID)
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
+    recorded = NativeContextProof.read_evidence(session, INPUT_ID, session_entry_start=input_record.start)
     journal = Path(str(session) + ".input-proof")
     first = read_proof_rows(session)[0]
     later = {**first, "requestGeneration": 2, "llmContextDigest": "d" * 64}
@@ -1175,8 +1189,12 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
 
     with sqlite3.connect(journal) as db:
         FieldCodec.decode(NativeContextJournal, later).insert(db)
-    assert NativeContextProof.read_evidence(session, INPUT_ID).request_generation == 2
-    assert NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1) == recorded
+    assert NativeContextProof.read_evidence(
+        session, INPUT_ID, session_entry_start=input_record.start
+    ).request_generation == 2
+    assert NativeContextProof.read_evidence(
+        session, INPUT_ID, request_generation=1, session_entry_start=input_record.start
+    ) == recorded
     assert recorded.corroborates_input(INPUT_ID)
     assert not recorded.corroborates_input("e" * 32)
 
@@ -1185,7 +1203,8 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     from agent_comms.pi_events import ContextCommitted, InputCommitted
 
     input_event = InputCommitted(
-        input_id=INPUT_ID, session_id="sid", session_entry_id="entry"
+        input_id=INPUT_ID, session_id="sid", session_entry_id="entry",
+        session_entry_start=input_record.start,
     )
     context_event = ContextCommitted.from_wire({key: value for key, value in first.items() if key != "schema"})
     assert _verify_context(session, INPUT_ID, "sid", input_event, context_event) == recorded
@@ -1195,7 +1214,9 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
             replace(context_event, llm_context_digest="d" * 64),
         )
     with pytest.raises(NativePiUnavailable, match="no assembled-context"):
-        NativeContextProof.read_evidence(session, INPUT_ID, request_generation=3)
+        NativeContextProof.read_evidence(
+            session, INPUT_ID, request_generation=3, session_entry_start=input_record.start
+        )
 
 
 def test_native_proof_database_enforces_generation_and_digest_without_scanning(tmp_path):
@@ -1204,6 +1225,7 @@ def test_native_proof_database_enforces_generation_and_digest_without_scanning(t
     from agent_comms.native_pi import NativeContextJournal
 
     session = _evidence(tmp_path)
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
     first = read_proof_rows(session)[0]
     with sqlite3.connect(Path(str(session) + ".input-proof")) as db:
         later = FieldCodec.decode(NativeContextJournal, {**first, "requestGeneration": 2})
@@ -1216,7 +1238,9 @@ def test_native_proof_database_enforces_generation_and_digest_without_scanning(t
             with pytest.raises(sqlite3.IntegrityError):
                 FieldCodec.decode(NativeContextJournal, invalid).insert(db)
     assert (
-        NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1).request_generation
+        NativeContextProof.read_evidence(
+            session, INPUT_ID, request_generation=1, session_entry_start=input_record.start
+        ).request_generation
         == 1
     )
 
