@@ -9,7 +9,7 @@ from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass
 from math import inf
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import BinaryIO, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -53,6 +53,19 @@ def reverse_records(
         if floor == 0 and end:
             stream.seek(0)
             yield 0, end, stream.read(end)
+
+
+def record_end(stream: BinaryIO, size: int) -> int:
+    """The end of the last newline-terminated record within the first ``size`` bytes."""
+    position = size
+    while position > 0:
+        count = min(position, 65536)
+        stream.seek(position - count)
+        boundary = stream.read(count).rfind(b"\n")
+        if boundary >= 0:
+            return position - count + boundary + 1
+        position -= count
+    return 0
 
 
 class RecordsCut(DeclaredFamily, affix="Cut"):
@@ -236,22 +249,14 @@ class NativeTranscript(TranscriptSource):
         return tuple(sources)
 
     def cut(self) -> SessionCut:
-        revision = FileRevision.capture(self.path)
-        return (MissingSessionCut() if revision is None
-                else PresentSessionCut(revision, self.record_end(revision.size)))
-
-    def record_end(self, size: int) -> int:
-        """The end of the last complete record within the first ``size`` bytes."""
-        with self.path.open("rb") as stream:
-            position = size
-            while position > 0:
-                count = min(position, 65536)
-                stream.seek(position - count)
-                boundary = stream.read(count).rfind(b"\n")
-                if boundary >= 0:
-                    return position - count + boundary + 1
-                position -= count
-        return 0
+        try:
+            stream = self.path.open("rb")
+        except FileNotFoundError:
+            return MissingSessionCut()
+        # One open file supplies both the revision and its last record boundary.
+        with stream:
+            revision = FileRevision.from_file(stream)
+            return PresentSessionCut(revision, record_end(stream, revision.size))
 
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return self.cut().publication_revision(root, self, recipient)
