@@ -22,6 +22,7 @@ from .lifecycle import (
 from .load import LoadComparison
 from .measurements import StorageComparison, measured_load
 from .story import StoryCase
+from .wording import OrderWordingComparison, PlainWordsComparison
 from agent_comms.commander_parity.verdicts import VerdictComparison
 
 
@@ -106,6 +107,10 @@ class PlainWordsParityRow(ParityRow):
     native = "`PlainText`, `StrikeReason`"
     phases = ()
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return PlainWordsComparison.read()
+
 
 class OrderWordingParityRow(ParityRow):
     number = 10
@@ -113,6 +118,10 @@ class OrderWordingParityRow(ParityRow):
     current = "`order.py`"
     native = "`OrderText`, `CheckedProblemOrder.require_wording`"
     phases = ()
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return OrderWordingComparison.read()
 
 
 class OrderWorkParityRow(ParityRow):
