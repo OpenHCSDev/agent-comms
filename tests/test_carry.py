@@ -7,6 +7,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import time
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
@@ -41,9 +42,10 @@ from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
 from cutover.backup import (
-    Backup, RestoreSpace, SavedFile, UpgradeRefused, bus_files, transcripts_held,
+    RestoreSpace, SavedFile, StoreBackup, UpgradeRefused, bus_files, transcripts_held,
 )
 from upgrade_bus import (
+    RehearsalFiles,
     Revisions,
     Stack,
     before_stop,
@@ -322,7 +324,10 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
         steps = [*before_stop(root, pending, installed, revisions), *carry_all(root, pending, installed, revisions)]
     finally:
         revisions.close()
-    assert carried(root, before, steps) == {"identical": 0, "rewritten": 3, "restore_bytes": 0}
+    assert carried(root, before, steps, RehearsalFiles.declared(steps)) == RehearsalFiles(
+        0, 3, ("carried", "carries.json", "stopped"), 0)
+    with pytest.raises(UpgradeRefused, match="outside the expected set"):
+        carried(root, before, steps, frozenset({CarryLedger.name}))
     assert (root / "stopped").read_text() == (root / "carried").read_text() == "2"
     assert CarryLedger(root).applied() == ("carry_probe",)
 
@@ -339,11 +344,12 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         opened.execute("BEGIN IMMEDIATE")
         opened.execute("ROLLBACK")
         assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
-        assert carried(tmp_path, before, [{"rewritten": []}]) == {
-            "identical": 1, "rewritten": 0, "restore_bytes": 0}
+        steps = [{"rewritten": []}]
+        assert carried(tmp_path, before, steps, RehearsalFiles.declared(steps)) == (
+            RehearsalFiles(1, 0, (), 0))
         opened.execute("UPDATE todo SET id = 2")
         with pytest.raises(UpgradeRefused, match=r"\['todos.sqlite3'\]"):
-            carried(tmp_path, before, [{"rewritten": []}])
+            carried(tmp_path, before, steps, RehearsalFiles.declared(steps))
 
 
 def todos_before_order_runs(root: Path, scratch: Path) -> None:
@@ -420,9 +426,11 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
 
     for name in steps:
         before = bus_files(root)
-        carried(root, before, [invoke(name)])
+        dry = [invoke(name)]
+        carried(root, before, dry, RehearsalFiles.declared(dry))
         applied = invoke(name, "--apply")
-        carried(root, before, [applied])
+        changed = [applied]
+        carried(root, before, changed, RehearsalFiles.declared(changed))
         assert invoke(name)["changed"] == 0, name
     assert CarryLedger(root).applied() == tuple(step.name for step in chain)
 
@@ -463,11 +471,13 @@ def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_pat
     assert chain[-1].name == "carry_registry_version"
 
     before = bus_files(root)
-    carried(root, before, [run_step("carry_registry_version", root)])
+    dry = [run_step("carry_registry_version", root)]
+    carried(root, before, dry, RehearsalFiles.declared(dry))
     applied = run_step("carry_registry_version", root, "--apply")
-    result = carried(root, before, [applied])
-    assert result['identical'] == len(before) - 3 and result['rewritten'] == 3
-    assert result['restore_bytes'] > 0
+    changed = [applied]
+    result = carried(root, before, changed, RehearsalFiles.declared(changed))
+    assert result.identical == len(before) - 3 and result.rewritten == 3
+    assert result.restore_bytes > 0
     assert run_step("carry_registry_version", root, "--apply")["changed"] == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.goal.to_wire() is None
@@ -498,7 +508,8 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
         return
     before = bus_files(root)
     applied = run_step("carry_turn_records", root, "--apply")
-    carried(root, before, [applied])
+    changed = [applied]
+    carried(root, before, changed, RehearsalFiles.declared(changed))
     assert applied["changed"] == carried_count
     assert run_step("carry_turn_records", root)["changed"] == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
@@ -555,8 +566,13 @@ def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, t
     monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
     monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
     stack = Installed(tmp_path / "checkout")
+    started = time.perf_counter()
     result = upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
-                              "worker", comms.root.parent, 0)
+                              "worker", comms.root.parent,
+                              RehearsalFiles(0, 0, (), 0))
+    assert time.perf_counter() - started < 120
+    assert result["backup"] is None and result["backup_bytes"] == 0
+    assert not list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*"))
     assert result["stopped_and_started"] == names
     assert sorted(calls) == sorted((command, name) for command in ("stop", "start") for name in names)
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
@@ -592,7 +608,8 @@ def test_restore_space_refuses_before_conversion_or_stop(comms, monkeypatch):
     assert RestoreSpace.measure(1024, comms.root.parent).needed == 1024 + 1024**3
     with pytest.raises(UpgradeRefused, match='Restore needs'):
         upgrade_bus.live(REPO, comms.root, 'old', 'new', (), Stack(REPO), Stack(REPO),
-                         None, 'worker', comms.root.parent, 1024)
+                         None, 'worker', comms.root.parent,
+                         RehearsalFiles(0, 1, ("store.sqlite3",), 1024))
     assert not MaintenanceBarrier(comms.root / 'registry.json').marker_path.exists()
 
 
@@ -616,45 +633,6 @@ def test_bus_files_reads_metadata_without_contents(tmp_path, monkeypatch):
     assert after[datum.name].size == before[datum.name].size
     assert after[datum.name].mtime_ns == before[datum.name].mtime_ns
     assert after[datum.name].inode != before[datum.name].inode
-
-
-def test_restore_only_changed_members_and_preserves_unchanged_identity(tmp_path):
-    root = tmp_path / 'bus'
-    root.mkdir()
-    (root / 'same').write_text('unmodified')
-    (root / 'changed').write_text('original')
-    (root / 'missing').write_text('was here')
-    backup = Backup.take(root, tmp_path / 'absent-route', (root,), tmp_path / 'backup')
-    same = SavedFile.at(root / 'same')
-    (root / 'changed').write_text('new material')
-    (root / 'missing').unlink()
-    (root / 'extra').write_text('extra material')
-    backup.restore()
-    assert (root / 'changed').read_text() == 'original'
-    assert (root / 'missing').read_text() == 'was here'
-    assert not (root / 'extra').exists()
-    assert SavedFile.at(root / 'same') == same
-    failed, = tmp_path.glob('.bus.failed-*')
-    assert (failed / 'changed').read_text() == 'new material'
-    assert (failed / 'extra').read_text() == 'extra material'
-    assert backup.files().keys() == bus_files(root).keys()
-
-
-def test_selective_restore_preserves_saved_sqlite_wal_rows(tmp_path):
-    root = tmp_path / 'bus'
-    root.mkdir()
-    database = root / 'data.sqlite3'
-    with closing(sqlite3.connect(database)) as writer:
-        writer.execute('PRAGMA journal_mode=WAL')
-        writer.execute('CREATE TABLE data (value TEXT)')
-        writer.execute("INSERT INTO data VALUES ('original')")
-        writer.commit()
-        backup = Backup.take(root, tmp_path / 'absent-route', (root,), tmp_path / 'backup')
-        writer.execute("UPDATE data SET value = 'changed'")
-        writer.commit()
-    backup.restore()
-    with closing(sqlite3.connect(database)) as reader:
-        assert reader.execute('SELECT value FROM data').fetchone() == ('original',)
 
 
 def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path):
@@ -729,17 +707,18 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
 
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
     monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
+    monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     stack = Installed(tmp_path / "checkout")
     with pytest.raises(RuntimeError, match="carry failed after writing"):
-        upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
-                         "worker", comms.root.parent, datum.stat().st_size)
+        upgrade_bus.live(stack.checkout, comms.root, "old", "new", (object(),), stack, stack, None,
+                         "worker", comms.root.parent,
+                         RehearsalFiles(0, 1, ("kept.txt",), datum.stat().st_size))
     assert datum.read_text() == "before"
-    failed, = comms.root.parent.glob(f".{comms.root.name}.failed-*")
-    assert (failed / "kept.txt").read_text() == "changed before failure"
     assert not any("reset" in command for command in commands)
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
-    assert list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*/bus.tar"))
+    backups = list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*/stores/kept.txt"))
+    assert len(backups) == 1 and backups[0].read_text() == "before"
 
 
 def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
@@ -749,7 +728,7 @@ def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
         stack.require_uv()
 
 
-def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
+def test_upgrade_transcript_hold_covers_selected_snapshot(comms):
     """A bridge publishes from its own process, and the upgrade reads the store's files raw
     for the backup and its digests. The bridge may not write while those are read, nor into
     the failed bus a restore keeps as evidence."""
@@ -769,14 +748,15 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
 
     with transcripts_held(comms.root):
         before = bus_files(comms.root)
-        backup = Backup.take(comms.root, comms.root.parent / "no-route.json",
-                             (comms.root,), comms.root.parent / 'backup')
+        path = ExternalTranscript.path_in(comms.root)
+        backup = StoreBackup.take(comms.root, comms.root.parent / "no-route.json",
+                                  (path,), comms.root.parent / 'backup')
         assert bridge_publishes(comms.root).endswith("database is locked")
-        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0, "restore_bytes": 0}
-        backup.restore()  # unchanged files stay in place under the hold
-        assert bridge_publishes(comms.root).endswith("database is locked")
+        assert carried(comms.root, before, [], RehearsalFiles.declared([])) == (
+            RehearsalFiles(len(before), 0, (), 0))
+        assert backup.original()
     assert bridge_publishes(comms.root) == "wrote"
-    assert backup.files() == before
+    assert tuple(backup.files()) == (str(path.relative_to(comms.root)),)
 
 
 def test_practice_preserves_old_maintenance_format_until_before_stop(tmp_path):
@@ -797,7 +777,9 @@ def test_practice_preserves_old_maintenance_format_until_before_stop(tmp_path):
         path.write_text(json.dumps(FieldCodec.encode(record)))
         path.chmod(0o600)
     original = tuple(path.read_bytes() for path in old.witness_paths)
-    PracticeCopy(Comms(source), destination).copy_maintenance(destination)
+    CarryLedger(source).record("carry_external_pages")
+    PracticeCopy(Comms(source), destination).copy_install_state(destination)
+    assert CarryLedger(destination).applied() == CarryLedger(source).applied()
     copied = MaintenanceBarrier(destination / "registry.json")
     for path in copied.witness_paths:
         assert json.loads(path.read_bytes())["version"] == 1
@@ -839,7 +821,10 @@ def rehearsed(stack: Stack, root: Path) -> dict:
 
 def installed_live(stack: Stack, root: Path) -> dict:
     from upgrade_bus import live
-    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker", root.parent, 0)
+    path = ExternalTranscript.path_in(root)
+    return live(stack.checkout, root, "old", "new", (object(),), stack, stack, None,
+                "worker", root.parent,
+                RehearsalFiles(0, 1, (str(path.relative_to(root)),), path.stat().st_size))
 
 
 @pytest.mark.parametrize("install", [rehearsed, installed_live])
@@ -879,6 +864,7 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
             return {"read": ExternalTranscript.path_in(root).exists()}
 
     monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
+    monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "")
     # A rehearsal places the route under its own home, so the route sits under this one.
     monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
@@ -887,8 +873,13 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
     result = install(Installed(tmp_path / "checkout", tmp_path / "home"), comms.root)
     step, = result["steps"]
     assert step["changed"] == step["indexes"] > 0
-    assert result["files"]["rewritten"] == 1
+    assert result["files"].rewritten == 1
     assert result["read"] == {"read": True}
+    if install is installed_live:
+        backup = Path(result["backup"])
+        assert result["backup_bytes"] == sum(path.stat().st_size
+                                              for path in backup.rglob('*') if path.is_file())
+        assert result["backup_bytes"] > 0
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):
@@ -909,4 +900,5 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
         ActivityLog.at(comms.root).emit(Activity.create(unit.name, ActivityState.THINKING))
         with pytest.raises(sqlite3.OperationalError, match="locked"):
             transcript.finish(turn_id="turn", item_id="during", events=())
-        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0, "restore_bytes": 0}
+        assert carried(comms.root, before, [], RehearsalFiles.declared([])) == (
+            RehearsalFiles(len(before), 0, (), 0))

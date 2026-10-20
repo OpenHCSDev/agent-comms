@@ -17,7 +17,7 @@ unchanged by saved-file size, nanosecond mtime and inode. The rehearsal
 prepares native Pi in the staged stack exactly as the live phase does. ``--rehearse`` stops there.
 
 A live run then stops the running agent owners with the installed CLI, backs
-the bus up (tar plus saved-file metadata), moves the checkout,
+up only files the rehearsal changed, moves the checkout,
 relocks and syncs its stack, prepares native Pi, carries the bus, reads it
 back, and starts only the owners it stopped. A failure after the backup
 keeps maintenance held and preserves the bus, checkout and backup for forward
@@ -48,9 +48,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import publish_runtime
 from cutover.backup import (
-    Backup,
+    NoBackup,
     RestoreSpace,
     SavedFile,
+    StoreBackup,
     UpgradeRefused,
     bus_files,
     transcripts_held,
@@ -77,6 +78,26 @@ CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 
+@dataclass(frozen=True)
+class RehearsalFiles:
+    """The rehearsal's named rewrite set and the restore reservation it requires."""
+
+    identical: int
+    rewritten: int
+    names: tuple[str, ...]
+    restore_bytes: int
+
+    @staticmethod
+    def declared(steps: list[dict]) -> frozenset[str]:
+        return frozenset({CarryLedger.name, *(name for step in steps
+                                              for name in step["rewritten"])})
+
+    def require_rehearsal(self, rehearsal: RehearsalFiles) -> None:
+        outside = sorted(set(self.names) - set(rehearsal.names) - {CarryLedger.name})
+        if outside:
+            raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
+
+
 def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) -> str:
     print("+", " ".join(map(str, command)), file=sys.stderr, flush=True)
     completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
@@ -86,7 +107,8 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
     return completed.stdout
 
 
-def carried(root: Path, before: dict[str, SavedFile], steps: list[dict]) -> dict[str, int]:
+def carried(root: Path, before: dict[str, SavedFile], steps: list[dict],
+            expected: frozenset[str]) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
     physical = {name for name in before.keys() | after.keys()
@@ -94,12 +116,16 @@ def carried(root: Path, before: dict[str, SavedFile], steps: list[dict]) -> dict
     # SQLite's committed WAL belongs to its database declaration, not a second carry.
     changed = {name[:-4] if name.endswith('-wal') and name[:-4] in before.keys() | after.keys()
                else name for name in physical}
-    unnamed = sorted(changed - {CarryLedger.name}
-                     - {name for step in steps for name in step["rewritten"]})
+    unnamed = sorted(changed - RehearsalFiles.declared(steps))
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
-    return {"identical": len(before.keys() - changed), "rewritten": len(changed),
-            "restore_bytes": sum(before[name].size for name in physical & before.keys())}
+    outside = sorted(changed - expected)
+    if outside:
+        raise UpgradeRefused(f"Carries changed files outside the expected set: {outside}")
+    return RehearsalFiles(
+        identical=len(before.keys() - changed), rewritten=len(changed),
+        names=tuple(sorted(changed)),
+        restore_bytes=sum(before[name].size for name in physical & before.keys()))
 
 
 @dataclass(frozen=True)
@@ -349,7 +375,8 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[Step
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
     steps = [*stopping, *carry_all(root, pending, staged, revisions)]
-    return {"steps": steps, "files": carried(root, before, steps), "read": reader.verify(root)}
+    files = carried(root, before, steps, RehearsalFiles.declared(steps))
+    return {"steps": steps, "files": files, "read": reader.verify(root)}
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool,
@@ -426,7 +453,7 @@ class ChangedInstall(Install):
     def live(self, rehearsal: dict) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
                     self.installed, self.staged, self.revisions, self.installer, self.spill_dir,
-                    rehearsal['files']['restore_bytes'])
+                    rehearsal['files'])
 
 
 class UnchangedInstall(Install):
@@ -444,10 +471,12 @@ class UnchangedInstall(Install):
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
          installed: Stack, staged: Stack, revisions: Revisions, installer: str,
-         spill_dir: Path, restore_bytes: int) -> dict:
+         spill_dir: Path, rehearsal_files: RehearsalFiles) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    restore = RestoreSpace.measure(restore_bytes, root.parent)
+    restore = RestoreSpace.measure(rehearsal_files.restore_bytes, root.parent)
+    expected = frozenset((*rehearsal_files.names, CarryLedger.name))
+    selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore.require()
     stopping = before_stop(root, pending, staged, revisions)
     running = staged.running_owners(root)
@@ -457,7 +486,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     try:
         staged.owners(root, "stop", running)
         with transcripts_held(root):
-            backup = Backup.take(root, ROUTE, (root,),
+            before = bus_files(root)
+            backup = (StoreBackup if selected else NoBackup).take(
+                root, ROUTE, selected,
                 spill_dir / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
         maintenance.clear(held)
@@ -469,7 +500,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Revisions.prepare(checkout)
         staged.prepare_native()
-        passed = carry_and_read(root, backup.files(), pending, staged, staged, revisions, stopping)
+        passed = carry_and_read(root, before, pending, staged, staged, revisions, stopping)
+        passed["files"].require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
@@ -492,12 +524,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         maintenance.clear(restored_hold)
         installed.owners(root, "start", running)
         print(f"upgrade-bus: restored after failure ({type(error).__name__}: {error}); "
-              f"original runtime selected and {running} restarted; backup: {backup.path}",
+              f"original runtime selected and {running} restarted; "
+              f"backup: {backup.description}",
               file=sys.stderr)
         raise
     return {"stopped_and_started": running, **passed, "services": services,
             "restore_space": {"needed": restore.needed, **asdict(restore)},
-            "backup": str(backup.path)}
+            **backup.report()}
 
 
 def detached_live(command: tuple[str, ...], root: Path) -> int:
@@ -553,7 +586,7 @@ def main() -> None:
         signal.signal(signum, stopped)
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse,
-                                 args.spill_dir), indent=2))
+                                 args.spill_dir), indent=2, default=asdict))
     except UpgradeRefused as error:
         raise SystemExit(error.output)
 
