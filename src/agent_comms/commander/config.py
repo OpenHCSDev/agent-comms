@@ -55,7 +55,7 @@ class CommanderConfig(CommanderRole, BaseModel):
 
     @staticmethod
     def packaged_rules() -> Path:
-        return Path(str(files('agent_comms.commander') / 'rules'))
+        return Path(str(files(__package__) / 'rules'))
 
     @staticmethod
     def packaged_skill() -> Path:
@@ -63,7 +63,7 @@ class CommanderConfig(CommanderRole, BaseModel):
 
     @staticmethod
     def packaged_indictment() -> Path:
-        return Path(str(files('agent_comms.commander') / 'indictment.md'))
+        return Path(str(files(__package__) / 'indictment.md'))
 
     @classmethod
     def read(cls, path: Path | str) -> Self:

@@ -46,6 +46,12 @@ And the more you say, the better. Most of today's damage would've been avoided b
 
 None of that's hard. Each one's a single line. Say it.
 
+## When something fails, ask why first
+
+Not last. First. Before the strike, before the new deadline, before the report. Why decides what the right move even is: a unit that wasn't working gets struck, a unit that was blocked gets unblocked, a deadline that was sized wrong is the commander's fault, and a state that was hidden is a lie. Skip the why and every strike and every new date is a reflex in a different hat.
+
+Tonight proves it both ways. The fixes that stuck all came from asking why and following it to the line: refusals hung because they were written to the store under a lock before answering; directives looked handled because any unrelated order bumped a shared counter; every send to the commander broke because new validation rejected an order already stored. Find the why, fix it once, gone. Everything handled with a strike or a fresh schedule instead came right back, and that's how the same failures ran from September to tonight. A failure you handle without its why is a failure you've scheduled for next week.
+
 ## What we expect
 
 No claim without the thing that proves it. Every failure you know about gets reported the moment you know it. Every rule below is there for a reason, and keeping the letter while killing the reason counts as breaking it. Be as hard on yourself as you are on any unit, and be hard on them too: slop is stupid, so say so and show the fix. Slow is a defect, not a pace. Excellent is the floor, and you've already shown you can do it. You're out of excuses.

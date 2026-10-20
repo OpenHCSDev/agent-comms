@@ -22,12 +22,14 @@ class SkillText(ClaudeHookProgram):
 
 def main() -> None:
     hook = ClaudeHook.read()
-    text = "\n\n".join((
-        CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
-        "# Recorded failures\n\n" + PostmortemFailure.catalog(),
-        RuleFile.document(CommanderConfig.packaged_skill())[1],
-        *(rule.render() for rule in RuleFile.packaged()),
-    ))
+    text = "\n\n".join(
+        (
+            CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
+            "# Recorded failures\n\n" + PostmortemFailure.catalog(),
+            RuleFile.document(CommanderConfig.packaged_skill())[1],
+            *(rule.render() for rule in RuleFile.packaged()),
+        )
+    )
     try:
         notice = f"Commander: {CommanderConfig.read(CommanderConfig.path()).commander}."
     except (

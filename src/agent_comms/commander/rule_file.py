@@ -1,4 +1,5 @@
 """A packaged rule owns its metadata, reason, rendering and review membership."""
+
 from __future__ import annotations
 
 import json
@@ -15,6 +16,7 @@ from .config import CommanderConfig
 
 @dataclass(frozen=True)
 class RuleFile(DeclaredFamily, affix="RuleFile"):
+    family_discriminator = "type"
     name: str
     description: str
     why: str
@@ -42,23 +44,30 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
             if not separator or key in metadata:
                 raise ValueError(f"{path.name}: invalid frontmatter field {key!r}")
             value = value.strip()
-            metadata[key] = FieldCodec.decode(str, json.loads(value)) if value.startswith('"') else value
+            metadata[key] = (
+                FieldCodec.decode(str, json.loads(value)) if value.startswith('"') else value
+            )
         return metadata, body.strip()
 
     @classmethod
+    @boundary_decoder
     def read(cls, path: Path) -> Self:
         metadata, body = cls.document(path)
         reason = cls.reason_line.search(body)
         if reason is None:
             raise ValueError(f"{path.name}: missing Why")
-        owner = cls.member_named(metadata["type"])
-        return owner(metadata["name"], metadata["description"], reason.group(1),
-                     cls.reason_line.sub("", body).strip())
+        return FieldCodec.decode(
+            cls, {**metadata, "why": reason.group(1), "body": cls.reason_line.sub("", body).strip()}
+        )
 
     @classmethod
     def packaged(cls) -> tuple[Self, ...]:
-        return tuple(sorted((cls.read(path) for path in CommanderConfig.packaged_rules_files()),
-                            key=lambda rule: (rule.priority, rule.name)))
+        return tuple(
+            sorted(
+                (cls.read(path) for path in CommanderConfig.packaged_rules_files()),
+                key=lambda rule: (rule.priority, rule.name),
+            )
+        )
 
     @property
     def summary(self) -> str:
