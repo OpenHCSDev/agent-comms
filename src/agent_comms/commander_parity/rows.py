@@ -1,5 +1,6 @@
 """Each native/current workflow declares its identity once."""
 
+from ..commander.standing import MergeGrowth
 from ..plan_phases import (
     CommanderPagePhase,
     ControlPlanePhase,
@@ -9,7 +10,6 @@ from ..plan_phases import (
     ReviewQueuePhase,
     StoryPhase,
 )
-from ..commander.standing import MergeGrowth
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
