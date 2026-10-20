@@ -63,7 +63,9 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     assert inputs[0].text == second.body and inputs[0].routing.requests == (second.reference,)
     assert inputs[1].text == quote and inputs[1].routing is None
     # The conversation source shows its original wire row, not a second native input.
-    assert [event.text for event in reopened.transcripts.thread_transcript_page("worker").events] == [quote]
+    assert [event.text for event in reopened.transcripts.thread_transcript_page("worker").events] == [
+        raw_second, quote, first.body, second.body
+    ]
 
 
 def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
