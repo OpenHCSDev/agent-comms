@@ -326,7 +326,7 @@ class Commander(CommanderContext):
         group = [new[0]] if new else list(document.problems)
         listed = {t.id: t for t in self.todos()}
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        problems.extend(order.serves.order_refusals(history, document.unplanned_reason))
+        problems.extend(order.phase.order_refusals(history, document.unplanned_reason))
         held = tuple(todo for todo in listed.values() if todo.holder)
         busy = tuple(todo for plan in PlanPhase.members_with(PlanPhase)
                      for todo in plan.serving(held) if todo.holder == unit and todo.id not in group)
