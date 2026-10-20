@@ -231,9 +231,10 @@ class CommanderContext(CommanderConfig):
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
 
+    @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
                    deep: bool = False) -> Self:
-        """Copy declared values, never live resources; construction owns the new binding."""
+        """Normalize Pydantic's optional updates; copy values, never live resources."""
         values = {name: getattr(self, name) for name in type(self).model_fields}
         if deep:
             values = deepcopy(values)

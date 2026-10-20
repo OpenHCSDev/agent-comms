@@ -42,7 +42,8 @@ def test_context_copy_rebinds_after_root_updates(commander_script, tmp_path, dee
     assert first.root == first.comms.root
 
 
-def test_relocated_config_never_opens_original_and_command_writes_only_copy(commander_script, tmp_path):
+def test_relocated_config_never_opens_original_and_command_writes_only_copy(
+        commander_script, tmp_path):
     first, _ = commander_script
     selected = tmp_path / 'selected'
     shutil.copytree(first.root, selected)
@@ -64,13 +65,17 @@ from agent_comms.commander.request import RequestVerb
 context = Commander.read_root(selected)
 assert context.root == context.comms.root == selected
 goal = context.comms.registry.require(context.commander).goal.require()
-RequestVerb.parse(['complete', goal.id, '--why', 'Selected copy command proof'], '').apply(context)
-assert context.comms.registry.require(context.commander).goal.require().progress == 'Selected copy command proof'
+RequestVerb.parse(
+    ['complete', goal.id, '--why', 'Selected copy command proof'], '').apply(context)
+completed = context.comms.registry.require(context.commander).goal.require()
+assert completed.progress == 'Selected copy command proof'
 ''', str(selected), str(first.root)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert before == {path.relative_to(first.root): path.read_bytes()
                       for path in first.root.rglob('*') if path.is_file()}
-    assert Comms(selected).registry.require(first.commander).goal.require().progress == 'Selected copy command proof'
+    completed = Comms(selected).registry.require(first.commander).goal.require()
+    assert completed.progress == 'Selected copy command proof'
+    assert completed.state.terminal
 
 
 def test_two_commands_in_one_process_keep_their_explicit_roots(commander_script, tmp_path, capsys):

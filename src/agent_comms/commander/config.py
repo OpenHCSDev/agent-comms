@@ -68,8 +68,8 @@ class CommanderConfig(CommanderRole, BaseModel):
         return info.context if isinstance(info.context, Path) else root
 
     @classmethod
-    def read(cls, path: Path | str, *, root: Path | None = None) -> Self:
-        return cls.model_validate_json(Path(path).read_text(), context=root)
+    def read(cls, path: Path | str) -> Self:
+        return cls.model_validate_json(Path(path).read_text())
 
     @staticmethod
     def root_path(root: Path) -> Path:
@@ -78,7 +78,7 @@ class CommanderConfig(CommanderRole, BaseModel):
     @classmethod
     def read_root(cls, root: Path | str) -> Self:
         root = Path(root).resolve()
-        return cls.read(cls.root_path(root), root=root)
+        return cls.model_validate_json(cls.root_path(root).read_text(), context=root)
 
     @classmethod
     def packaged_rules_files(cls) -> tuple[Path, ...]:
