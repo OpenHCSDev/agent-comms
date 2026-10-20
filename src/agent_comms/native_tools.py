@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -71,6 +72,10 @@ class NativeRequestTools:
         return CoordinationCall(
             call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
+    def recorded_digest(self, arguments: Mapping[str, object], *, call_id: str) -> str:
+        """Use the same native call owner as tool_watch, with original fields and identity."""
+        return self.create_call(call_id, dict(arguments)).digest()
+
     @classmethod
     def native_extension(cls, package: Path) -> Path:
         return package / "agent-comms-extensions/global-agent-comms/index.mjs"
@@ -85,6 +90,9 @@ class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=N
 
     def reads(self) -> str:
         return json.dumps(self.arguments)
+
+    def recorded_digest(self, arguments: Mapping[str, object], *, call_id: str) -> str:
+        return self.digest()
 
 
 class ArgumentTool:
