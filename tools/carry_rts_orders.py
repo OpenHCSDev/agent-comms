@@ -65,7 +65,7 @@ class RtsOrder:
     no_first_call: bool = False
 
     @boundary_decoder
-    def declared(self, body: str) -> todos.PendingProblemOrder | todos.MergedProblemOrder:
+    def declared(self, body: str) -> todos.PendingProblemOrder:
         place = re.search(r"^Owner:\s*(\S+):(\d+)\s*$", body, re.M)
         report = re.search(r"\bReport:\s*([^\n]+)", body)
         if place is None or report is None or not re.search(r"^Banned:", body, re.M):
@@ -77,7 +77,7 @@ class RtsOrder:
         run: todos.OrderRun = todos.MechanicalOrderRun()
         if isinstance(self.works, str):
             run = todos.ApplicationOrderRun(self.works)
-        order = todos.PendingProblemOrder(
+        return todos.PendingProblemOrder(
             id=self.msg,
             owner=FileLine(place[1], int(place[2])),
             check=check,
@@ -94,9 +94,6 @@ class RtsOrder:
             first_call=todos.ObservedFirstCall() if self.started else todos.AwaitingFirstCall(),
             run=run,
         )
-        if isinstance(self.merged, str):
-            return todos.MergedProblemOrder(original=order, sha=self.merged)
-        return order
 
 
 @boundary_decoder
@@ -145,11 +142,15 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     todo.state.require_open(todo)
                 else:
                     print(f"{pid} order {row.msg}", file=sys.stderr, flush=True)
-                    base = order.original if isinstance(order, todos.MergedProblemOrder) else order
-                    repo = Repo.of(Path(base.owner.file).parent)
+                    repo = Repo.of(Path(order.owner.file).parent)
                     text = problems[pid].text
                     todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
-                todo = todos.AssignTodo(todo.revision, proposed, due, order, todo.goal).apply(todo)
+                record = (
+                    todos.MergedProblemOrder(original=order, sha=row.merged)
+                    if isinstance(row.merged, str)
+                    else order
+                )
+                todo = todos.AssignTodo(todo.revision, proposed, due, record, todo.goal).apply(todo)
                 history = tuple(
                     strike.recorded(actor, comms.registry.require(strike.unit).incarnation)
                     for strike in strikes
