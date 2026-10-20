@@ -128,7 +128,8 @@ class UnreadTranscriptCursor(TranscriptCursor):
 
     async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
                         **bounds: object) -> TranscriptPage:
-        return await loader()
+        # Nothing read pins no source window; the page's own bounds still apply.
+        return await loader(**bounds)
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return self
