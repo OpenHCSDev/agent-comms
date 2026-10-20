@@ -199,13 +199,9 @@ class LifecycleRun:
         )
 
     @staticmethod
-    def invoke_command(
-        command: tuple[str, ...],
-        *,
-        cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
-    ) -> ChildResult:
-        return asyncio.run(BoundedRun.run(command, timeout=120, cwd=cwd, env=env))
+    def invoke_command(command: tuple[str, ...], **options) -> ChildResult:
+        """BoundedRun.run owns the process options and their absent defaults."""
+        return asyncio.run(BoundedRun.run(command, timeout=120, **options))
 
     @property
     def due(self) -> str:
