@@ -710,7 +710,8 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     Never stored: the checkout and GitHub are its owners. The finish view is the
     prediction already recorded on the Todo, not a new estimate on every read."""
 
-    finish: FinishPrediction = field(default_factory=UnreviewedPrediction, kw_only=True, compare=False)
+    finish: FinishPrediction = field(
+        default_factory=UnreviewedPrediction, kw_only=True, compare=False)
 
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
@@ -2778,7 +2779,7 @@ class TodoStore(TypedStore):
 
     def review_predictions(self, commander: ThreadIncarnation, storage: StorageRule,
                            at: float) -> tuple[Todo, ...]:
-        """Read progress outside the write transaction; save only the still-current order.
+        """Read progress before locking; save only the still-current order.
 
         Counts that are missing or not falling remain explicit unknown forecasts. A
         deadline or commit cadence is not evidence of remaining work.
