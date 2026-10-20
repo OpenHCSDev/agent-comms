@@ -17,7 +17,10 @@ from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
+    CliInboxPresence,
+    ConnectedThreadStatus,
     DeletingThreadStatus,
+    NoBridgeThreadStatus,
     IdleThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
@@ -53,32 +56,45 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
 def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
     comms = wire(tmp_path)
-    thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), title='Retained title', session_file='/retained/session.jsonl', created_at=12.5)
-    comms.registry.register(thread, status)
-    before = comms.registry.snapshot()
-    raw = json.loads(comms.registry.store.path.read_text())
-    assert FieldCodec.decode(ThreadStatus, raw["statuses"]["owner"]) == status
-    assert raw["threads"]["owner"]["created_at"] == 12.5
-    reopened = Registration(comms.registry.store.path)
-    assert reopened.snapshot() == before
-    assert reopened.status("owner") == status
-    assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
-    assert comms.views.thread_detail("owner", CountedRead()).to_wire()["status"] == status.declared_name
-    assert comms.views.list_threads()[0].status.declared_name == status.declared_name
-    activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
-    comms.agents.activity.emit(activity)
-    visible = comms.views.thread_views()
-    individual = comms.views.thread_presentations(("owner",)).read("owner")
-    if visible:
-        # Opening the individual acquires a transcript reader; the roster owns
-        # none. Its original identity must bind this owner, while presentation
-        # of the common lifecycle/readiness is identical.
-        assert individual.read_identity.thread.incarnation == thread.incarnation
-        assert replace(individual, read_identity=None) == visible[0].presentation
-    else:
-        from agent_comms.registry_document import RosterVisibility
-        assert (individual is not None) == status.in_view(RosterVisibility(archived=True))
-    assert comms.views.thread_presentations(("missing",)).read("missing") is None
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title='Retained title', session_file='/retained/session.jsonl', created_at=12.5)
+        comms.registry.register(thread, status)
+        before = comms.registry.snapshot()
+        saved = comms.registry.store.path.read_bytes()
+        raw = json.loads(saved)
+        assert FieldCodec.decode(ThreadStatus, raw["statuses"]["owner"]) == status.declaration()
+        assert raw["threads"]["owner"]["created_at"] == 12.5
+        reopened = Registration(comms.registry.store.path)
+        assert reopened.snapshot() == before
+        expected = status.registered(thread)
+        assert reopened.status("owner") == expected
+        assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
+        assert comms.views.thread_detail("owner", CountedRead()).to_wire()["status"] == expected.declared_name
+        assert comms.views.list_threads()[0].status.declared_name == expected.declared_name
+        activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
+        comms.agents.activity.emit(activity)
+        visible = comms.views.thread_views()
+        individual = comms.views.thread_presentations(("owner",)).read("owner")
+        if visible:
+            # Opening the individual acquires a transcript reader; the roster owns
+            # none. Its original identity must bind this owner, while presentation
+            # of the common lifecycle/readiness is identical.
+            assert individual.read_identity.thread.incarnation == thread.incarnation
+            assert replace(individual, read_identity=None) == visible[0].presentation
+        else:
+            from agent_comms.registry_document import RosterVisibility
+            assert (individual is not None) == expected.in_view(RosterVisibility(archived=True))
+        assert comms.views.thread_presentations(("missing",)).read("missing") is None
+        if isinstance(status, CliInboxPresence):
+            assert reopened.status("owner") == ConnectedThreadStatus()
+            child.kill()
+            child.wait(timeout=5)
+            assert reopened.status("owner") == NoBridgeThreadStatus()
+            assert comms.registry.store.path.read_bytes() == saved
+    finally:
+        child.kill()
+        child.wait(timeout=5)
 
 
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
