@@ -148,10 +148,10 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     def unit(self) -> str:
         return self.dispatch.name
 
-    def _identity(self) -> tuple[str, int, str]:
-        # The dispatch carries an order reissued at observation time with a fresh id; the
-        # violation is the row and the unit, so equal passes are equal and stay quiet.
-        return self.todo.id, self.todo.revision, self.unit
+    def _identity(self) -> str:
+        # The dispatch carries an order reissued at observation time, enforcing it bumps the
+        # row's revision, and the proposed unit moves as units go idle: the violation is the row.
+        return self.todo.id
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, UnownedWheelSpin) and self._identity() == other._identity()
