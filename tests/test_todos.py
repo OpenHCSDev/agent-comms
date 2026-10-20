@@ -19,7 +19,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AssignTodo, Assignment, ChangeTodoState, MergedProblemOrder, DoneTodoState, GoalRef,
+    AssignTodo, Assignment, ChangeTodoState, DoneTodoState, GoalRef,
     MechanicalOrderRun, PendingProblemOrder,
     BlockedTodoState, OperationDelivery, Todo, TodoConflict, TodoError, TodoState, TodoStore,
 )
@@ -184,16 +184,16 @@ def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path) -> 
         FieldCodec.decode(type[TodoState], "unverified")
 
 
-def test_merged_order_retains_its_original_order(tmp_path: Path) -> None:
+def test_merged_order_keeps_its_checked_fields(tmp_path: Path) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     todo = store.create(
         "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path))
-    merged = replace(todo, order=MergedProblemOrder(original=todo.order, sha="2b9c1f1ab"))
-    cells = merged.order.original.board_cells(merged)
+    merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
+    cells = merged.order.board_cells(merged)
     assert cells.startswith(f"{__file__}:1 | lead | checked-order | {RecordedEventTime(1000.0).clock()} | ")
-    assert json.loads(cells.split(" | ", 4)[-1]) == FieldCodec.encode(merged.order.original.check)
-    assert merged.order.original == todo.order
+    assert json.loads(cells.split(" | ", 4)[-1]) == FieldCodec.encode(merged.order.checked().check)
+    assert merged.order.checked().copy_as(PendingProblemOrder) == todo.order
     assert merged.order.line == "Merged and installed"
     assert merged.order.waiting_on_install(merged, {}) == ()

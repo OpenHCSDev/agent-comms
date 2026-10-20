@@ -78,7 +78,7 @@ class MergedAt(SingleFieldValue, OrderMerge):
     sha: str
 
     def wrap(self, order: todos.PendingProblemOrder) -> todos.MergedProblemOrder:
-        return todos.MergedProblemOrder(original=order, sha=self.sha)
+        return order.merged(self.sha)
 
 
 class MechanicalRunJson(FieldRepresentation):

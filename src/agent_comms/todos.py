@@ -1458,7 +1458,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
                        if item.name not in evidence}, **evidence)
 
-    def merged(self, sha: str) -> ProblemOrder:
+    def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
     @property
