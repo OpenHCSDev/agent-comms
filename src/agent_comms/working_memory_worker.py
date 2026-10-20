@@ -57,9 +57,10 @@ class AnnotationWorker:
         with self.comms.bus.log.checked_read() as original:
             facts = RetainedTaskFacts(tuple(original.retained_task_facts(owner.incarnation)))
             current = facts.current_authored_sources(owner, snapshot)
-            selected = next((message for message in current
-                             if message.reference == policy.source), None)
-            if selected is None:
+            for selected in current:
+                if selected.reference == policy.source:
+                    break
+            else:
                 raise RelationViolationError("Annotation grant is absent, superseded or dropped")
             grant = selected.task.require_annotation_grant()
             grant.require_publication(selected.sender, snapshot, original)
