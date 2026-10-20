@@ -875,6 +875,11 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
     assert step["changed"] == step["indexes"] > 0
     assert result["files"].rewritten == 1
     assert result["read"] == {"read": True}
+    if install is installed_live:
+        backup = Path(result["backup"])
+        assert result["backup_bytes"] == sum(path.stat().st_size
+                                              for path in backup.rglob('*') if path.is_file())
+        assert result["backup_bytes"] > 0
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):

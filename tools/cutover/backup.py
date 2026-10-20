@@ -189,7 +189,7 @@ class StoreBackup(ResourceBackup[str]):
 
     def report(self) -> dict[str, object]:
         return {"backup": str(self.path),
-                "backup_bytes": sum(path.stat().st_size for path in self.data_root.rglob('*')
+                "backup_bytes": sum(path.stat().st_size for path in self.path.rglob('*')
                                     if path.is_file())}
 
     @property
