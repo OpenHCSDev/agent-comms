@@ -359,7 +359,7 @@ class Commander(CommanderContext):
         if check and deleted and (unread := self.importers(deleted, check)):
             problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
                             'the check must also count their `from agent_comms` imports')
-        if any(Path(reference.file).resolve().is_relative_to(Path(check.directory) / 'tools')
+        if any(Path(reference.file).resolve().is_relative_to(Path(check.directory) / 'tools/')
                for reference in references) and not all(
                 said in body for said in ('--root tools', '--root src')):
             problems.append('the order changes tools/: say "ratchet with --root tools and with '

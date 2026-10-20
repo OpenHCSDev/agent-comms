@@ -1262,7 +1262,10 @@ class OrderDeletion(DeclaredFamily, affix="Deletion"):
 
     label: ClassVar[str] = "Deletes:"
     checks: ClassVar[tuple[OrderCheck, ...]] = ()
-    modules: ClassVar[tuple[str, ...]] = ()
+
+    @property
+    def modules(self) -> tuple[str, ...]:
+        return ()
 
     def instructions(self) -> tuple[str, ...]:
         return ()
@@ -1275,7 +1278,7 @@ class NoOrderDeletion(OrderDeletion):
 
 @dataclass(frozen=True)
 class ModuleDeletion(OrderDeletion):
-    modules: tuple[str, ...]
+    modules: tuple[str, ...] = ()
 
     def instructions(self) -> tuple[str, ...]:
         return (f"{self.label} {', '.join(self.modules)}",)

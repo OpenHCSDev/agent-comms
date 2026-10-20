@@ -8,7 +8,7 @@ from pathlib import Path
 from agent_comms.commander.config import Repo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import ModuleDeletion, NoOrderDeletion
-from test_commander_problem_orders import create, order, order_body, problem
+from test_commander_problem_orders import order, order_body, problem
 
 
 def test_module_deletion_keeps_existing_orders_and_carries_module_instructions(commander):
@@ -38,8 +38,8 @@ def test_order_send_cli_refuses_declared_module_imported_by_toad(
         commander, commander_script, tmp_path):
     comms, _ = commander
     script, repo = commander_script
-    create(commander, 'P1')
     (repo / 'count.txt').write_text('0\n')
+    problem(script, order_body(repo))
     (repo / 'acp_ingress.py').write_text('class Ingress: pass\n')
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
