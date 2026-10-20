@@ -69,12 +69,12 @@ def test_phase_gate_uses_the_phase_family_and_requires_an_explicit_unplanned_rea
     if phase is UnplannedPhase:
         del payload['unplanned_reason']
         with pytest.raises(SystemExit, match='Plan phases are ready'):
-            context.send('worker', '23:59', OrderFile.read(json.dumps(payload)),
+            context.send('worker', RecordedEventTime.from_clock('23:59'), OrderFile.read(json.dumps(payload)),
                          clean=True, new=('P1', 'Repair the owner'))
         assert comms.goals.todos.for_commander(comms.registry.require('lead').incarnation) == ()
         payload['unplanned_reason'] = (
             'This urgent retained incident is outside the declared plan dependency chain.')
-    context.send('worker', '23:59', OrderFile.read(json.dumps(payload)),
+    context.send('worker', RecordedEventTime.from_clock('23:59'), OrderFile.read(json.dumps(payload)),
                  clean=True, new=('P1', 'Repair the owner'))
     assert comms.goals.todos.get('P1').order.serves is phase
 
@@ -92,7 +92,7 @@ def test_second_plan_order_gate_names_the_busy_order_and_running_unowned_units(
     payload = json.loads(Path(order_body(repo)).read_text())
     payload['order']['serves'] = RecordPlanePhase.declared_name
     with pytest.raises(SystemExit) as refused:
-        context.send('worker', '23:59', OrderFile.read(json.dumps(payload)),
+        context.send('worker', RecordedEventTime.from_clock('23:59'), OrderFile.read(json.dumps(payload)),
                      clean=True, new=('P2', 'Repair another owner'))
     assert 'worker already holds plan orders P1' in str(refused.value)
     assert 'running units holding no order: free-unit' in str(refused.value)

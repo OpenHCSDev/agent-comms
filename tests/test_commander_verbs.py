@@ -4,15 +4,16 @@ import shlex
 
 import pytest
 
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 
 DOCUMENTED = [
     ("order", "send worker order.txt --due 23:59 --clean --reassign 'missed two deadlines' --fork f1",
-     {"unit": "worker", "due": "23:59", "body_file": "order.txt", "clean": True,
+     {"unit": "worker", "due": RecordedEventTime.from_clock('23:59'), "body_file": "order.txt", "clean": True,
       "reassign": "missed two deadlines", "fork": ThreadCaller("f1")}),
-    ("order", "send worker order.txt", {"unit": "worker", "body_file": "order.txt", "due": None}),
+    ("order", "send worker order.txt", {"unit": "worker", "body_file": "order.txt", "due": UnrecordedEventTime()}),
     ("order", "problem order.json --to worker --where file.py:1",
-     {"to": "worker", "order": "order.json", "where": "file.py:1", "due": None}),
+     {"to": "worker", "order": "order.json", "where": "file.py:1", "due": UnrecordedEventTime()}),
     ("order", "strike worker --why 'P1 late' --caught 'lead at install'",
      {"unit": "worker", "why": "P1 late", "caught": "lead at install", "fork": NoThreadCaller()}),
     ("order", "strike worker --why 'P1 late'",
@@ -25,7 +26,7 @@ DOCUMENTED = [
      {"pid": "P1", "check": "repo :: cat n -> 1", "why": "counted the wrong file"}),
     ("order", "say worker,#comms note.txt", {"units": "worker,#comms", "body_file": "note.txt"}),
     ("order", "problem order.json --to worker --due 23:59 --where file.py:1",
-     {"to": "worker", "due": "23:59", "order": "order.json", "where": "file.py:1"}),
+     {"to": "worker", "due": RecordedEventTime.from_clock('23:59'), "order": "order.json", "where": "file.py:1"}),
     ("order", "unstrike P1 --why 'recorded in error' --at 12:46",
      {"pid": "P1", "why": "recorded in error", "at": "12:46"}),
     ("order", "fire worker --why 'late twice'", {"unit": "worker", "why": "late twice"}),

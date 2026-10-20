@@ -26,7 +26,7 @@ def test_json_problem_and_send_report_all_fields_then_record_the_correction(comm
     assert created.returncode == 0, created.stderr
     before = commander.comms.goals.todos.get('P1')
     original['problems'] = ['P1']
-    original['order']['report'] = 'Please preserve optional_state and maybe_action identifiers.'
+    original['order']['report'] = 'Preserve optional_state and maybe_action identifiers.'
     broken = json.loads(json.dumps(original))
     del broken['order']['check']
     broken['order']['owner'] = 7

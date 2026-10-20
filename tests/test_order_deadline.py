@@ -65,8 +65,8 @@ def test_measured_deadline_from_delivered_orders(commander, commander_script):
     explicit = run('send', 'worker', str(path), '--due', '23:59', '--clean',
                    '--replaces', current.messages[-1].message_id)
     current = store.get('P13')
-    assert current.deadline.clock() == '23:59'
-    assert 'explicit deadline 23:59' in explicit.stdout
+    assert current.deadline.clock() == '23:59:00'
+    assert 'selected deadline 23:59:00' in explicit.stdout
     assert f'measured deadline {measured.deadline(current.order).clock()}' in explicit.stdout
 
 
@@ -82,3 +82,18 @@ def test_empty_measurement_does_not_create_a_store(tmp_path):
     assert measured.rates == ()
     assert 'unavailable (0 delivered orders)' in measured.summary
     assert not store.path.exists()
+
+
+@pytest.mark.parametrize('clock', ('', '24:00', '12:60', 'noon'))
+def test_invalid_explicit_clock_is_refused_before_reading_the_order(commander_script, clock):
+    context, repo = commander_script
+    result = subprocess.run(
+        [str(Path(sys.executable).with_name('agent-comms-commander')),
+         '--root', str(context.comms.root), 'order', 'problem', str(repo / 'must-not-be-read'),
+         '--to', 'worker', '--due', clock, '--where', f'{__file__}:1'],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src')})
+    assert result.returncode != 0
+    assert 'due' in result.stderr and 'from_clock' in result.stderr
+    assert 'FileNotFoundError' not in result.stderr
+    assert context.comms.goals.todos.for_commander(context.incarnation) == ()
