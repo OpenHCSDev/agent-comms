@@ -114,6 +114,11 @@ class Backup:
             os.fsync(ready.fileno())
         return bus_files(self.root)
 
+    @property
+    def captured(self) -> bool:
+        """The final manifest is written only after every selected file was saved."""
+        return (self.path / 'files.json').exists()
+
     def files(self) -> dict[str, str]:
         return json.loads((self.path / 'files.json').read_text())
 
@@ -225,7 +230,7 @@ class StoreBackup(Backup):
         return contents
 
     def original(self) -> bool:
-        if not (self.path / 'files.json').exists():
+        if not self.captured:
             return False
         saved = self.files()
         for name in json.loads((self.path / 'selected.json').read_text()):

@@ -57,7 +57,7 @@ from agent_comms.todos import PlannedInstallDeadline
 from agent_comms.locked_store import RuntimeFile
 import agent_comms.restart_queue  # noqa: F401 (declares resettable restart state)
 import agent_comms.runtime_info  # noqa: F401 (declares resettable observations)
-from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
+from cutover.backup import StoreBackup, UpgradeRefused, bus_files, transcripts_held
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 
 REPO = Path(__file__).resolve().parents[1]
@@ -80,7 +80,8 @@ def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, 
     after = {name: StoreBackup.digest(root / name) for name in selected
              if (root / name).is_file()}
     changed = {name for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
-    unnamed = sorted(changed - {name for step in steps for name in step["rewritten"]})
+    unnamed = sorted(changed - {CarryLedger.name} -
+                     {name for step in steps for name in step["rewritten"]})
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
     return {"identical": len(before.keys() - changed), "rewritten": len(changed)}
@@ -457,12 +458,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     lock = installed.lock
-    backup = None
+    backup = StoreBackup(root, ROUTE,
+        root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     complete = False
     try:
         staged.owners(root, "stop", running)
         backup = StoreBackup.take(root, ROUTE, upgrade_files(root, pending, staged.checkout),
-            root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
+            backup.path)
         if lock.exists():
             shutil.copy2(lock, backup.path / "uv.lock")
         reset = RuntimeFile.reset(root, backup.path / "runtime-before")
@@ -480,7 +482,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     finally:
         # A failure must restore data AND source before any original can start.
         # A failed restore deliberately exits here with maintenance still held.
-        if backup is not None and not complete:
+        if backup.captured and not complete:
             restored = False
             try:
                 state = maintenance.read()
@@ -489,7 +491,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
                     lambda: staged.owners(root, "stop", running),
                 )
                 backup.restore()
-                held = maintenance.read()
+                state = maintenance.read()
+                held = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
                 os.environ[HOLDER_NONCE] = held.nonce
                 run("git", "-C", checkout, "switch", "--detach", current)
                 saved_lock = backup.path / "uv.lock"
