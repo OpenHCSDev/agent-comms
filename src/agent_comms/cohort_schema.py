@@ -18,11 +18,12 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from .field_codec import MalformedRecord
 from .typed_table import (
     Column,
+    DurableTables,
     ForeignKey,
     Index,
+    PrefixedTables,
     SQLiteForeignKeys,
     SQLiteJournalMode,
-    SQLiteSchemaObject,
     TypedTable,
 )
 
@@ -30,12 +31,20 @@ COHORT_SCHEMA_VERSION = 2
 _LOG = logging.getLogger(__name__)
 
 
-class CohortTable:
+class CohortTable(PrefixedTables, DurableTables):
     """Mandatory sealed N/K acknowledgement declarations."""
 
+    __slots__ = ()
+    name_prefixes = ("cohort_", "claim_batch_")
+    schema_error = SchemaVersionError
 
-class AwarenessTable:
+
+class AwarenessTable(PrefixedTables, DurableTables):
     """Optional provenance captured only during the unsealed acceptance transaction."""
+
+    __slots__ = ()
+    name_prefixes = ("awareness_",)
+    schema_error = SchemaVersionError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -541,32 +550,12 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
         }
 
 
-def _schema(capability: type) -> dict[str, str]:
-    return {
-        name: sql
-        for table in TypedTable.members_with(capability)
-        for name, sql in table.schema_objects().items()
-    }
-
-
 def _digest(schema: dict[str, str]) -> str:
     return hashlib.sha256("\n".join(schema.values()).encode()).hexdigest()
 
 
-def _cohort_objects(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-    return SQLiteSchemaObject.read(db.execute(
-        "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
-        "AND (name LIKE 'cohort_%' OR name LIKE 'claim_batch_%')"))
-
-
-def _awareness_objects(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-    return SQLiteSchemaObject.read(db.execute(
-        "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
-        "AND name LIKE 'awareness_%'"))
-
-
 def assert_cohort_schema(db: sqlite3.Connection) -> None:
-    schema = _schema(CohortTable)
+    schema = CohortTable.declared_schema()
     try:
         meta = CohortSchemaMeta.one(db, singleton=1)
     except (sqlite3.Error, MalformedRecord) as error:
@@ -575,27 +564,25 @@ def assert_cohort_schema(db: sqlite3.Connection) -> None:
         singleton=1, version=COHORT_SCHEMA_VERSION, ddl_digest=_digest(schema)
     ):
         raise SchemaVersionError("unsupported private cohort schema version")
-    if SQLiteSchemaObject.differences(_cohort_objects(db), schema) or SQLiteForeignKeys.read(
+    if CohortTable.schema_differs(db) or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
     ) != [SQLiteForeignKeys(True)]:
         raise SchemaVersionError("private cohort schema is missing or drifted")
 
 
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
-    schema = _schema(AwarenessTable)
     meta = AwarenessSchemaMeta.one(db, singleton=1)
-    if SQLiteSchemaObject.differences(_awareness_objects(db), schema) or meta != AwarenessSchemaMeta(
-        singleton=1, version=2, ddl_digest=_digest(schema)
+    if AwarenessTable.schema_differs(db) or meta != AwarenessSchemaMeta(
+        singleton=1, version=2, ddl_digest=_digest(AwarenessTable.declared_schema())
     ):
         raise SchemaVersionError("optional awareness generation schema is unavailable")
 
 
 def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
-    if not _awareness_objects(db):
-        for table in TypedTable.members_with(AwarenessTable):
-            table.create(db)
+    if not AwarenessTable.stored_schema(db):
+        AwarenessTable.create_schema(db)
         AwarenessSchemaMeta(
-            singleton=1, version=2, ddl_digest=_digest(_schema(AwarenessTable))
+            singleton=1, version=2, ddl_digest=_digest(AwarenessTable.declared_schema())
         ).insert(db)
     assert_optional_awareness_schema(db)
 
@@ -605,11 +592,11 @@ def install_private_cohort_schema(store: Coordination) -> None:
     with store.session.writing() as db:
         if store.session.schema_version != COORDINATION_SCHEMA_VERSION:
             raise SchemaVersionError("unsupported coordinator schema")
-        if not _cohort_objects(db):
-            for table in TypedTable.members_with(CohortTable):
-                table.create(db)
+        if not CohortTable.stored_schema(db):
+            CohortTable.create_schema(db)
             CohortSchemaMeta(
-                singleton=1, version=COHORT_SCHEMA_VERSION, ddl_digest=_digest(_schema(CohortTable))
+                singleton=1, version=COHORT_SCHEMA_VERSION,
+                ddl_digest=_digest(CohortTable.declared_schema())
             ).insert(db)
         assert_cohort_schema(db)
         if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [

@@ -517,46 +517,25 @@ class TableSchema(ABC):
             json.dumps(cls.declared_schema(), sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
 
-    @staticmethod
-    def stored_schema(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        """The file's own objects; SQLite's sqlite_sequence for AUTOINCREMENT is not one."""
+    @classmethod
+    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        """The objects this file's kind compares: by default every object the file owns.
+
+        SQLite's own sqlite_sequence for AUTOINCREMENT is not one. A file kind with a
+        different scope overrides this read and nothing else.
+        """
         return SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
-
-    @staticmethod
-    def every_stored_object(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        """Every object with SQL, SQLite's own included, for files that declare all of them."""
-        return SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
-
-    @classmethod
-    def stored_member_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        """Only the member tables' objects, for tables that share a file with others."""
-        names = tuple(row.declared_name for row in cls.schema_rows())
-        return SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND tbl_name IN ("
-            + ",".join("?" for _ in names) + ")", names))
 
     @classmethod
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
         return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
 
     @classmethod
-    def member_schema_differs(cls, db: sqlite3.Connection) -> bool:
-        return bool(SQLiteSchemaObject.differences(
-            cls.stored_member_schema(db), cls.declared_schema()))
-
-    @classmethod
     def require_schema(cls, db: sqlite3.Connection) -> None:
         """Readers use only the declared schema, whichever kind of file this is."""
         if cls.schema_differs(db):
-            raise cls.schema_error(f"{cls.__name__} differs from its declaration")
-
-    @classmethod
-    def require_member_schema(cls, db: sqlite3.Connection) -> None:
-        """For tables sharing a file: only their own objects are compared."""
-        if cls.member_schema_differs(db):
             raise cls.schema_error(f"{cls.__name__} differs from its declaration")
 
     @classmethod
@@ -568,6 +547,41 @@ class TableSchema(ABC):
     @abstractmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
         """The writer's answer to a stored schema that differs from the declaration."""
+
+
+class SharedFileTables(TableSchema):
+    """Tables that share a file with others: only their own tables and indexes compare."""
+
+    __slots__ = ()
+
+    @classmethod
+    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        return [item for row in cls.schema_rows() for item in row.stored_objects(db)]
+
+
+class PrefixedTables(TableSchema):
+    """Tables named under prefixes in a shared file: a stray object with a prefix also differs."""
+
+    __slots__ = ()
+    name_prefixes: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        return SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND ("
+            + " OR ".join("name LIKE ?" for _ in cls.name_prefixes) + ")",
+            tuple(f"{prefix}%" for prefix in cls.name_prefixes)))
+
+
+class AllObjectsTables(TableSchema):
+    """A file that declares every object it holds, SQLite's own included."""
+
+    __slots__ = ()
+
+    @classmethod
+    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        return SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
 
 
 class DerivedTables(TableSchema):
@@ -812,6 +826,13 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         if len(stored) > 1:
             raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
         return stored
+
+    @classmethod
+    def stored_objects(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        """This table's stored SQL and every index or trigger attached to it."""
+        return SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
+            (cls.declared_name,)))
 
     @classmethod
     def present(cls, db: sqlite3.Connection) -> bool:
