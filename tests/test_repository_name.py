@@ -50,4 +50,4 @@ def test_order_family_owns_which_kinds_a_merge_closes(commander):
     comms, _ = commander
     todo = create(commander, "P1")
     finding = replace(todo, order=UnorderedProblemOrder())
-    assert finding.order.closed_by_merge(finding, (), comms.registry.storage_rule, PullRequests((finding,))) == ()
+    assert finding.order.closed_by_merge(finding, comms.registry.storage_rule, PullRequests((finding,))) == ()

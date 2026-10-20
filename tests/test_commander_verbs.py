@@ -33,7 +33,6 @@ DOCUMENTED = [
      {"where": "a.py:1", "why": "why", "sent": ""}),
     ("order", "next-hunt", {}),
     ("order", "board", {}),
-    ("order", "overdue", {}),
     ("request", "add 'finish the commander plan'", {"text": "finish the commander plan"}),
     ("request", "complete r1 --why 'phases delivered'", {"id": "r1", "why": "phases delivered"}),
     ("request", "list", {}),

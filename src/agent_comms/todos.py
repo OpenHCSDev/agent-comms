@@ -51,6 +51,7 @@ from .maintenance_barrier import MaintenanceBarrier
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .repo import Repo
 from .repository_name import RepositoryName
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
@@ -63,7 +64,6 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goal_management import Goals
     from .registration import Registration
-    from .repo import Repo
 
 
 @dataclass(frozen=True)
@@ -1443,7 +1443,7 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
             rf"(?m)^(?:#{{1,6}} +|{re.escape(cls.pull_request_problem_label)} +|Problem: +)"
             r"(P[1-9][0-9]*)(?=[:\s]|$)", body))
 
-    def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
+    def closed_by_merge(self, todo: Todo, storage: StorageRule,
                         pulls: PullRequests) -> tuple[Todo, ...]:
         return ()
 
@@ -1637,12 +1637,11 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
-    def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
+    def closed_by_merge(self, todo: Todo, storage: StorageRule,
                         pulls: PullRequests) -> tuple[Todo, ...]:
-        if not repos:
-            return ()
+        repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
         source = ProgressSource.of(todo, storage, pulls)
-        return tuple(DoneTodoState.closed(todo, merged) for repo in repos
+        return tuple(DoneTodoState.closed(todo, merged)
                      for merged in self.observed_merges(repo, source))
 
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
@@ -3049,15 +3048,12 @@ class TodoStore(TypedStore):
                                     source := ProgressSource.of(todo, storage, pulls))
                                 .stalled(source.since, time.time()))
 
-    def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
-                         storage: StorageRule) -> None:
+    def reconcile_merges(self, commander: ThreadIncarnation, storage: StorageRule) -> None:
         """Read before locking; close only orders whose observed revision still holds."""
         held = self.held_for_commander(commander)
         pulls = PullRequests(held)
         completed = tuple(closed for todo in held
-                          for closed in todo.order.closed_by_merge(
-                              todo, tuple(repo for repo in repos if repo.holds(todo)),
-                              storage, pulls))
+                          for closed in todo.order.closed_by_merge(todo, storage, pulls))
         if not completed:
             return
         with self.writing() as db:

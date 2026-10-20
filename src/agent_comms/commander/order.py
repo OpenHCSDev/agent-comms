@@ -31,7 +31,7 @@ from typing import Self
 from pydantic import PrivateAttr
 
 from agent_comms_hooks import ClaudeHook
-from agent_comms_hooks.watch import LoopClaim, PeerSync, WatchRecord
+from agent_comms_hooks.watch import PeerSync
 
 from ..change_report import FileLine
 from ..child_process import BoundedRun
@@ -610,13 +610,6 @@ class Commander(CommanderContext):
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
         print(f'hunt recorded: {where} -> {sent or "clean"}')
 
-    def overdue(self):
-        """Close installed merges periodically; Core's heartbeat owns every alarm."""
-        while True:
-            self.comms.goals.todos.reconcile_merges(
-                self.incarnation, self.repos, self.comms.registry.storage_rule)
-            time.sleep(60)
-
     @boundary_decoder
     def unstrike(self, task: str, why: str, at: str | None = None) -> None:
         """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
@@ -1031,16 +1024,6 @@ class BoardVerb(OrderVerb):
     def run(self, ctx: Commander) -> None:
         ctx.write_board()
         print(ctx.board.read_text(), end='')
-
-
-class OverdueVerb(OrderVerb):
-    help = "loop: every minute, name units past their deadline"
-
-    def run(self, ctx: Commander) -> None:
-        with LoopClaim.for_command(sys.argv).held(
-            WatchRecord(ctx.commander, str(ctx.root), tuple(sys.argv))
-        ):
-            ctx.overdue()
 
 
 def main(a, ctx: Commander):

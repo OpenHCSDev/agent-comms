@@ -76,6 +76,7 @@ class CommanderHeartbeat:
                 owner: review for owner, review in self.reviews.items() if owner in live
             }
             for thread in commanders:
+                comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry.storage_rule)
                 if thread.incarnation not in self.reviews:
                     # A restart observes the live rules as its baseline, not another alert.
                     self.reviews[thread.incarnation] = CommanderReview(
