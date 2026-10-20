@@ -23,7 +23,7 @@ from stored_inputs import stored_inputs
 
 from native_backend_fixture import wait_for
 
-async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(native_backend):
+async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(native_backend, monkeypatch):
     owner = native_backend
     first = await owner.run("first", followup="queued followup")
     assert isinstance(first[-1], events.Done) and first[-1].ok, first[-1]
@@ -46,6 +46,24 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     # immutable retained-context limit. Pi compacts it before settling; the
     # history and split-turn prefix each require a summary provider request.
     owner.provider.text = "L" * (2 * 1024 * 1024 + 257)
+    original_chunks = owner.provider.response_chunks
+
+    def summary_request(request):
+        return request['messages'][0]['content'].startswith('You are a context summarization assistant.')
+
+    def chunks():
+        if summary_request(owner.provider.requests[-1]):
+            yield {'content': 'Bounded retained-history summary.'}, None
+            yield {}, 'stop'
+        else:
+            yield from original_chunks()
+
+    def usage():
+        output = 8 if summary_request(owner.provider.requests[-1]) else 500000
+        return {'prompt_tokens': 8, 'completion_tokens': output, 'total_tokens': 8 + output}
+
+    monkeypatch.setattr(owner.provider, 'response_chunks', chunks)
+    monkeypatch.setattr(owner.provider, 'response_usage', usage)
     second = await owner.run("large response")
     assert second[-1].ok and second[-1].text == owner.provider.text, second[-1]
     assert owner.persistent.child_state.child.proc is reopened_child
@@ -60,9 +78,7 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
             "role": "user", "content": [{"type": "text", "text": text}]
         }
     for request in owner.provider.requests[4:]:
-        assert request["messages"][0]["content"].startswith(
-            "You are a context summarization assistant."
-        )
+        assert summary_request(request)
     compacted = [
         row for row in map(json.loads, owner.session.read_text().splitlines())
         if row["type"] == "compaction"
@@ -159,19 +175,21 @@ async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
             await agent.prompt(session, [TextContentBlock(
                 type="text", text="Distinct isolated native terminal verification."
             )])
-        assert effect.read_text() == "effect\n"
-        journal = [json.loads(line) for line in owner.session.read_text().splitlines()]
-        messages = [row["message"] for row in journal if row.get("type") == "message"]
-        errors = [message for message in messages if message.get("stopReason") == "error"]
-        assert len(errors) == 1 and "controlled failure" in errors[0]["errorMessage"]
-        assert owner.provider.posts == 2  # One tool request, one terminal refusal; no retries.
-        tools = [message for message in messages if message.get("role") == "toolResult"]
-        assert len(tools) == 1
-        assert len([message for message in messages if message.get("role") == "user"]) == 2
-        reports = list((owner.root / "diagnostics").glob("*.json"))
-        failures = [json.loads(path.read_text()) for path in reports]
-        assert len(failures) == 1
-        assert failures[0]["reason"] == "model_request_failed"
+    # The owner's context joins its SDK writer. An ACP error notification is
+    # not an acknowledgement that the final journal append has finished.
+    assert effect.read_text() == "effect\n"
+    journal = [json.loads(line) for line in owner.session.read_text().splitlines()]
+    messages = [row["message"] for row in journal if row.get("type") == "message"]
+    errors = [message for message in messages if message.get("stopReason") == "error"]
+    assert len(errors) == 1 and "controlled failure" in errors[0]["errorMessage"]
+    assert owner.provider.posts == 2  # One tool request, one terminal refusal; no retries.
+    tools = [message for message in messages if message.get("role") == "toolResult"]
+    assert len(tools) == 1
+    assert len([message for message in messages if message.get("role") == "user"]) == 2
+    reports = list((owner.root / "diagnostics").glob("*.json"))
+    failures = [json.loads(path.read_text()) for path in reports]
+    assert len(failures) == 1
+    assert failures[0]["reason"] == "model_request_failed"
 
 
 @pytest.mark.parametrize("termination", ["cancel", "eof", "owner_stop"])

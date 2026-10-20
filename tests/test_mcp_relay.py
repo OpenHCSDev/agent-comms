@@ -272,12 +272,12 @@ send = lambda row: print(json.dumps(row), flush=True)
 preflight = json.loads(sys.stdin.readline())
 send({{"id":preflight["id"],"type":"response","command":"get_state","success":True,
       "data":{{"nativeInputProofCapability":{json.dumps(CAPABILITY)},
-              "sessionId":"fixture-session"}}}})
+              "sessionId":"fixture-session", "sessionFile":"/fixture/one.jsonl"}}}})
 prompt = next_prompt()
 send({{"id":prompt["id"],"type":"response","command":"prompt","success":True}})
 send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
       "inputId":prompt["inputId"]}}}})
-send({{"type":"message_end","message":{{"role":"assistant","content":[],"stopReason":"stop"}}}})
+send({{"type":"message_end","message":{{"role":"assistant","content":[{{"type":"text","text":"fixture complete"}}],"stopReason":"stop"}}}})
 send({{"type":"agent_settled"}})
 acknowledgement = {input_receipt!r}
 acknowledgement["inputId"] = prompt["inputId"]
@@ -293,7 +293,7 @@ send({{"type":"extension_ui_request","id":"late","method":"setStatus",
             program, [], "fixture", str(tmp_path), finish_event=asyncio.Event()
         )
     ]
-    assert any(isinstance(event, ae.StreamSettled) for event in events)
+    assert any(isinstance(event, ae.StreamSettled) for event in events), events
     assert not any(isinstance(event, ae.McpLiveStatus) for event in events)
 
 

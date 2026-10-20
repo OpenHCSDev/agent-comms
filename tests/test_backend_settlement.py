@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSI
 async def test_followup_outlives_previous_native_settlement(
     tmp_path, start_before_settlement, inject_during_stats
 ):
-    from agent_comms.native_session_files import create_fresh_private_session
+    from agent_comms.fresh_private_session import create_fresh_private_session
     session = create_fresh_private_session(tmp_path / 'sessions', worktree=tmp_path).path
     session_id = json.loads(session.read_text().splitlines()[0])['id']
     stub = tmp_path / "pi-stub"

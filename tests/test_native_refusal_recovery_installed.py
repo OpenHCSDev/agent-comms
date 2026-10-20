@@ -17,6 +17,7 @@ CODEX_RETRYABLE = (
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(240)
 async def test_actual_native_refusal_after_tool_preserves_saved_history(native_backend, monkeypatch):
     owner = native_backend
     marker = owner.project / "read-once.txt"
@@ -49,7 +50,7 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(native_b
     config["providers"]["response-local"]["baseUrl"] = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1"
     model_file.write_text(json.dumps(config))
     try:
-        async with asyncio.timeout(240), owner.open_owner(native_options=("--tools", "read")) as (agent, session):
+        async with owner.open_owner(native_options=("--tools", "read")) as (agent, session):
             native = agent.turns.persistent_backends[session]
             original_stream = native.run_turn
             observed = []
