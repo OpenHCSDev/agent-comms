@@ -16,6 +16,7 @@ from ..comms import Comms
 from ..coordinator import Coordination
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
+from ..repo import Repo
 from ..standing_rules import (
     DatedStandingRule,
     ReasonedStandingRule,
@@ -29,7 +30,7 @@ from ..todos import (
 )
 from ..tools import CommsUnjudgedTool
 from ..turn_digests import TurnDigestRead, TurnsSince
-from .config import CommanderConfig, Repo
+from .config import CommanderConfig
 
 
 @dataclass(frozen=True)

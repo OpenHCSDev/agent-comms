@@ -77,6 +77,7 @@ from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
+from .repo import Repo
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .shared_ledger import LedgerDocument
@@ -1462,7 +1463,7 @@ class InstallCliCommand(CliCommand):
     commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .commander.config import CommanderConfig, Repo
+        from .commander.config import CommanderConfig
 
         home = Path.home()
         project = self.project.resolve()

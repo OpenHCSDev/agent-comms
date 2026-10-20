@@ -1,6 +1,7 @@
 """An order's progress is read from its unit's checkout and PRs beside its deadline; merged work draws no strike."""
 import shutil
 import subprocess
+import shlex
 import time
 
 from dataclasses import replace
@@ -8,13 +9,17 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.child_process import CountPrinted
+from agent_comms.goals import CountCheckResult, GitCommandFailed, OrderCheck
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
-    PullRequest, PullRequests, PushedProgress, UnreadProgress)
+    MergedPullRequest, PresentCheckout, ProgressPoint, ProgressSource, PullRequest, PullRequests,
+    PushedProgress, UnmergedPullRequest, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
+from agent_comms.work_branches import WorkBranchError
 from test_commander_problem_orders import create, working
 
 
@@ -67,7 +72,7 @@ def test_no_commit_since_the_order_is_explicit(checkout):
 
 
 def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander_script, checkout, monkeypatch):
-    from agent_comms.child_process import CountPrinted, NoIntegerPrinted
+    from agent_comms.child_process import NoIntegerPrinted
     from agent_comms.todos import DistanceReading, UncountedTrend
 
     script, _ = commander_script
@@ -80,6 +85,7 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
         replace(todo, order=broken).upsert(db)
     create(commander, 'P2', deadline=1)
     commit(unit)
+    broken.check.at(git(unit, 'rev-parse', 'HEAD'), str(unit))
 
     progress = read((comms.goals.todos.get('P1'), unit))
     assert progress.line.endswith("; check prints no integer: printf 'no count here'")
@@ -109,7 +115,7 @@ def test_a_pushed_commit_with_no_pr_says_so(checkout):
 
 
 def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
-    pulls = Listed(open=(PullRequest(12, 'fix/p10', 'f' * 40, orders=('order-P10',)), PullRequest(7, 'fix/p1', 'a' * 40,
+    pulls = Listed(open=(UnmergedPullRequest(12, 'fix/p10', 'f' * 40, orders=('order-P10',)), UnmergedPullRequest(7, 'fix/p1', 'a' * 40,
                                                                               updated_at=400.0, orders=('order-P1',))))
     progress = read(checkout, pulls)
     assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
@@ -119,7 +125,7 @@ def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
 def test_removed_checkout_uses_only_retained_pr_and_present_git_errors_propagate(checkout):
     _, unit = checkout
     shutil.rmtree(unit)
-    pulls = Listed(open=(PullRequest(7, 'fix/p1', 'a' * 40,
+    pulls = Listed(open=(UnmergedPullRequest(7, 'fix/p1', 'a' * 40,
                                     updated_at=400.0, orders=('order-P1',)),))
     progress = read(checkout, pulls)
     assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
@@ -136,36 +142,61 @@ def test_removed_checkout_uses_only_retained_pr_and_present_git_errors_propagate
 
 def test_an_order_owns_the_pr_from_its_identity_whatever_the_branch_says(checkout):
     # #7 was renamed without its P-number; #9 is titled "P1: ..." but comes from another order's branch.
-    pulls = Listed(open=(PullRequest(9, 'fix/p2', 'b' * 40, updated_at=500.0, orders=('order-P2',)),
-                         PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',))))
+    pulls = Listed(open=(UnmergedPullRequest(9, 'fix/p2', 'b' * 40, updated_at=500.0, orders=('order-P2',)),
+                         UnmergedPullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',))))
     assert read(checkout, pulls) == OpenPrProgress(7, 'a' * 9, at=400.0)
 
 
 def test_a_detached_checkout_still_reads_its_order_pr(checkout):
     git(checkout[1], 'switch', '-q', '--detach')
-    assert read(checkout, Listed(open=(PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',)),))) == OpenPrProgress(7, 'a' * 9, at=400.0)
+    assert read(checkout, Listed(open=(UnmergedPullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',)),))) == OpenPrProgress(7, 'a' * 9, at=400.0)
 
 
 def test_an_open_pr_untouched_since_the_order_belongs_to_an_earlier_one(checkout):
-    assert read(checkout, Listed(open=(PullRequest(5, 'fix/p1', 'e' * 40, updated_at=99.0, orders=('order-P1',)),))) == NoCommitProgress()
+    assert read(checkout, Listed(open=(UnmergedPullRequest(5, 'fix/p1', 'e' * 40, updated_at=99.0, orders=('order-P1',)),))) == NoCommitProgress()
 
 
 def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
-    pulls = Listed(merged=(PullRequest(3, 'fix/p1', 'b' * 40, 'c' * 40, 99.0, 600.0, orders=('order-P1',)),))
+    pulls = Listed(merged=(MergedPullRequest(3, 'fix/p1', 'b' * 40, merge='c' * 40, merged_at=99.0, updated_at=600.0, orders=('order-P1',)),))
     assert read(checkout, pulls) == NoCommitProgress()
 
 
 def test_a_merge_not_yet_installed_waits_only_on_install(checkout):
-    progress = read(checkout, Listed(merged=(PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)))
+    progress = read(checkout, Listed(merged=(MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)))
     assert progress == MergedProgress('d' * 40)
     assert progress.line == 'merged as ddddddddd, waiting on install'
 
 
 def test_unread_github_is_explicit(checkout):
     pulls = Listed()
-    pulls.states = ValueError('gh: not logged in')
+    pulls.states = WorkBranchError('gh: not logged in')
     progress = read(checkout, pulls)
     assert progress == UnreadProgress('gh: not logged in')
+
+
+def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
+    todo, unit = checkout
+    marker = tmp_path / 'explicit-check-count'
+    check = OrderCheck(str(unit), f'printf x >> {shlex.quote(str(marker))}; printf 0',
+                       CountCheckResult(0))
+    todo = replace(todo, order=replace(todo.order, check=check))
+    source = ProgressSource.of(todo, StorageRule(checkout_base=unit.parent), Listed())
+    assert not source.readings().readings
+    assert not marker.exists()
+    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
+    assert marker.read_text() == 'x'
+    assert len(source.readings().readings) == 1
+    assert source.readings().readings[0].distance == CountPrinted(todo.order.checked().untouched(()))
+    assert marker.read_text() == 'x'
+
+
+def test_an_existing_broken_checkout_is_not_silently_treated_as_missing(checkout, tmp_path):
+    bad = tmp_path / 'not-a-repository' / 'worker--P1'
+    bad.mkdir(parents=True)
+    source = ProgressSource.of(checkout[0], StorageRule(checkout_base=bad.parent), Listed())
+    assert isinstance(source.checkout, PresentCheckout)
+    with pytest.raises(GitCommandFailed):
+        source.readings()
 
 
 def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_script, monkeypatch, tmp_path):
@@ -176,7 +207,7 @@ def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')
     create(commander, 'P1', deadline=1)
-    merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
+    merged = (MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     assert "waiting on install" in deadline_lines(script)[0]
     script.board()
@@ -201,15 +232,16 @@ class HeldSource:
     since = 100.0
 
     def commits(self, *excluded):
-        commits = {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}
+        commits = {('--remotes',): ProgressPoint('a' * 40, 1000.0),
+                   ('origin/HEAD',): ProgressPoint('e' * 40, 1000.0)}
         yield commits[excluded]
 
     def readings(self):
         return DistanceReadings()
 
     def requests(self, state):
-        return {'open': [PullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0, orders=('order-P1',))],
-                'merged': [PullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0, orders=('order-P1',))]}[state]
+        return {'open': [UnmergedPullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0, orders=('order-P1',))],
+                'merged': [MergedPullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0, orders=('order-P1',))]}[state]
 
 
 class EmptySource:
@@ -319,7 +351,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     git(unit, 'init', '-q', '-b', 'fix/p1')
     for pid in ('P1', 'P2', 'P3'):
         create(commander, pid, deadline=1)
-    merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
+    merged = (MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     for pid in ('P2', 'P3'):
         CommsOrderDoneTool(problem=pid, order_id=comms.goals.todos.get(pid).order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
@@ -361,8 +393,8 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     monkeypatch.setattr(subprocess, "run", forge)
     script.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).run()
     assert todo.order.pull_request_ids(bodies[0]) == (todo.order.id,)
-    stamp = "1970-01-01T00:08:20Z"
-    merged = PullRequest.listed(number, branch, "b" * 40, "d" * 40, stamp, stamp, bodies[0])
+    merged = MergedPullRequest(number, branch, "b" * 40, merge="d" * 40,
+        merged_at=500, updated_at=500, orders=todo.order.pull_request_ids(bodies[0]))
     foreign = replace(merged, number=number + 1, merge="f" * 40, orders=("another-order",))
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order:
                         (foreign, merged) if state == "merged" else ())

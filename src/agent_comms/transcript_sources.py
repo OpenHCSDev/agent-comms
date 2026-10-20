@@ -7,7 +7,7 @@ A display cursor advances each only when that source's record is consumed.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -294,6 +294,14 @@ class TranscriptDraft:
 @dataclass(frozen=True)
 class NoDraft(TranscriptDraft):
     pass
+
+
+class TranscriptRecord:
+    """A source position; only native records can project a decoded native entry."""
+
+    def project[Result](self, projection: Callable[[NativeRecord], Result]) -> Result | tuple[()]:
+        """External records have events already, but no native entry for this callback."""
+        return ()
 
 
 class TranscriptSource:

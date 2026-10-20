@@ -12,7 +12,8 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.config import CommanderConfig, Repo
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.repo import Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
@@ -24,7 +25,8 @@ from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
-    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, StrikeReason, Todo, UnreadProgress)
+    MergedPullRequest, NoCommitProgress, OpenPrProgress, OrderProgress, PullRequests, StrikeReason,
+    Todo, UnmergedPullRequest, UnreadProgress)
 from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsChangeProblemTool
 
@@ -56,13 +58,12 @@ def test_board_self_check_uses_order_progress_and_its_linked_merge(
         commander, standing, monkeypatch, reported, alarms):
     comms, caller = commander
     owned, pending, foreign = (create(commander, pid) for pid in ("P77", "P109", "P117"))
-    stamp = "1970-01-01T00:08:20Z"
-    merged = PullRequest.listed(1581, "docs/module-layers", "b" * 40, "d" * 40,
-        stamp, stamp, owned.order.pull_request_body("Module layer map"))
-    opened = PullRequest.listed(1624, "ratchet/none-absence", "c" * 40, "", "",
-        stamp, pending.order.pull_request_body("Declared measure"))
-    other = PullRequest.listed(1629, "ratchet/decoder-marker", "e" * 40, "f" * 40,
-        stamp, stamp, "Agent-Comms-Order: another-order\n")
+    merged = MergedPullRequest(1581, "docs/module-layers", "b" * 40, merge="d" * 40,
+        merged_at=500, updated_at=500, orders=(owned.order.id,))
+    opened = UnmergedPullRequest(1624, "ratchet/none-absence", "c" * 40,
+        updated_at=500, orders=(pending.order.id,))
+    other = MergedPullRequest(1629, "ratchet/decoder-marker", "e" * 40, merge="f" * 40,
+        merged_at=500, updated_at=500, orders=("another-order",))
 
     def forge(self, repo, state, order):
         return (merged, other) if state == "merged" else (opened,)
@@ -190,20 +191,24 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     runs = tmp_path / "runs"
     check = f"echo run >> {runs}; cat left"
     todo = create(commander, "P1", command=check, expected=0, deadline=time.time() + 3600)
+    ordered_check = todo.order.checked().check
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
 
     def progress():
         return OrderProgress.read(comms.goals.todos.get("P1"), storage, PullRequests())
 
     commit(2)
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
     assert "; distance 2, projected done " in progress().line
     assert isinstance(progress().distance_readings().trend, MovingTrend)
     commit(2)
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
     assert progress().line.endswith("; distance 2, not falling")
     assert runs.read_text().count("run") == 3  # once per commit: base, then each branch commit
 
     reader = ("import sys; from agent_comms.goals import CountCheckResult, OrderCheck; "
               "check = OrderCheck(sys.argv[1], sys.argv[2], CountCheckResult(0)); "
-              "print(check.at(sys.argv[3], sys.argv[1]).stdout.decode(), end='')")
+              "print(check.recorded(sys.argv[3], sys.argv[1])[0].stdout.decode(), end='')")
     second = subprocess.run([sys.executable, "-c", reader, str(unit), check,
                              git("rev-parse", "HEAD").strip()],
                             check=True, capture_output=True, text=True)

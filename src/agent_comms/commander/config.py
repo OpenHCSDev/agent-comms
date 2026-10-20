@@ -5,7 +5,6 @@ hardcodes a home directory, a bus root or a unit name.
 """
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
@@ -16,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from ..comms import Comms
 from ..errors import RelationViolationError
 from ..native_arguments import NativeArguments
+from ..repo import Repo
 from ..threads import Thread
 from ..todos import Todo
 
@@ -30,33 +30,6 @@ class CommanderRole:
                 f"Thread {thread.name!r} with declared model {thread.model!r} "
                 "cannot command: no Codex commander."
             )
-
-
-class Repo(BaseModel):
-    """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
-
-    model_config = ConfigDict(frozen=True)
-
-    checkout: Path
-    github: str
-    source: str = 'src'
-
-    def contains(self, sha: str) -> bool:
-        """Only a successful ancestry proof in this installed checkout permits closure."""
-        result = subprocess.run(
-            ('git', '-C', str(self.checkout), 'merge-base', '--is-ancestor', sha, 'HEAD'),
-            capture_output=True, timeout=60)
-        if result.returncode not in (0, 1):
-            result.check_returncode()
-        return result.returncode == 0
-
-    @classmethod
-    def of(cls, checkout: Path) -> Repo:
-        """Its GitHub name comes from the checkout's own origin remote."""
-        url = subprocess.run(['git', '-C', str(checkout), 'remote', 'get-url', 'origin'],
-                             capture_output=True, text=True, check=True).stdout.strip()
-        github = url.removesuffix('.git').replace(':', '/').split('/')[-2:]
-        return cls(checkout=checkout.resolve(), github='/'.join(github))
 
 
 class CommanderConfig(CommanderRole, BaseModel):
