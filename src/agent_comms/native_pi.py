@@ -141,12 +141,12 @@ class NativePiPromptRejected(NativePiUnavailable):
 class NativePiOperationFailed(NativePiUnavailable):
     """Keep the native event private while reporting a fixed public failure."""
 
-    def __init__(self, event: pi.NativeOperationError):
+    def __init__(self, event: pi.NativeOperationError) -> None:
         self.event = event
         super().__init__("Native Pi refused an operation (see diagnostic)")
 
     @property
-    def diagnostic_evidence(self):
+    def diagnostic_evidence(self) -> dict[str, str]:
         return {**super().diagnostic_evidence, "operation": self.event.error}
 
 
