@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 from abc import abstractmethod
+from collections.abc import Sequence
 from contextlib import (
     AbstractContextManager,
     ExitStack,
@@ -20,7 +21,7 @@ from contextlib import (
     nullcontext,
     redirect_stdout,
 )
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib.metadata import distribution
 from io import StringIO
 from pathlib import Path
@@ -43,7 +44,12 @@ from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.owner_cutover import MaintainedOwnerCutover
-from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelection
+from agent_comms.owner_lifecycle import (
+    OwnerLifecycle,
+    OwnerRestartResult,
+    OwnerRestartSelection,
+    OwnerStartResult,
+)
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _atomic_write_text, _store_lock
@@ -51,7 +57,7 @@ from agent_comms.threads import Thread
 
 
 class PublicationIntent(SubclassUnion, affix=''):
-    """A new publication selects workers; an interrupted one keeps its exact selection."""
+    """Retain stopped witnesses and include owners running when publication resumes."""
 
     @classmethod
     def read(cls, path: Path) -> PublicationIntent:
@@ -68,6 +74,17 @@ class PublicationIntent(SubclassUnion, affix=''):
     def select(self, snapshot, selected, runtime: Path, previous: Path,
                path: Path) -> SavedPublicationIntent: ...
 
+    @staticmethod
+    def capture(snapshot: RegistrySnapshot, selected: Sequence[Thread],
+                runtime: Path, previous: Path, path: Path,
+                owners: tuple[OwnerRestartSelection, ...] = ()) -> SavedPublicationIntent:
+        names = {owner.name for owner in owners}
+        intent = SavedPublicationIntent(str(runtime), str(previous), owners + tuple(
+            OwnerRestartSelection.capture(snapshot, thread.name)
+            for thread in selected if thread.name not in names))
+        _atomic_write_text(path, json.dumps(FieldCodec.encode(intent)) + '\n', fsync_parent=True)
+        return intent
+
 
 class NoPublicationIntent(NullMember, PublicationIntent):
     def require_target(self, runtime: Path, previous: Path) -> None:
@@ -76,10 +93,7 @@ class NoPublicationIntent(NullMember, PublicationIntent):
 
     def select(self, snapshot, selected, runtime: Path, previous: Path,
                path: Path) -> SavedPublicationIntent:
-        intent = SavedPublicationIntent(str(runtime), str(previous), tuple(
-            OwnerRestartSelection.capture(snapshot, thread.name) for thread in selected))
-        _atomic_write_text(path, json.dumps(FieldCodec.encode(intent)) + '\n', fsync_parent=True)
-        return intent
+        return self.capture(snapshot, selected, runtime, previous, path)
 
 
 @dataclass(frozen=True)
@@ -95,7 +109,8 @@ class SavedPublicationIntent(RecordMember, PublicationIntent):
 
     def select(self, snapshot, selected, runtime: Path, previous: Path,
                path: Path) -> SavedPublicationIntent:
-        return self
+        return self.capture(snapshot, selected, Path(self.runtime), Path(self.previous),
+                            path, self.owners)
 
 
 @dataclass(frozen=True)
@@ -171,9 +186,7 @@ class RuntimePublication:
 
     def publish_stopped(self, carries, comms, intent, hold, resources) -> None:
         root = comms.root
-        snapshot = comms.registry.snapshot()
-        remaining = [original.name for original in OwnerRestartSelection.live(intent.owners, snapshot)]
-        request = OwnerRestartRequest(names=tuple(remaining))
+        request = OwnerRestartRequest(names=tuple(original.name for original in intent.owners))
         if not carries.original():
             if OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):
                 raise RuntimeError('Cannot restore data while an original worker is running')
@@ -237,6 +250,33 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
     carries: PendingConversion
     route_ownership: ExitStack = field(default_factory=ExitStack, compare=False)
     route_descriptor: int = field(init=False)
+
+    def restart(self, lifecycle: OwnerLifecycle,
+                request: OwnerRestartRequest) -> tuple[OwnerRestartResult, ...]:
+        snapshot = lifecycle.registry.snapshot()
+        for original in self.selection:
+            if snapshot.require(original.name).incarnation != original.identity.incarnation:
+                raise ValueError('Saved publication owner incarnation changed')
+        running = replace(request, names=tuple(
+            original.name for original in self.selection
+            if snapshot.require(original.name).restart_candidates(snapshot.status(original.name))))
+        results = super().restart(lifecycle, running)
+        # A previous failed cutover already retired these owners. Their /proc
+        # environment is gone; normal start derives their declared launch anew.
+        # The stopped batch has released its wire/route locks before this step.
+        for original in self.selection:
+            if any(result.thread == original.name for result in results):
+                continue
+            thread = lifecycle.registry.require(original.name)
+            if thread.incarnation != original.identity.incarnation:
+                raise ValueError('Saved publication owner incarnation changed')
+            completed = subprocess.run([
+                self.runtime / 'bin/agent-comms', '--root', str(lifecycle.root),
+                'start', '--name', original.name,
+            ], capture_output=True, text=True, check=True, timeout=60)
+            started = FieldCodec.decode(OwnerStartResult, FieldCodec.parse(completed.stdout))
+            results += (OwnerRestartResult(original.name, original.process.pid, started.pid),)
+        return results
 
     def stopped_resources(self, lifecycle):
         # Agent observation children hold shared route locks until they stop.
