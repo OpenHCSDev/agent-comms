@@ -28,7 +28,7 @@ def lock():
     return ResolvedLock.model_validate(
         {
             "package": [
-                {"name": "agent-comms", "version": "1", "source": {"editable": ".."}},
+                {"name": "agent-comms", "source": {"editable": ".."}},
                 {
                     "name": "batrachian-toad",
                     "version": "2",
