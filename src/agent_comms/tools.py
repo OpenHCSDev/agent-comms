@@ -50,7 +50,6 @@ from .field_codec import (
     DefaultNonNull,
     Description,
     FieldDirective,
-    GivenArgumentDefault,
     WireChoices,
     WireName,
     WireOmitDefault,
@@ -1570,7 +1569,6 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         dict[str, object],
         Argument(
             flags=("--arguments",),
-            default=GivenArgumentDefault("{}"),
             options={"help": "Tool arguments as a JSON object"},
         ),
     ] = dataclasses.field(default_factory=dict)

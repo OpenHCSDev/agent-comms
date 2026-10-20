@@ -331,11 +331,13 @@ class ArgumentDefault(ABC):
 
 @dataclass(frozen=True)
 class InferredArgumentDefault(ArgumentDefault):
+    """An absent optional argument stays absent, so the field's own default applies."""
+
     def apply(self, options: dict[str, object], plan: FieldPlan) -> None:
         if plan.constructor_required:
             options["required"] = True
         else:
-            options["default"] = plan.value.argument_text(plan.value.encode(plan.default()))
+            options["default"] = argparse.SUPPRESS
 
 
 @dataclass(frozen=True)
@@ -1249,6 +1251,7 @@ class FieldCodec(Sealed):
         return cls.decode_record(target, {
             entry.key: entry.argument_payload(raw[entry.key])
             for entry in cls.argument_fields(target)
+            if entry.key in raw
         })
 
     @classmethod

@@ -45,7 +45,6 @@ from ..field_codec import (
     SubclassUnion,
     boundary_decoder,
     Argument,
-    FactoryArgumentDefault,
     Normalize,
 )
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
@@ -864,7 +863,6 @@ class SendVerb(OrderVerb, DirectiveVerb):
         Normalize(FieldCodec.encode),
         Argument(
             flags=("--due",),
-            default=FactoryArgumentDefault(UnrecordedEventTime),
             options={
                 "type": RecordedEventTime.from_clock,
                 "choices": None,
@@ -1136,7 +1134,6 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
         Normalize(FieldCodec.encode),
         Argument(
             flags=("--due",),
-            default=FactoryArgumentDefault(UnrecordedEventTime),
             options={
                 "type": RecordedEventTime.from_clock,
                 "choices": None,

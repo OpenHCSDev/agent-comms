@@ -878,7 +878,7 @@ class ImportingCliCommand(CliCommand):
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),
-        Argument(flags=("--tags",), default=GivenArgumentDefault("")),
+        Argument(flags=("--tags",)),
     ] = dataclasses.field(default_factory=frozenset)
     max_messages: Annotated[int, Argument(flags=("--max-messages",))] = (
         200
@@ -1476,7 +1476,6 @@ class ThreadCliCommand(CliCommand):
         Normalize(dict),
         Argument(
             flags=("--no-pending",),
-            default=GivenArgumentDefault(FieldCodec.encode(CountedRead())),
             options={
                 "help": "Skip the inbox count for fast metadata reads",
                 "action": "store_const",
@@ -1497,7 +1496,7 @@ class RegisterCliCommand(CliCommand):
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),
-        Argument(flags=("--tags",), default=GivenArgumentDefault("")),
+        Argument(flags=("--tags",)),
     ] = dataclasses.field(default_factory=frozenset)
     parent: Annotated[str | None, Argument(flags=("--parent",))] = (
         None
@@ -1507,7 +1506,6 @@ class RegisterCliCommand(CliCommand):
         ProcessState,
         Argument(
             flags=("--pid",),
-            default=GivenArgumentDefault(FieldCodec.encode(NoProcess())),
             options={"type": ProcessIdentity.pid_argument},
         ),
     ] = dataclasses.field(default_factory=NoProcess)
@@ -1516,7 +1514,6 @@ class RegisterCliCommand(CliCommand):
         Editor(ChoiceTargetField),
         Argument(
             flags=("--execution",),
-            default=GivenArgumentDefault(FieldCodec.encode(ExternalThreadExecution)),
         ),
     ] = ExternalThreadExecution
 
@@ -1542,7 +1539,7 @@ class InstallCliCommand(CliCommand):
     checkout: Annotated[
         Path,
         PathText,
-        Argument(flags=("--checkout",), default=GivenArgumentDefault(".")),
+        Argument(flags=("--checkout",)),
     ] = dataclasses.field(default_factory=Path.cwd)
     to: Annotated[str, Argument(flags=("--to",))] = "origin/main"
     installer: Annotated[
@@ -1568,19 +1565,18 @@ class InstallCliCommand(CliCommand):
         PathText,
         Argument(
             flags=("--spill-dir",),
-            default=GivenArgumentDefault(str(Path.home() / ".cache/agent-rehearsal")),
             options={"help": "Parent directory for live backups"},
         ),
     ] = dataclasses.field(default_factory=lambda: Path.home() / ".cache/agent-rehearsal")
     project: Annotated[
         Path,
         PathText,
-        Argument(flags=("--project",), default=GivenArgumentDefault(".")),
+        Argument(flags=("--project",)),
     ] = dataclasses.field(default_factory=Path.cwd)
     repos: Annotated[
         tuple[Annotated[Path, PathText], ...],
         Normalize(_tags),
-        Argument(flags=("--repos",), default=GivenArgumentDefault("")),
+        Argument(flags=("--repos",)),
     ] = ()
     commander: Annotated[str, Argument(flags=("--commander",))] = (
         "claude-code"
@@ -1635,7 +1631,6 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
         ProcessState,
         Argument(
             flags=("--pid",),
-            default=GivenArgumentDefault(FieldCodec.encode(NoProcess())),
             options={"type": ProcessIdentity.pid_argument},
         ),
     ] = dataclasses.field(default_factory=NoProcess)
@@ -1943,7 +1938,6 @@ class PollCliCommand(CliCommand):
         Normalize(dict),
         Argument(
             flags=("--thread",),
-            default=GivenArgumentDefault(FieldCodec.encode(CallingThreadTarget())),
             options={"action": "store", "type": NamedThreadTarget.argument},
         ),
     ] = dataclasses.field(default_factory=CallingThreadTarget)
@@ -2124,7 +2118,7 @@ class TargetActionCliCommand(CliCommand, declared_name="target-action"):
     arguments: Annotated[
         dict[str, Any],
         Argument(
-            flags=("--arguments",), default=GivenArgumentDefault("{}")
+            flags=("--arguments",)
         ),
     ] = dataclasses.field(default_factory=dict)
     confirmed: Annotated[bool, Argument(flags=("--confirmed",))] = (
