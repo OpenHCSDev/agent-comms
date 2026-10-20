@@ -17,7 +17,11 @@ def observation(mutation: VerdictMutation, changes: int) -> VerdictObservation:
 def test_verdict_requires_the_actual_call_event_goal_and_strike_together():
     accepted = VerdictMutation("one-call", 1, 1, 0, 0, 0, "P1: Open · Accepted")
     back = replace(
-        accepted, strikes=1, goal_revisions=1, goal_transitions=1, progress="P1: Open · Sent back"
+        accepted,
+        strikes=1,
+        goal_revisions=1,
+        goal_history_entries=1,
+        progress="P1: Open · Sent back",
     )
     ok, sent_back = observation(accepted, 0), observation(back, 1)
     compared = VerdictComparison(ok, ok, sent_back, sent_back)
@@ -27,7 +31,7 @@ def test_verdict_requires_the_actual_call_event_goal_and_strike_together():
         replace(back, todo_revisions=2),
         replace(back, strikes=0),
         replace(back, goal_revisions=0),
-        replace(back, goal_transitions=2),
+        replace(back, goal_history_entries=2),
     ):
         observed = observation(changed, 1)
         assert not observed.passed

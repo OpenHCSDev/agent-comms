@@ -95,7 +95,7 @@ class StrikeLimitParityRow(ParityRow):
 class VerdictParityRow(ParityRow):
     number = 8
     capability = "Verdicts on a unit's tool calls"
-    current = "`judge.py ok`, `back`; `verdicts.jsonl`"
+    current = "`judge.py ok`, `back`; both invoke `CommsVerdictTool`"
     native = "Order `Verdict`; send-back revises the Goal and records its strike atomically"
     phases = (RecordPlanePhase,)
     comparison = VerdictComparison.read

@@ -58,7 +58,7 @@ class VerdictMutation:
     todo_revisions: int
     strikes: int
     goal_revisions: int
-    goal_transitions: int
+    goal_history_entries: int
     progress: str
 
     def checks(self, changes: int) -> tuple[tuple[str, bool], ...]:
@@ -67,7 +67,7 @@ class VerdictMutation:
             ("one Todo revision", self.todo_revisions == 1),
             ("strike delta", self.strikes == changes),
             ("Goal revision delta", self.goal_revisions == changes),
-            ("committed Goal transition delta", self.goal_transitions == changes),
+            ("committed Goal history delta", self.goal_history_entries == changes),
         )
 
 
@@ -165,7 +165,8 @@ class VerdictCase(ABC):
             if len(native) != 1 or native[0][0].operation.tool_call_id != call_id:
                 raise ValueError("The native verdict must judge this one original copied tool call")
             request, result = native[0]
-            transitions = run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id)[
+            # goal_history returns committed revisions; its internal tags stay there.
+            history_entries = run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id)[
                 history:
             ]
             progress = GoalSegment.capture(worker, after, run.commander.comms.goals).progress
@@ -175,7 +176,7 @@ class VerdictCase(ABC):
                 saved.revision - before.revision,
                 saved.strike_count - before.strike_count,
                 after.revision - goal.revision,
-                len(transitions),
+                len(history_entries),
                 progress,
             )
             checks = (
@@ -195,10 +196,7 @@ class VerdictCase(ABC):
                 ("declared verdict kind", isinstance(request.operation, cls.native_owner)),
                 (
                     "Goal publication retained",
-                    all(
-                        entry.kind == "transition" and entry.before == goal and entry.after == after
-                        for entry in transitions
-                    ),
+                    all(entry.before == goal and entry.after == after for entry in history_entries),
                 ),
                 ("native verdict visible in Goal", request.operation.line in progress),
             )
