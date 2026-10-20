@@ -131,7 +131,7 @@ class NativePiPromptRejected(NativePiUnavailable):
 
     def __init__(self, response: pi.Response):
         self.response = response
-        super().__init__("Native Pi rejected the tracked prompt (see diagnostic)")
+        super().__init__(f"Native Pi rejected the tracked prompt: {response.error}")
 
     @property
     def rejected_response(self) -> pi.Response:
