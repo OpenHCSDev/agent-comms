@@ -39,26 +39,28 @@ def test_rootless_client_uses_published_route_not_environment(tmp_path, monkeypa
     root = publish_route(tmp_path)
     unrelated = tmp_path / 'wrong'
     monkeypatch.setenv('AGENT_COMMS_ROOT', str(unrelated))
-    assert isinstance(resolve_comms_route(), ActiveRoute)
+    LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
+    assert LaunchRoot.current().path == root
     assert resolve_comms_route().root == root
     assert child_root(dict(os.environ), tmp_path) == root
     assert main(['threads']) == 0
     assert not unrelated.exists()
 
 
-def test_rootless_route_tracks_publication_until_an_explicit_selection(tmp_path, monkeypatch):
+def test_process_keeps_its_startup_root_until_restarted(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
     first = publish_route(tmp_path)
+    LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
     selected = LaunchRoot.current()
     second = tmp_path / 'second'
     second_id = Comms(second).messaging.initialize_private_initial_protocol()
     route = tmp_path / '.local/state/agent-comms/active-route.json'
     route.write_text(json.dumps(ActiveRoute(second, second_id).to_record()))
-    assert isinstance(resolve_comms_route(), ActiveRoute)
+    assert LaunchRoot.current().path == first
+    assert child_root({'AGENT_COMMS_ROOT': str(second)}, tmp_path) == first
+    assert selected.arguments() == ('--comms-root', str(first))
+    LaunchRoot.startup(['agent-comms'], ActiveRoute.published_launch)
     assert LaunchRoot.current().path == second
-    with selected.selected():
-        assert child_root({'AGENT_COMMS_ROOT': str(second)}, tmp_path) == first
-        assert selected.arguments() == ('--comms-root', str(first))
 
 
 def test_selection_is_scoped_and_child_ignores_home_and_environment(tmp_path, monkeypatch):
@@ -71,7 +73,7 @@ def test_selection_is_scoped_and_child_ignores_home_and_environment(tmp_path, mo
         with LaunchRoot.from_path(tmp_path / 'second').selected():
             assert LaunchRoot.current().path == tmp_path / 'second'
         assert LaunchRoot.current().path == selected
-    with pytest.raises(RelationViolationError, match='No active Comms route is published'):
+    with pytest.raises(RelationViolationError, match='did not select a root at startup'):
         LaunchRoot.current()
 
 
@@ -103,11 +105,23 @@ def test_launch_argument_is_consumed_by_its_owner(tmp_path, monkeypatch):
     published = publish_route(tmp_path)
     explicit = tmp_path / 'explicit'
     arguments = ['program', *LaunchRoot.from_path(explicit).arguments(), 'threads']
-    LaunchRoot.startup(arguments)
+    LaunchRoot.startup(arguments, lambda: pytest.fail('explicit root must win'))
     assert arguments == ['program', 'threads']
     assert LaunchRoot.current().path == explicit
     assert LaunchRoot.current().path != published
     assert LaunchRoot.current().arguments() == ('--comms-root', str(explicit))
+
+
+@pytest.mark.parametrize('joined', [False, True])
+def test_cli_root_wins_without_published_route(tmp_path, monkeypatch, joined):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    root = tmp_path / 'explicit'
+    comms = Comms(root)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    arguments = [f'--root={root}'] if joined else ['--root', str(root)]
+    assert main([*arguments, 'threads']) == 0
+    assert not (tmp_path / '.local/state/agent-comms/active-route.json').exists()
 
 
 def test_rootless_real_cli_child_fails_without_published_route(tmp_path):

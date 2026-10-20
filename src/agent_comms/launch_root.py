@@ -1,30 +1,19 @@
-"""The process root selected explicitly or from the published route, and its child boundary."""
+"""The process root chosen at startup and handed to child processes."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
+from .errors import RelationViolationError
 from .field_codec import FieldCodec, PathText
-
-if TYPE_CHECKING:
-    from .active_route import CommsRoute
 
 
 class UnstartedLaunch:
-    """A process with no explicit root uses the published route."""
-
-    def root(self) -> LaunchRoot:
-        return LaunchRoot.from_path(self.route().root)
-
-    def route(self) -> CommsRoute:
-        # The route module imports LaunchRoot; load it after both states exist.
-        from .active_route import ActiveRoute
-
-        return ActiveRoute.published()
+    """A process with no selected root; startup must run before use."""
 
 
 @dataclass(frozen=True)
@@ -33,6 +22,7 @@ class LaunchRoot:
 
     path: Annotated[Path, PathText]
     argument: ClassVar[str] = "--comms-root"
+    root_argument: ClassVar[str] = "--root"
     environment_name: ClassVar[str] = "AGENT_COMMS_ROOT"
     _current: ClassVar[LaunchRoot | UnstartedLaunch] = UnstartedLaunch()
 
@@ -47,19 +37,9 @@ class LaunchRoot:
 
     @classmethod
     def current(cls) -> LaunchRoot:
-        return cls._current.root()
-
-    @classmethod
-    def current_route(cls) -> CommsRoute:
-        return cls._current.route()
-
-    def root(self) -> LaunchRoot:
-        return self
-
-    def route(self) -> CommsRoute:
-        from .active_route import LocalRoute
-
-        return LocalRoute(self.path)
+        if isinstance(cls._current, UnstartedLaunch):
+            raise RelationViolationError("Comms process did not select a root at startup.")
+        return cls._current
 
     def install(self) -> None:
         LaunchRoot._current = self
@@ -78,7 +58,7 @@ class LaunchRoot:
         return self.argument, str(self.path)
 
     @classmethod
-    def startup(cls, arguments: list[str]) -> None:
+    def startup(cls, arguments: list[str], published: Callable[[], LaunchRoot]) -> None:
         if cls.argument in arguments:
             index = arguments.index(cls.argument)
             if index + 1 == len(arguments):
@@ -86,6 +66,10 @@ class LaunchRoot:
             record = FieldCodec.decode(cls, {"path": arguments[index + 1]})
             cls.from_path(record.path).install()
             del arguments[index : index + 2]
+        elif not any(arg == cls.root_argument or arg.startswith(f"{cls.root_argument}=")
+                     for arg in arguments):
+            # Only the CLI parses --root; it selects that explicit path after parsing.
+            published().install()
 
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:

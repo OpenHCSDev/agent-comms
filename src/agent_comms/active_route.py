@@ -103,10 +103,11 @@ class ActiveRoute(CommsRoute):
     repair_command: ClassVar[str] = "replace-route"
 
     @classmethod
-    def published(cls) -> ActiveRoute:
+    def published_launch(cls) -> LaunchRoot:
         match read_active_route():
             case ActiveRoute() as route:
-                return route
+                route.observe_root()
+                return LaunchRoot.from_path(route.root)
             case _:
                 raise RelationViolationError(
                     "No active Comms route is published; --comms-root or --root is required."
@@ -156,7 +157,7 @@ def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRou
         return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
-    return LaunchRoot.current_route()
+    return LocalRoute(LaunchRoot.current().path)
 
 
 class RoutePublicationUnknownError(RelationViolationError):

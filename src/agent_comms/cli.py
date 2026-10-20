@@ -13,7 +13,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from .active_route import resolve_comms_route
+from .active_route import ActiveRoute, resolve_comms_route
 from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
@@ -38,7 +38,7 @@ class CliArgumentParser(argparse.ArgumentParser):
 def build_parser() -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
     parser.add_argument(
-        "--root",
+        LaunchRoot.root_argument,
         default=None,
         help="Explicit Comms root directory (otherwise uses the published active route)",
     )
@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         arguments = list(argv) if isinstance(argv, Sequence) else sys.argv[1:]
-        LaunchRoot.startup(arguments)
+        LaunchRoot.startup(arguments, ActiveRoute.published_launch)
         args = build_parser().parse_args(arguments, namespace=SendArguments())
         route = resolve_comms_route(args.root)
         with LaunchRoot.from_path(route.root).selected():
