@@ -1,4 +1,5 @@
 """Move the old home-only commander record through its existing writer."""
+
 from __future__ import annotations
 
 from pathlib import Path
