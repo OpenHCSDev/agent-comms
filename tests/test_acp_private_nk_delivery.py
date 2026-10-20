@@ -35,6 +35,7 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
@@ -730,11 +731,9 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     assert not any(state.pending_turns for state in agent.inputs.drained.values())
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         rows = NativeRuntimeInput.select(store.session._connection)
-        assert (
-            len(rows) == 1
-            and rows[0].session_id == "isolated-session"
-            and rows[0].session_entry_id is None
-        )
+        assert len(rows) == 1 and rows[0].session_file is not None
+        assert rows[0].session_id == NativeSessionIdentity.locate(rows[0].session_file).session_id
+        assert rows[0].session_entry_id is None
 
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):

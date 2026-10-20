@@ -197,12 +197,8 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(authorized)
-        if fresh:
-            entries = [{"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": f"isolated-session-{input_id}"}]
-            proof_rows = []
-        else:
-            entries = [json.loads(line) for line in session_file.read_text().splitlines()]
-            proof_rows = read_proof_rows(session_file)
+        entries = [json.loads(line) for line in session_file.read_text().splitlines()]
+        proof_rows = [] if fresh else read_proof_rows(session_file)
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
         # Real pinned native semantics: the tracked digest covers the
@@ -218,7 +214,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
             {
                 "schema": 2,
                 "type": "context_committed",
-                "sessionId": "isolated-session",
+                "sessionId": entries[0]["id"],
                 "inputId": input_id,
                 "sessionEntryId": entry_id,
                 "requestGeneration": generation,
@@ -756,12 +752,12 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         )
         assert evidence == ()
         binding = store.session._connection.execute(
-            f"SELECT n.input_id,n.session_id FROM {NativeRuntimeInput.declared_name} n "
+            f"SELECT n.input_id,n.session_id,n.session_file FROM {NativeRuntimeInput.declared_name} n "
             f"JOIN ({NativeRuntimeInput.source_membership_sql()}) m ON m.input_id=n.input_id "
             "JOIN wake_claims c ON c.assignment_id=m.assignment_id WHERE c.wire_seq=?",
             (initial.message.seq,),
         ).fetchone()
-        assert binding is not None and binding[1] == "isolated-session"
+        assert binding is not None and binding[1] == NativeSessionIdentity.locate(binding[2]).session_id
     # The uncertain, already reserved input remains deferred, not retried.
     assert (
         await SelectedExecution(

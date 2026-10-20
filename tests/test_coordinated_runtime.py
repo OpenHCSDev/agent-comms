@@ -729,7 +729,8 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
         assert rows[0].owner_lookup == rows[1].owner_lookup
         assert rows[0].owner_generation == rows[1].owner_generation == 1
         assert all(row.expected_prompt_equality_established for row in rows)
-        assert all(row.context.session_id == "isolated-session" for row in rows)
+        assert len({row.context.session_id for row in rows}) == 1
+        assert rows[0].context.session_id == NativeSessionIdentity.locate(str(rows[0].context.session_file)).session_id
         assert (
             read_historical_native_inputs(
                 store,
@@ -1573,9 +1574,9 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(tmp_p
     assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
-            "SELECT stage,session_id FROM native_runtime_input"
+            "SELECT stage,session_id,session_file FROM native_runtime_input"
         ).fetchone()
-        assert tuple(row) == ("full", "isolated-session")
+        assert row[0] == "full" and row[1] == NativeSessionIdentity.locate(row[2]).session_id
         assert (
             store.session._connection.execute("SELECT state FROM obligations").fetchone()[0]
             == "failed"
