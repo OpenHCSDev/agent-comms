@@ -23,7 +23,7 @@ from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections.abc import Callable, Iterator, Mapping
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
@@ -38,6 +38,7 @@ from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, Relation
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec, MalformedRecord
+from .message_reference import MessageReference
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
@@ -610,66 +611,15 @@ class CheckedRead:
         )
         return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
-    def message_by_id(
-        self, message_id: str, *,
-        accepts: Callable[[CommittedDelivery], bool] = lambda original: True,
-        public: WireSnapshot | None = None,
-    ) -> Message | None:
-        """Resolve a message ID through checked original rows, not a byte-limited tail.
-
-        Public-only imported history has no delivery pointer; its sequence is
-        located in the same checked index and decoded by the covered page index.
-        Receipt callers select only deliveries and prove their publication key.
-        """
-        self.require_current()
-        if public is not None:
-            opened = public.checked(self)
-            from .message_reference import MessageReference
-
-            rows = PublicMessages.read(self.connection.execute(
-                f"SELECT * FROM {PublicMessages.declared_name} WHERE message_id=? ORDER BY seq DESC",
-                (message_id,),
-            ))
-            for row in rows:
-                delivery = DeliverySources.one(self.connection, seq=row.seq)
-                if delivery is not None:
-                    original = delivery.delivery(self.stream, self.witness.root_id)
-                    if accepts(original):
-                        self.require_current()
-                        return original.message
-                    continue
-                message, = opened.messages_for_references((MessageReference(row.seq, row.message_id),))
-                if message.sender != row.sender:
-                    raise RelationViolationError("Checked public message sender differs from its original.")
-                self.require_current()
-                return message
-            self.require_current()
-            return None
-        # Delivery receipts may share a message ID across senders. Their
-        # original publication key, not the newest unrelated ID, selects one.
-        cursor = self.connection.execute(
-            f"SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC",
-            (message_id,),
-        )
-        for row in DeliverySources.iterate(cursor):
-            original = row.delivery(self.stream, self.witness.root_id)
-            if accepts(original):
-                self.require_current()
-                return original.message
-        self.require_current()
-        return None
-
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
         self.require_current()
-        if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
+        if not ResponseKeys.one(self.connection, key=intent.publication_key):
             return None
-        # The original intent already owns its Message-derived identity. IDs
-        # are not assumed unique: each matching original must prove the key,
-        # execution and complete publication content.
+        # A publication key, not another sender's matching ID, selects the answer.
         def matches(original: CommittedDelivery) -> bool:
             acknowledgement = original.acknowledgement
-            if acknowledgement is not None and acknowledgement.publication_key == intent.publication_key:
+            if acknowledgement and acknowledgement.publication_key == intent.publication_key:
                 if acknowledgement.execution_id != intent.execution_id:
                     raise RelationViolationError("Response publication identity conflicts.")
                 if not intent.matches_publication(original.message):
@@ -680,6 +630,56 @@ class CheckedRead:
         if matched := self.message_by_id(intent.expected_message_id, accepts=matches):
             return matched
         raise RelationViolationError("checked response key has no original source row.")
+
+    def message_by_id(
+        self, message_id: str, *,
+        accepts: Callable[[CommittedDelivery], bool] = lambda original: True,
+        public: WireSnapshot | None = None,
+    ) -> Message | None:
+        """Resolve a message ID through checked original rows, not a byte-limited tail.
+
+        Public-only imported history has no delivery pointer; its sequence is
+        located in the same checked index and decoded by the covered page index.
+        Response callers select only deliveries and prove their publication key.
+        """
+        self.require_current()
+        if public is not None:
+            opened = public.checked(self)
+            rows = PublicMessages.read(self.connection.execute(
+                f"SELECT * FROM {PublicMessages.declared_name} "
+                "WHERE message_id=? ORDER BY seq DESC", (message_id,),
+            ))
+            for row in rows:
+                source_row = DeliverySources.one(self.connection, seq=row.seq)
+                if source_row:
+                    original = source_row.delivery(self.stream, self.witness.root_id)
+                    if accepts(original):
+                        self.require_current()
+                        return original.message
+                    continue
+                message = cast("Message", opened.messages_for_references((
+                    MessageReference(row.seq, row.message_id),))[0])
+                if message.sender != row.sender:
+                    raise RelationViolationError(
+                        "Checked public message sender differs from its original.")
+                self.require_current()
+                return message
+            self.require_current()
+            return None
+        # Responses may share a message ID across senders. Their publication
+        # key, not the newest unrelated ID, selects one.
+        cursor = self.connection.execute(
+            f"SELECT * FROM {DeliverySources.declared_name} "
+            "WHERE message_id=? ORDER BY seq DESC", (message_id,),
+        )
+        for source_row in DeliverySources.iterate(cursor):
+            original = source_row.delivery(self.stream, self.witness.root_id)
+            if accepts(original):
+                self.require_current()
+                return original.message
+        self.require_current()
+        return None
+
 
 
 class CheckpointTable:
@@ -825,7 +825,8 @@ class PublicMessages(CheckpointTable, TypedTable):
     sender: str
     message_id: str
     gap: ClassVar[str] = "seq != previous_seq + 1"
-    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap))
+    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap),
+               Index(("message_id", "seq")))
 
     @classmethod
     def require_contiguous(cls, db: sqlite3.Connection) -> None:
@@ -848,7 +849,7 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
     seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
     message_id: str
     sender_lookup: str
-    indexes = (Index(("sender_lookup", "seq")),)
+    indexes = (Index(("sender_lookup", "seq")), Index(("message_id", "seq")))
 
     def delivery(self, stream, root_id: str) -> CommittedDelivery:
         """A pointer has no message authority: resolve its original frozen row."""
@@ -1255,6 +1256,22 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
             published.seal_with(FinalSeal.capture(witness, path))
             bus.write_metadata_unlocked(published)
             return witness
+
+    @classmethod
+    def reindex_messages(cls, bus: WireLog) -> PrefixWitness:
+        """Verify the old saved cut before rebuilding its two declared message indexes.
+
+        The caller holds the wire lock and the update owner's original backup.
+        A failed publish leaves a refused seal, never an unproved index.
+        """
+        marker = bus.private_marker_unlocked()
+        path = _path(bus.path)
+        with closing(_connect(path, readonly=True)) as db:
+            witness = cls.read_witness(db)
+        witness.require_marker(marker)
+        witness.require_current_revision(bus.path.stat())
+        marker.seal.check_final(witness, path)
+        return cls._install(bus, marker)
 
     @classmethod
     def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:

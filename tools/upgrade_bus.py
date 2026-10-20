@@ -479,12 +479,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore.require()
     stopping = before_stop(root, pending, staged, revisions)
-    running = staged.running_owners(root)
+    running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
-        staged.owners(root, "stop", running)
+        installed.owners(root, "stop", running)
         with transcripts_held(root):
             before = bus_files(root)
             backup = (StoreBackup if selected else NoBackup).take(
