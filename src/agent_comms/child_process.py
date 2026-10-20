@@ -1065,6 +1065,10 @@ class PosixLaunch(ChildLaunch):
             os.close(fd)
 
 
+class OrderCheckFailed(ValueError):
+    """A completed order check did not prove its expected result."""
+
+
 class CheckPrinted(DeclaredFamily, affix="Printed"):
     """The count printed by a child, or the absence of an integer."""
 
@@ -1102,7 +1106,7 @@ class CountPrinted(CheckPrinted):
 
     def require(self, expected: object) -> None:
         if self.count:
-            raise ValueError(f"The order check is {self.count} away from {expected}.")
+            raise OrderCheckFailed(f"The order check is {self.count} away from {expected}.")
 
     def project[T](self, counted: Callable[[int], T],
                    uncounted: Callable[[NoIntegerPrinted], T]) -> T:
@@ -1122,7 +1126,7 @@ class NoIntegerPrinted(CheckPrinted):
         return self
 
     def require(self, expected: object) -> None:
-        raise ValueError(f"The order check cannot prove {expected}: it printed no integer.")
+        raise OrderCheckFailed(f"The order check cannot prove {expected}: it printed no integer.")
 
     def project[T](self, counted: Callable[[int], T],
                    uncounted: Callable[[NoIntegerPrinted], T]) -> T:

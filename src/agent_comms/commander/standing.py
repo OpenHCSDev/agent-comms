@@ -190,6 +190,7 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         """The worker borrows the root for this pass, never while the timer is idle."""
         with opened_wire() as comms:
+            comms.goals.todos.advance_objective_failures(comms.goals)
             cls.after_stall(comms)
 
 
