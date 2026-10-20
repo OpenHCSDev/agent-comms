@@ -1147,7 +1147,8 @@ def stray(commander, problem, generation):
     not the unit's open Goal."""
     comms, _ = commander
     lead = comms.registry.require('lead')
-    return comms.goals.todos.create(problem, 'OpenHCSDev/agent-comms', 'Fix ' + problem, creator=lead,
+    return comms.goals.todos.create(
+        problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'), 'Fix ' + problem, creator=lead,
         owner=comms.registry.require('worker'), generation=generation, deadline=RecordedEventTime(1000),
         order=order(comms.root, 'order-' + problem), goal=GoalRef('lead', lead.created_at, 'request'))
 

@@ -478,7 +478,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     reused = storage.order_checkout("worker", "P999")
     reused.mkdir(parents=True)
     git(reused, "init", "-q", "-b", branch)
-    git(reused, "remote", "add", "origin", f"https://github.com/{todo.repo}.git")
+    git(reused, "remote", "add", "origin", f"https://github.com/{todo.repo.to_wire()}.git")
     monkeypatch.chdir(reused)
     body_file = tmp_path / "pr-body.md"
     body_file.write_text(subject)

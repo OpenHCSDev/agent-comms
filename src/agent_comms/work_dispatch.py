@@ -23,7 +23,7 @@ from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
 from .repository_name import RepositoryName
-from .storage_rules import CheckoutStorageEffect
+from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ class WorkDispatch:
         )
         self.action.request_ref(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
-        CheckoutStorageEffect(checkout).check(storage, candidate)
+        CheckoutStorageEffect(checkout).check(StorageProjection(storage, candidate))
         subprocess.run(
             ("git", "-C", self.action.order.check.directory, "fetch", "origin", "main"),
             check=True,

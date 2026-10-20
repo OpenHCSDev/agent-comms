@@ -678,8 +678,7 @@ class ProgressSource:
         candidates = (Path(todo.order.checked().check.directory), *owned)
         path = next((path for path in candidates if (path / ".git").exists()),
                     next(iter(owned), candidates[0]))
-        checkout = (PresentCheckout(path) if path in owned or (path / ".git").exists()
-                    else MissingCheckout(path))
+        checkout = PresentCheckout(path) if (path / ".git").exists() else MissingCheckout(path)
         return cls(todo, checkout, pulls, checkout.references(storage, owner))
 
     @property
@@ -1642,6 +1641,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
                         pulls: PullRequests) -> tuple[Todo, ...]:
+        if not repos:
+            return ()
         source = ProgressSource.of(todo, storage, pulls)
         return tuple(DoneTodoState.closed(todo, merged) for repo in repos
                      for merged in self.observed_merges(repo, source))

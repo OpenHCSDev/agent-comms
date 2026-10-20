@@ -189,7 +189,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     todo = store.create(
-        "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path))
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
     cells = merged.order.board_cells(merged)
