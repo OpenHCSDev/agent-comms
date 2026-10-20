@@ -561,11 +561,9 @@ class SetStatusUiRequest(ExtensionUiRequest):
 
     async def apply(self, session):
         if self.status_key == "pi-mcp/live-v1":
-            # An omitted status text acknowledges nothing, as an unparsable one does.
-            for text in self.status_text.present():
-                acknowledgement = session.extension_ui.observe(text, session)
-                if acknowledgement is not None:
-                    yield events.McpLiveStatus(acknowledgement=acknowledgement)
+            acknowledgement = session.extension_ui.observe(self.status_text.value_or(None), session)
+            if acknowledgement is not None:
+                yield events.McpLiveStatus(acknowledgement=acknowledgement)
         session.skip = True
 
 
@@ -738,7 +736,7 @@ class MessageStart(NativePiEvent, DurablePiEvent):
 @dataclass(frozen=True, kw_only=True)
 class MessageUpdate(NativePiEvent, DurablePiEvent):
     assistant_message_event: Annotated[
-        PiDelta | NoDelta, WireName("assistantMessageEvent")
+        NoDelta | PiDelta, WireName("assistantMessageEvent")
     ] = NoDelta()
     message: PiMessage = field(
         default_factory=AbsentMessage
