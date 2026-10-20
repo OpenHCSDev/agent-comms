@@ -12,6 +12,10 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, PathText
 
 
+class UnstartedLaunch:
+    """A process with no selected root; startup must run before use."""
+
+
 @dataclass(frozen=True)
 class LaunchRoot:
     """A process's selected root travels in its arguments, never its environment."""
@@ -19,15 +23,20 @@ class LaunchRoot:
     path: Annotated[Path, PathText]
     argument: ClassVar[str] = "--comms-root"
     environment_name: ClassVar[str] = "AGENT_COMMS_ROOT"
-    _current: ClassVar[LaunchRoot | None] = None
+    _current: ClassVar[LaunchRoot | UnstartedLaunch] = UnstartedLaunch()
 
-    def __post_init__(self) -> None:
-        # Capture cwd/home now; keep symlinks for private-root validation.
-        object.__setattr__(self, "path", self.path.expanduser().absolute())
+    @classmethod
+    def from_path(cls, path: str | Path) -> LaunchRoot:
+        """Capture cwd/home now; keep symlinks for private-root validation."""
+        return cls(Path(path).expanduser().absolute())
+
+    @classmethod
+    def unstarted(cls) -> UnstartedLaunch:
+        return UnstartedLaunch()
 
     @classmethod
     def current(cls) -> LaunchRoot:
-        if cls._current is None:
+        if isinstance(cls._current, UnstartedLaunch):
             raise RelationViolationError(
                 "Comms requires an explicit launch root (--comms-root or --root)."
             )
@@ -37,7 +46,7 @@ class LaunchRoot:
         LaunchRoot._current = self
 
     @contextmanager
-    def selected(self) -> Iterator[None]:
+    def selected(self) -> Iterator[LaunchRoot]:
         """Borrow a selection without changing later callers."""
         previous = LaunchRoot._current
         self.install()
@@ -56,8 +65,8 @@ class LaunchRoot:
             if index + 1 == len(arguments):
                 raise ValueError(f"{cls.argument} requires a root")
             record = FieldCodec.decode(cls, {"path": arguments[index + 1]})
-            record.install()
-            del arguments[index:index + 2]
+            cls.from_path(record.path).install()
+            del arguments[index : index + 2]
 
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:

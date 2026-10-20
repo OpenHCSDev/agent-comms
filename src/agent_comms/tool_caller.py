@@ -102,7 +102,9 @@ class ThreadCaller(ToolCaller):
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(
-            tools, comms.registry.require(self.name).service_tier, LaunchRoot(comms.root).arguments(),
+            tools,
+            comms.registry.require(self.name).service_tier,
+            LaunchRoot.from_path(comms.root).arguments(),
         )
 
     def acting_name(self, default: str) -> str:

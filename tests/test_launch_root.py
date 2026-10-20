@@ -19,7 +19,7 @@ from agent_comms.route_selection import RouteSelection, child_root
 
 @pytest.fixture(autouse=True)
 def no_process_selection(monkeypatch):
-    monkeypatch.setattr(LaunchRoot, '_current', None)
+    monkeypatch.setattr(LaunchRoot, '_current', LaunchRoot.unstarted())
 
 
 def test_rootless_client_cannot_borrow_published_route_or_environment(tmp_path, monkeypatch):
@@ -41,11 +41,11 @@ def test_rootless_client_cannot_borrow_published_route_or_environment(tmp_path, 
 
 def test_selection_is_scoped_and_child_ignores_home_and_environment(tmp_path):
     selected = tmp_path / 'copy'
-    with LaunchRoot(selected).selected():
+    with LaunchRoot.from_path(selected).selected():
         assert resolve_comms_route().observe_root() == selected
         assert child_root({'HOME': '/different', 'AGENT_COMMS_ROOT': '/live'}, '/') == selected
         assert RouteSelection.for_child({}, '/').root == selected
-        with LaunchRoot(tmp_path / 'second').selected():
+        with LaunchRoot.from_path(tmp_path / 'second').selected():
             assert LaunchRoot.current().path == tmp_path / 'second'
         assert LaunchRoot.current().path == selected
     with pytest.raises(RelationViolationError, match='explicit launch root'):
@@ -65,18 +65,18 @@ def test_every_launch_policy_removes_root_but_keeps_other_inheritance(runtime, t
 
 def test_root_fixes_relative_meaning_without_hiding_symlinks(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    root = LaunchRoot(Path('copy'))
+    root = LaunchRoot.from_path(Path('copy'))
     later = tmp_path / 'later'
     later.mkdir()
     monkeypatch.chdir(later)
     assert root.path == tmp_path / 'copy'
     link = tmp_path / 'alias'
     link.symlink_to(later)
-    assert LaunchRoot(link).path == link
+    assert LaunchRoot.from_path(link).path == link
 
 
 def test_launch_argument_is_consumed_by_its_owner(tmp_path):
-    arguments = ['program', *LaunchRoot(tmp_path).arguments(), 'threads']
+    arguments = ['program', *LaunchRoot.from_path(tmp_path).arguments(), 'threads']
     LaunchRoot.startup(arguments)
     assert arguments == ['program', 'threads']
     assert LaunchRoot.current().path == tmp_path

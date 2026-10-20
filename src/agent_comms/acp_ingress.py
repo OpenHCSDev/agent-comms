@@ -24,7 +24,7 @@ from pathlib import Path
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .launch_root import LaunchRoot
 from .maintenance_barrier import MaintenanceBarrier
-from .route_selection import RouteSelection, child_root, selected_write
+from .route_selection import RouteSelection, child_root
 
 
 def _release_abandoned(task: asyncio.Future[ExitStack]) -> None:
@@ -57,9 +57,7 @@ class AcpIngress:
             locks.enter_context(MaintenanceBarrier(registry).allow_input())
 
     def _lock_prompt(self, locks: ExitStack) -> None:
-        locks.enter_context(
-            selected_write(self.selection.root, implicit=self.selection.implicit)
-        )
+        locks.enter_context(self.selection.route.hold_client_route())
         self._lock_roots(locks)
 
     @staticmethod
@@ -96,12 +94,7 @@ class AcpIngress:
 
     def _project_launch(self) -> LaunchRoot:
         """Carry the captured root in arguments only after acquiring the locks."""
-        from .active_route import read_active_route
-
-        # The child derives its launch from this root; only the route must not move.
-        if self.selection.implicit and read_active_route() not in (None, self.selection.route):
-            raise ValueError("ACP root changed before private launch")
-        return LaunchRoot(self.selection.root)
+        return LaunchRoot.from_path(self.selection.root)
 
     async def spawn(
         self, argv: tuple[str, ...], *, env: Mapping[str, str],
