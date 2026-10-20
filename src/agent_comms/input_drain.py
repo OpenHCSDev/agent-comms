@@ -603,13 +603,13 @@ class DrainTurn(ABC):
         raise KeyError("Session has no started first input")
 
     def send(self, item: TurnInboxItem) -> None:
-        return None
+        pass
 
     async def resume(self, maintenance: MaintenanceIngress) -> None:
-        return None
+        pass
 
     async def finish_original(self, inputs: InputDrain) -> None:
-        return None
+        pass
 
 
 class NoDrainTurn(DrainTurn):

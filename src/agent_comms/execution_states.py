@@ -46,7 +46,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
         raise IdentityConflict("execution cannot start an attempt")
 
     def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
-        return None
+        pass
 
     @classmethod
     @abstractmethod

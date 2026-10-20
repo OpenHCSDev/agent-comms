@@ -1950,7 +1950,7 @@ class TodoHolder(ABC):
         return proposed
 
     def require_trace(self, owner: str, traced: FileLine | None) -> None:
-        return None
+        pass
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         return proposed

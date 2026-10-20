@@ -38,7 +38,7 @@ class InputForwarder(ABC):
     async def finish(self) -> None: ...
 
     def raise_failure(self) -> None:
-        return None
+        pass
 
 
 class NoInputForwarder(InputForwarder):

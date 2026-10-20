@@ -64,7 +64,7 @@ class PreviousAttempt(ABC):
     def require_retry(self, snapshot: RecoverySnapshot) -> None: ...
 
     def require_newer_owner(self, generation: int) -> None:
-        return None
+        pass
 
 
 class NoPreviousAttempt(PreviousAttempt):
